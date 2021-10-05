@@ -1,46 +1,81 @@
-# Thales Open Source Template Project
+# CipherTrust Terraform Provider
 
-Template for creating a new project in the [Thales GitHub organization](https://github.com/ThalesGroup). 
+The CipherTrust Terraform Provider allows for the incorporation of CipherTrust Cloud Key Manager functionality into a CI/CD pipeline.
 
-Each Thales OSS project repository **MUST** contain the following files at the root:
+## Supported Clouds
 
-- a `LICENSE` which has been chosen in accordance with legal department depending on your needs 
-
-- a `README.md` outlining the project goals, sponsoring sig, and community contact information, [GitHub tips about README.md](https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-readmes)
-
-- a `CONTRIBUTING.md` outlining how to contribute to the project, how to submit a pull request and an issue
-
-- a `SECURITY.md` outlining how the security concerns are handled, [GitHub tips about SECURITY.md](https://docs.github.com/en/github/managing-security-vulnerabilities/adding-a-security-policy-to-your-repository)
-
-Below is an example of the common structure and information expected in a README.
-
-**Please keep this structure as is and only fill the content for each section according to your project.**
-
-If you need assistance or have question, please contact oss@thalesgroup.com 
+- AWS
+- Azure
+- HSM
+- DSM
 
 
+## CipherTrust Provider Initialization
 
-## Get started
+The provider can be initialized either directly in the provider block of the terraform script or in a configuration file. If settings are specified in both locations precedence will be given to those in the provider block.
 
-XXX project purpose it to ...
+### Provider block
 
-**Please also add the description into the About section (Description field)**
+```hcl
+	provider "ciphertrust" {
+	  address           = "https://34.207.194.87"
+	  username          = "bob"
+	  password          = "password"
+	}
+```
 
-## Documentation
+### Configuration file
 
-Documentation is available at [xxx/docs](https://xxx/docs/).
+CipherTrust provider will read configuration from ~/.ciphertrust/config.
 
-You can use [GitHub pages](https://guides.github.com/features/pages/) to create your documentation.
+```hcl
+	address = https://34.207.194.87
+	username = bob
+	password = password
+```
 
-See an example here : https://github.com/ThalesGroup/ThalesGroup.github.io
+If a configuration file is used the provider can be initialized with an empty provider block.
 
-**Please also add the documentation URL into the About section (Website field)**
+```hcl
+provider "ciphertrust" {)
+```
 
-## Contributing
+Configuration items in the provider block have precedence over those in the configuration file.
 
-If you are interested in contributing to the XXX project, start by reading the [Contributing guide](/CONTRIBUTING.md).
+## Environment Variables for AWS and Azure Clouds
 
-## License
+The following environment variables can be used by the CipherTrust provider when creating connections to Azure and AWS.
 
-The chosen license in accordance with legal department must be defined into an explicit [LICENSE](https://github.com/ThalesGroup/template-project/blob/master/LICENSE) file at the root of the repository
-You can also link this file in this README section.
+### AWS
+
+```hcl
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
+### Azure
+
+```hcl
+ARM_CLIENT_ID
+ARM_CLIENT_SECRET
+ARM_TENANT_ID
+ARM_SUBSCRIPTION_ID
+```
+
+## Argument Reference
+
+### Required
+
+- **address** (String) HTTPS URL of the CipherTrust instance.
+- **username** (String) Username of a CipherTrust user.
+- **password** (String, Sensitive) Password of the CipherTrust user.
+
+### Optional
+
+- **domain** (String) CipherTrust domain of the CipherTrust user.
+- **log_file** (String) Log file name. Default is ctp.log.
+- **log_level** (String) Log level. Options are: debug, info, warning, error and "off". Default is info.
+- **no_ssl_verify** (Bool) Set to false to verify the server's certificate chain and host name. Default is true.
+- **rest_api_timeout** (Number) CipherTrust rest api timeout in seconds. Default is 60.
+- **azure_operation_timeout** (Number) Azure key operations can take time to complete. This specifies how long to wait for an operation to complete in seconds.  Default is 240.
+- **hsm_operation_timeout** (Number) HSM connection opertions are not synchronous. This specifies how long to wait for an operation to complete in seconds. Default is 60.
