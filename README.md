@@ -13,7 +13,8 @@ CI/CD pipeline.
 
 ## CipherTrust Provider Initialization
 
-The provider can be initialized either directly in the provider block of the terraform script or in a configuration file. If settings are specified in both locations precedence will be given to those in the provider block.
+The provider can be initialized either directly in the provider block of the terraform script or in a configuration 
+file. If settings are specified in both locations precedence will be given to those in the provider block.
 
 ### Provider block
 
