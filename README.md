@@ -1,4 +1,4 @@
-s# CipherTrust Terraform Provider
+# CipherTrust Terraform Provider
 
 The CipherTrust Terraform Provider allows for the incorporation of CipherTrust Cloud Key Manager functionality into a 
 CI/CD pipeline.
