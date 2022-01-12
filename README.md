@@ -5,11 +5,11 @@ CI/CD pipeline.
 
 ## Supported Clouds
 
-- AWS
-- Azure
-- HSM
-- DSM
-
+- Amazon AWS
+- Microsoft Azure
+- Google Cloud
+- Luna HSM
+- Thales DSM
 
 ## CipherTrust Provider Initialization
 
