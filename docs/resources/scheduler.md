@@ -13,12 +13,23 @@ description: |-
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_scheduler" "rotation_job" {
-  key_rotation_params {
+resource "ciphertrust_scheduler" "key_rotation" {
+  cckm_key_rotation_params {
     cloud_name = "AzureCloud"
   }
-  name       = "job_name"
+  name       = "rotation_job_name"
+  operation  = "cckm_key_rotation"
   run_at     = "0 9 * * sat"
+}
+
+resource "ciphertrust_scheduler" "key_synchronization" {
+  cckm_synchronization_params {
+    cloud_name      = "azure"
+    synchronize_all = true
+  }
+  name       = "sync_job_name"
+  operation  = "cckm_synchronization"
+  run_at     = "0 9 * * fri"
 }
 ```
 
@@ -27,23 +38,23 @@ resource "ciphertrust_scheduler" "rotation_job" {
 
 ### Required
 
-- **cckm_key_rotation_params** (Block List, Min: 1, Max: 1) (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
 - **name** (String) Name of the job configuration.
 - **run_at** (String) Described using the cron expression format: '* * * * * 'These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case-insensitive. For example, To run on Saturday at 23:45(11:45 PM): '45 23 * * 6' or '45 23 * * sat' To run on the first of the month at 09:00: '0 9 1 * *'
 
 ### Optional
 
+- **cckm_key_rotation_params** (Block List, Max: 1) (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
+- **cckm_synchronization_params** (Block List, Max: 1) (see [below for nested schema](#nestedblock--cckm_synchronization_params))
 - **description** (String) Description of the job configuration.
 - **disabled** (Boolean) Disable the job configuration. Defaults to false.
 - **end_date** (String) Date the job configuration becomes inactive. RFC3339 format, for example, 2021-07-03T14:24Z.
-- **operation** (String) Type of operation. Currently, only cckm_key_rotation is supported. Default is cckm_key_rotation.
+- **operation** (String) Type of operation. Currently, only cckm_key_rotation and cckm_synchronization are supported. Default is cckm_key_rotation.
 - **run_on** (String) Use 'any' to run the rotation job on any node in the cluster. Use a specific node ID to run the rotation job on that node. Default is 'any'.
 - **start_date** (String) Date the job configuration becomes active. RFC3339 format, for example, 2021-07-03T14:24:00Z.
 
 ### Read-Only
 
 - **id** (String) CipherTrust job configuration ID.
-- **job_config_params** (List of Object) (see [below for nested schema](#nestedatt--job_config_params))
 
 <a id="nestedblock--cckm_key_rotation_params"></a>
 ### Nested Schema for `cckm_key_rotation_params`
@@ -59,21 +70,18 @@ Optional:
 - **expire_in** (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
 
 
-<a id="nestedatt--job_config_params"></a>
-### Nested Schema for `job_config_params`
+<a id="nestedblock--cckm_synchronization_params"></a>
+### Nested Schema for `cckm_synchronization_params`
 
-Read-Only:
+Required:
 
-- **cckm_aws_rotation_params** (List of Object) (see [below for nested schema](#nestedobjatt--job_config_params--cckm_aws_rotation_params))
-- **cloud_name** (String)
-- **expiration** (String)
-- **expire_in** (String)
+- **cloud_name** (String) Name of the cloud where rotation operation will be triggered. Options are: aws, AzureCloud and gcp.
 
-<a id="nestedobjatt--job_config_params--cckm_aws_rotation_params"></a>
-### Nested Schema for `job_config_params.cckm_aws_rotation_params`
+Optional:
 
-Read-Only:
-
-- **aws_retain_alias** (String)
+- **key_rings** (Set of String) IDs or name of key ring from which google cryptographic keys will be synchronized. At least one key ring is required for Google cloud synchronization operation.
+- **key_vaults** (Set of String) IDs or name of vault from which azure keys will be synchronized. At least one vault is required for Azure synchronization operation.
+- **kms** (Set of String) IDs or names of kms resource from which AWS keys will be synchronized. At least one kms is required for AWS synchronization operation.
+- **synchronize_all** (Boolean) Enable AWS autorotation on the key. Default is false.
 
 

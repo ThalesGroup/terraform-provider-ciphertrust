@@ -20,11 +20,3 @@ data "ciphertrust_gcp_key" "by_multiple_values_ex1" {
   project_id  = "gcp_project_id"
   location_id = "project_location"
 }
-
-# Get the GCP key data using key name and other values
-data "ciphertrust_gcp_key" "by_multiple_values_ex2" {
-  name        = "gcp_key_name"
-  key_ring_id = "gcp_keyring_name"
-  project_id  = "gcp_project_id"
-  location_id = "project_location""
-}
