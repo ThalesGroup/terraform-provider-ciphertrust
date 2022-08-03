@@ -8,15 +8,32 @@ description: |-
 
 # ciphertrust_gcp_keyring (Resource)
 
+This resource specifies the Google cloud project and keyring in which keys will be created.
+
+This resource is dependent on a [ciphertrust_gcp_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_connection) resource.
 
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_gcp_keyring" "keyring" {
-  gcp_connection = ciphertrust_gcp_connection.connection.name
-  name           = "short_or_long_keyring_name"
-  project_id     = "project_name"
+# This resource is dependent on a ciphertrust_gcp_connection resource
+resource "ciphertrust_gcp_connection" "gcp_connection" {
+  key_file = "gcp-key-file.json"
+  name     = "connection-name"
+}
+
+# Create a keyring resource and assign it to the connection
+resource "ciphertrust_gcp_keyring" "gcp_keyring" {
+  gcp_connection = ciphertrust_gcp_connection.gcp_connection.name
+  name           = "keyring-name"
+  project_id     = "project-id"
+}
+
+# Create a Google cloud key
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
 }
 ```
 
@@ -25,13 +42,13 @@ resource "ciphertrust_gcp_keyring" "keyring" {
 
 ### Required
 
-- **gcp_connection** (String) Name of the Google Cloud connection.
-- **name** (String) Keyring name.
-- **project_id** (String) Google Cloud project ID.
+- `gcp_connection` (String) Name of the Google Cloud connection.
+- `name` (String) Keyring name.
+- `project_id` (String) Google Cloud project ID.
 
 ### Read-Only
 
-- **id** (String) Google cloud key ring name.
-- **key_ring_id** (String) Keyring ID.
+- `id` (String) Google cloud key ring name.
+- `key_ring_id` (String) Keyring ID.
 
 

@@ -8,13 +8,47 @@ description: |-
 
 # ciphertrust_azure_connection (Resource)
 
+This resource creates a connection between CipherTrust Manager and an Azure cloud.
 
+A connection is required before operations can be performed on the Azure cloud.
+
+[ciphertrust_azure_vault](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_vault) resources are dependent on this resource.
+
+## Optional Use of Environment Variables
+
+| Parameter        | Environment Variable  |
+|:----------------|:----------------------|
+| client_id        | ARM_CLIENT_ID         |
+| client_secret    | ARM_CLIENT_SECRET     |
+| tenant_id        | ARM_TENANT_ID         |
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_azure_connection" "connection" {
-  name        = "aws_connection_name"
+# Create an Azure connection without using environment variables
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name          = "connection-name"
+  client_id     = "azure-client-id"
+  client_secret = "azure-client-secret"
+  tenant_id     = "azure-tenant-id"
+}
+
+# Create an Azure connection using the ARM_CLIENT_ID, ARM_CLIENT_SECRET and ARM_TENANT_ID environment variables
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name = "connection-name"
+}
+
+# Create a ciphertrust_azure_vault resource and assign it to the connection
+resource "ciphertrust_azure_vault" "azure_vault" {
+  azure_connection = ciphertrust_azure_connection.azure_connection.name
+  subscription_id  = "azure-subscription-id"
+  name             = "azure-vault-name"
+}
+
+# Create an Azure key
+resource "ciphertrust_azure_key" "azure_key" {
+  name     = "key-name"
+  vault    = ciphertrust_azure_vault.azure_vault.id
 }
 ```
 
@@ -23,19 +57,19 @@ resource "ciphertrust_azure_connection" "connection" {
 
 ### Required
 
-- **name** (String) Unique connection name.
+- `name` (String) Unique connection name.
 
 ### Optional
 
-- **client_id** (String) Unique Identifier (client ID) for the Azure application. Default is the ARM_CLIENT_ID environment variable.
-- **client_secret** (String, Sensitive) Secret key for the Azure application. Default is the ARM_CLIENT_SECRET environment variable.
-- **cloud_name** (String) Name of the cloud. Options: AzureCloud, AzureGermanCloud, AzureChinaCloud and AzureUSGovernment. Default is AzureCloud.
-- **description** (String) Description of the Azure connection.
-- **meta** (String) Optional end-user or service data stored with the connection.
-- **tenant_id** (String) Tenant ID of the Azure application. Default is the ARM_TENANT_ID environment variable.
+- `client_id` (String) (Updateable) Unique Identifier (client ID) for the Azure application. Default is the ARM_CLIENT_ID environment variable.
+- `client_secret` (String, Sensitive) (Updateable) Secret key for the Azure application. Default is the ARM_CLIENT_SECRET environment variable.
+- `cloud_name` (String) (Updateable) Name of the cloud. Options: AzureCloud, AzureGermanCloud, AzureChinaCloud and AzureUSGovernment. Default is AzureCloud.
+- `description` (String) (Updateable) Description of the Azure connection.
+- `meta` (Map of String) (Updateable)  A list of key:value pairs to store with the connection.
+- `tenant_id` (String) (Updateable) Tenant ID of the Azure application. Default is the ARM_TENANT_ID environment variable.
 
 ### Read-Only
 
-- **id** (String) CipherTrust Azure connection ID.
+- `id` (String) CipherTrust Azure connection ID.
 
 

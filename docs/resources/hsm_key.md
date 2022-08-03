@@ -8,13 +8,44 @@ description: |-
 
 # ciphertrust_hsm_key (Resource)
 
+Luna-HSM keys are primarily used to create the following:
+- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
+- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
+
+This resource is dependent on a [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition) resource.
 
 
 ## Example Usage
 
 ```terraform
+# Create a ciphertrust_hsm_server resource
+resource "ciphertrust_hsm_server" "hsm_server" {
+  hostname        = "hsm-ip"
+  hsm_certificate = "hsm-server.pem"
+}
+
+# Create a ciphertrust_hsm_connection resource
+resource "ciphertrust_hsm_connection" "hsm_connection" {
+  is_ha_enabled = true
+  hostname    = "hsm-ip"
+  server_id   = ciphertrust_hsm_server.hsm_server.id
+  name        = "connection-name"
+  partitions {
+    partition_label = "partition-label"
+    serial_number   = "serial-number"
+  }
+  partition_password = "partition-password"
+}
+
+# Create a ciphertrust_hsm_partition resource
+resource "ciphertrust_hsm_partition" "hsm_partition" {
+  hsm_connection = ciphertrust_hsm_connection.hsm_connection.id
+}
+
+# Create a Luna-HSM key
 resource "ciphertrust_hsm_key" "hsm_key" {
   attributes   = ["CKA_ENCRYPT", "CKA_DECRYPT"]
+  label        = "key-name"
   mechanism    = "CKM_RSA_FIPS_186_3_AUX_PRIME_KEY_PAIR_GEN"
   partition_id = ciphertrust_hsm_partition.hsm_partition.id
   key_size     = 2048
@@ -26,19 +57,19 @@ resource "ciphertrust_hsm_key" "hsm_key" {
 
 ### Required
 
-- **attributes** (List of String) Key attributes. Options: CKA_ENCRYPT, CKA_DECRYPT, CKA_WRAP, CKA_UNWRAP, CKA_SIGN, CKA_VERIFY and CKA_DERIVE.
-- **key_size** (Number) Size of the key. Options: 2048, 3072, 4096.
-- **mechanism** (String) Mechanism of the key. Options: CKM_RSA_FIPS_186_3_AUX_PRIME_KEY_PAIR_GEN, CKM_RSA_X9_31_KEY_PAIR_GEN, CKM_RSA_FIPS_186_3_PRIME_KEY_PAIR_GEN and CKM_RSA_PKCS_KEY_PAIR_GEN.
-- **partition_id** (String) Partition ID in which the key will be created.
+- `attributes` (List of String) (Updateable) Key attributes. Options: CKA_ENCRYPT, CKA_DECRYPT, CKA_WRAP, CKA_UNWRAP, CKA_SIGN, CKA_VERIFY and CKA_DERIVE.
+- `key_size` (Number) Size of the key. Options: 2048, 3072, 4096 for asymmetric keys. 128, 192 and 256 for symmetric keys.
+- `mechanism` (String) Mechanism of the key. Options: CKM_RSA_FIPS_186_3_AUX_PRIME_KEY_PAIR_GEN, CKM_RSA_X9_31_KEY_PAIR_GEN, CKM_RSA_FIPS_186_3_PRIME_KEY_PAIR_GEN, CKM_RSA_PKCS_KEY_PAIR_GEN and CKM_AES_KEY_GEN.
+- `partition_id` (String) Partition ID in which the key will be created.
 
 ### Optional
 
-- **label** (String) Label of the key.
+- `label` (String) Label of the key.
 
 ### Read-Only
 
-- **id** (String) Concatenation of public_key_id and private_key_id.
-- **private_key_id** (String) ID of the private key. Second ID in the resourceID string.
-- **public_key_id** (String) ID of the public key. First ID in the resourceID string.
+- `id` (String) For asymmetric keys this is a concatenation of public_key_id and private_key_id. For symmetric keys the CipherTrust Key ID.
+- `private_key_id` (String) ID of the private key. Second ID in the resourceID string.
+- `public_key_id` (String) ID of the public key. First ID in the resourceID string.
 
 

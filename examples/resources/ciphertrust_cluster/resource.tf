@@ -19,6 +19,6 @@ resource "ciphertrust_cluster" "cluster" {
   }
   node {
     host           = "3.3.3.3"
-    public_address = "4.4.4.4"
+    public_address = "4.4.4.5"
   }
 }

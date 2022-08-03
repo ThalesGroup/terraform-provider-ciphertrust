@@ -8,59 +8,168 @@ description: |-
 
 # ciphertrust_gcp_key (Resource)
 
+Primary uses of the ciphertrust_gcp_key resource are:
+- Creating a Google cloud key
+- Uploading an existing key to Google cloud
+- Adding a new version of a Google cloud key using Google cloud as the key source
+- Adding a new version of a Google cloud key from another key source
+- Specifying Google cloud key rotation parameters for symmetric keys
+- Scheduling key rotation that is managed by CipherTrust Manager
+- Updating existing ciphertrust_gcp_key resources
+- Enabling/Disabling specific key versions
+- Destroying specific key versions
+
+Key resources for upload are:
+- CipherTrust Manager Key [ciphertrust_cm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/cm_key)
+- DSM Key [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain), [ciphertrust_dsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_key)
+- Luna-HSM Key [ciphertrust_hsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_key)
+
+Container resources for scheduled rotation are:
+- Luna-HSM Partition [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition)
+- DSM Domain [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain)
+
+Scheduling key rotation requires a [ciphertrust_scheduler](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/scheduler) resource.
+
+The resource is dependent on a [ciphertrust_gcp_keyring](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_keyring) resource.
 
 
 ## Example Usage
 
 ```terraform
-# Basic create key usage
+# Indirectly this resource is dependent on a ciphertrust_gcp_connection resource
+resource "ciphertrust_gcp_connection" "gcp_connection" {
+  key_file = "gcp-key-file.json"
+  name     = "connection-name"
+}
 
+# This resource is dependent on a ciphertrust_gcp_keyring resource
+resource "ciphertrust_gcp_keyring" "gcp_keyring" {
+  gcp_connection = ciphertrust_gcp_connection.gcp_connection.name
+  name           = "keyring-name"
+  project_id     = "project-id"
+}
+
+# Create an asymmetric Google cloud key
 resource "ciphertrust_gcp_key" "gcp_key" {
   algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
   key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "gcp_key_name"
+  name      = "key-name"
 }
 
-# Upload a CipherTrust CM key to Google Cloud
-
+# Create a symmetric Google cloud key
 resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm          = "GOOGLE_SYMMETRIC_ENCRYPTION"
-  key_ring           = ciphertrust_gcp_keyring.gcp_keyring.id
-  name               = "key_name"
+  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+}
+
+# Upload a CipherTrust Manager key to Google Cloud
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
   upload_key {
     source_key_identifier = ciphertrust_cm_key.cm_key.id
   }
 }
 
-# Create a key and add a new native version
+# Upload a DSM key to Google Cloud
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  upload_key {
+    source_key_identifier = ciphertrust_dsm_key.dsm_key.id
+    source_key_tier       = "dsm"
+  }
+}
 
+# Upload a Luna-HSM key to Google Cloud
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_SIGN_PKCS1_2048_SHA256"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  upload_key {
+    source_key_identifier = ciphertrust_hsm_key.hsm_key.private_key_id
+    source_key_tier       = "hsm-luna"
+  }
+}
+
+# Create a new version using Google cloud
 resource "ciphertrust_gcp_key" "gcp_key" {
   # Versions can be added on create or update
   add_version {
-    is_native       = true
+    is_native = true
   }
   algorithm = "RSA_DECRYPT_OAEP_4096_SHA256"
   key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key_name"
+  name      = "key-name"
 }
 
-# Create a key and add a new version using Hsm-Luna as the key source
+# Create a new version using CipherTrust Manager as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  # Versions can be added on create or update
+  add_version {
+    algorithm       = "GOOGLE_SYMMETRIC_ENCRYPTION"
+    is_native       = false
+    source_key_id   = ciphertrust_cm_key.cm_key.id
+    source_key_tier = "local"
+  }
+  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+}
 
+# Create a new version using Luna-HSM as the key source
 resource "ciphertrust_gcp_key" "gcp_key" {
   # Versions can be added on create or update
   add_version {
     is_native       = false
-    algorithm       = "RSA_DECRYPT_OAEP_2048_SHA256"
+    algorithm       = "RSA_DECRYPT_OAEP_4096_SHA256"
     source_key_id   = ciphertrust_hsm_key.hsm_key.private_key_id
     source_key_tier = "hsm-luna"
   }
   algorithm = "RSA_DECRYPT_OAEP_4096_SHA256"
   key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key_name"
+  name      = "key-name"
+}
+
+# Create a new version using a DSM as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  # Versions can be added on create or update
+  add_version {
+    is_native       = false
+    algorithm       = "RSA_DECRYPT_OAEP_4096_SHA256"
+    source_key_id   = ciphertrust_dsm_key.rsa_dsm_key.id
+    source_key_tier = "dsm"
+  }
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA256"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+}
+
+# Configure Google Cloud rotation (symmetric keys only)
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm          = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  key_ring           = ciphertrust_gcp_keyring.gcp_keyring.id
+  name               = "key-name"
+  next_rotation_time = "2029-07-31T17:18:37.085Z"
+  rotation_period    = "360000s"
+}
+
+# Schedule key rotation using Google cloud as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
+  # Rotation can be enabled on create or update
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source    = "native"
+  }
+  key_ring = ciphertrust_gcp_keyring.gcp_keyring.id
+  name     = "key-name"
 }
 
 # Schedule key rotation using CipherTrust Manager as the key source
-
 resource "ciphertrust_gcp_key" "gcp_key" {
   algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
   # Rotation can be enabled on create or update
@@ -69,20 +178,37 @@ resource "ciphertrust_gcp_key" "gcp_key" {
     job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
     key_source    = "ciphertrust"
   }
-  key_ring         = ciphertrust_gcp_keyring.gcp_keyring.id
-  name             = "key_name"
+  key_ring = ciphertrust_gcp_keyring.gcp_keyring.id
+  name     = "key-name"
 }
 
-# Schedule key rotation by Google Cloud (symmetric keys only)
-
+# Schedule key rotation using Luna-HSM as the key source
 resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "GOOGLE_SYMMETRIC_ENCRYPTION"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name               = key_name
-  # Can be specified on update or create
-  next_rotation_time = "2022-07-31T17:18:37.085Z"
-  rotation_period    = "360005s"
- }
+  algorithm = "RSA_DECRYPT_OAEP_2048_SHA256"
+  # Rotation can be enabled on create or update
+  enable_rotation {
+    algorithm        = "RSA_DECRYPT_OAEP_4096_SHA512"
+    hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
+    job_config_id    = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source       = "hsm-luna"
+  }
+  key_ring = ciphertrust_gcp_keyring.gcp_keyring.id
+  name     = "key-name"
+}
+
+# Schedule key rotation using a DSM as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_SIGN_PKCS1_2048_SHA256"
+  # Rotation can be enabled on create or update
+  enable_rotation {
+    algorithm     = "EC_SIGN_P384_SHA384"
+    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
+    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source    = "dsm"
+  }
+  key_ring = ciphertrust_gcp_keyring.gcp_keyring.id
+  name     = "key-name"
+}
 ```
 
 <!-- schema generated by tfplugindocs -->
@@ -90,56 +216,55 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 
 ### Required
 
-- **algorithm** (String) Algorithm of the next key versions. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. Can be updated for asymmetric keys. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
-- **key_ring** (String) Terraform ID of the key ring on which to create the key.
-- **name** (String) Name of the key.
+- `algorithm` (String) Algorithm of the next key versions. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. Can be updated for asymmetric keys. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
+- `key_ring` (String) Terraform ID of the key ring on which to create the key.
+- `name` (String) Name of the key.
 
 ### Optional
 
-- **add_version** (Block List) Add versions to the Google Cloud key. Versions can be added during create or update. (see [below for nested schema](#nestedblock--add_version))
-- **disable_all_versions** (Boolean) Disable all key versions. All versions can be disabled on create or update.
-- **disable_versions** (Set of String) A list of version ID's to disable. Versions that don't exist or are not enabled are ignored.
-- **enable_all_versions** (Boolean) Enable all key versions.
-- **enable_rotation** (Block List, Max: 1) Enable the key for scheduled rotation job. Rotation can be enabled on create or update. (see [below for nested schema](#nestedblock--enable_rotation))
-- **enable_versions** (Set of String) A list of version ID's to enable. Versions that don't exist or are not disabled are ignored.
-- **key_labels** (Map of String) A list of key:value pairs to assign to the Google Cloud key. Keys and values can contain only lowercase letters,  numeric characters, underscores, and dashes.
-- **next_rotation_time** (String) Time when the key will next be rotated by Google Cloud KMS. Can only be applied to symmetric keys. Must be formatted as per RFC3339. For example, 2022-07-31T17:18:37Z.
-- **primary_version** (Number) Update the primary version. Valid for symmetric keys only.
-- **protection_level** (String) Protection level of the key. Options: SOFTWARE, HSM.
-- **purpose** (String) Purpose of the key. Options: ENCRYPT_DECRYPT, ASYMMETRIC_SIGN, ASYMMETRIC_DECRYPT.
-- **rotation_period** (String) Frequency at which the Google Cloud key will to be rotated by Google Cloud. Can only be applied to symmetric keys. Must be formatted as a duration in seconds terminated by 's'. For example, 360000s.
-- **upload_key** (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
+- `add_version` (Block List) Add versions to the Google Cloud key. Versions can be added during create or update. (see [below for nested schema](#nestedblock--add_version))
+- `disable_all_versions` (Boolean) Disable all key versions. All versions can be disabled on create or update.
+- `disable_versions` (Set of String) A list of version ID's to disable. Versions that don't exist or are not enabled are ignored.
+- `enable_all_versions` (Boolean) Enable all key versions.
+- `enable_rotation` (Block List, Max: 1) Enable the key for scheduled rotation job. Rotation can be enabled on create or update. (see [below for nested schema](#nestedblock--enable_rotation))
+- `enable_versions` (Set of String) A list of version ID's to enable. Versions that don't exist or are not disabled are ignored.
+- `key_labels` (Map of String) A list of key:value pairs to assign to the Google Cloud key. Keys and values can contain only lowercase letters,  numeric characters, underscores, and dashes.
+- `next_rotation_time` (String) Time when the key will next be rotated by Google Cloud KMS. Can only be applied to symmetric keys. Must be formatted as per RFC3339. For example, 2022-07-31T17:18:37Z.
+- `primary_version` (Number) Update the primary version. Valid for symmetric keys only.
+- `protection_level` (String) Protection level of the key. Options: SOFTWARE, HSM.
+- `purpose` (String) Purpose of the key. Options: ENCRYPT_DECRYPT, ASYMMETRIC_SIGN, ASYMMETRIC_DECRYPT.
+- `rotation_period` (String) Frequency at which the Google Cloud key will to be rotated by Google Cloud. Can only be applied to symmetric keys. Must be formatted as a duration in seconds terminated by 's'. For example, 360000s.
+- `upload_key` (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
 
 ### Read-Only
 
-- **cloud_name** (String) Cloud name.
-- **create_status** (String) Key creation status.
-- **created_at** (String) Date the key was created.
-- **gcp_cloud_resource_name** (String) Google cloud resource name.
-- **gone** (Boolean) True if the key is not managed by the connection.
-- **id** (String) Google cloud resource ID.
-- **key_id** (String) CipherTrust key ID.
-- **key_ring_id** (String) Google cloud key ring ID.
-- **key_ring_name** (String) Google cloud key ring name.
-- **key_versions** (List of Object) Key version details. (see [below for nested schema](#nestedatt--key_versions))
-- **labels** (Map of String) A list of key:value pairs associated with the key.
-- **location_id** (String) Location ID.
-- **primary** (String) Primary version.
-- **project_id** (String) Google Cloud project ID.
-- **updated_at** (String) Date the key was last updated.
+- `cloud_name` (String) Cloud name.
+- `create_status` (String) Key creation status.
+- `created_at` (String) Date the key was created.
+- `gcp_cloud_resource_name` (String) Google cloud resource name.
+- `id` (String) Google cloud resource ID.
+- `key_id` (String) CipherTrust key ID.
+- `key_ring_id` (String) Google cloud key ring ID.
+- `key_ring_name` (String) Google cloud key ring name.
+- `key_versions` (List of Object) Key version details. (see [below for nested schema](#nestedatt--key_versions))
+- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `location_id` (String) Location ID.
+- `primary` (String) Primary version.
+- `project_id` (String) Google Cloud project ID.
+- `updated_at` (String) Date the key was last updated.
 
 <a id="nestedblock--add_version"></a>
 ### Nested Schema for `add_version`
 
 Required:
 
-- **is_native** (Boolean) Google Cloud will create the new version using the algorithm of the key.
+- `is_native` (Boolean) Google Cloud will create the new version using the algorithm of the key.
 
 Optional:
 
-- **algorithm** (String) Algorithm of the version. Not valid if is_native is true. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
-- **source_key_id** (String) DSM, HSM or CipherTrust key ID. Not required if is_native is true.
-- **source_key_tier** (String) Source of the key. Options: local, dsm and hsm-luna. Not required if is_native is true.
+- `algorithm` (String) Algorithm of the version. Not valid if is_native is true. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
+- `source_key_id` (String) DSM, HSM or CipherTrust key ID. Not required if is_native is true.
+- `source_key_tier` (String) Source of the key. Options: local, dsm and hsm-luna. Not required if is_native is true.
 
 
 <a id="nestedblock--enable_rotation"></a>
@@ -147,14 +272,14 @@ Optional:
 
 Required:
 
-- **job_config_id** (String) ID of the scheduler job that will perform key rotation.
-- **key_source** (String) Source of the key material. Options: native, ciphertrust, dsm and hsm-luna.
+- `job_config_id` (String) ID of the scheduler job that will perform key rotation.
+- `key_source` (String) Source of the key material. Options: native, ciphertrust, dsm and hsm-luna.
 
 Optional:
 
-- **algorithm** (String) Algorithm of the rotated key. Not valid if key_source is native.  Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
-- **dsm_domain_id** (String) ID of the domain in which DSM keys will be created.
-- **hsm_partition_id** (String) ID of the partition in which HSM keys will be created.
+- `algorithm` (String) Algorithm of the rotated key. Not valid if key_source is native.  Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
+- `dsm_domain_id` (String) ID of the domain in which DSM keys will be created.
+- `hsm_partition_id` (String) ID of the partition in which HSM keys will be created.
 
 
 <a id="nestedblock--upload_key"></a>
@@ -162,11 +287,11 @@ Optional:
 
 Required:
 
-- **source_key_identifier** (String) DSM, HSM or CipherTrust key ID.
+- `source_key_identifier` (String) DSM, HSM or CipherTrust key ID.
 
 Optional:
 
-- **source_key_tier** (String) Source of the key. Options: local, dsm and hsm-luna. Default is local.
+- `source_key_tier` (String) Source of the key. Options: local, dsm and hsm-luna. Default is local.
 
 
 <a id="nestedatt--key_versions"></a>
@@ -174,22 +299,22 @@ Optional:
 
 Read-Only:
 
-- **algorithm** (String)
-- **is_primary** (Boolean)
-- **local_key_id** (String)
-- **local_key_name** (String)
-- **public_key** (Set of Object) (see [below for nested schema](#nestedobjatt--key_versions--public_key))
-- **version** (Number)
-- **version_id** (String)
-- **version_state** (String)
+- `algorithm` (String)
+- `is_primary` (Boolean)
+- `local_key_id` (String)
+- `local_key_name` (String)
+- `public_key` (Set of Object) (see [below for nested schema](#nestedobjatt--key_versions--public_key))
+- `version` (Number)
+- `version_id` (String)
+- `version_state` (String)
 
 <a id="nestedobjatt--key_versions--public_key"></a>
 ### Nested Schema for `key_versions.public_key`
 
 Read-Only:
 
-- **algorithm** (String)
-- **name** (String)
-- **pem** (String)
+- `algorithm` (String)
+- `name` (String)
+- `pem` (String)
 
 

@@ -13,7 +13,7 @@ description: |-
 
 A cluster is a group of one or more system nodes that synchronize their data. The nodes should be freshly launched instances of CipherTrust Manager.
 Cluster operations will not use the "address" configured for the provider. It will use the "public_address" of one of the nodes instead. If a "node" block is marked as
-"original" then we will try and use that one. The provider will attempt to use the "username" and "password" values configured at the provider level. But if those do not 
+"original" then we will try and use that one. The provider will attempt to use the "username" and "password" values configured at the provider level. But if those do not
 work we will attempt to use the default credentials and then change the password to the "password" value.
 
 ## Example Usage
@@ -40,7 +40,7 @@ resource "ciphertrust_cluster" "cluster" {
   }
   node {
     host           = "3.3.3.3"
-    public_address = "4.4.4.4"
+    public_address = "4.4.4.5"
   }
 }
 ```
@@ -50,33 +50,33 @@ resource "ciphertrust_cluster" "cluster" {
 
 ### Optional
 
-- **id** (String) The ID of this resource.
-- **node** (Block Set) (see [below for nested schema](#nestedblock--node))
+- `node` (Block Set) (see [below for nested schema](#nestedblock--node))
 
 ### Read-Only
 
-- **node_count** (Number) Number of nodes in the cluster
-- **node_id** (String) This CipherTrust manager node ID
-- **status_code** (String) short code for cluster status: r == ready
-- **status_description** (String) cluster status
+- `id` (String) "ciphertrust_cluster"
+- `node_count` (Number) Number of nodes in the cluster
+- `node_id` (String) This CipherTrust manager node ID
+- `status_code` (String) short code for cluster status: r == ready
+- `status_description` (String) cluster status
 
 <a id="nestedblock--node"></a>
 ### Nested Schema for `node`
 
 Required:
 
-- **host** (String) The hostname or IP of the node
+- `host` (String) The hostname or IP of the node
 
 Optional:
 
-- **original** (Boolean) This node is the same server as the provider is configured to use. It is used as the first node in the cluster. All other nodes will have the same state as this node.
-- **port** (Number) The port of the node, typically 5432
-- **public_address** (String) The fully qualified domain name (FQDN) or public IP of this node. This attribute is used by CipherTrust Manager connectors to learn how to access this particular node of the cluster remotely.
+- `original` (Boolean) This node is the same server as the provider is configured to use. It is used as the first node in the cluster. All other nodes will have the same state as this node.
+- `port` (Number) The port of the node, typically 5432
+- `public_address` (String) The fully qualified domain name (FQDN) or public IP of this node. This attribute is used by CipherTrust Manager connectors to learn how to access this particular node of the cluster remotely.
 
 Read-Only:
 
-- **id** (String) This CipherTrust manager node ID
-- **status_code** (String) Status code of the node in the cluster, r == ready
-- **status_description** (String) Descriptive status name of the node in the cluster
+- `id` (String) This CipherTrust manager node ID
+- `status_code` (String) Status code of the node in the cluster, r == ready
+- `status_description` (String) Descriptive status name of the node in the cluster
 
 

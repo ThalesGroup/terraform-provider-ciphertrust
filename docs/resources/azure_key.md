@@ -8,40 +8,129 @@ description: |-
 
 # ciphertrust_azure_key (Resource)
 
+Primary uses of the ciphertrust_azure_key resource include:
+- Creating a native Azure key
+- Uploading an existing key to Azure
+- Scheduling key rotation that is managed by CipherTrust Manager
+- Updating existing ciphertrust_azure_key resources
+- Enabling/Disabling an Azure key
+
+Key resources for upload are:
+- CipherTrust Manager Key [ciphertrust_cm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/cm_key)
+- DSM Key [ciphertrust_dsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_key)
+- Luna-HSM Key [ciphertrust_hsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_key)
+
+Container resources for scheduled rotation are:
+- Luna-HSM Partition [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition)
+- DSM Domain [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain)
+
+Scheduling key rotation requires a [ciphertrust_scheduler](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/scheduler) resource.
+
+This resource is dependent on a [ciphertrust_azure_vault](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_vault) resource.
 
 
 ## Example Usage
 
 ```terraform
-# Basic create key usage
-
-resource "ciphertrust_azure_key" "azure_key" {
-  key_type = "EC"
-  name     = "key_name"
-  vault    = ciphertrust_azure_vault.standard_vault.id
+# Indirectly this resource is dependent on a ciphertrust_azure_connection resource
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name = "connection-name"
 }
 
-# Upload a HSM key to Azure
+# This resource is dependent on a ciphertrust_azure_vault resource
+resource "ciphertrust_azure_vault" "azure_vault" {
+  azure_connection = ciphertrust_azure_connection.azure_connection.name
+  subscription_id  = "azure-subscription-id"
+  name             = "azure-vault-name"
+}
 
+# Create a 2048 bit RSA Azure key
 resource "ciphertrust_azure_key" "azure_key" {
-  name = "key_name"
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Upload an existing CipherTrustKey to Azure
+resource "ciphertrust_azure_key" "azure_key" {
+  name = "key-name"
+  upload_key {
+    local_key_id = ciphertrust_cm_key.cihpertrust_key.id
+    source_key_tier = "local"
+  }
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Upload an existing Luna-HSM key to Azure
+resource "ciphertrust_azure_key" "azure_key" {
+  name = "key-name"
   upload_key {
     hsm_key_id      = ciphertrust_hsm_key.hsm_key.private_key_id
     source_key_tier = "hsm-luna"
   }
-  vault = ciphertrust_azure_vault.standard_vault.id
+  vault = ciphertrust_azure_vault.azure_vault.id
 }
 
-# Schedule key rotation using a Luna-SM as the key source
+# Upload an existing DSM key to Azure
+resource "ciphertrust_azure_key" "azure_key" {
+  name = "key-name"
+  upload_key {
+    dsm_key_id      = ciphertrust_dsm_key.dsm_key.id
+    source_key_tier = "dsm"
+  }
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
 
+# Upload a PFX file to Azure
+resource "ciphertrust_azure_key" "azure_key" {
+  name = "key-name"
+  upload_key {
+    pfx             = "path-to-pfx-file"
+    pfx_password    = "pfx-password"
+    source_key_tier = "pfx"
+  }
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Schedule key rotation using Azure as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source    = "native"
+  }
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Schedule key rotation using CipherTrust Manager as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source    = "ciphertrust"
+  }
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Schedule key rotation using a Luna-HSM as the key source
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
     hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
-    job_config_id    = ciphertrust_scheduler.rotation_job.id
+    job_config_id    = ciphertrust_scheduler.scheduled_rotation_job.id
     key_source       = "hsm-luna"
   }
-  name     = "key_name"
-  vault    = ciphertrust_azure_vault.standard_vault.id
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Schedule key rotation using a DSM as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  enable_rotation {
+    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
+    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    key_source    = "dsm"
+  }
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
 }
 ```
 
@@ -50,66 +139,65 @@ resource "ciphertrust_azure_key" "azure_key" {
 
 ### Required
 
-- **name** (String) Name for the key.
-- **vault** (String) Name or ID of the vault.
+- `name` (String) Name for the key.
+- `vault` (String) Name or ID of the vault.
 
 ### Optional
 
-- **activation_date** (String) Date of key activation in UTC time in RFC3339 format. For example, 2021-07-03T14:24:30Z.
-- **curve** (String) Curve name for an EC or EC-HSM elliptical key. Options: P-256, P-384, P-521, SECP256K1. Default is P-256.
-- **enable_key** (Boolean) Enable or disable the key. Default is true.
-- **enable_rotation** (Block List, Max: 1) Enable the key for scheduled rotation job. Note: Key rotation can cause drift. (see [below for nested schema](#nestedblock--enable_rotation))
-- **expiration_date** (String) Date of key expiry in UTC time in RFC3339 format. For example, 2022-07-03T14:24:00Z.
-- **key_ops** (List of String) Allowed key operations. RSA/RSA-HSM key options: encrypt, decrypt, sign, verify, wrapKey, unwrapKey and import. EC key options: sign and verify. Import is applicable only for RSA-HSM keys and mandatory to be set when creating a Key Encryption Key. Default for RSA keys is encrypt, decrypt, sign, verify, wrapKey and unwrapKey. Default for EC keys is sign and verify.
-- **key_size** (Number) Size for RSA keys. Options: 2048, 3072, 4096. Default is 2048.
-- **key_type** (String) The type of key to create. EC      - Elliptic Curve key, RSA     - RSA key, EC-HSM  - Elliptic Curve key for premium key vaults only, RSA-HSM - RSA key for premium key vaults only. Default is RSA.
-- **tags** (Map of String) A list of key:value pairs to assign to the key.
-- **upload_key** (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
+- `activation_date` (String) (Updateable) Date of key activation in UTC time in RFC3339 format. For example, 2021-07-03T14:24:30Z.
+- `curve` (String) Curve name for an EC or EC-HSM elliptical key. Options: P-256, P-384, P-521, SECP256K1. Default is P-256.
+- `enable_key` (Boolean) (Updateable) Enable or disable the key. Default is true.
+- `enable_rotation` (Block List, Max: 1) (Updateable) Enable the key for scheduled rotation job. Note: Key rotation can cause drift. (see [below for nested schema](#nestedblock--enable_rotation))
+- `expiration_date` (String) (Updateable) Date of key expiry in UTC time in RFC3339 format. For example, 2022-07-03T14:24:00Z.
+- `key_ops` (List of String) (Updateable) Allowed key operations. RSA/RSA-HSM key options: encrypt, decrypt, sign, verify, wrapKey, unwrapKey and import. EC/EC-HSM key options: sign and verify. Import is applicable only for RSA-HSM keys and mandatory to be set when creating a Key Encryption Key. Default for RSA keys is encrypt, decrypt, sign, verify, wrapKey and unwrapKey. Default for EC keys is sign and verify.
+- `key_size` (Number) Size for RSA keys. Options: 2048, 3072, 4096. Default is 2048.
+- `key_type` (String) The type of key to create. EC      - Elliptic Curve key, RSA     - RSA key, EC-HSM  - Elliptic Curve key for premium and managed HSM key vaults only, RSA-HSM - RSA key for premium key and managed HSM vaults only. Keys created in managed HSM vaults must be RSA-HSM or EC-HSM. Default is RSA-HSM for managed HSM vaults otherwise RSA.
+- `tags` (Map of String) (Updateable) A list of key:value pairs to assign to the key.
+- `upload_key` (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
 
 ### Read-Only
 
-- **azure_key_id** (String) Azure key identifier.
-- **backup** (String) CipherTrust ID of the key's backup.
-- **backup_at** (String) Date the key was backed up.
-- **cloud_name** (String) Azure cloud.
-- **created_at** (String) Date the key was created.
-- **created_by** (String) Client ID which created the key.
-- **deleted** (Boolean) Is the key deleted.
-- **enabled** (Boolean) True if the key is enabled.
-- **gone** (Boolean) True if the key is not managed by the connection.
-- **id** (String) Azure key identifier.
-- **key_id** (String) CipherTrust Key ID.
-- **key_material_origin** (String) Key material origin of an uploaded or imported key.
-- **key_soft_deleted_in_azure** (Boolean) Is the key soft-deleted in Azure.
-- **key_vault** (String) Name of the Azure vault containing the key in the format of vault_name::subscription_id
-- **key_vault_id** (String) CipherTrust vault ID.
-- **labels** (Map of String) A list of key:value pairs associated with the key.
-- **local_key_id** (String) CipherTrust key identifier of the external key.
-- **local_key_name** (String) CipherTrust key name of the external key.
-- **modified_by** (String) Client ID which modified the key.
-- **recovery_level** (String) Recovery level of the key.
-- **region** (String) Azure region of the key.
-- **soft_delete_enabled** (Boolean) Is soft-delete enabled for the key.
-- **status** (String) Status of the key.
-- **synced_at** (String) Date the key was synchronized.
-- **tenant** (String) Azure Tenant.
-- **updated_at** (String) Date the key was last updated.
-- **version** (String) Key version.
-- **version_count** (Number) Number of versions of the key.
+- `azure_key_id` (String) Azure key identifier.
+- `backup` (String) CipherTrust ID of the key's backup.
+- `backup_at` (String) Date the key was backed up.
+- `cloud_name` (String) Azure cloud.
+- `created_at` (String) Date the key was created.
+- `created_by` (String) Client ID which created the key.
+- `deleted` (Boolean) Is the key deleted.
+- `enabled` (Boolean) True if the key is enabled.
+- `id` (String) Azure key identifier.
+- `key_id` (String) CipherTrust Key ID.
+- `key_material_origin` (String) Key material origin of an uploaded or imported key.
+- `key_soft_deleted_in_azure` (Boolean) Is the key soft-deleted in Azure.
+- `key_vault` (String) Name of the Azure vault containing the key in the format of vault_name::subscription_id
+- `key_vault_id` (String) CipherTrust vault ID.
+- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `local_key_id` (String) CipherTrust key identifier of the external key.
+- `local_key_name` (String) CipherTrust key name of the external key.
+- `modified_by` (String) Client ID which modified the key.
+- `recovery_level` (String) Recovery level of the key.
+- `region` (String) Azure region of the key.
+- `soft_delete_enabled` (Boolean) Is soft-delete enabled for the key.
+- `status` (String) Status of the key.
+- `synced_at` (String) Date the key was synchronized.
+- `tenant` (String) Azure Tenant.
+- `updated_at` (String) Date the key was last updated.
+- `version` (String) Key version.
+- `version_count` (Number) Number of versions of the key.
 
 <a id="nestedblock--enable_rotation"></a>
 ### Nested Schema for `enable_rotation`
 
 Required:
 
-- **job_config_id** (String) ID of the scheduler job that will perform key rotation.
-- **key_source** (String) Source of the key material. Only native is valid for EC keys. Options: native, ciphertrust, dsm and hsm-luna.
+- `job_config_id` (String) (Updateable) ID of the scheduler job that will perform key rotation.
+- `key_source` (String) (Updateable) Source of the key material. Only native is valid for EC keys. Options: native, ciphertrust, dsm and hsm-luna.
 
 Optional:
 
-- **dsm_domain_id** (String) ID of the domain in which DSM keys will be created.
-- **enable_key** (Boolean) Enable the rotated key. Default is true.
-- **hsm_partition_id** (String) ID of the partition in which HSM keys will be created.
+- `dsm_domain_id` (String) (Updateable) ID of the domain in which DSM keys will be created.
+- `enable_key` (Boolean) (Updateable) Enable the rotated key. Default is true.
+- `hsm_partition_id` (String) (Updateable) ID of the partition in which HSM keys will be created.
 
 
 <a id="nestedblock--upload_key"></a>
@@ -117,13 +205,13 @@ Optional:
 
 Optional:
 
-- **dsm_key_id** (String) DSM key ID to upload to Azure. Required if source_key_tier is dsm.
-- **hsm** (Boolean) Premium vaults support hsm-backed keys. Set to true to use this option.
-- **hsm_key_id** (String) Luna-HSM key identifier of the key to be uploaded to Azure. Required if source_key_tier is hsm-luna
-- **kek_kid** (String) Identifier of an Azure key encrypting key.
-- **local_key_id** (String) CCKM key identifier of the key uploaded to Azure. Required if source_key_tier is local.
-- **pfx** (String) Pfx file to upload. Required if source_key_tier is pfx.
-- **pfx_password** (String) PFX password. Specify only if the PFX certificate is provided.
-- **source_key_tier** (String) Options: local, pfx, dsm and hsm-luna. Default is local.
+- `dsm_key_id` (String) DSM key ID to upload to Azure. Required if source_key_tier is dsm.
+- `hsm` (Boolean) Premium vaults support hsm-backed keys. Set to true to use this option.
+- `hsm_key_id` (String) Luna-HSM key identifier of the key to be uploaded to Azure. Required if source_key_tier is hsm-luna
+- `kek_kid` (String) Identifier of an Azure key encrypting key.
+- `local_key_id` (String) CCKM key identifier of the key uploaded to Azure. Required if source_key_tier is local.
+- `pfx` (String) Pfx file to upload. Required if source_key_tier is pfx.
+- `pfx_password` (String) PFX password. Specify only if the PFX certificate is provided.
+- `source_key_tier` (String) Options: local, pfx, dsm and hsm-luna. Default is local.
 
 

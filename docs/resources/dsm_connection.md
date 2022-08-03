@@ -8,19 +8,40 @@ description: |-
 
 # ciphertrust_dsm_connection (Resource)
 
+This resource creates a connection between CipherTrust Manager and a DSM
+
+A connection is required before operations can be performed on the DSM.
+
+[ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain) resources are dependent on this resource.
 
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_dsm_connection" "connection" {
-  name        = "dsm_connection_name"
+# Create a DSM connection
+resource "ciphertrust_dsm_connection" "dsm_connection" {
+  name        = "connection-name"
   nodes {
-    hostname    = "10.134.183.43"
+    hostname    = "host-ip-address"
     certificate = "dsm-server.pem"
   }
-  password = "dsm_password"
-  username = "dsm_username"
+  password = "dsm-password"
+  username = "dsm-username"
+}
+
+# Assign a DSM domain to the connection
+resource "ciphertrust_dsm_domain" "dsm_domain" {
+  dsm_connection = ciphertrust_dsm_connection.dsm_connection.id
+  domain_id      = "domain-id"
+}
+
+# Create a DSM key
+resource "ciphertrust_dsm_key" "dsm_key" {
+  name            = "key-name"
+  algorithm       = "AES256"
+  domain          = ciphertrust_dsm_domain.dsm_domain.id
+  extractable     = true
+  object_type     = "symmetric"
 }
 ```
 
@@ -29,27 +50,27 @@ resource "ciphertrust_dsm_connection" "connection" {
 
 ### Required
 
-- **name** (String) Unique connection name.
-- **nodes** (Block List, Min: 1) (see [below for nested schema](#nestedblock--nodes))
-- **password** (String, Sensitive) Password of the DSM.
-- **username** (String) Username for accessing the DSM.
+- `name` (String) Unique connection name.
+- `nodes` (Block List, Min: 1) (see [below for nested schema](#nestedblock--nodes))
+- `password` (String, Sensitive) (Updateable) Password of the DSM.
+- `username` (String) (Updateable) Username for accessing the DSM.
 
 ### Optional
 
-- **description** (String) Description of the DSM connection.
-- **domain_id** (String) If the DSM user is restricted to a domain, provide the domain id.
-- **meta** (String) Optional end-user or service data stored with the connection.
+- `description` (String) (Updateable) Description of the DSM connection.
+- `domain_id` (String) (Updateable) If the DSM user is restricted to a domain, provide the domain ID.
+- `meta` (Map of String) (Updateable) A list of key:value pairs to store with the connection.
 
 ### Read-Only
 
-- **id** (String) CipherTrust DSM connection ID.
+- `id` (String) CipherTrust DSM connection ID.
 
 <a id="nestedblock--nodes"></a>
 ### Nested Schema for `nodes`
 
 Required:
 
-- **certificate** (String) SSL certificate string or filename containing the certificate of DSM Server for TLS communication.
-- **hostname** (String) Hostname of the DSM.
+- `certificate` (String) SSL certificate string or filename containing the certificate of DSM Server for TLS communication.
+- `hostname` (String) Hostname of the DSM.
 
 

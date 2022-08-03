@@ -8,15 +8,32 @@ description: |-
 
 # ciphertrust_cm_key (Resource)
 
+CipherTrust Manager keys are primarily used to create the following:
+- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
+- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
+- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
 
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_cm_key" "cm_key" {
-  name      = "key_name"
+# Create a 2048 bit RSA key
+resource "ciphertrust_cm_key" "cm_rsa_key" {
+  name      = "key-name"
   algorithm = "RSA"
-  key_size  = 4096
+  key_size  = 2048
+}
+
+# Create a secp384r1 EC key
+resource "ciphertrust_cm_key" "cm_ec_key" {
+  name      = "key-name"
+  algorithm = "EC"
+}
+
+# Create a 256 bit AES key
+resource "ciphertrust_cm_key" "cm_aes_key" {
+  name      = "key-name"
+  algorithm = "AES"
 }
 ```
 
@@ -25,16 +42,16 @@ resource "ciphertrust_cm_key" "cm_key" {
 
 ### Required
 
-- **algorithm** (String) Algorithm of the key. Options: AES, EC and RSA.
-- **name** (String) Name of the key.
+- `algorithm` (String) Algorithm of the key. Options: AES, EC and RSA.
+- `name` (String) Name of the key.
 
 ### Optional
 
-- **curve** (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1 and prime256v1. Default is secp384r1.
-- **key_size** (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 1024, 2048, 3072, 4096.
+- `curve` (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1 and prime256v1. Default is secp384r1.
+- `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 1024, 2048, 3072, 4096.
 
 ### Read-Only
 
-- **id** (String) CipherTrust key ID.
+- `id` (String) CipherTrust key ID.
 
 

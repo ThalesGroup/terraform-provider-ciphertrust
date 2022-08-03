@@ -8,13 +8,30 @@ description: |-
 
 # ciphertrust_aws_account_details (Data Source)
 
+This data-source provides some AWS details associated with a [ciphertrust_aws_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_connection) resource.
+
+The details can optionally be used when creating a [ciphertrust_aws_kms](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_kms) resource.
 
 
 ## Example Usage
 
 ```terraform
+# Create an AWS connection
+resource "ciphertrust_aws_connection" "aws_connection" {
+  name              = "connection-name"
+  access_key_id     = "access-key-id"
+  secret_access_key = "secret-access-key"
+}
+
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.connection.id
+  aws_connection = ciphertrust_aws_connection.aws_connection.id
+}
+
+resource "ciphertrust_aws_kms" "kms" {
+  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
+  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  name           = "kms-name"
+  regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 ```
 
@@ -23,16 +40,16 @@ data "ciphertrust_aws_account_details" "account_details" {
 
 ### Required
 
-- **aws_connection** (String) Name or ID of the AWS connection.
+- `aws_connection` (String) Name or ID of the AWS connection.
 
 ### Optional
 
-- **id** (String) The ID of this resource.
-- **validate** (Boolean) Validate that the AWS account is already managed by a connection.
+- `validate` (Boolean) Validate that the AWS account is already managed by a connection.
 
 ### Read-Only
 
-- **account_id** (String) AWS account ID managed by the connection.
-- **regions** (List of String) AWS regions available for the account.
+- `account_id` (String) AWS account ID managed by the connection.
+- `id` (String) AWS account.
+- `regions` (List of String) AWS regions available for the account.
 
 

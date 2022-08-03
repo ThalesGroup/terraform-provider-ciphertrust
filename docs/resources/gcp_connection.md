@@ -8,14 +8,34 @@ description: |-
 
 # ciphertrust_gcp_connection (Resource)
 
+This resource creates a connection between CipherTrust Manager and Google cloud.
+
+A connection is required before operations can be performed on Google cloud.
+
+[ciphertrust_gcp_keyring](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_keyring) resources are dependent on this resource.
 
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_gcp_connection" "connection" {
-  key_file    = "gcp-key-file.json"
-  name        = "gcp_connection_name"
+# Create a connection to Google cloud
+resource "ciphertrust_gcp_connection" "gcp_connection" {
+  key_file = "gcp-key-file.json"
+  name     = "connection-name"
+}
+
+# Assign a keyring to the connection
+resource "ciphertrust_gcp_keyring" "gcp_keyring" {
+  gcp_connection = ciphertrust_gcp_connection.gcp_connection.name
+  name           = "keyring-name"
+  project_id     = "project-id"
+}
+
+# Create a Google cloud key
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
 }
 ```
 
@@ -24,17 +44,17 @@ resource "ciphertrust_gcp_connection" "connection" {
 
 ### Required
 
-- **key_file** (String) Path to or data of a Google Cloud Service Account key file.
-- **name** (String) Unique connection name.
+- `key_file` (String) (Updateable) Path to or data of a Google Cloud Service Account key file.
+- `name` (String) Unique connection name.
 
 ### Optional
 
-- **cloud_name** (String) Name of the cloud. Options: gcp. Default is gcp.
-- **description** (String) Description of the Google Cloud connection.
-- **meta** (String) Optional end-user or service data stored with the connection.
+- `cloud_name` (String) (Updateable) Name of the cloud. Options: gcp. Default is gcp.
+- `description` (String) (Updateable) Description of the Google Cloud connection.
+- `meta` (Map of String) (Updateable) A list of key:value pairs to store with the connection.
 
 ### Read-Only
 
-- **id** (String) CipherTrust Google Cloud connection ID.
+- `id` (String) CipherTrust Google Cloud connection ID.
 
 

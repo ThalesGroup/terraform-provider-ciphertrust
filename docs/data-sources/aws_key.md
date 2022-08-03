@@ -8,36 +8,33 @@ description: |-
 
 # ciphertrust_aws_key (Data Source)
 
+This data-source retrieves details of a [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resource.
+
+It's possible to identify the key using a range of fields.
 
 
 ## Example Usage
 
 ```terraform
-# Get the AWS key details using the alias and optionally a region
-data "ciphertrust_aws_key" "by_alias" {
-  alias  = ["key_alias"]
-  region = "us-east1"
-}
-
-# Get the AWS key details using the ARN
-data "ciphertrust_aws_key" "by_arn" {
-  arn = ciphertrust_aws_key.aws_key.arn
-}
-
-# Get the AWS key details using the AWS key id and optionally a region
-data "ciphertrust_aws_key" "by_aws_key_id" {
-  aws_key_id = ciphertrust_aws_key.aws_key.aws_key_id
-  region     = "us-east1"
-}
-
-# Get the AWS key details using the terraform resource id
+# Retrieve details using the terraform resource ID
 data "ciphertrust_aws_key" "by_resource_id" {
   id = ciphertrust_aws_key.aws_key.id
 }
 
-# Get the AWS key details using the CipherTrust key id
+# Retrieve details using the CipherTrust key ID
 data "ciphertrust_aws_key" "by_key_id" {
   key_id = ciphertrust_aws_key.aws_key.key_id
+}
+
+# Retrieve details using the AWS key ARN
+data "ciphertrust_aws_key" "by_arn" {
+  arn = ciphertrust_aws_key.aws_key.arn
+}
+
+# Retrieve details using the alias and a region
+data "ciphertrust_aws_key" "by_alias_and_region" {
+  alias  = ["key_name"]
+  region = "region"
 }
 ```
 
@@ -46,57 +43,55 @@ data "ciphertrust_aws_key" "by_key_id" {
 
 ### Optional
 
-- **alias** (Set of String) Input parameter. Aliases assigned to the the key
-- **arn** (String) Input parameter, AWS ARN
-- **aws_key_id** (String) Input parameter, can be used alone or with a region to specify the key. AWS key ID
-- **id** (String) Input parameter, used alone to specify the key. Terraform ID of the key
-- **key_id** (String) Input parameter, used alone to specify the key. CipherTrust key ID
-- **region** (String) Optional input paramter, AWS region. Can be used in combination with alias and aws_key_id
+- `alias` (Set of String) Input parameter. Aliases assigned to the the key
+- `arn` (String) AWS ARN. Can be used alone to identify the key, all other parameters will be ignored.
+- `aws_key_id` (String) AWS key ID.
+- `id` (String) Terraform ID of the key. Can be used alone to identify the key, all other parameters will be ignored.
+- `key_id` (String) CipherTrust key ID. Can be used alone to identify the key, all other parameters will be ignored.
+- `region` (String) AWS region.
 
 ### Read-Only
 
-- **auto_rotate** (Boolean) True if AWS autorotation is enabled.
-- **aws_account_id** (String) AWS account ID.
-- **basic_view_enabled** (Boolean) What does this mean!
-- **cloud_name** (String) AWS cloud.
-- **created_at** (String) Date the key was created.
-- **customer_master_key_spec** (String) Specifies a symmetric key or an asymmetric key pair and the encryption algorithms.
-- **deletion_date** (String) Date the key is scheduled for deletion.
-- **description** (String) Description of the AWS key.
-- **enabled** (Boolean) True if key is enabled.
-- **encryption_algorithms** (List of String) Encryption algorithms of an asymmetric key
-- **expiration_model** (String) Expiration model.
-- **external_accounts** (List of String) Other AWS accounts that have access to this key.
-- **gone** (Boolean) True if they key is not managed by the connection.
-- **key_admins** (List of String) Key administrators.
-- **key_manager** (String) Key manager.
-- **key_material_origin** (String) Key material origin.
-- **key_rotation_enabled** (Boolean) True if rotation is enabled in AWS for this key.
-- **key_source** (String) Source of the key.
-- **key_state** (String) Key state.
-- **key_type** (String) Key type.
-- **key_usage** (String) Specifies the intended use of the key.
-- **key_users** (List of String) Key users.
-- **kms** (String) Kms name.
-- **kms_id** (String) Kms ID
-- **labels** (Map of String) A list of key:value pairs associated with the key.
-- **local_key_id** (String) CCKM key identifier of the external key.
-- **local_key_name** (String) CCKM key name of the external key.
-- **multi_region** (Boolean) True if the key is a multi-region key.
-- **multi_region_key_type** (String) Indicates if the key is the primary key or a replica key.
-- **multi_region_primary_key** (Map of String) Multi-region primary key details.
-- **multi_region_replica_keys** (List of Map of String) Multi-region primary key details.
-- **origin** (String) Source of the CMK's key material.
-- **policy** (String) AWS key policy.
-- **replica_policy** (String) Replication policy.
-- **replica_tags** (Map of String) A list of key:value pairs to assigned to the key.
-- **rotated_at** (String) Time when this key was rotated by a scheduled rotation job.
-- **rotated_from** (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
-- **rotated_to** (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
-- **rotation_status** (String) Rotation status of the key.
-- **synced_at** (String) Date the key was synchronized.
-- **tags** (Map of String) Key tags.
-- **updated_at** (String) Date the key was last updated.
-- **valid_to** (String) Date of key material expiry.
+- `auto_rotate` (Boolean) True if AWS autorotation is enabled.
+- `aws_account_id` (String) AWS account ID.
+- `cloud_name` (String) AWS cloud.
+- `created_at` (String) Date the key was created.
+- `customer_master_key_spec` (String) Specifies a symmetric key or an asymmetric key pair and the encryption algorithms.
+- `deletion_date` (String) Date the key is scheduled for deletion.
+- `description` (String) Description of the AWS key.
+- `enabled` (Boolean) True if key is enabled.
+- `encryption_algorithms` (List of String) Encryption algorithms of an asymmetric key
+- `expiration_model` (String) Expiration model.
+- `external_accounts` (List of String) Other AWS accounts that have access to this key.
+- `key_admins` (List of String) Key administrators.
+- `key_manager` (String) Key manager.
+- `key_material_origin` (String) Key material origin.
+- `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
+- `key_source` (String) Source of the key.
+- `key_state` (String) Key state.
+- `key_type` (String) Key type.
+- `key_usage` (String) Specifies the intended use of the key.
+- `key_users` (List of String) Key users.
+- `kms` (String) Kms name.
+- `kms_id` (String) Kms ID
+- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `local_key_id` (String) CCKM key identifier of the external key.
+- `local_key_name` (String) CCKM key name of the external key.
+- `multi_region` (Boolean) True if the key is a multi-region key.
+- `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
+- `multi_region_primary_key` (Map of String) Multi-region primary key details.
+- `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
+- `origin` (String) Source of the CMK's key material.
+- `policy` (String) AWS key policy.
+- `replica_policy` (String) Replication policy.
+- `replica_tags` (Map of String) A list of key:value pairs to assigned to the key.
+- `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
+- `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
+- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
+- `rotation_status` (String) Rotation status of the key.
+- `synced_at` (String) Date the key was synchronized.
+- `tags` (Map of String) Key tags.
+- `updated_at` (String) Date the key was last updated.
+- `valid_to` (String) Date of key material expiry.
 
 

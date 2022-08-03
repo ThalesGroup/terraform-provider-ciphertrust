@@ -8,25 +8,48 @@ description: |-
 
 # ciphertrust_hsm_connection (Resource)
 
+This resource creates a connection between CipherTrust Manager and a Luna-HSM server.
+
+A connection is required before operations can be performed on the Luna-HSM.
+
+This resource is dependent on a [ciphertrust_hsm_server](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_server) resource.
+
+[ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition) resources are dependent on this resource.
 
 
 ## Example Usage
 
 ```terraform
+# Create a ciphertrust_hsm_server resource
+resource "ciphertrust_hsm_server" "hsm_server" {
+  hostname        = "hsm-ip"
+  hsm_certificate = "hsm-server.pem"
+}
+
+# Create a Luna-HSM connection
 resource "ciphertrust_hsm_connection" "hsm_connection" {
-  is_ha_enabled = true
-  hostname    = "10.123.45.67"
+  hostname    = "hsm-ip"
   server_id   = ciphertrust_hsm_server.hsm_server.id
-  name        = "hsm_connection_name"
+  name        = "connection-name"
   partitions {
-      partition_label = "partition_label_one"
-      serial_number   = "serial_number_one"
+      partition_label = "partition-label"
+      serial_number   = "serial-number"
   }
-  partitions {
-     partition_label = "partition_label_two"
-     serial_number   = "serial_number_two"
-  }
-  partition_password = "hsm_partition_password"
+  partition_password = "partition-password"
+}
+
+# Create a ciphertrust_hsm_partition resource and assign it to the connection
+resource "ciphertrust_hsm_partition" "hsm_partition" {
+  hsm_connection = ciphertrust_hsm_connection.hsm_connection.id
+}
+
+# Create a Luna-HSM key
+resource "ciphertrust_hsm_key" "hsm_key" {
+  attributes   = ["CKA_ENCRYPT", "CKA_DECRYPT"]
+  label        = "key-name"
+  mechanism    = "CKM_RSA_FIPS_186_3_AUX_PRIME_KEY_PAIR_GEN"
+  partition_id = ciphertrust_hsm_partition.hsm_partition.id
+  key_size     = 2048
 }
 ```
 
@@ -35,28 +58,28 @@ resource "ciphertrust_hsm_connection" "hsm_connection" {
 
 ### Required
 
-- **hostname** (String) Hostname/IP of the Luna Network HSM Server.
-- **name** (String) Unique connection name.
-- **partition_password** (String, Sensitive) Password associated with the Luna Network HSM partition.
-- **partitions** (Block List, Min: 1) (see [below for nested schema](#nestedblock--partitions))
-- **server_id** (String) ID of the HSM network server.
+- `hostname` (String) Hostname/IP of the Luna Network HSM Server.
+- `name` (String) Unique connection name.
+- `partition_password` (String, Sensitive) Password associated with the Luna Network HSM partition.
+- `partitions` (Block List, Min: 1) (see [below for nested schema](#nestedblock--partitions))
+- `server_id` (String) ID of the HSM network server.
 
 ### Optional
 
-- **description** (String) Description of the HSM connection.
-- **is_ha_enabled** (Boolean) This flag signifies if it is a HighAvailability(HA) Group or not. Requires at least two HSM partitions.
-- **meta** (String) Optional end-user or service data stored with the connection.
+- `description` (String) (Updateable) Description of the HSM connection.
+- `is_ha_enabled` (Boolean) This flag signifies if it is a HighAvailability(HA) Group or not. Requires at least two HSM partitions.
+- `meta` (Map of String) (Updateable) A list of key:value pairs to store with the connection.
 
 ### Read-Only
 
-- **id** (String) CipherTrust HSM connection ID.
+- `id` (String) CipherTrust HSM connection ID.
 
 <a id="nestedblock--partitions"></a>
 ### Nested Schema for `partitions`
 
 Required:
 
-- **partition_label** (String) Label of a partition on the Luna Network HSM Server.
-- **serial_number** (String) Serial number of the partition.
+- `partition_label` (String) Label of a partition on the Luna Network HSM Server.
+- `serial_number` (String) Serial number of the partition.
 
 

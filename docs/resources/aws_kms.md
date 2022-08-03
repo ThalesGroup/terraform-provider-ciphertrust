@@ -8,16 +8,44 @@ description: |-
 
 # ciphertrust_aws_kms (Resource)
 
+This resource specifies the AWS Key Management Service account and AWS regions in which keys can be created.
+
+This resource is dependent on a [ciphertrust_aws_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_connection) resource.
+
+[ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources are dependent on this resource.
 
 
 ## Example Usage
 
 ```terraform
+# This resource is dependent on a ciphertrust_aws_connection resource
+resource "ciphertrust_aws_connection" "aws_connection" {
+  name              = "aws_connection_name"
+}
+
+# Create a kms resource without using the ciphertrust_aws_account_details data-source and assign it to the connection
+resource "ciphertrust_aws_kms" "kms" {
+  account_id     = ["aws-account-id"]
+  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  name           = "kms-name"
+  regions        = ["aws-region", "aws-region"]
+}
+
+# Create a kms resource using the ciphertrust_aws_account_details data-source and assign it to the connection
+data "ciphertrust_aws_account_details" "account_details" {
+  aws_connection = ciphertrust_aws_connection.aws_connection.id
+}
 resource "ciphertrust_aws_kms" "kms" {
   account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.connection.id
-  name           = "kms_name"
+  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  name           = "kms-name"
   regions        = data.ciphertrust_aws_account_details.account_details.regions
+}
+
+# Create an AWS key
+resource "ciphertrust_aws_key" "aws_key" {
+  kms    = ciphertrust_aws_kms.kms.id
+  region = "aws-region"
 }
 ```
 
@@ -26,14 +54,14 @@ resource "ciphertrust_aws_kms" "kms" {
 
 ### Required
 
-- **account_id** (String) AWS account ID.
-- **aws_connection** (String) Name or ID of the AWS connection.
-- **name** (String) Unique name for the KMS.
-- **regions** (List of String) A list of AWS regions to be added.
+- `account_id` (String) AWS account ID.
+- `aws_connection` (String) (Updateable) Name or ID of the AWS connection.
+- `name` (String) Unique name for the KMS.
+- `regions` (List of String) (Updateable) A list of AWS regions to be added.
 
 ### Read-Only
 
-- **arn** (String) Amazon Resource Name.
-- **id** (String) CipherTrust KMS ID.
+- `arn` (String) Amazon Resource Name.
+- `id` (String) CipherTrust KMS ID.
 
 

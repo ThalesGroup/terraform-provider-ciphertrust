@@ -8,14 +8,30 @@ description: |-
 
 # ciphertrust_azure_connection (Data Source)
 
+This data-source provides vault details associated with a [ciphertrust_azure_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_connection) resource.
 
 
 ## Example Usage
 
 ```terraform
-# List vault information for a connection
-data "ciphertrust_azure_connection" "vault_info" {
-  azure_connection = "AzureConnectionName"
+# Create an Azure connection
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name          = "connection-name"
+  client_id     = "azure-client-id"
+  client_secret = "azure-client-secret"
+  tenant_id     = "azure-tenant-id"
+}
+
+# Add a vault
+resource "ciphertrust_azure_vault" "azure_vault" {
+  azure_connection = ciphertrust_azure_connection.azure_connection.name
+  subscription_id  = "azure-subscription-id"
+  name             = "azure-vault-name"
+}
+
+# Get the Azure connection details including the vaults
+data "ciphertrust_azure_connection" "connection_details" {
+  azure_connection = "connection-name"
 }
 ```
 
@@ -24,15 +40,12 @@ data "ciphertrust_azure_connection" "vault_info" {
 
 ### Required
 
-- **azure_connection** (String) Name of the Azure connection
-
-### Optional
-
-- **id** (String) The ID of this resource.
+- `azure_connection` (String) Name of the Azure connection
 
 ### Read-Only
 
-- **connection_id** (String) CipherTrust connection ID.
-- **vaults** (Map of String) A list of vault name:vault ID pairs managed by the connection.
+- `connection_id` (String) CipherTrust connection ID.
+- `id` (String) Azure connection name.
+- `vaults` (Map of String) A list of vault name:vault ID pairs managed by the connection.
 
 

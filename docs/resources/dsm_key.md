@@ -8,16 +8,48 @@ description: |-
 
 # ciphertrust_dsm_key (Resource)
 
+DSM keys are primarily used to create the following:
+- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
+- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
+- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
+
+This resource is dependent on a [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain) resource.
 
 
 ## Example Usage
 
 ```terraform
+# Indirectly this resource is dependent on a ciphertrust_dsm_connection resource
+resource "ciphertrust_dsm_connection" "dsm_connection" {
+  name        = "connection-name"
+  nodes {
+    hostname    = "host-ip-address"
+    certificate = "dsm-server.pem"
+  }
+  password = "dsm-password"
+  username = "dsm-username"
+}
+
+# This resource is dependent on a ciphertrust_dsm_domain resource
+resource "ciphertrust_dsm_domain" "dsm_domain" {
+  dsm_connection = ciphertrust_dsm_connection.dsm_connection.id
+  domain_id      = dsm_domain_id
+}
+
+# Create an AES 256 bit key
 resource "ciphertrust_dsm_key" "dsm_key" {
-  name            = "dsm_key_name"
+  name            = "key-name"
   algorithm       = "AES256"
   domain          = ciphertrust_dsm_domain.dsm_domain.id
-  encryption_mode = "CBC"
+  extractable     = true
+  object_type     = "symmetric"
+}
+
+# Create an RSA 4069  bit key
+resource "ciphertrust_dsm_key" "dsm_key" {
+  name            = "key-name"
+  algorithm       = "RSA4096"
+  domain          = ciphertrust_dsm_domain.dsm_domain.id
   extractable     = true
   object_type     = "symmetric"
 }
@@ -28,20 +60,20 @@ resource "ciphertrust_dsm_key" "dsm_key" {
 
 ### Required
 
-- **algorithm** (String) Algorithm of the key. Options: RSA1024, RSA2048, RSA3072, RSA4096, AES256, AES128, ARIA128 and ARIA256.
-- **domain** (String) ID of the DSM domain in which to create the key.
-- **name** (String) Name of the key.
-- **object_type** (String) Object type of the key. Options: asymmetric and symmetric.
+- `algorithm` (String) Algorithm of the key. Options: RSA1024, RSA2048, RSA3072, RSA4096, AES256, AES128, ARIA128 and ARIA256.
+- `domain` (String) ID of the DSM domain in which to create the key.
+- `name` (String) Name of the key.
+- `object_type` (String) Object type of the key. Options: asymmetric and symmetric.
 
 ### Optional
 
-- **description** (String) Description of the DSM key.
-- **encryption_mode** (String) Encryption mode is required for AES symmetric keys only. Options: CBC, CBC_CS1 and XTS.
-- **expiration_date** (String) Date of key expiry in UTC time in RFC3339 format. For example, 2021-07-03T14:24:001Z.
-- **extractable** (Boolean) The key is extractable from the DSM.
+- `description` (String) Description of the DSM key.
+- `encryption_mode` (String) Encryption mode is required for AES symmetric keys only. Options: CBC, CBC_CS1 and XTS.
+- `expiration_date` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2021-07-03T14:24:001Z.
+- `extractable` (Boolean) The key is extractable from the DSM.
 
 ### Read-Only
 
-- **id** (String) CipherTrust DSM key ID.
+- `id` (String) CipherTrust DSM key ID.
 
 

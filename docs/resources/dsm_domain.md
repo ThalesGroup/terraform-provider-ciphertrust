@@ -8,14 +8,45 @@ description: |-
 
 # ciphertrust_dsm_domain (Resource)
 
+This resource specifies the DSM domain in which keys will be created.
+
+Resources of this type can be used as the container when scheduling rotation for:
+- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
+- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
+- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
+
+This resource is dependent on a [ciphertrust_dsm_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_connection) resource.
+
+[ciphertrust_dsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_key) resources are dependent on this resource.
 
 
 ## Example Usage
 
 ```terraform
+# This resource is dependent on a ciphertrust_dsm_connection resource
+resource "ciphertrust_dsm_connection" "dsm_connection" {
+  name        = "connection-name"
+  nodes {
+    hostname    = "host-ip-address"
+    certificate = "dsm-server.pem"
+  }
+  password = "dsm_password"
+  username = "dsm_username"
+}
+
+# Assign a DSM domain to the connection
 resource "ciphertrust_dsm_domain" "dsm_domain" {
-  dsm_connection = ciphertrust_dsm_connection.connection.id
-  domain_id      = 4321
+  dsm_connection = ciphertrust_dsm_connection.dsm_connection.id
+  domain_id      = dsm_domain_id
+}
+
+# Create a DSM key
+resource "ciphertrust_dsm_key" "dsm_key" {
+  name            = "key-name"
+  algorithm       = "RSA2048"
+  domain          = ciphertrust_dsm_domain.dsm_domain.id
+  extractable     = true
+  object_type     = "asymmetric"
 }
 ```
 
@@ -24,15 +55,15 @@ resource "ciphertrust_dsm_domain" "dsm_domain" {
 
 ### Required
 
-- **domain_id** (Number) DSM domain to add.
-- **dsm_connection** (String) Name or ID of the DSM connection.
+- `domain_id` (Number) DSM domain to add.
+- `dsm_connection` (String) Name or ID of the DSM connection.
 
 ### Optional
 
-- **description** (String) Description of the dsm domain.
+- `description` (String) Description of the dsm domain.
 
 ### Read-Only
 
-- **id** (String) CipherTrust DSM domain ID.
+- `id` (String) CipherTrust DSM domain ID.
 
 

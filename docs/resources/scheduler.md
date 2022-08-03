@@ -8,26 +8,193 @@ description: |-
 
 # ciphertrust_scheduler (Resource)
 
+A ciphertrust_scheduler resource can be used to either:
+- Schedule rotation of cloud keys. Scheduler resources for rotation are required to be attached to key resources.
+- Synchronize the cloud keys stored in CipherTrust Manager with those in the specified cloud container.
+
+A ciphertrust_scheduler used for rotation can be assigned to the following:
+- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
+- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
+- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
+
+A schedule can be created to synchronize keys for:
+- AWS
+- Azure
+- Google Cloud
 
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_scheduler" "key_rotation" {
+# A scheduler resource suitable for the rotation of AWS keys
+resource "ciphertrust_scheduler" "aws_scheduled_key_rotation" {
   cckm_key_rotation_params {
-    cloud_name = "AzureCloud"
+    cloud_name = "aws"
   }
-  name       = "rotation_job_name"
+  name       = "rotation-job-name"
   operation  = "cckm_key_rotation"
   run_at     = "0 9 * * sat"
 }
 
-resource "ciphertrust_scheduler" "key_synchronization" {
+# An example of attaching the scheduler resource to an AWS key using CipherTrust as the key source
+resource "ciphertrust_aws_key" "aws_key" {
+  kms    = ciphertrust_aws_kms.kms.id
+  region = "aws-region"
+  enable_rotation {
+    disable_encrypt = false
+    job_config_id   = ciphertrust_scheduler.aws_scheduled_key_rotation.id
+    key_source      = "ciphertrust"
+  }
+}
+
+# An example of attaching the scheduler resource to an AWS key using a DSM as the key source
+resource "ciphertrust_aws_key" "aws_key" {
+  kms    = ciphertrust_aws_kms.kms.id
+  region = "aws-region"
+  enable_rotation {
+    disable_encrypt = true
+    dsm_domain_id   = ciphertrust_dsm_domain.dsm_domain.id
+    job_config_id   = ciphertrust_scheduler.aws_scheduled_key_rotation.id
+    key_source      = "dsm"
+  }
+}
+
+# A scheduler resource suitable for the rotation of Azure keys
+resource "ciphertrust_scheduler" "azure_scheduled_key_rotation" {
+  cckm_key_rotation_params {
+    cloud_name = "AzureCloud"
+  }
+  name       = "rotation-job-name"
+  operation  = "cckm_key_rotation"
+  run_at     = "0 9 * * sat"
+}
+
+# An example of attaching the scheduler resource to an Azure key using CipherTrust as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
+    key_source    = "ciphertrust"
+  }
+}
+
+# An example of attaching the scheduler resource to an Azure key using a DSM as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+  enable_rotation {
+    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
+    key_source    = "dsm"
+  }
+}
+
+# An example of attaching the scheduler resource to an Azure key using Luna-HSM as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+  enable_rotation {
+    hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
+    job_config_id    = ciphertrust_scheduler.azure_scheduled_key_rotation.id
+    key_source       = "hsm-luna"
+  }
+}
+
+# An example of attaching the scheduler resource to an Azure key using Azure as the key source
+resource "ciphertrust_azure_key" "azure_key" {
+  name  = "key-name"
+  vault = ciphertrust_azure_vault.azure_vault.id
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
+    key_source    = "native"
+  }
+}
+
+# A scheduler resource suitable for the rotation of Google cloud keys
+resource "ciphertrust_scheduler" "gcp_scheduled_key_rotation" {
+  cckm_key_rotation_params {
+    cloud_name = "gcp"
+  }
+  name       = "rotation-job-name"
+  operation  = "cckm_key_rotation"
+  run_at     = "0 9 * * sat"
+}
+
+# An example of attaching the scheduler resource to a Google cloud key using CipherTrust as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
+    key_source    = "ciphertrust"
+  }
+}
+
+# An example of attaching the scheduler resource to a Google cloud key using a DSM as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  enable_rotation {
+    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
+    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
+    key_source    = "dsm"
+  }
+}
+
+# An example of attaching the scheduler resource to a Google cloud key using Luna-HSM as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
+    hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
+  }
+}
+
+# An example of attaching the scheduler resource to a Google cloud key using Google cloud as the key source
+resource "ciphertrust_gcp_key" "gcp_key" {
+  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
+  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
+  name      = "key-name"
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
+    key_source    = "native"
+  }
+}
+
+# A scheduler resource for synchronizing AWS keys with CipherTrust Manager
+resource "ciphertrust_scheduler" "aws_key_sync" {
   cckm_synchronization_params {
-    cloud_name      = "azure"
+    cloud_name      = "AzureCloud"
     synchronize_all = true
   }
-  name       = "sync_job_name"
+  name       = "sync-job-name"
+  operation  = "cckm_synchronization"
+  run_at     = "0 9 * * fri"
+}
+
+# A scheduler resource for synchronizing Azure keys with CipherTrust Manager
+resource "ciphertrust_scheduler" "azure_key_sync" {
+  cckm_synchronization_params {
+    cloud_name      = "aws"
+    synchronize_all = true
+  }
+  name       = "sync-job-name"
+  operation  = "cckm_synchronization"
+  run_at     = "0 9 * * fri"
+}
+
+# A scheduler suitable for synchronizing Google cloud keys with CipherTrust Manager
+resource "ciphertrust_scheduler" "gcp_key_sync" {
+  cckm_synchronization_params {
+    cloud_name      = "gcp"
+    synchronize_all = true
+  }
+  name       = "sync-job-name"
   operation  = "cckm_synchronization"
   run_at     = "0 9 * * fri"
 }
@@ -38,36 +205,36 @@ resource "ciphertrust_scheduler" "key_synchronization" {
 
 ### Required
 
-- **name** (String) Name of the job configuration.
-- **run_at** (String) Described using the cron expression format: '* * * * * 'These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case-insensitive. For example, To run on Saturday at 23:45(11:45 PM): '45 23 * * 6' or '45 23 * * sat' To run on the first of the month at 09:00: '0 9 1 * *'
+- `name` (String) Name of the job configuration.
+- `run_at` (String) (Updateable) Described using the cron expression format: '* * * * * 'These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case-insensitive. For example, To run on Saturday at 23:45(11:45 PM): '45 23 * * 6' or '45 23 * * sat' To run on the first of the month at 09:00: '0 9 1 * *'
 
 ### Optional
 
-- **cckm_key_rotation_params** (Block List, Max: 1) (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
-- **cckm_synchronization_params** (Block List, Max: 1) (see [below for nested schema](#nestedblock--cckm_synchronization_params))
-- **description** (String) Description of the job configuration.
-- **disabled** (Boolean) Disable the job configuration. Defaults to false.
-- **end_date** (String) Date the job configuration becomes inactive. RFC3339 format, for example, 2021-07-03T14:24Z.
-- **operation** (String) Type of operation. Currently, only cckm_key_rotation and cckm_synchronization are supported. Default is cckm_key_rotation.
-- **run_on** (String) Use 'any' to run the rotation job on any node in the cluster. Use a specific node ID to run the rotation job on that node. Default is 'any'.
-- **start_date** (String) Date the job configuration becomes active. RFC3339 format, for example, 2021-07-03T14:24:00Z.
+- `cckm_key_rotation_params` (Block List, Max: 1) (Updateable) Specifies key rotation parameters (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
+- `cckm_synchronization_params` (Block List, Max: 1) (Updateable) Specifies key synchronization parameters (see [below for nested schema](#nestedblock--cckm_synchronization_params))
+- `description` (String) (Updateable) Description of the job configuration.
+- `disabled` (Boolean) (Updateable) Disable the job configuration. Defaults to false.
+- `end_date` (String) (Updateable) Date the job configuration becomes inactive. RFC3339 format, for example, 2021-07-03T14:24Z.
+- `operation` (String) Type of operation. Currently, only cckm_key_rotation and cckm_synchronization are supported. Default is cckm_key_rotation.
+- `run_on` (String) (Updateable) Use 'any' to run the rotation job on any node in the cluster. Use a specific node ID to run the rotation job on that node. Default is 'any'.
+- `start_date` (String) (Updateable) Date the job configuration becomes active. RFC3339 format, for example, 2021-07-03T14:24:00Z.
 
 ### Read-Only
 
-- **id** (String) CipherTrust job configuration ID.
+- `id` (String) CipherTrust job configuration ID.
 
 <a id="nestedblock--cckm_key_rotation_params"></a>
 ### Nested Schema for `cckm_key_rotation_params`
 
 Required:
 
-- **cloud_name** (String) Name of the cloud where rotation operation will be triggered. Options are: aws, AzureCloud and gcp.
+- `cloud_name` (String) (Updateable) Name of the cloud for which to schedule the key rotation. Options are: aws, AzureCloud and gcp.
 
 Optional:
 
-- **aws_retain_alias** (Boolean) Retain the alias and timestamp on the archived key after rotation.
-- **expiration** (String) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
-- **expire_in** (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
+- `aws_retain_alias` (Boolean) (Updateable) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
+- `expiration` (String) (Updateable) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
+- `expire_in` (String) (Updateable) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
 
 
 <a id="nestedblock--cckm_synchronization_params"></a>
@@ -75,13 +242,13 @@ Optional:
 
 Required:
 
-- **cloud_name** (String) Name of the cloud where rotation operation will be triggered. Options are: aws, AzureCloud and gcp.
+- `cloud_name` (String) (Updateable) Name of the cloud that will be synchronized on schedule. Options are: aws, AzureCloud and gcp.
 
 Optional:
 
-- **key_rings** (Set of String) IDs or name of key ring from which google cryptographic keys will be synchronized. At least one key ring is required for Google cloud synchronization operation.
-- **key_vaults** (Set of String) IDs or name of vault from which azure keys will be synchronized. At least one vault is required for Azure synchronization operation.
-- **kms** (Set of String) IDs or names of kms resource from which AWS keys will be synchronized. At least one kms is required for AWS synchronization operation.
-- **synchronize_all** (Boolean) Enable AWS autorotation on the key. Default is false.
+- `key_rings` (Set of String) (Updateable) IDs or name of key ring from which Google keys will be synchronized. Unless synchronizing all Google keys, at least one key ring is required.
+- `key_vaults` (Set of String) (Updateable) IDs or name of vault from which azure keys will be synchronized. Unless synchronizing all Azure keys, at least one vault is required.
+- `kms` (Set of String) (Updateable) IDs or names of kms resources from which AWS keys will be synchronized. Unless synchronizing all AWS keys, At least one kms is required.
+- `synchronize_all` (Boolean) (Updateable) Set true to synchronize all keys. Default is false.
 
 
