@@ -197,7 +197,8 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `expiration_model` (String) Expiration model.
 - `external_accounts` (List of String) Other AWS accounts that have access to this key.
 - `id` (String) AWS region and AWS key identifier separated by a backslash.
-- `key_admins` (List of String) Key administrators.
+- `key_admins` (List of String) Key administrators - users.
+- `key_admins_roles` (List of String) Key administrators - roles.
 - `key_id` (String) CipherTrust Key ID.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
@@ -205,7 +206,8 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `key_source` (String) Source of the key.
 - `key_state` (String) Key state.
 - `key_type` (String) Key type.
-- `key_users` (List of String) Key users.
+- `key_users` (List of String) Key users - users.
+- `key_users_roles` (List of String) Key users - roles.
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `local_key_id` (String) CipherTrust key identifier of the external key.
 - `local_key_name` (String) CipherTrust key name of the external key.
@@ -213,8 +215,8 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `multi_region_primary_key` (Map of String) Multi-region primary key details.
 - `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `policy` (String) AWS key policy.
+- `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `replica_policy` (String) Replication policy.
-- `replica_tags` (Map of String) (Updateable) A list of key:value pairs to assigned to the key.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
 - `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
 - `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
@@ -260,8 +262,10 @@ Optional:
 Optional:
 
 - `external_accounts` (List of String) (Updateable) Other AWS accounts that can access to the key.
-- `key_admins` (List of String) (Updateable) Key administrators.
-- `key_users` (List of String) (Updateable) Key users.
+- `key_admins` (List of String) (Updateable) Key administrators - users.
+- `key_admins_roles` (List of String) (Updateable) Key administrators - roles.
+- `key_users` (List of String) (Updateable) Key users - users.
+- `key_users_roles` (List of String) (Updateable) Key users - roles.
 - `policy` (String) (Updateable) AWS key policy json.
 - `policy_template` (String) (Updateable) CipherTrust policy template ID
 

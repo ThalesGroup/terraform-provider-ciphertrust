@@ -24,7 +24,7 @@ resource "ciphertrust_gwcse_identity" "cse_identity" {
 
 resource "ciphertrust_gwcse_endpoint" "cse_endpoint" {
   name                    = "endpoint-name"
-  cse_identity_id         = ciphertrust_gwcse_identity.cse_identity.id
+  cse_identity_id         = [ciphertrust_gwcse_identity.cse_identity.id]
   authentication_audience = ["authentication_audience"]
   endpoint_url_hostname   = "terraform.example.com"
   meta                    = "some information to store with endpoint"
@@ -36,8 +36,8 @@ resource "ciphertrust_gwcse_endpoint" "cse_endpoint" {
 
 ### Required
 
-- `authentication_audience` (Set of String) (Updateable) List of supported audiences for the authentication JWT.
-- `cse_identity_id` (String) (Updateable) ID of a CSE identity provider.
+- `authentication_audience` (Set of String) (Updateable) A list of supported audiences for the authentication JWT.
+- `cse_identity_id` (Set of String) (Updateable) A list of CSE identity provider ID's.
 - `endpoint_url_hostname` (String) Endpoint base URL hostname for KACLS endpoint.
 - `name` (String) Unique name for the endpoint.
 

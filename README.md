@@ -19,6 +19,22 @@ Use the navigation to the left to read about the available resources.
 - Azure
 - Google Cloud
 
+### AWS Deployment
+To deploy a Virtual CipherTrust Manager from AWS, you must supply the Amazon Machine Image (AMI), available on the AWS Marketplace or through the Thales Cloud Provisioning System. The cluster example in dev_examples demonstrates launching CipherTrust Manager images from AWS.
+
+### Azure Deployment
+1. List the available versions with `Get-AzVMImage -location eastus2 -PublisherName thalesdiscplusainc1596561677238 -Offer cm_k170v -sku ciphertrust_manager`.
+
+2. Obtain image information for a particular version with `az vm image show --location eastus2 --urn thalesdiscplusainc1596561677238:cm_k170v:ciphertrust_manager:<desired-version>`. Under `plan`, obtain the required values for `name`, `product` and `publisher`.
+
+3. Consult [azurerm provider documentation](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine) for details on creating a plan to launch a Linux Virtual Machine with the azurerm provider.
+
+### Google Cloud Deployment
+
+1. List the available CipherTrust Manager versions with `gcloud compute images list --no-standard-images --project=thales-cpl-public`. CipherTrust Manager image names start with the prefix `k170v`. Copy the `NAME` of the image you would like to deploy.
+
+2. Consult [Google Cloud Platform provider documentation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance) for details on launching a Virtual Machine image with the GCP provider.
+
 ## Thales Devices
 The following devices can be used to create keys for the above public clouds.
 - DSM

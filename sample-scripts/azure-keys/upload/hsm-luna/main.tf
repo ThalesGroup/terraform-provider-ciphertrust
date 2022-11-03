@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta5"
+      version = "0.9.0-beta6"
     }
   }
 }
@@ -17,6 +17,7 @@ locals {
   azure_connection_name = "azure-connection-${lower(random_id.random.hex)}"
   hsm_connection_name   = "hsm-connection-${lower(random_id.random.hex)}"
   key_name              = "hsm-upload-${lower(random_id.random.hex)}"
+  exportable_key_name  = "hsm-upload-exportable-${lower(random_id.random.hex)}"
 }
 
 # Create an Azure connection
@@ -82,4 +83,30 @@ resource "ciphertrust_azure_key" "azure_key" {
 }
 output "azure_key" {
   value = ciphertrust_azure_key.azure_key
+}
+
+# It's also possible to create an exportable key in Azure when uploading a key from a hsm-luna
+resource "ciphertrust_azure_key" "azure_exportable_key" {
+  name = local.exportable_key_name
+  upload_key {
+    hsm_key_id      = ciphertrust_hsm_key.hsm_key.private_key_id
+    source_key_tier = "hsm-luna"
+    exportable      = "true"
+    release_policy  =  <<-EOT
+    {
+      "anyOf": [{
+        "anyOf": [{
+          "claim": "lzxdwiqk24k24",
+          "equals": "true"
+        }],
+        "authority": "https://lzxdwiqk24jkh.ncus.attest.azure.net"
+      }],
+      "version": "1.0.0"
+    }
+    EOT
+  }
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+output "azure_exportable_key" {
+  value = ciphertrust_azure_key.azure_exportable_key
 }

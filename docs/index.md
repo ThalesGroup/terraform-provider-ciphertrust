@@ -100,13 +100,15 @@ provider "ciphertrust" {}
 
 ### Optional
 
-- **address** (String) HTTPS URL of the CipherTrust instance. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config. An address need not be provided when creating a cluster of CipherTrust instances.
-- **aws_operation_timeout** (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
-- **azure_operation_timeout** (Number) Azure key operations can take time to complete. This specifies how long to wait for an operation to complete in seconds. azure_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 240.
-- **domain** (String) CipherTrust domain of the user. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the root domain.
-- **gcp_operation_timeout** (Number) Some Google Cloud operations, for example, schedule destroy, are not synchronous. This specifies how long to wait for an operation to complete in seconds. gcp_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
-- **hsm_operation_timeout** (Number) HSM connection operations are not synchronous. This specifies how long to wait for an operation to complete in seconds. hsm_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
-- **log_file** (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
-- **log_level** (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
-- **no_ssl_verify** (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
-- **rest_api_timeout** (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
+- `address` (String) HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config
+- `aws_operation_timeout` (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
+- `azure_operation_timeout` (Number) Azure key operations can take time to complete. This specifies how long to wait for an operation to complete in seconds. azure_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 240.
+- `domain` (String) CipherTrust domain of the user. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is root.
+- `gcp_operation_timeout` (Number) Some Google Cloud operations, for example, schedule destroy, are not synchronous. This specifies how long to wait for an operation to complete in seconds. gcp_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
+- `hsm_operation_timeout` (Number) HSM connection operations are not synchronous. This specifies how long to wait for an operation to complete in seconds. hsm_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
+- `log_file` (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
+- `log_level` (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
+- `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
+- `password` (String, Sensitive) Password of a CipherTrust user. password can be set in the provider block, via the CM_PASSWORD environment variable or in ~/.ciphertrust/config
+- `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
+- `username` (String) Username of a CipherTrust user. username can be set in the provider block, via the CM_USERNAME environment variable or in ~/.ciphertrust/config

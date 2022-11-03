@@ -63,7 +63,8 @@ data "ciphertrust_aws_key" "by_alias_and_region" {
 - `encryption_algorithms` (List of String) Encryption algorithms of an asymmetric key
 - `expiration_model` (String) Expiration model.
 - `external_accounts` (List of String) Other AWS accounts that have access to this key.
-- `key_admins` (List of String) Key administrators.
+- `key_admins` (List of String) Key administrators  users.
+- `key_admins_roles` (List of String) Key administrators - roles.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
@@ -71,7 +72,8 @@ data "ciphertrust_aws_key" "by_alias_and_region" {
 - `key_state` (String) Key state.
 - `key_type` (String) Key type.
 - `key_usage` (String) Specifies the intended use of the key.
-- `key_users` (List of String) Key users.
+- `key_users` (List of String) Key users - users.
+- `key_users_roles` (List of String) Key users - roles.
 - `kms` (String) Kms name.
 - `kms_id` (String) Kms ID
 - `labels` (Map of String) A list of key:value pairs associated with the key.
@@ -83,8 +85,8 @@ data "ciphertrust_aws_key" "by_alias_and_region" {
 - `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `origin` (String) Source of the CMK's key material.
 - `policy` (String) AWS key policy.
+- `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `replica_policy` (String) Replication policy.
-- `replica_tags` (Map of String) A list of key:value pairs to assigned to the key.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
 - `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
 - `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.

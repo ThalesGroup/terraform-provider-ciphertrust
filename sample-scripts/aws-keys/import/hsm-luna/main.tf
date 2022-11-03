@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta5"
+      version = "0.9.0-beta6"
     }
   }
 }
@@ -44,9 +44,9 @@ resource "ciphertrust_hsm_server" "hsm_server" {
 
 # Add create a hsm connection
 resource "ciphertrust_hsm_connection" "hsm_connection" {
-  hostname    = var.hsm_hostname
-  server_id   = ciphertrust_hsm_server.hsm_server.id
-  name        = local.hsm_connection_name
+  hostname  = var.hsm_hostname
+  server_id = ciphertrust_hsm_server.hsm_server.id
+  name      = local.hsm_connection_name
   partitions {
     partition_label = var.hsm_partition_label
     serial_number   = var.hsm_partition_serial_number

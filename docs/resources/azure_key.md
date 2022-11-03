@@ -165,6 +165,7 @@ resource "ciphertrust_azure_key" "azure_key" {
 - `created_by` (String) Client ID which created the key.
 - `deleted` (Boolean) Is the key deleted.
 - `enabled` (Boolean) True if the key is enabled.
+- `exportable` (Boolean) True if the key is exportable from Azure.
 - `id` (String) Azure key identifier.
 - `key_id` (String) CipherTrust Key ID.
 - `key_material_origin` (String) Key material origin of an uploaded or imported key.
@@ -177,6 +178,7 @@ resource "ciphertrust_azure_key" "azure_key" {
 - `modified_by` (String) Client ID which modified the key.
 - `recovery_level` (String) Recovery level of the key.
 - `region` (String) Azure region of the key.
+- `release_policy` (String) Release policy of the exportable key.
 - `soft_delete_enabled` (Boolean) Is soft-delete enabled for the key.
 - `status` (String) Status of the key.
 - `synced_at` (String) Date the key was synchronized.
@@ -206,12 +208,14 @@ Optional:
 Optional:
 
 - `dsm_key_id` (String) DSM key ID to upload to Azure. Required if source_key_tier is dsm.
+- `exportable` (Boolean) Make the private key exportable from Azure. Currently only supported for premium vaults and managed-hsm vaults when the key is uploaded from hsm-luna.
 - `hsm` (Boolean) Premium vaults support hsm-backed keys. Set to true to use this option.
 - `hsm_key_id` (String) Luna-HSM key identifier of the key to be uploaded to Azure. Required if source_key_tier is hsm-luna
 - `kek_kid` (String) Identifier of an Azure key encrypting key.
 - `local_key_id` (String) CCKM key identifier of the key uploaded to Azure. Required if source_key_tier is local.
 - `pfx` (String) Pfx file to upload. Required if source_key_tier is pfx.
 - `pfx_password` (String) PFX password. Specify only if the PFX certificate is provided.
+- `release_policy` (String) Exportable keys require a release policy.
 - `source_key_tier` (String) Options: local, pfx, dsm and hsm-luna. Default is local.
 
 

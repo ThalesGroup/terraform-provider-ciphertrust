@@ -28,8 +28,8 @@ resource "ciphertrust_domain" "cm_domain" {
 
 ### Required
 
-- `name` (String) Name of the CM domain.
 - `admins` (List of String) List of administrators for the domain
+- `name` (String) Name of the CM domain.
 
 ### Optional
 

@@ -1,7 +1,7 @@
 # Create a policy template using key_admins and key_users
 resource "ciphertrust_aws_policy_template" "policy_template" {
-  key_admins = ["key-admin"]
-  key_users  = ["key-user", "key-user"]
+  key_admins = ["aws-iam-user", "aws-iam-role"]
+  key_users  = ["aws-iam-user", "aws-iam-role"]
   km         = kms.id
 }
 
@@ -9,7 +9,19 @@ resource "ciphertrust_aws_policy_template" "policy_template" {
 resource "ciphertrust_aws_policy_template" "policy_template" {
   km     = kms.id
   policy = <<-EOT
-    {"Version":"2012-10-17","Id":"kms-tf-1","Statement":[{"Sid":"Enable IAM User Permissions 1","Effect":"Allow","Principal":{"AWS":"*"},"Action":"kms:*","Resource":"*"}]}
+    {
+    "Version": "2012-10-17",
+    "Id": "kms-tf-1",
+    "Statement": [{
+      "Sid": "Enable IAM User Permissions 1",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    }]
+  }
   EOT
 }
 

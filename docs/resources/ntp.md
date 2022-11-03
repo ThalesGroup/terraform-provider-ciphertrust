@@ -14,7 +14,7 @@ description: |-
 
 ```terraform
 resource "ciphertrust_ntp" "ntp_server_1" {
-  host = "time1.google.com"
+    host = "time1.google.com"
 }
 ```
 
@@ -23,8 +23,14 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 
 ### Required
 
-- **host** (String) The hostname or IP address of the NTP server.
+- `host` (String) The hostname or IP address of the NTP server.
 
 ### Optional
 
-- **key** (String) Symmetric key value to be used for authenticated NTP servers.
+- `key` (String) Symmetric key value to be used for authenticated NTP servers
+
+### Read-Only
+
+- `id` (String) The ID of this resource.
+
+

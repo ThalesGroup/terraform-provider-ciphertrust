@@ -36,6 +36,29 @@ resource "ciphertrust_azure_key" "azure_key" {
   vault = ciphertrust_azure_vault.azure_vault.id
 }
 
+# Upload an existing Luna-HSM key to Azure as an exportable key
+resource "ciphertrust_azure_key" "azure_key" {
+  name = "key-name"
+  upload_key {
+    hsm_key_id      = ciphertrust_hsm_key.hsm_key.private_key_id
+    source_key_tier = "hsm-luna"
+    exportable      = true
+    release_policy  =  <<-EOT
+    {
+      "anyOf": [{
+        "anyOf": [{
+          "claim": "lzxdwiqk24k24",
+          "equals": "true"
+        }],
+        "authority": "https://lzxdwiqk24jkh.ncus.attest.azure.net"
+      }],
+      "version": "1.0.0"
+    }
+    EOT
+  }
+  vault = ciphertrust_azure_vault.azure_vault.id
+}
+
 # Upload an existing DSM key to Azure
 resource "ciphertrust_azure_key" "azure_key" {
   name = "key-name"

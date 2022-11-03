@@ -12,15 +12,13 @@ A ciphertrust_aws_policy_template can be used to add the key policy for [ciphert
 
 If the policy json is provided no other fields can be specified.
 
-
-
 ## Example Usage
 
 ```terraform
 # Create a policy template using key_admins and key_users
 resource "ciphertrust_aws_policy_template" "policy_template" {
-  key_admins = ["key-admin"]
-  key_users  = ["key-user", "key-user"]
+  key_admins = ["aws-iam-user", "aws-iam-role"]
+  key_users  = ["aws-iam-user", "aws-iam-role"]
   km         = kms.id
 }
 
@@ -28,7 +26,19 @@ resource "ciphertrust_aws_policy_template" "policy_template" {
 resource "ciphertrust_aws_policy_template" "policy_template" {
   km     = kms.id
   policy = <<-EOT
-    {"Version":"2012-10-17","Id":"kms-tf-1","Statement":[{"Sid":"Enable IAM User Permissions 1","Effect":"Allow","Principal":{"AWS":"*"},"Action":"kms:*","Resource":"*"}]}
+    {
+    "Version": "2012-10-17",
+    "Id": "kms-tf-1",
+    "Statement": [{
+      "Sid": "Enable IAM User Permissions 1",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    }]
+  }
   EOT
 }
 
@@ -61,12 +71,15 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Required
 
 - `kms` (String) Name or ID of the KMS for the key policy.
+- `name` (String) Name for the policy template.
 
 ### Optional
 
 - `external_accounts` (Set of String) (Updateable) External AWS accounts.
-- `key_admins` (Set of String) (Updateable) Key administrators.
-- `key_users` (Set of String) (Updateable) Key users.
+- `key_admins` (Set of String) (Updateable) Key administrators - users.
+- `key_admins_roles` (Set of String) (Updateable) Key administrators - roles.
+- `key_users` (Set of String) (Updateable) Key users - users.
+- `key_users_roles` (Set of String) (Updateable) Key users - roles.
 - `policy` (String) (Updateable) AWS key policy json.
 
 ### Read-Only

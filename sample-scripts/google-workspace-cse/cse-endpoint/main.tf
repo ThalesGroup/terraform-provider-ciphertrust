@@ -1,8 +1,8 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source = "thales.com/terraform/ciphertrust"
-      #version = "0.9.0-beta5"
+      source  = "ThalesGroup/ciphertrust"
+      version = "0.9.0-beta6"
     }
   }
 }
@@ -30,7 +30,7 @@ output "cse_identity" {
 # Create a CSE endpoint
 resource "ciphertrust_gwcse_endpoint" "cse_endpoint" {
   name                    = local.endpoint_name
-  cse_identity_id         = ciphertrust_gwcse_identity.cse_identity.id
+  cse_identity_id         = [ciphertrust_gwcse_identity.cse_identity.id]
   authentication_audience = [var.authentication_audience]
   endpoint_url_hostname   = var.endpoint_url_hostname
 }

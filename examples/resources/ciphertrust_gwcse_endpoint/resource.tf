@@ -6,7 +6,7 @@ resource "ciphertrust_gwcse_identity" "cse_identity" {
 
 resource "ciphertrust_gwcse_endpoint" "cse_endpoint" {
   name                    = "endpoint-name"
-  cse_identity_id         = ciphertrust_gwcse_identity.cse_identity.id
+  cse_identity_id         = [ciphertrust_gwcse_identity.cse_identity.id]
   authentication_audience = ["authentication_audience"]
   endpoint_url_hostname   = "terraform.example.com"
   meta                    = "some information to store with endpoint"

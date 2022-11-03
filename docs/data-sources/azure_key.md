@@ -57,6 +57,7 @@ data "ciphertrust_azure_key" "by_name_and_vault" {
 - `deleted` (Boolean) True if the key is deleted.
 - `enabled` (Boolean) True if the key is enabled.
 - `expiration_date` (String) Date of key expiry.
+- `exportable` (Boolean) True if the key is exportable.
 - `key_material_origin` (String) Key material origin of an uploaded or imported key.
 - `key_ops` (List of String) Allowed key operations for asymmetric keys.
 - `key_size` (Number) Size of asymmetric keys.
@@ -69,6 +70,7 @@ data "ciphertrust_azure_key" "by_name_and_vault" {
 - `modified_by` (String) Client ID which modified the key.
 - `recovery_level` (String) Recovery level of the key.
 - `region` (String) Azure region of the key.
+- `release_policy` (String) Release policy of the exportable key.
 - `soft_delete_enabled` (Boolean) True if soft-delete is enabled for the key.
 - `status` (String) Status of the key.
 - `synced_at` (String) Date the key was synchronized.
