@@ -53,5 +53,14 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 ### Read-Only
 
 - `id` (String) CipherTrust key ID.
+- `linked_keys` (Block Set) (see [below for nested schema](#nestedblock--linked_keys))
+
+<a id="nestedblock--linked_keys"></a>
+### Nested Schema for `linked_keys`
+
+Read-Only:
+
+- `key_id` (String) ID of the linked key.
+- `key_type` (String) Key type of the linked key.
 
 

@@ -1,3 +1,10 @@
+# 0.9.0-beta7
+
+## Fixes:
+    ciphertrust_cm_key 
+        Added read-only linked_keys attribute.
+        Linked keys are deleted when the resource is destroyed.     
+
 # 0.9.0-beta6
 
 ## New Resources
