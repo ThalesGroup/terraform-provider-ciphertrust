@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_property (Resource)
 
-
+Set server level properties.
 
 ## Example Usage
 

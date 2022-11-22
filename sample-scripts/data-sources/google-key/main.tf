@@ -48,7 +48,7 @@ output "gcp_key" {
 
 # Get the key from the Terraform ID
 data "ciphertrust_gcp_key" "key_from_terraform_id" {
-  gcp_cloud_resource_name = ciphertrust_gcp_key.gcp_key.id
+  id = ciphertrust_gcp_key.gcp_key.id
 }
 output "key_from_terraform_id" {
   value = data.ciphertrust_gcp_key.key_from_terraform_id.id

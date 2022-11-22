@@ -8,6 +8,11 @@ description: |-
 
 # ciphertrust_groups (Resource)
 
+Users can be added to Groups. Users' group membership is available to the authorization system.
+Groups are identified by their name, which must be unique.
+Users can be added to groups by using the id.
+
+This resource is dependent on a [ciphertrust_user](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/user) resource.
 
 
 ## Example Usage

@@ -1,3 +1,29 @@
+# 0.9.0-beta8
+
+## New Resources
+    ciphertrust_gcp_acl
+        Set access permissions for users and groups to Google Cloud keyrings.
+
+## New Data Sources
+	ciphertrust_gcp_keyring
+		Reads the keyring.
+		
+## Changed Resources
+	ciphertrust_gcp_key resource
+		Removed gcp_cloud_resource_name.
+		Renamed key_ring_id to keyring_id.
+	ciphertrust_cm_key
+		Added read only variable owner_id.
+	ciphertrust_groups
+		Added ability to add users to system groups.
+	ciphertrust_gcp_keyring
+		Renamed key_ring_id to keyring_id.
+
+## Changed Data Sources
+	ciphertrust_gcp_key resource
+		Renamed key_ring_id to keyring_id.   
+		Removed gcp_cloud_resource_name.
+
 # 0.9.0-beta7
 
 ## Fixes:

@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_ntp (Resource)
 
-
+NTP (Network Time Protocol) is used to synchronize time with an external time source.
 
 ## Example Usage
 

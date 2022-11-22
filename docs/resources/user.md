@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_user (Resource)
 
-
+Users are unique individuals or systems using the API.
 
 ## Example Usage
 

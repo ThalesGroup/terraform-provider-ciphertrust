@@ -241,12 +241,11 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 - `cloud_name` (String) Cloud name.
 - `create_status` (String) Key creation status.
 - `created_at` (String) Date the key was created.
-- `gcp_cloud_resource_name` (String) Google cloud resource name.
 - `id` (String) Google cloud resource ID.
 - `key_id` (String) CipherTrust key ID.
-- `key_ring_id` (String) Google cloud key ring ID.
 - `key_ring_name` (String) Google cloud key ring name.
 - `key_versions` (List of Object) Key version details. (see [below for nested schema](#nestedatt--key_versions))
+- `keyring_id` (String) Google cloud key ring ID.
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `location_id` (String) Location ID.
 - `primary` (String) Primary version.

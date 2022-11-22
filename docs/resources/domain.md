@@ -8,6 +8,9 @@ description: |-
 
 # ciphertrust_domain (Resource)
 
+Domains isolate resources like keys to a single domain and cannot be accessed across domains. Every system has a root domain by default. Additional child domains can be created.
+
+When a domain is created an administrator can define which system users are administrators of that domain. Domain administrators can explicitly add or remove system users to / from the domain or create group maps to implicitly include system users in the domain.
 
 
 ## Example Usage

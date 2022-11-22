@@ -18,7 +18,7 @@ It's possible to identify the key using a range of fields.
 ```terraform
 # Retrieve details using the terraform ID
 data "ciphertrust_gcp_key" "by_terraform_id" {
-  gcp_cloud_resource_name = ciphertrust_gcp_key.gcp_key.id
+  id = ciphertrust_gcp_key.gcp_key.id
 }
 
 # Retrieve details using the CipherTrust key ID
@@ -26,13 +26,8 @@ data "ciphertrust_gcp_key" "by_ciphertrust_id" {
   key_id = ciphertrust_gcp_key.gcp_key.key_id
 }
 
-# Retrieve details using the key name
-data "ciphertrust_gcp_key" "by_key_name" {
-  name = ciphertrust_gcp_key.gcp_key.name
-}
-
 # Retrieve details using the key name and the keyring name
-data "ciphertrust_gcp_key" "by_multiple_values_ex1" {
+data "ciphertrust_gcp_key" "by_multiple_values" {
   name        = ciphertrust_gcp_key.gcp_key.name
   key_ring    = ciphertrust_gcp_key.gcp_key.key_ring_name
 }
@@ -43,11 +38,10 @@ data "ciphertrust_gcp_key" "by_multiple_values_ex1" {
 
 ### Optional
 
-- `gcp_cloud_resource_name` (String) Google cloud resource name. Can be used alone to identify the key, all other parameters will be ignored.
 - `id` (String) Terraform resource ID. Can be used alone to identify the key, all other parameters will be ignored.
 - `key_id` (String) CipherTrust key ID. Can be used alone to identify the key, all other parameters will be ignored.
 - `key_ring` (String) Terraform ID of the keyring.
-- `key_ring_id` (String) Keyring ID, short keyring name.
+- `keyring_id` (String) Keyring ID, short keyring name.
 - `location_id` (String) Google Cloud location.
 - `name` (String) Name of the key.
 - `project_id` (String) Google Cloud project ID.

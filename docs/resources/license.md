@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_license (Resource)
 
-
+Licenses can be installed to enable extended functionality for enterprise level features such as clustering and external identity provider options, and for various connectors such as KMIP clients.
 
 ## Example Usage
 

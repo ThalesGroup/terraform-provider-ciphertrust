@@ -54,6 +54,7 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 
 - `id` (String) CipherTrust key ID.
 - `linked_keys` (Block Set) (see [below for nested schema](#nestedblock--linked_keys))
+- `owner_id` (String) User ID of the key owner
 
 <a id="nestedblock--linked_keys"></a>
 ### Nested Schema for `linked_keys`

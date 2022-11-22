@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_proxy (Resource)
 
-
+The proxy API is used to set the proxy in the system. The API also provides an option to input a CA certificate to trust by the system. A system restart is required after adding new or changing proxy settings.
 
 ## Example Usage
 

@@ -12,6 +12,8 @@ This resource specifies the Google cloud project and keyring in which keys will 
 
 This resource is dependent on a [ciphertrust_gcp_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_connection) resource.
 
+[ciphertrust_gcp_acl](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_acl) resources can be added the keyring.
+
 
 ## Example Usage
 
@@ -48,7 +50,17 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 
 ### Read-Only
 
-- `id` (String) Google cloud key ring name.
-- `key_ring_id` (String) Keyring ID.
+- `acls` (Set of Object) List of ACLs that have been added to the keyring. (see [below for nested schema](#nestedatt--acls))
+- `id` (String) Terraform ID. Google cloud key ring name.
+- `keyring_id` (String) Keyring ID, short keyring name.
+
+<a id="nestedatt--acls"></a>
+### Nested Schema for `acls`
+
+Read-Only:
+
+- `actions` (Set of String)
+- `group` (String)
+- `user_id` (String)
 
 
