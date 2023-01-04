@@ -1,5 +1,5 @@
 provider "ciphertrust" {
-  address           = "https://34.207.194.87"
+  address           = "ip_address_of_cm"
   username          = "username"
   password          = "password"
   domain            = "domain"
