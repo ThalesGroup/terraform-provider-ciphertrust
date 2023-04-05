@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta7"
+      version = "0.9.0-beta9"
     }
   }
 }
@@ -34,7 +34,7 @@ resource "ciphertrust_gcp_keyring" "keyring" {
   project_id     = var.gcp_project
 }
 
-# Create a Google Key
+# Create a Google cloud Key
 resource "ciphertrust_gcp_key" "gcp_key" {
   algorithm        = "GOOGLE_SYMMETRIC_ENCRYPTION"
   key_ring         = ciphertrust_gcp_keyring.keyring.id
@@ -46,28 +46,21 @@ output "gcp_key" {
   value = ciphertrust_gcp_key.gcp_key.id
 }
 
-# Get the key from the Terraform ID
-data "ciphertrust_gcp_key" "key_from_terraform_id" {
-  id = ciphertrust_gcp_key.gcp_key.id
-}
-output "key_from_terraform_id" {
-  value = data.ciphertrust_gcp_key.key_from_terraform_id.id
-}
-
 # Get the key from the CipherTrust key ID
 data "ciphertrust_gcp_key" "key_from_ciphertrust_id" {
   key_id = ciphertrust_gcp_key.gcp_key.key_id
 }
 output "key_from_ciphertrust_id" {
-  value = data.ciphertrust_gcp_key.key_from_ciphertrust_id.id
+  value = data.ciphertrust_gcp_key.key_from_ciphertrust_id
 }
 
-# Get the key from key name and keyring name
-data "ciphertrust_gcp_key" "key_from_key_name_and_keyring" {
-  depends_on = [ciphertrust_gcp_key.gcp_key]
-  name       = local.key_name
-  key_ring   = var.keyring
+# Get the GCP key data using key name and other values uniquely identify the key
+data "ciphertrust_gcp_key" "gcp_key_data_using_multiple_values" {
+  name        = ciphertrust_gcp_key.gcp_key.name
+  key_ring    = ciphertrust_gcp_keyring.keyring.id
+  project_id  = var.gcp_project
+  location_id = "global"
 }
-output "key_from_key_name_and_keyring" {
-  value = data.ciphertrust_gcp_key.key_from_key_name_and_keyring.id
+output "gcp_key_data_using_multiple_values" {
+  value = data.ciphertrust_gcp_key.gcp_key_data_using_multiple_values
 }

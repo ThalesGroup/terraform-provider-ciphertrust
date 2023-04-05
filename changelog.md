@@ -1,3 +1,26 @@
+# 0.9.0-beta9
+
+## New Resources
+    ciphertrust_password_policy
+        Updates CipherTrust Manager's global password policy
+    ciphertrust_policies:
+        Creates custom policies that:
+            Allow a non-admin users add an AWS KMS
+            Allow a non-admin users add an Azure vault
+            Allow a non-admin users add a Google Cloud keyring
+            Prevent users from exporting CipherTrust keys 
+     ciphertrust_policy_attachments
+        Used to attach ciphertrust_policies to principles, eg groups.
+
+## New Data Sources
+    ciphertrust-gcp-connection
+        Reads a gcp connection resource
+
+## Breaking changes
+    ciphertrust_gcp_key
+        enable_versions - has changed from a list of version id strings to a list of version numbers
+        disable_versions - has changed from a list of version id strings to a list of version numbers
+
 # 0.9.0-beta8
 
 ## New Resources

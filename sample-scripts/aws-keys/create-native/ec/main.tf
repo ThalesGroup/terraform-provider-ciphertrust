@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta7"
+      version = "0.9.0-beta9"
     }
   }
 }

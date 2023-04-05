@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta7"
+      version = "0.9.0-beta9"
     }
   }
 }
@@ -34,14 +34,6 @@ resource "ciphertrust_azure_vault" "azure_vault" {
   subscription_id  = data.ciphertrust_azure_account_details.subscriptions.subscription_id
   name             = var.vault_name
 }
-
-# Add another vault
-resource "ciphertrust_azure_vault" "azure_premium_vault" {
-  azure_connection = ciphertrust_azure_connection.azure_connection.name
-  subscription_id  = data.ciphertrust_azure_account_details.subscriptions.subscription_id
-  name             = var.premium_vault_name
-}
-
 # Create an Azure key in the first vault
 resource "ciphertrust_azure_key" "azure_key" {
   name  = local.key_name
@@ -49,23 +41,6 @@ resource "ciphertrust_azure_key" "azure_key" {
 }
 output "azure_key" {
   value = ciphertrust_azure_key.azure_key.id
-}
-
-# Create an Azure key in the second vault
-resource "ciphertrust_azure_key" "azure_premium_key" {
-  name  = local.key_name
-  vault = ciphertrust_azure_vault.azure_premium_vault.id
-}
-output "azure_premium_key" {
-  value = ciphertrust_azure_key.azure_premium_key.id
-}
-
-# Get the key using the Terraform resource ID
-data "ciphertrust_azure_key" "key_from_terraform_id" {
-  id = ciphertrust_azure_key.azure_key.id
-}
-output "key_from_id" {
-  value = data.ciphertrust_azure_key.key_from_terraform_id.id
 }
 
 # Get the key using the Azure key ID

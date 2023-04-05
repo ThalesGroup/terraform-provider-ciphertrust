@@ -16,20 +16,15 @@ It's possible to identify the key using a range of fields.
 ## Example Usage
 
 ```terraform
-# Retrieve details using the terraform ID
-data "ciphertrust_gcp_key" "by_terraform_id" {
-  id = ciphertrust_gcp_key.gcp_key.id
-}
-
 # Retrieve details using the CipherTrust key ID
 data "ciphertrust_gcp_key" "by_ciphertrust_id" {
-  key_id = ciphertrust_gcp_key.gcp_key.key_id
+  key_id = "6f4134bf-0007-42db-bc0b-e11e5bfbe782"
 }
 
-# Retrieve details using the key name and the keyring name
-data "ciphertrust_gcp_key" "by_multiple_values" {
-  name        = ciphertrust_gcp_key.gcp_key.name
-  key_ring    = ciphertrust_gcp_key.gcp_key.key_ring_name
+# Retrieve details using the key name and keyring
+data "ciphertrust_gcp_key" "by_keyname_and_keyring" {
+  name     = "key-name"
+  key_ring = "projects/my-project/locations/my-location/keyRings/my-keyring"
 }
 ```
 
@@ -38,10 +33,9 @@ data "ciphertrust_gcp_key" "by_multiple_values" {
 
 ### Optional
 
-- `id` (String) Terraform resource ID. Can be used alone to identify the key, all other parameters will be ignored.
-- `key_id` (String) CipherTrust key ID. Can be used alone to identify the key, all other parameters will be ignored.
+- `key_id` (String) CipherTrust key ID. Can be used alone to identify the key.
 - `key_ring` (String) Terraform ID of the keyring.
-- `keyring_id` (String) Keyring ID, short keyring name.
+- `keyring_id` (String) Google cloud keyring ID.
 - `location_id` (String) Google Cloud location.
 - `name` (String) Name of the key.
 - `project_id` (String) Google Cloud project ID.
@@ -52,14 +46,16 @@ data "ciphertrust_gcp_key" "by_multiple_values" {
 - `cloud_name` (String) Cloud name.
 - `create_status` (String) Key creation status.
 - `created_at` (String) Date the key was created.
+- `id` (String) Terraform datasource ID
 - `key_labels` (Map of String) A list of key:value pairs to assigned to the key.
-- `key_ring_name` (String) Google cloud keyring.
+- `key_ring_name` (String) Google cloud keyring name.
 - `key_versions` (List of Object) Key version details. (see [below for nested schema](#nestedatt--key_versions))
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `next_rotation_time` (String) Time when the key will next be rotated by Google Cloud KMS.
 - `primary` (String) Primary version.
 - `purpose` (String) Purpose of the key.
 - `rotation_period` (String) Frequency at which the Google Cloud key will to be rotated by Google Cloud.
+- `state` (String) State of the key.
 - `updated_at` (String) Date the key was last updated.
 
 <a id="nestedatt--key_versions"></a>
@@ -71,7 +67,7 @@ Read-Only:
 - `is_primary` (Boolean)
 - `local_key_id` (String)
 - `local_key_name` (String)
-- `public_key` (Set of Object) (see [below for nested schema](#nestedobjatt--key_versions--public_key))
+- `public_key` (List of Object) (see [below for nested schema](#nestedobjatt--key_versions--public_key))
 - `version` (Number)
 - `version_id` (String)
 - `version_state` (String)

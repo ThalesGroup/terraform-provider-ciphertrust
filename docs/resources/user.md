@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_user (Resource)
 
-Users are unique individuals or systems using the API.
+
 
 ## Example Usage
 
@@ -33,17 +33,17 @@ resource "ciphertrust_user" "user_admin1" {
 
 ### Required
 
-- `password` (String) The user password.
+- `password` (String) (Updateable) The user password.
 - `username` (String) The user name.
 
 ### Optional
 
-- `email` (String) E-mail of the user.
+- `email` (String) (Updateable) E-mail of the user.
 - `is_domain_user` (Boolean) This flag can be used to create the user in a non-root domain where user management is allowed.
-- `name` (String) Full name of the user.
-- `password_change_required` (Boolean) Password change required flag. If set to true, user will be required to change their password on next successful login.
-- `prevent_ui_login` (Boolean) If true, user is not allowed to login from Web UI. Default - false
-- `user_metadata` (Map of String) User meta data
+- `name` (String) (Updateable) Full name of the user.
+- `password_change_required` (Boolean) (Updateable) Password change required flag. If set to true, user will be required to change their password on next successful login.
+- `prevent_ui_login` (Boolean) (Updateable) If true, user is not allowed to login from Web UI. Default - false
+- `user_metadata` (Map of String) (Updateable) User meta data
 
 ### Read-Only
 

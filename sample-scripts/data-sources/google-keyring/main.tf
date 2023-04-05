@@ -2,10 +2,12 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta7"
+      version = "0.9.0-beta9"
     }
   }
 }
+
+provider "ciphertrust" {}
 
 resource "random_id" "random" {
   byte_length = 8
@@ -15,9 +17,8 @@ locals {
   connection_name = "google-connection-${lower(random_id.random.hex)}"
   key_name        = "google-keyring-datasource-${lower(random_id.random.hex)}"
   user_name       = "google-keyring-datasource-user-${lower(random_id.random.hex)}"
+  user_password   = "password"
 }
-
-provider "ciphertrust" {}
 
 # Create a GCP connection
 resource "ciphertrust_gcp_connection" "connection" {
@@ -37,7 +38,7 @@ resource "ciphertrust_gcp_keyring" "gcp_keyring" {
 # Create a CipherTrust user
 resource "ciphertrust_user" "gcp_user" {
   username = local.user_name
-  password = "Temp12345#"
+  password = local.user_password
 }
 
 # Add some ACLs for that user
@@ -47,24 +48,13 @@ resource "ciphertrust_gcp_acl" "gcp_user_acls" {
   actions    = ["view", "keycreate", "keyupload", "keyupdate", "keydestroy", "keysynchronize", "keycanceldestroy"]
 }
 
-# Get the GCP keyring data using the Terraform resource id
-data "ciphertrust_gcp_keyring" "gcp_keyring_data_using_terraform_id" {
-  id = ciphertrust_gcp_keyring.gcp_keyring.id
-  depends_on = [
-    ciphertrust_gcp_acl.gcp_user_acls
-  ]
-}
-output "gcp_keyring_data_using_terraform_id" {
-  value = data.ciphertrust_gcp_keyring.gcp_keyring_data_using_terraform_id
-}
-
 # Get the GCP keyring data using the keyring name
-data "ciphertrust_gcp_keyring" "gcp_keyring_data_using_keyring_name" {
+data "ciphertrust_gcp_keyring" "gcp_keyring_data" {
   name = ciphertrust_gcp_keyring.gcp_keyring.name
   depends_on = [
     ciphertrust_gcp_acl.gcp_user_acls
   ]
 }
 output "gcp_keyring_data_using_keyring_name" {
-  value = data.ciphertrust_gcp_keyring.gcp_keyring_data_using_keyring_name
+  value = data.ciphertrust_gcp_keyring.gcp_keyring_data
 }

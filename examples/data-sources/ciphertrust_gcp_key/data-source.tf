@@ -1,15 +1,10 @@
-# Retrieve details using the terraform ID
-data "ciphertrust_gcp_key" "by_terraform_id" {
-  id = ciphertrust_gcp_key.gcp_key.id
-}
-
 # Retrieve details using the CipherTrust key ID
 data "ciphertrust_gcp_key" "by_ciphertrust_id" {
-  key_id = ciphertrust_gcp_key.gcp_key.key_id
+  key_id = "6f4134bf-0007-42db-bc0b-e11e5bfbe782"
 }
 
-# Retrieve details using the key name and the keyring name
-data "ciphertrust_gcp_key" "by_multiple_values" {
-  name        = ciphertrust_gcp_key.gcp_key.name
-  key_ring    = ciphertrust_gcp_key.gcp_key.key_ring_name
+# Retrieve details using the key name and keyring
+data "ciphertrust_gcp_key" "by_keyname_and_keyring" {
+  name     = "key-name"
+  key_ring = "projects/my-project/locations/my-location/keyRings/my-keyring"
 }

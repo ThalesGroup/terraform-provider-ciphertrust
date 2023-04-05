@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta7"
+      version = "0.9.0-beta9"
     }
   }
 }
@@ -45,9 +45,8 @@ resource "ciphertrust_groups" "cckm_users" {
   ]
 }
 
-# Add an acl for the user
+# Add ACLs for the user
 resource "ciphertrust_gcp_acl" "user_acls" {
-  # Add some acls for user
   keyring_id = ciphertrust_gcp_keyring.keyring.id
   user_id    = ciphertrust_user.user.id
   actions    = ["keycreate", "keydestroy", "view"]
