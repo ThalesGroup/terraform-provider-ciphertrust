@@ -63,7 +63,7 @@ data "ciphertrust_aws_key" "by_alias_and_region" {
 - `encryption_algorithms` (List of String) Encryption algorithms of an asymmetric key
 - `expiration_model` (String) Expiration model.
 - `external_accounts` (List of String) Other AWS accounts that have access to this key.
-- `key_admins` (List of String) Key administrators  users.
+- `key_admins` (List of String) Key administrators - users.
 - `key_admins_roles` (List of String) Key administrators - roles.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.

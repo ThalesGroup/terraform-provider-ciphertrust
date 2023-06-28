@@ -1,3 +1,61 @@
+# 0.9.0-beta10
+
+## New Resources
+    ciphertrust_aws_custom_keystore
+        Used to create custom key store of type EXTERNAL_KEY_STORE, AWS_CLOUDHSM. 
+        Supported from Ciphertrust Manager v2.12 onwards.
+        It supports following:
+            Allow creation of custom key store of type EXTERNAL_KEY_STORE in unlinked as well as linked mode
+            For custom key store of type EXTERNAL_KEY_STORE following operations are supported:
+                Keystore of EXTERNAL_KEY_STORE can be backed by Luna as key source or Ciphertrust Manager as key source 
+                Allow connect, disconnect, block, unblock of custom key store
+                Allow updation of attributes (as applicable for linked and unlinked key store)
+            For custom key store of type AWS_CLOUDHSM following operations are supported:
+                Allow connect, disconnect of custom key store
+                Allow updation of attributes (as applicable for linked and unlinked key store)
+
+    ciphertrust_aws_xks_key:
+        Creates an AWS HYOK (XKS) key. Supported from Ciphertrust Manager v2.12 onwards.
+        AWS HYOK key source tier and External Key Store key source tier need to match. 
+        Following key sources are supported for AWS HYOK (XKS) key:
+            Luna as key source
+            Ciphertrust Manager as key source
+        It supports following:
+            Allow creation of AWS HYOK (XKS) key in unlinked as well as linked mode
+            Allow block, unblock of AWS HYOK (XKS) key
+            Allow updation of attributes (as applicable for linked and unlinked key)
+    
+    ciphertrust_virtual_key:
+        Used to create an AWS HYOK (XKS) key with luna as key source in custom key store of type EXTERNAL_KEY_STORE. 
+        Supported from Ciphertrust Manager v2.12 onwards.
+
+    ciphertrust_aws_cloudhsm_key
+        Used to create AWS key in custom key store of type AWS_CLOUDHSM. 
+        Supported from Ciphertrust Manager v2.12 onwards.
+        It supports following:
+            Allow creation of CloudHSM key in AWS_CLOUDHSM key store.
+
+    ciphertrust_cte_client
+        Used to create a CTE Client on CM. A client is a computer system where the data needs to be protected.
+
+    ciphertrust_cte_guardpoint
+        Used to create a CTE GuardPoint on a CTE Client. A GuardPoint specifies the list of folders that contains paths to be protected. 
+        Access to files and encryption of files under the GuardPoint is controlled by security policies.
+
+    ciphertrust_cte_policies
+        Used to create CTE policies on CM which can be used to add a guardpoint on CTE client. 
+        A policy is a collection of rules that govern data access and encryption on CTE client.
+
+## New Data Sources
+    ciphertrust_aws_custom_keystore
+        Reads a aws custom keystore resource
+    ciphertrust_aws_xks_key
+        Reads a aws xks (HYOK) key resource
+    ciphertrust_virtual_key
+        Reads a virtual key resource
+    ciphertrust_aws_cloudhsm_key
+        Reads a aws CloudHSM key resource
+
 # 0.9.0-beta9
 
 ## New Resources

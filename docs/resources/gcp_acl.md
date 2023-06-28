@@ -108,8 +108,8 @@ resource "ciphertrust_gcp_acl" "test_group_acls" {
 
 ### Optional
 
-- `group` (String) Ciphertrust group the acl applies to. Specify either "user_id" or "group".
-- `user_id` (String) ID of the Ciphertrust user the acl applies to. Specify either "user_id" or "group".
+- `group` (String) CipherTrust group the acl applies to. Specify either "user_id" or "group".
+- `user_id` (String) ID of the CipherTrust user the acl applies to. Specify either "user_id" or "group".
 
 ### Read-Only
 

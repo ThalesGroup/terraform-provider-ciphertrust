@@ -275,7 +275,7 @@ Optional:
 
 Required:
 
-- `key_id` (String) CipherTrust key ID of they key to replicate.
+- `key_id` (String) CipherTrust key ID of the key to replicate.
 
 Optional:
 

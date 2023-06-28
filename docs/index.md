@@ -21,8 +21,9 @@ Use the navigation to the left to read about the available resources.
 
 ## Thales Devices
 The following devices can be used to create keys for the above public clouds.
-- DSM
+- CipherTrust Manager
 - HSM Luna
+- DSM
 
 ## Provider Initialization
 

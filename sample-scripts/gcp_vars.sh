@@ -4,9 +4,9 @@
 # Replace dummy values with your values and execute this script.
 
 # Project name
-GCP_PROJECT=gemalto-kyloeng
+GCP_PROJECT=gcp-project
 # Qualified path to your keyring eg: projects/project-name/locations/global/keyRings/keyring-name
-GCP_KEYRING=projects/gemalto-kyloeng/locations/global/keyRings/CCKM-Automation1
+GCP_KEYRING=gcp-keyring
 # Path to a service account key file
 GCP_KEYFILE_PATH=/gcp-key-file.json
 

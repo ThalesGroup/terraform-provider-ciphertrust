@@ -2,7 +2,7 @@
 
 This example shows how to:
 - Create a connection to Google Cloud
-- Configure a scheduled rotation job for Google Cloud keys using a DSM as the key source
+- Configure a scheduled rotation job for Google Cloud keys using HSM-Luna as the key source
 - Create a Google Cloud key that will be rotated by the scheduler
 
 The following steps explain how to:

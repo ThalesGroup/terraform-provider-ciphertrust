@@ -3,16 +3,20 @@
 page_title: "ciphertrust_password_policy Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-
+  
 ---
 
 # ciphertrust_password_policy (Resource)
-Change the current password policy for all users. Can only be used to by a member of the admin group. Currently, a single policy named 'global' is applied to all users.
+- Change the current global password policy for all users. Can only be used by a member of the admin or user admin group. Currently, by default 'global' policy is applied to all users.
+- Create, Update and Delete a custom password policy. Can only be used by a member of the admin or user admin group. Currently, by default 'global' policy is applied to all users. To apply the policy, you need to assign it to a user.
+
+
 
 
 ## Example Usage
 
 ```terraform
+#Global Password Policy
 resource "ciphertrust_password_policy" "PasswordPolicy"{
 	inclusive_min_upper_case = 2 
 	inclusive_min_lower_case = 2 
@@ -21,6 +25,21 @@ resource "ciphertrust_password_policy" "PasswordPolicy"{
 	inclusive_min_total_length = 10
 	inclusive_max_total_length = 50 
 	password_history_threshold = 10 
+	failed_logins_lockout_thresholds = [0, 0, 1, 1]
+	password_lifetime = 20
+	password_change_min_days = 100
+}
+
+#Custom Password Policy
+resource "ciphertrust_password_policy" "PasswordPolicy"{
+	policy_name = "testcustompolicyname"
+	inclusive_min_upper_case = 2
+	inclusive_min_lower_case = 2
+	inclusive_min_digits = 2
+	inclusive_min_other = 2
+	inclusive_min_total_length = 10
+	inclusive_max_total_length = 50
+	password_history_threshold = 10
 	failed_logins_lockout_thresholds = [0, 0, 1, 1]
 	password_lifetime = 20
 	password_change_min_days = 100
@@ -42,6 +61,7 @@ resource "ciphertrust_password_policy" "PasswordPolicy"{
 - `password_change_min_days` (Number) The minimum period in days between password changes. Value 0 is ignored.
 - `password_history_threshold` (Number) Determines the number of past passwords a user cannot reuse. Even with value 0, the user will not be able to change their password to the same password.
 - `password_lifetime` (Number) The maximum lifetime of the password in days. Value 0 is ignored.
+- `policy_name` (String) The name for the custom password policy.
 
 ### Read-Only
 

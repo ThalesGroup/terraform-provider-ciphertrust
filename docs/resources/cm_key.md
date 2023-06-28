@@ -62,6 +62,6 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 Read-Only:
 
 - `key_id` (String) ID of the linked key.
-- `key_type` (String) Key type of the linked key.
+- `key_type` (String) Object type of the linked key.
 
 
