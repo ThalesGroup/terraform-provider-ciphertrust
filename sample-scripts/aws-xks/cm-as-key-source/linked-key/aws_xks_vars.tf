@@ -67,22 +67,22 @@ variable "cks_aws_cks_connect_disconnect_state" {
 # XKS key Policy variables
 variable "admin" {
   type    = string
-  default = "aws-iam-user"
+  default = "aws-iam-user1"
 }
 
 variable "admin_role" {
   type    = string
-  default = "aws-iam-role"
+  default = "aws-iam-role1"
 }
 
 variable "user" {
   type    = string
-  default = "aws-iam-user"
+  default = "aws-iam-user2"
 }
 
 variable "user_role" {
   type    = string
-  default = "aws-iam-role"
+  default = "aws-iam-role2"
 }
 
 variable "xks_key_blocked" {
