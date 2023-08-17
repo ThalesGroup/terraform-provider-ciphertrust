@@ -46,7 +46,6 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 
 - `alias` (Set of String) Input parameter. Alias assigned to the the XKS key
 - `arn` (String) The Amazon Resource Name (ARN) of the key.
-- `bypass_policy_lockout_safety_check` (Boolean) Bypass the AWS key policy lockout safety check. Default is false.
 - `description` (String) Description of the AWS key.
 - `id` (String) XKS key ID.
 - `key_id` (String) CipherTrust key ID. Can be used alone to identify the key, all other parameters will be ignored.
@@ -67,7 +66,7 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `custom_key_store_id` (String) Custom keystore ID in AWS.
 - `customer_master_key_spec` (String) Specifies a symmetric key or an asymmetric key pair and the encryption algorithms.
 - `deletion_date` (String) Date the key is scheduled for deletion.
-- `enabled` (Boolean) (Updateable) True if the key is enabled.
+- `enabled` (Boolean) True if the key is enabled.
 - `encryption_algorithms` (List of String) Encryption algorithms of an asymmetric key
 - `expiration_model` (String) Expiration model.
 - `external_accounts` (List of String) Other AWS accounts that have access to this key.
@@ -92,13 +91,8 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `local_hosted_params` (List of Object) Parameters for a AWS XKS key. (see [below for nested schema](#nestedatt--local_hosted_params))
 - `local_key_id` (String) CipherTrust key identifier of the external key.
 - `local_key_name` (String) CipherTrust key name of the external key.
-- `multi_region` (Boolean) True if the key is a multi-region key.
-- `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
-- `multi_region_primary_key` (Map of String) Multi-region primary key details.
-- `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
-- `replica_policy` (String) Replication policy.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
 - `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
 - `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
