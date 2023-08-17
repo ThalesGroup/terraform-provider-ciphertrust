@@ -148,7 +148,7 @@ output "unlinked_xks_custom_keystore_for_cm_as_source" {
 
 # Set blocked = true to block above unlinked keystore
 
-# Create an unlinked XKS key with cm as key source in above unlinked external key store 
+# Create an unlinked XKS key with cm as key source in above unlinked external key store
 resource "ciphertrust_aws_xks_key" "xks_unlinked_key_with_cm_as_source_1" {
   depends_on = [
     ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore_for_cm_as_source,
@@ -209,7 +209,7 @@ output "linked_xks_custom_keystore_for_cm_as_source" {
 # Set connect_disconnect_keystore = CONNECT_KEYSTORE to connect above linked keystore
 # Set blocked = true to block above linked keystore
 
-# Create an linked XKS key with cm as key source in above linked external key store 
+# Create an linked XKS key with cm as key source in above linked external key store
 resource "ciphertrust_aws_xks_key" "xks_linked_key_with_cm_as_source_1" {
   depends_on = [
     ciphertrust_aws_custom_keystore.linked_xks_custom_keystore_for_cm_as_source,
@@ -379,20 +379,25 @@ output "xks_unlinked_key_with_luna_as_source_1" {
 
 - `alias` (Set of String) Input parameter. Alias assigned to the the XKS key
 - `auto_rotate` (Boolean) (Updateable) Enable AWS autorotation on the key. Default is false.
+- `bypass_policy_lockout_safety_check` (Boolean) Bypass the AWS key policy lockout safety check. Default is false.
+- `customer_master_key_spec` (String) Specifies a symmetric or asymmetric key and the encryption\signing algorithms the key supports. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521 and ECC_SECG_P256K1. Default is SYMMETRIC_DEFAULT.
 - `description` (String) Description of the AWS key.
 - `enable_key` (Boolean) (Updateable) Enable or disable the key. Default is true.
 - `enable_rotation` (Block List, Max: 1) (Updateable) Enable the key for scheduled rotation job. (see [below for nested schema](#nestedblock--enable_rotation))
+- `import_key_material` (Block List, Max: 1) (Updateable) Key import details. (see [below for nested schema](#nestedblock--import_key_material))
 - `key_policy` (Block List, Max: 1) (Updateable) Key policy to attach to the AWS key. Policy and key administrators, key_users, and AWS accounts are mutually exclusive. Specify either the policy or any one user at a time. If no parameters are specified, the default policy is used. (see [below for nested schema](#nestedblock--key_policy))
 - `key_usage` (String) Specifies the intended use of the key. RSA key options: ENCRYPT_DECRYPT, SIGN_VERIFY. Default is ENCRYPT_DECRYPT. EC key options: SIGN_VERIFY. Default is SIGN_VERIFY. Symmetric key options: ENCRYPT_DECRYPT. Default is ENCRYPT_DECRYPT.
 - `key_users_roles` (List of String) Key users - roles.
 - `kms` (String) Name or ID of the kms. Required unless replicating a multi-user key.
 - `local_hosted_params` (Block List) Parameters for a AWS XKS key. (see [below for nested schema](#nestedblock--local_hosted_params))
 - `multi_region` (Boolean) Creates or identifies a multi-region key.
-- `origin` (String) Source of the CMK's key material.  Options: AWS_KMS, EXTERNAL, EXTERNAL_KEY_STORE, AWS_CLOUDHSM. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations. Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store. 
+- `origin` (String) Source of the CMK's key material.  Options: AWS_KMS, EXTERNAL, EXTERNAL_KEY_STORE, AWS_CLOUDHSM. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations. Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.
 - `primary_region` (String) (Updateable) Update the primary region of a multi-region key. Can only be set for a primary key.
 - `region` (String) AWS region in which to create a XKS key.
+- `replicate_key` (Block List, Max: 1) Key replication details. (see [below for nested schema](#nestedblock--replicate_key))
 - `schedule_for_deletion_days` (Number) (Updateable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
 - `tags` (Map of String) A list of tags assigned to the XKS key.
+- `upload_key` (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
 
 ### Read-Only
 
@@ -414,6 +419,7 @@ output "xks_unlinked_key_with_luna_as_source_1" {
 - `key_admins` (List of String) Key administrators - users.
 - `key_admins_roles` (List of String) Key administrators - roles.
 - `key_id` (String) CipherTrust Key ID.
+- `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
 - `key_source` (String) Source of the key.
@@ -427,8 +433,12 @@ output "xks_unlinked_key_with_luna_as_source_1" {
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `local_key_id` (String) CipherTrust key identifier of the external key.
 - `local_key_name` (String) CipherTrust key name of the external key.
+- `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
+- `multi_region_primary_key` (Map of String) Multi-region primary key details.
+- `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
+- `replica_policy` (String) Replication policy.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
 - `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
 - `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
@@ -443,13 +453,29 @@ output "xks_unlinked_key_with_luna_as_source_1" {
 Required:
 
 - `job_config_id` (String) (Updateable) ID of the scheduler job that will perform key rotation.
-- `key_source` (String) (Updateable) Source of the key material. Options: dsm, ciphertrust.
+- `key_source` (String) (Updateable) Source of the key material. Options: dsm, ciphertrust, hsm-luna.
 
 Optional:
 
 - `disable_encrypt` (Boolean) (Updateable) Disable encryption on the old key.
 - `dsm_domain_id` (String) (Updateable) DSM domain ID, required if key_source is dsm.
 - `hsm_partition_id` (String) (Updateable) HSM Luna partition ID, required if key_source is hsm-luna.
+
+
+<a id="nestedblock--import_key_material"></a>
+### Nested Schema for `import_key_material`
+
+Required:
+
+- `source_key_name` (String) Name of the key created for key material.
+
+Optional:
+
+- `dsm_domain_id` (String) (Updateable) Domain for the DSM key. Required if source_key_tier is dsm.
+- `hsm_partition_id` (String) (Updateable) Partition for the HSM Luna key. Required if source_key_tier is hsm-luna.
+- `key_expiration` (Boolean) (Updateable) Enable key material expiration.
+- `source_key_tier` (String) Source of the key. Options: local, dsm, hsm-luna. Default is local.
+- `valid_to` (String) (Updateable) Date of key material expiry in UTC time in RFC3339 format. For example, 2022-07-03T14:24:00Z.
 
 
 <a id="nestedblock--key_policy"></a>
@@ -479,4 +505,34 @@ Optional:
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `source_key_id` (String) ID of the source key for AWS XKS key.
 - `source_key_tier` (String) Source key tier for AWS xks key - hsm-luna or local. Default is hsm-luna.
+
+
+<a id="nestedblock--replicate_key"></a>
+### Nested Schema for `replicate_key`
+
+Required:
+
+- `key_id` (String) CipherTrust key ID of the key to replicate.
+
+Optional:
+
+- `import_key_material` (Boolean) Import key material to a replicated external key.
+- `key_expiration` (Boolean) Enable key expiration of the replicated key. Only applies to external keys.
+- `make_primary` (Boolean) Update the primary key region to the replicated key's region following replication.
+- `valid_to` (String) Date the key material of the replicated key expires. Only applies to external keys. Set as UTC time in RFC3339 format. For example, 2022-07-03T14:24:00Z.
+
+
+<a id="nestedblock--upload_key"></a>
+### Nested Schema for `upload_key`
+
+Required:
+
+- `source_key_identifier` (String) DSM or CipherTrust key ID to upload to AWS.
+
+Optional:
+
+- `key_expiration` (Boolean) Enable key expiration.
+- `source_key_tier` (String) Source of the key. Options: local, dsm and hsm-luna. Default is local.
+- `valid_to` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2022-07-03T14:24:00Z.
+
 

@@ -46,6 +46,7 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 
 - `alias` (Set of String) Input parameter. Alias assigned to the the XKS key
 - `arn` (String) The Amazon Resource Name (ARN) of the key.
+- `bypass_policy_lockout_safety_check` (Boolean) Bypass the AWS key policy lockout safety check. Default is false.
 - `description` (String) Description of the AWS key.
 - `id` (String) XKS key ID.
 - `key_id` (String) CipherTrust key ID. Can be used alone to identify the key, all other parameters will be ignored.
@@ -74,7 +75,7 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `key_admins_roles` (List of String) Key administrators - roles.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
-- `key_policy` (List of Object) (Updateable) Key policy to attach to the AWS key. Policy and key administrators, key_users, and AWS accounts are mutually exclusive. Specify either the policy or any one user at a time. If no parameters are specified, the default policy is used. (see [below for nested schema](#nestedatt--key_policy))
+- `key_policy` (List of Object) Key policy to attach to the AWS key. Policy and key administrators, key_users, and AWS accounts are mutually exclusive. Specify either the policy or any one user at a time. If no parameters are specified, the default policy is used. (see [below for nested schema](#nestedatt--key_policy))
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
 - `key_source` (String) Source of the key.
 - `key_source_container_id` (String) ID of the source container of the key.
@@ -92,8 +93,12 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `local_key_id` (String) CipherTrust key identifier of the external key.
 - `local_key_name` (String) CipherTrust key name of the external key.
 - `multi_region` (Boolean) True if the key is a multi-region key.
+- `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
+- `multi_region_primary_key` (Map of String) Multi-region primary key details.
+- `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
+- `replica_policy` (String) Replication policy.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
 - `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
 - `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.

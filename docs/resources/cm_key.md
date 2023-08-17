@@ -49,19 +49,22 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 
 - `curve` (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1 and prime256v1. Default is secp384r1.
 - `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 1024, 2048, 3072, 4096.
+- `undeletable` (Boolean) (Updateable) Parameter to indicate if CM key is undeletable. Must be set to false before this key and any linked keys can be destroyed. Default is false.
+- `unexportable` (Boolean) (Updateable) Parameter to indicate if CM key is unexportable.
+- `usage_mask` (Number) Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks).
 
 ### Read-Only
 
 - `id` (String) CipherTrust key ID.
-- `linked_keys` (Block Set) (see [below for nested schema](#nestedblock--linked_keys))
+- `linked_keys` (Set of Object) (see [below for nested schema](#nestedatt--linked_keys))
 - `owner_id` (String) User ID of the key owner
 
-<a id="nestedblock--linked_keys"></a>
+<a id="nestedatt--linked_keys"></a>
 ### Nested Schema for `linked_keys`
 
 Read-Only:
 
-- `key_id` (String) ID of the linked key.
-- `key_type` (String) Object type of the linked key.
+- `key_id` (String)
+- `key_type` (String)
 
 

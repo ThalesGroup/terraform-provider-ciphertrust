@@ -216,7 +216,7 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 
 ### Required
 
-- `algorithm` (String) Algorithm of the next key versions. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. Can be updated for asymmetric keys. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
+- `algorithm` (String) Algorithm of the first version of the key and subsequent versions unless specified when adding versions. Options: RSA_SIGN_PSS_2048_SHA256, RSA_SIGN_PSS_3072_SHA256, RSA_SIGN_PSS_4096_SHA256, RSA_SIGN_PSS_4096_SHA512, RSA_SIGN_PKCS1_2048_SHA256, RSA_SIGN_PKCS1_3072_SHA256, RSA_SIGN_PKCS1_4096_SHA256, RSA_SIGN_PKCS1_4096_SHA512, EC_SIGN_P256_SHA256, EC_SIGN_P384_SHA384, EC_SIGN_SECP256K1_SHA256, RSA_DECRYPT_OAEP_2048_SHA256, RSA_DECRYPT_OAEP_3072_SHA256, RSA_DECRYPT_OAEP_4096_SHA256, RSA_DECRYPT_OAEP_4096_SHA512 and GOOGLE_SYMMETRIC_ENCRYPTION. Can be updated for asymmetric keys. EC_SIGN_SECP256K1_SHA256 is only valid if protection_level is HSM.
 - `key_ring` (String) Terraform ID of the key ring on which to create the key.
 - `name` (String) Name of the key.
 
@@ -224,16 +224,17 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 
 - `add_version` (Block List) Add versions to the Google Cloud key. Versions can be added during create or update. (see [below for nested schema](#nestedblock--add_version))
 - `disable_all_versions` (Boolean) Disable all key versions. All versions can be disabled on create or update.
-- `disable_versions` (Set of String) A list of version ID's to disable. Versions that don't exist or are not enabled are ignored.
+- `disable_versions` (Set of Number) A list of version to disable. Versions that don't exist or are not enabled are ignored.
 - `enable_all_versions` (Boolean) Enable all key versions.
 - `enable_rotation` (Block List, Max: 1) Enable the key for scheduled rotation job. Rotation can be enabled on create or update. (see [below for nested schema](#nestedblock--enable_rotation))
-- `enable_versions` (Set of String) A list of version ID's to enable. Versions that don't exist or are not disabled are ignored.
+- `enable_versions` (Set of Number) A list of versions to enable. Versions that don't exist or are not disabled are ignored.
 - `key_labels` (Map of String) A list of key:value pairs to assign to the Google Cloud key. Keys and values can contain only lowercase letters,  numeric characters, underscores, and dashes.
 - `next_rotation_time` (String) Time when the key will next be rotated by Google Cloud KMS. Can only be applied to symmetric keys. Must be formatted as per RFC3339. For example, 2022-07-31T17:18:37Z.
 - `primary_version` (Number) Update the primary version. Valid for symmetric keys only.
 - `protection_level` (String) Protection level of the key. Options: SOFTWARE, HSM.
-- `purpose` (String) Purpose of the key. Options: ENCRYPT_DECRYPT, ASYMMETRIC_SIGN, ASYMMETRIC_DECRYPT.
+- `purpose` (String) Purpose of the key. Required for asymmetric keys. Options: ENCRYPT_DECRYPT, ASYMMETRIC_SIGN, ASYMMETRIC_DECRYPT.
 - `rotation_period` (String) Frequency at which the Google Cloud key will to be rotated by Google Cloud. Can only be applied to symmetric keys. Must be formatted as a duration in seconds terminated by 's'. For example, 360000s.
+- `schedule_destroy_versions` (Set of Number) A list of versions to destroy. Versions that don't exist or are already scheduled to be destroyed are ignored. If all the versions are destroyed the key is destroyed.
 - `upload_key` (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
 
 ### Read-Only
@@ -250,6 +251,7 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 - `location_id` (String) Location ID.
 - `primary` (String) Primary version.
 - `project_id` (String) Google Cloud project ID.
+- `state` (String) State of the key.
 - `updated_at` (String) Date the key was last updated.
 
 <a id="nestedblock--add_version"></a>

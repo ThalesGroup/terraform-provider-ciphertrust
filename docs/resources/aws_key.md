@@ -208,6 +208,7 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `key_type` (String) Key type.
 - `key_users` (List of String) Key users - users.
 - `key_users_roles` (List of String) Key users - roles.
+- `kms_id` (String) ID of the kms
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `local_key_id` (String) CipherTrust key identifier of the external key.
 - `local_key_name` (String) CipherTrust key name of the external key.

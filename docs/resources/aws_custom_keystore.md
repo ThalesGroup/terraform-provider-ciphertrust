@@ -305,9 +305,9 @@ output "cloudhsm_custom_keystore" {
 
 ### Required
 
-- `name` (String) (Updateable) Unique name for the custom keystore.
 - `kms` (String) Name or id for the KMS in which custom keystore belongs.
-- `region` (String) Region of the AWS custom keystore.
+- `name` (String) (Updateable) Unique name for the custom keystore.
+- `region` (String) Region in which to create AWS custom keystore.
 
 ### Optional
 
@@ -338,7 +338,7 @@ Required:
 
 Optional:
 
-- `cloud_hsm_cluster_id` (String) (Updateable) CloudHSM cluster ID. Required during create operation for AWS custom keystore of type AWS_CLOUDHSM. 
+- `cloud_hsm_cluster_id` (String) (Updateable) CloudHSM cluster ID for AWS custom keystore of type AWS_CLOUDHSM. Required during create operation for AWS custom keystore of type AWS_CLOUDHSM.
 - `key_store_password` (String) (Updateable) CloudHSM kmsuser Crypto User (CU) password or AWS custom keystore of type AWS_CLOUDHSM. Required during create operation for AWS custom keystore of type AWS_CLOUDHSM.
 - `trust_anchor_certificate` (String) Trust anchor certificate for AWS custom keystore of type AWS_CLOUDHSM. Required during create operation for AWS custom keystore of type AWS_CLOUDHSM.
 - `xks_proxy_connectivity` (String) (Updateable) AWS XKS connectivity type. Applicable for AWS custom keystore of type EXTERNAL_KEYSTORE. Default is EXTERNAL_KEY_STORE.

@@ -17,7 +17,7 @@ It's possible to identify the key using a range of fields.
 
 ### Required
 
-- `name` (String) Keyring name. Can be used alone to identify the keyring.
+- `name` (String) Keyring name.
 
 ### Read-Only
 

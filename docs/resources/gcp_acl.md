@@ -75,7 +75,7 @@ resource "ciphertrust_groups" "cckm_users" {
 }
 
 # Users must be a member of the Key Users group to perform operations on CipherTrust keys
-# For example, create a CipherTrust key to upload it
+# For example, create a CipherTrust key to upload it to a cloud
 resource "ciphertrust_groups" "key_users" {
   name = "Key Users"
   user_ids = [
@@ -86,15 +86,15 @@ resource "ciphertrust_groups" "key_users" {
 # Add an acl for the user to the keyring
 resource "ciphertrust_gcp_acl" "user_acls" {
   keyring_id = ciphertrust_gcp_keyring.gcp_keyring.id
-  user_id     = ciphertrust_user.user.id
-  actions     = ["keycreate", "keyupload", "view"]
+  user_id    = ciphertrust_user.user.id
+  actions    = ["keycreate", "keyupload", "view"]
 }
 
 # Add an acl for the group to the keyring
 resource "ciphertrust_gcp_acl" "test_group_acls" {
   keyring_id = ciphertrust_gcp_keyring.gcp_keyring.id
-  group       = ciphertrust_groups.group.id
-  actions     = ["view", "keyupload", "keydestroy"]
+  group      = ciphertrust_groups.group.id
+  actions    = ["view", "keyupload", "keydestroy"]
 }
 ```
 

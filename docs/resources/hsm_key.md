@@ -57,17 +57,20 @@ resource "ciphertrust_hsm_key" "hsm_key" {
 
 ### Required
 
-- `attributes` (List of String) (Updateable) Key attributes. Options: CKA_ENCRYPT, CKA_DECRYPT, CKA_WRAP, CKA_UNWRAP, CKA_SIGN, CKA_VERIFY and CKA_DERIVE.
 - `key_size` (Number) Size of the key. Options: 2048, 3072, 4096 for asymmetric keys. 128, 192 and 256 for symmetric keys.
 - `mechanism` (String) Mechanism of the key. Options: CKM_RSA_FIPS_186_3_AUX_PRIME_KEY_PAIR_GEN, CKM_RSA_X9_31_KEY_PAIR_GEN, CKM_RSA_FIPS_186_3_PRIME_KEY_PAIR_GEN, CKM_RSA_PKCS_KEY_PAIR_GEN and CKM_AES_KEY_GEN.
 - `partition_id` (String) Partition ID in which the key will be created.
 
 ### Optional
 
+- `attributes` (Set of String) (Updateable) Key attributes. Options: CKA_ENCRYPT, CKA_DECRYPT, CKA_WRAP, CKA_UNWRAP, CKA_SIGN, CKA_VERIFY, CKA_DERIVE, CKA_MODIFIABLE, CKA_EXTRACTABLE and CKA_SENSITIVE
+- `hyok_key` (Boolean) If true the key will be assigned the following attributes: CKA_SENSITIVE, CKA_ENCRYPT, CKA_DECRYPT, CKA_WRAP and CKA_UNWRAP False by default.
 - `label` (String) Label of the key.
 
 ### Read-Only
 
+- `added_attributes` (Set of String) Key attributes added automatically according to hyok_key value.
+- `byok_key` (Boolean) True, if the keys attributes allow the key to be used in the creation of a byok key.
 - `id` (String) For asymmetric keys this is a concatenation of public_key_id and private_key_id. For symmetric keys the CipherTrust Key ID.
 - `private_key_id` (String) ID of the private key. Second ID in the resourceID string.
 - `public_key_id` (String) ID of the public key. First ID in the resourceID string.

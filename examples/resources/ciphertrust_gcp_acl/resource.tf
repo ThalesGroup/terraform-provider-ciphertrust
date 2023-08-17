@@ -39,7 +39,7 @@ resource "ciphertrust_groups" "cckm_users" {
 }
 
 # Users must be a member of the Key Users group to perform operations on CipherTrust keys
-# For example, create a CipherTrust key to upload it a cloud
+# For example, create a CipherTrust key to upload it to a cloud
 resource "ciphertrust_groups" "key_users" {
   name = "Key Users"
   user_ids = [

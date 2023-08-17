@@ -23,8 +23,8 @@ data "ciphertrust_azure_key" "by_azure_key_id" {
 
 # Retrieve details using the key name and vault
 data "ciphertrust_azure_key" "by_name_and_vault" {
-  name      = ciphertrust_azure_key.azure_key.name
-  key_vault = format("%s::%s", "vault_name", "subscription")
+  name      = "key-name"
+  key_vault = "vault-name::subscription-id"
 }
 ```
 
@@ -34,7 +34,6 @@ data "ciphertrust_azure_key" "by_name_and_vault" {
 ### Optional
 
 - `azure_key_id` (String) Azure key identifier. Can be used alone to identify the key.
-- `key_id` (String) CipherTrust Key ID. Can be used alone to identify the key.
 - `key_vault` (String) Name of the Azure vault containing the key in the format of vault_name::subscription_id.
 - `name` (String) Key name.
 - `version` (String) Key version. Set to -1 to retrieve the latest version
@@ -53,6 +52,7 @@ data "ciphertrust_azure_key" "by_name_and_vault" {
 - `expiration_date` (String) Date of key expiry.
 - `exportable` (Boolean) True if the key is exportable.
 - `id` (String) Azure key identifier.
+- `key_id` (String) CipherTrust Key ID.
 - `key_material_origin` (String) Key material origin of an uploaded or imported key.
 - `key_ops` (List of String) Allowed key operations for asymmetric keys.
 - `key_size` (Number) Size of asymmetric keys.

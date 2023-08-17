@@ -20,7 +20,7 @@ A user can apply GuardPoint on specific path on a selected file server. It can b
 ### Required
 
 - `client_id` (String) IP Address/hostname/ID of client.
-- `gp_type` (String) Type of GuardPoint.
+- `gp_type` (String) Type of Guardpoint.
 - `guard_enabled` (Boolean) Guard Enabled
 - `guard_paths` (List of String) List of GP paths
 - `policy_id` (String) ID of the policy applied with this GuardPoint.

@@ -46,18 +46,18 @@ Types of Policies:
 
 ### Optional
 
+- `data_transform_rules` (Block List) Policy data transform rules (see [below for nested schema](#nestedblock--data_transform_rules))
+- `idt_key_rules` (Block List) Policy IDT key rules (see [below for nested schema](#nestedblock--idt_key_rules))
 - `key_combine_algorithm` (String) Key combine algorithm
+- `key_rules` (Block List) Policy key rules (see [below for nested schema](#nestedblock--key_rules))
+- `ldt_key_rules` (Block List) Policy LDT key rules (see [below for nested schema](#nestedblock--ldt_key_rules))
 - `never_deny` (Boolean) Never deny
 - `permit_combine_algorithm` (String) Permit combine algorithm
 - `policy_key_version` (Number) Policy key version
 - `policy_version` (Number) Policy Version
 - `schema_version` (Number) Schema version
+- `security_rules` (Block List) Policy security rules (see [below for nested schema](#nestedblock--security_rules))
 - `updated_by` (String) Updated By
-- `data_transform_rules` (Block List) Policy data transform rules (see [below for nested schema](#nestedblock--data_transform_rules))
-- `idt_key_rules` (Block List) IDT rules to link with the policy. (see [below for nested schema](#nestedblock--idt_key_rules))
-- `key_rules` (Block List) Key rules to link with the policy. (see [below for nested schema](#nestedblock--key_rules))
-- `ldt_key_rules` (Block List) LDT rules to link with the policy. Supported for LDT policies. (see [below for nested schema](#nestedblock--ldt_key_rules))
-- `security_rules` (Block List) Security rules to link with the policy. (see [below for nested schema](#nestedblock--security_rules))
 
 ### Read-Only
 

@@ -21,8 +21,8 @@ This resouce is used to create a CTE Client. A client is a computer system where
 
 ### Optional
 
-- `client_locked` (Boolean) Whether the CTE client is locked. The default value is false. Enable this option to lock the configuration of the CTE Agent on the client. 
-- `client_type` (String) Client type
+- `client_locked` (Boolean) Whether the CTE client is locked. The default value is false. Enable this option to lock the configuration of the CTE Agent on the client.
+- `client_type` (String) Type of CTE Client. The default value is FS. Valid values are CTE-U and FS.
 - `communication_enabled` (Boolean) Whether communication with the client is enabled.
 - `description` (String) Description of client
 - `password` (String) Password for the client. Required when password_creation_method is MANUAL.

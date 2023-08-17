@@ -20,7 +20,7 @@ data "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_by_arn" {
   depends_on = [
     ciphertrust_aws_cloudhsm_key.cloudhsm_key_1,
   ]
-  arn = "arn:aws:kms:us-west-1:556782317223:key/991fc126-1281-4300-a174-5b39d4e78cb0"
+  arn = ciphertrust_aws_cloudhsm_key.cloudhsm_key_1.arn
 }
 
 # Retrieve details using the alias and a region
@@ -62,7 +62,7 @@ data "ciphertrust_aws_cloudhsm_key" "ciphertrust_aws_cloudhsm_keyby_key_id" {
 - `aws_account_id` (String) AWS account ID.
 - `aws_custom_key_store_id` (String) Custom keystore ID in AWS.
 - `aws_key_id` (String) AWS key ID.
-- `blocked` (Boolean) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
+- `blocked` (Boolean) Parameter to indicate if AWS CloudHSM key is blocked for any data plane operation.
 - `cloud_name` (String) AWS cloud.
 - `created_at` (String) Date the key was created.
 - `custom_key_store_id` (String) Custom keystore ID in AWS.
@@ -93,6 +93,9 @@ data "ciphertrust_aws_cloudhsm_key" "ciphertrust_aws_cloudhsm_keyby_key_id" {
 - `local_key_id` (String) CCKM key identifier of the external key.
 - `local_key_name` (String) CCKM key name of the external key.
 - `multi_region` (Boolean) True if the key is a multi-region key.
+- `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
+- `multi_region_primary_key` (Map of String) Multi-region primary key details.
+- `multi_region_replica_keys` (List of Map of String) Multi-region primary key details.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `replica_policy` (String) Replication policy.

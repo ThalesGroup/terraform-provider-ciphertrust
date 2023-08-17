@@ -33,7 +33,7 @@ data "ciphertrust_gcp_key" "by_keyname_and_keyring" {
 
 ### Optional
 
-- `key_id` (String) CipherTrust key ID. Can be used alone to identify the key.
+- `key_id` (String) CipherTrust key ID. Can be used alone to identify the key
 - `key_ring` (String) Terraform ID of the keyring.
 - `keyring_id` (String) Google cloud keyring ID.
 - `location_id` (String) Google Cloud location.
@@ -47,7 +47,7 @@ data "ciphertrust_gcp_key" "by_keyname_and_keyring" {
 - `create_status` (String) Key creation status.
 - `created_at` (String) Date the key was created.
 - `id` (String) Terraform datasource ID
-- `key_labels` (Map of String) A list of key:value pairs to assigned to the key.
+- `key_labels` (Map of String) A list of key:value pairs assigned to the key.
 - `key_ring_name` (String) Google cloud keyring name.
 - `key_versions` (List of Object) Key version details. (see [below for nested schema](#nestedatt--key_versions))
 - `labels` (Map of String) A list of key:value pairs associated with the key.
