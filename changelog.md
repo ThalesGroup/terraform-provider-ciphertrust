@@ -1,4 +1,8 @@
-# 0.9.0-beta10
+# 0.10.1-beta
+
+    Documentation update.
+
+# 0.10.0-beta
 
 ## New Resources
     ciphertrust_aws_custom_keystore
