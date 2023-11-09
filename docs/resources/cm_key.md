@@ -47,7 +47,7 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 
 ### Optional
 
-- `curve` (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1 and prime256v1. Default is secp384r1.
+- `curve` (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1, curve25519 and prime256v1. Default is secp384r1.
 - `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 1024, 2048, 3072, 4096.
 - `undeletable` (Boolean) (Updateable) Parameter to indicate if CM key is undeletable. Must be set to false before this key and any linked keys can be destroyed. Default is false.
 - `unexportable` (Boolean) (Updateable) Parameter to indicate if CM key is unexportable.

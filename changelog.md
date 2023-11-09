@@ -1,3 +1,11 @@
+# 0.10.2-beta
+
+    Changed provider parameter `domain`'s default value from `root` to the empty string.
+        The login behavior is unchanged because the appliance's backend uses `root` when the domain is not specified.
+
+    Introduced provider parameter `auth_domain`
+        CipherTrust authentication domain of the user. This is the domain where the user was created.
+
 # 0.10.1-beta
 
     Documentation update.
