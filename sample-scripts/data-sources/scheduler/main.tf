@@ -43,7 +43,7 @@ resource "ciphertrust_hsm_server" "hsm_server" {
   hsm_certificate = var.hsm_certificate
 }
 
-# Add create a HSM-Luna connection
+# Create a HSM-Luna connection
 resource "ciphertrust_hsm_connection" "hsm_connection" {
   hostname  = var.hsm_hostname
   server_id = ciphertrust_hsm_server.hsm_server.id
@@ -74,14 +74,22 @@ output "rotation_job" {
   value = ciphertrust_scheduler.rotation_job
 }
 
+# Retrieve details using the scheduler's name
+data "ciphertrust_scheduler" "rotation_scheduler" {
+  name = ciphertrust_scheduler.rotation_job.name
+}
+output "rotation_scheduler" {
+  value = data.ciphertrust_scheduler.rotation_scheduler
+}
+
 # Create an RSA key with scheduled rotation
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
     hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
-    job_config_id    = ciphertrust_scheduler.rotation_job.id
+    job_config_id    = data.ciphertrust_scheduler.rotation_scheduler.id
     key_source       = "hsm-luna"
   }
-  key_type = "RSA"
+  key_type = "RSA-HSM"
   name     = local.key_name
   key_size = 2048
   vault    = ciphertrust_azure_vault.azure_vault.id

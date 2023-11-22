@@ -10,6 +10,8 @@ description: |-
 
 This resource is used to create CTE policies which can be used to add a guardpoint on CTE client. A policy is a collection of rules that govern data access and encryption. Think of a policy as an if-then statement. Policy rules are processed sequentially. If the criteria of rule one are not met, the policy enforcement engine moves on to the second rule and so on.
 
+This resource is applicable to CipherTrust Manager only.
+
 Policies specify:
     Actors:             Users, groups, and processes that are permitted/denied access to protected data.
     Actions:            What actions authorized actors are allowed to perform. For example create/delete, read/write, decrypt, modify permissions, and so on.

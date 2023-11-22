@@ -28,6 +28,7 @@ Scheduling key rotation requires a [ciphertrust_scheduler](https://registry.terr
 
 This resource is dependent on a [ciphertrust_azure_vault](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_vault) resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

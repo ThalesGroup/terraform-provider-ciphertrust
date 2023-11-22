@@ -12,6 +12,8 @@ A ciphertrust_aws_policy_template can be used to add the key policy for [ciphert
 
 If the policy json is provided no other fields can be specified.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Example Usage
 
 ```terraform

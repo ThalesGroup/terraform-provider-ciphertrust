@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_interface (Resource)
 
-
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

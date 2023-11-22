@@ -10,7 +10,7 @@ description: |-
 - Change the current global password policy for all users. Can only be used by a member of the admin or user admin group. Currently, by default 'global' policy is applied to all users.
 - Create, Update and Delete a custom password policy. Can only be used by a member of the admin or user admin group. Currently, by default 'global' policy is applied to all users. To apply the policy, you need to assign it to a user.
 
-
+This resource is applicable to CipherTrust Manager only.
 
 
 ## Example Usage

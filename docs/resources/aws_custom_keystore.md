@@ -25,6 +25,8 @@ Primary uses of the ciphertrust_aws_custom_keystore resource include:
 - Perform following operations on a custom keystore of type AWS_CLOUDHSM:
   - connect/disconnect
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Prerequisites
 ### External Key Store
 - External Key Store can be in either linked or Unlinked state. Linked keystore is automatically created in AWS too. 

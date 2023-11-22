@@ -51,6 +51,8 @@ The order of precedence when determining the value of a provider parameter:
 
 ## Provider Block 
 
+### For CipherTrust Manager
+
 To authenticate to and log in to the root domain:
 ```terraform
 provider "ciphertrust" {
@@ -80,6 +82,17 @@ provider "ciphertrust" {
   password     = "cm-password"
   auth_domain  = "users-auth-domain"
   domain       = "a-different-domain"
+}
+```
+
+### For CipherTrust Data Security Platform as a Service (CDSPaaS)
+
+```terraform
+provider "ciphertrust" {
+  address     = "cdsp-address"
+  username    = "cdsp-tenant-username"
+  password    = "cdsp-tenant-password"
+  auth_domain = "cdsp-tenant-name"
 }
 ```
 ## Configuration File
@@ -136,6 +149,4 @@ provider "ciphertrust" {}
 - `log_file` (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
 - `log_level` (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
 - `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
-- `password` (String, Sensitive) Password of a CipherTrust user. password can be set in the provider block, via the CM_PASSWORD environment variable or in ~/.ciphertrust/config
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
-- `username` (String) Username of a CipherTrust user. username can be set in the provider block, via the CM_USERNAME environment variable or in ~/.ciphertrust/config

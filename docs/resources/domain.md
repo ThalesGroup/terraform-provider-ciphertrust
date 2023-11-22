@@ -12,6 +12,7 @@ Domains isolate resources like keys to a single domain and cannot be accessed ac
 
 When a domain is created an administrator can define which system users are administrators of that domain. Domain administrators can explicitly add or remove system users to / from the domain or create group maps to implicitly include system users in the domain.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

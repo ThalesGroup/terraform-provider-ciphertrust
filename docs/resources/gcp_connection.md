@@ -14,6 +14,7 @@ A connection is required before operations can be performed on Google cloud.
 
 [ciphertrust_gcp_keyring](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_keyring) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

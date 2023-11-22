@@ -16,6 +16,8 @@ Projects can be added to CipherTrust Manager by creating either of the following
 - [ciphertrust_gcp_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_connection)
 - [ciphertrust_google_project](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/google_project)
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Example Usage
 
 ```terraform

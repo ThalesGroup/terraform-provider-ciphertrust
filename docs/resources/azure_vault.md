@@ -16,6 +16,8 @@ This resource is dependent on a [ciphertrust_azure_connection](https://registry.
 
 [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Optional Use of Environment Variables
 
 | Parameter       | Environment Variable |

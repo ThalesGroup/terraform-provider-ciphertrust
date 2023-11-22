@@ -21,6 +21,8 @@ description: |-
 - Virtual key resource depends on following resources:
   - [ciphertrust_hsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_key) resource for Luna as key source.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

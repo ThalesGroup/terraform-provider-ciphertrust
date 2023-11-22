@@ -14,6 +14,7 @@ This resource is dependent on a [ciphertrust_aws_connection](https://registry.te
 
 [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_policy_attachments (Resource)
 
-
+This resource is applicable to CipherTrust Manager only.
 
 
 

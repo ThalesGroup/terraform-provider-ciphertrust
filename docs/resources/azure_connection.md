@@ -14,6 +14,8 @@ A connection is required before operations can be performed on the Azure cloud.
 
 [ciphertrust_azure_vault](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_vault) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Optional Use of Environment Variables
 
 | Parameter        | Environment Variable  |

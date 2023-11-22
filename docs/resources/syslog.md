@@ -10,6 +10,8 @@ description: |-
 
 Audit records can optionally be sent to one or more external syslog server(s). By default audit records are stored in the local database and will continue to do so even if syslog connections are configured. Each audit record will be sent to each configured syslog connection.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

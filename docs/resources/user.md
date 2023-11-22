@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_user (Resource)
 
-
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

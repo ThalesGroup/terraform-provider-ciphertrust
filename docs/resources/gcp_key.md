@@ -32,6 +32,7 @@ Scheduling key rotation requires a [ciphertrust_scheduler](https://registry.terr
 
 The resource is dependent on a [ciphertrust_gcp_keyring](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_keyring) resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

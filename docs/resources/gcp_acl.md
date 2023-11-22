@@ -31,6 +31,8 @@ The resource is dependent on a [ciphertrust_gcp_keyring](https://registry.terraf
 
 Access control is applied for either a [ciphertrust_user](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/user) or a [ciphertrust_group](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/group).
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Example Usage
 
 ```terraform

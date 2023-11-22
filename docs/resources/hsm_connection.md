@@ -16,6 +16,7 @@ This resource is dependent on a [ciphertrust_hsm_server](https://registry.terraf
 
 [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

@@ -15,6 +15,7 @@ DSM keys are primarily used to create the following:
 
 This resource is dependent on a [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain) resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

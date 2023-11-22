@@ -14,6 +14,7 @@ This resource is dependent on a [ciphertrust_gcp_connection](https://registry.te
 
 [ciphertrust_gcp_acl](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_acl) resources can be added the keyring.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

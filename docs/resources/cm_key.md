@@ -13,6 +13,7 @@ CipherTrust Manager keys are primarily used to create the following:
 - [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
 - [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 
@@ -24,16 +25,30 @@ resource "ciphertrust_cm_key" "cm_rsa_key" {
   key_size  = 2048
 }
 
+# Create a 256 bit AES key
+resource "ciphertrust_cm_key" "cm_aes_key" {
+  name      = "key-name"
+  algorithm = "AES"
+}
+
+# Create a 128 bit AES key
+resource "ciphertrust_cm_key" "cm_aes_key" {
+  name      = "key-name"
+  algorithm = "AES"
+  key_size  = 128
+}
+
 # Create a secp384r1 EC key
 resource "ciphertrust_cm_key" "cm_ec_key" {
   name      = "key-name"
   algorithm = "EC"
 }
 
-# Create a 256 bit AES key
-resource "ciphertrust_cm_key" "cm_aes_key" {
+# Create a curve25519 EC key
+resource "ciphertrust_cm_key" "cm_ec_key" {
   name      = "key-name"
-  algorithm = "AES"
+  algorithm = "EC"
+  curve  = "curve25519"
 }
 ```
 
@@ -47,8 +62,8 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 
 ### Optional
 
-- `curve` (String) Curve for an EC key. Options: secp256k1, secp384r1, secp521r1, curve25519 and prime256v1. Default is secp384r1.
-- `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 1024, 2048, 3072, 4096.
+- `curve` (String) Curve for an EC key. Options: secp224k1, secp224r1, secp256k1, secp384r1, secp521r1, prime256v1, brainpoolP224r1, brainpoolP224t1, brainpoolP256r1, brainpoolP256t1, brainpoolP384r1, brainpoolP384t1, brainpoolP512r1, brainpoolP512t1 and curve25519. Default is secp384r1.
+- `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 128, 192, 256 for AES keys and 1024, 2048, 3072, 4096 for RSA keys.
 - `undeletable` (Boolean) (Updateable) Parameter to indicate if CM key is undeletable. Must be set to false before this key and any linked keys can be destroyed. Default is false.
 - `unexportable` (Boolean) (Updateable) Parameter to indicate if CM key is unexportable.
 - `usage_mask` (Number) Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks).

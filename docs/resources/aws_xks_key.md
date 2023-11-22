@@ -16,6 +16,8 @@ Primary uses of the ciphertrust_aws_xks_key resource include:
     - block/unblock
     - link an unlinked key  
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Prerequisites
 - Creation of AWS HYOK key is supported for locally hosted External Key Store.
 - HYOK Keys can be backed by Luna HSM as key source or by Ciphertrust Manager as key source.  

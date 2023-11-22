@@ -5,16 +5,23 @@ resource "ciphertrust_cm_key" "cm_rsa_key" {
   key_size  = 2048
 }
 
-# Create a secp384r1 EC key
-resource "ciphertrust_cm_key" "cm_ec_key" {
-  name      = "key-name"
-  algorithm = "EC"
-}
-
 # Create a 256 bit AES key
 resource "ciphertrust_cm_key" "cm_aes_key" {
   name      = "key-name"
   algorithm = "AES"
+}
+
+# Create a 128 bit AES key
+resource "ciphertrust_cm_key" "cm_aes_key" {
+  name      = "key-name"
+  algorithm = "AES"
+  key_size  = 128
+}
+
+# Create a secp384r1 EC key
+resource "ciphertrust_cm_key" "cm_ec_key" {
+  name      = "key-name"
+  algorithm = "EC"
 }
 
 # Create a curve25519 EC key

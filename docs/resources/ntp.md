@@ -10,6 +10,8 @@ description: |-
 
 NTP (Network Time Protocol) is used to synchronize time with an external time source.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

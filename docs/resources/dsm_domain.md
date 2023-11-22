@@ -19,6 +19,7 @@ This resource is dependent on a [ciphertrust_dsm_connection](https://registry.te
 
 [ciphertrust_dsm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_key) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

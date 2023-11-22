@@ -12,6 +12,7 @@ This resource establishes the connection between Google Client Side Encryption a
 
 This resource is dependent on a [ciphertrust_gwcse_identity](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/ciphertrust_gwcse_identity) resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

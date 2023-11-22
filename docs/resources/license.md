@@ -10,6 +10,8 @@ description: |-
 
 Licenses can be installed to enable extended functionality for enterprise level features such as clustering and external identity provider options, and for various connectors such as KMIP clients.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

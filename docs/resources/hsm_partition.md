@@ -18,6 +18,7 @@ Resources of this type can be used as the container when scheduling rotation for
 
 This resource is dependent on a [ciphertrust_hsm_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_connection) resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

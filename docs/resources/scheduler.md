@@ -22,6 +22,7 @@ A schedule can be created to synchronize keys for:
 - Azure
 - Google Cloud
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

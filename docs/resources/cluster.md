@@ -16,6 +16,8 @@ Cluster operations will not use the "address" configured for the provider. It wi
 "original" then we will try and use that one. The provider will attempt to use the "username" and "password" values configured at the provider level. But if those do not
 work we will attempt to use the default credentials and then change the password to the "password" value.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

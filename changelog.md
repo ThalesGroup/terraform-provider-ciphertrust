@@ -1,3 +1,14 @@
+# 0.10.3-beta
+
+## New Data Source
+    Added the ciphertrust_scheduler data source.
+
+## Fixes
+    ciphertrust_cm_key key_size will accept 128, 192 and 256 for AES keys.
+
+## Documentation
+    Added documentation for CipherTrust Data Security Platform as a Service (CDSPaaS).
+
 # 0.10.2-beta
 
     Changed provider parameter `domain`'s default value from `root` to the empty string.

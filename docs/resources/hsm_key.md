@@ -14,6 +14,7 @@ Luna-HSM keys are primarily used to create the following:
 
 This resource is dependent on a [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition) resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

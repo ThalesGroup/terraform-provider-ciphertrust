@@ -3,7 +3,7 @@
 page_title: "CipherTrust Provider"
 subcategory: ""
 description: |-
-  The CipherTrust provider can be used configure a CipherTrust instance or cluster and subsequently manage cloud resources.
+  The CipherTrust provider can be used configure a CipherTrust instance or cluster or a CipherTrust Data Security Platform as a Service (CDSPaaS) and subsequently manage cloud resources.
 ---
 
 # CipherTrust Provider
@@ -37,6 +37,7 @@ To deploy a Virtual CipherTrust Manager from AWS, you must supply the Amazon Mac
 
 ## Thales Devices
 The following devices can be used to create keys for the above public clouds.
+- CipherTrust Manager
 - DSM
 - HSM Luna
 
@@ -50,41 +51,78 @@ CipherTrust authentication parameters can also be provided as environment variab
 
 The following table illustrates which parameters can be provided as environment variables or in the configuration file.
 
-| Provider Parameter   | Environment Variable | Config File | Required  | Default Value |
-|:---------------------|:---------------------|:------------|:----------|:--------------|
-| address              | CM_ADDRESS           | address     | Yes       | N/A           |
-| username             | CM_USERNAME          | username    | Yes       | N/A           |
-| password             | CM_PASSWORD          | password    | Yes       | N/A           |
-| domain               | CM_DOMAIN            | domain      | No        | root          |
-| remaining parameters | no                   | yes         | No        | N/A           |
+| Provider Parameter   | Environment Variable | Config File | Required  | Default Value              |
+|:---------------------|:---------------------|:------------|:----------|:---------------------------|
+| address              | CM_ADDRESS           | address     | Yes       | N/A                        |
+| username             | CM_USERNAME          | username    | Yes       | N/A                        |
+| password             | CM_PASSWORD          | password    | Yes       | N/A                        |
+| domain               | CM_DOMAIN            | domain      | No        | Empty string (root domain) |
+| auth_domain          | CM_AUTH_DOMAIN       | auth_domain | No        | Empty string (root domain) |
+| remaining parameters | no                   | yes         | No        | N/A                        |
 
-The order of precedence when determining the value of a parameter: 
+The order of precedence when determining the value of a provider parameter: 
 1. Provider Block
 2. Environment Variable
 3. Configuration File
 
 ## Provider Block 
 
+### For CipherTrust Manager
+
+To authenticate to and log in to the root domain:
 ```terraform
 provider "ciphertrust" {
   address  = "cm-address"
   username = "cm-username"
   password = "cm-password"
-  domain   = "cm-domain"
+}
+
+```
+To authenticate to and log in to a domain other than root: 
+
+```terraform
+provider "ciphertrust" {
+  address      = "cm-address"
+  username     = "cm-username"
+  password     = "cm-password"
+  auth_domain  = "users-auth-domain" 
+}
+```
+
+To authenticate to a domain but log in to a different domain:
+
+```terraform
+provider "ciphertrust" {
+  address      = "cm-address"
+  username     = "cm-username"
+  password     = "cm-password"
+  auth_domain  = "users-auth-domain"
+  domain       = "a-different-domain"
+}
+```
+
+### For CipherTrust Data Security Platform as a Service (CDSPaaS)
+
+```terraform
+provider "ciphertrust" {
+  address     = "cdsp-address"
+  username    = "cdsp-tenant-username"
+  password    = "cdsp-tenant-password"
+  auth_domain = "cdsp-tenant-name"
 }
 ```
 ## Configuration File
 
 All provider parameters can be read from the configuration file.
 
-The configuration file is ~/.ciphertrust/config. 
+The configuration file is ~/.ciphertrust/config. For example:
 
 ```terraform
   address = cm-address
   username = cm-username
   password = cm-password
 ```
-If the above values exist in the configuration file the provider block can be:
+If authentication values exist in the configuration file the provider block can be:
 
 ```terraform
 provider "ciphertrust" {}
@@ -97,10 +135,11 @@ Some provider parameters can be specified in environment variables.
 ```bash
 export CM_USERNAME=cm-username
 export CM_PASSWORD=cm-password
+export CM_AUTH_DOMAIN=cm-auth-domain
 export CM_DOMAIN=cm-domain
 ```
 
-If the above environment variables exist the provider block can be:
+If environment variables required for authentication exist the provider block can be:
 
 ```terraform
 provider "ciphertrust" {}
@@ -117,12 +156,64 @@ provider "ciphertrust" {}
 ### Optional
 
 - **address** (String) HTTPS URL of the CipherTrust instance. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config. An address need not be provided when creating a cluster of CipherTrust instances.
+- **auth_domain** (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CM_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - **aws_operation_timeout** (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
 - **azure_operation_timeout** (Number) Azure key operations can take time to complete. This specifies how long to wait for an operation to complete in seconds. azure_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 240.
-- **domain** (String) CipherTrust domain of the user. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the root domain.
+- **domain** (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the root domain.
 - **gcp_operation_timeout** (Number) Some Google Cloud operations, for example, schedule destroy, are not synchronous. This specifies how long to wait for an operation to complete in seconds. gcp_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
 - **hsm_operation_timeout** (Number) HSM connection operations are not synchronous. This specifies how long to wait for an operation to complete in seconds. hsm_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
 - **log_file** (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
 - **log_level** (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
 - **no_ssl_verify** (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
 - **rest_api_timeout** (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
+
+## Supported resource types
+
+The following table illustrates which resource types are supported in CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+| Resource Type                    | CipherTrust Manager | CDSPaaS |
+|:---------------------------------|:--------------------|:--------|
+| ciphertrust_aws_cloudhsm_key     | yes                 | yes     |
+| ciphertrust_aws_connection       | yes                 | yes     |
+| ciphertrust_aws_custom_keystore  | yes                 | yes     |
+| ciphertrust_aws_key              | yes                 | yes     |
+| ciphertrust_aws_kms              | yes                 | yes     |
+| ciphertrust_aws_policy_template  | yes                 | yes     |
+| ciphertrust_aws_xks_key          | yes                 | yes     |
+| ciphertrust_azure_connection     | yes                 | yes     |
+| ciphertrust_azure_key            | yes                 | yes     |
+| ciphertrust_azure_vault          | yes                 | yes     |
+| ciphertrust_cluster              | yes                 | no      |
+| ciphertrust_cm_key               | yes                 | yes     |
+| ciphertrust_cte_client           | yes                 | no      |
+| ciphertrust_cte_guardpoint       | yes                 | no      |
+| ciphertrust_cte_policies         | yes                 | no      |
+| ciphertrust_domain               | yes                 | no      |
+| ciphertrust_dsm_connection       | yes                 | no      |
+| ciphertrust_dsm_domain           | yes                 | no      |
+| ciphertrust_dsm_key              | yes                 | no      |
+| ciphertrust_ekm_endpoint         | yes                 | yes     |
+| ciphertrust_gcp_acl              | yes                 | yes     |
+| ciphertrust_gcp_connection       | yes                 | yes     |
+| ciphertrust_gcp_key              | yes                 | yes     |
+| ciphertrust_gcp_keyring          | yes                 | yes     |
+| ciphertrust_google_project       | yes                 | yes     |
+| ciphertrust_groups               | yes                 | yes     |
+| ciphertrust_gwcse_endpoint       | yes                 | yes     |
+| ciphertrust_gwcse_identity       | yes                 | yes     |
+| ciphertrust_hsm_connection       | yes                 | no      |
+| ciphertrust_hsm_key              | yes                 | no      |
+| ciphertrust_hsm_partition        | yes                 | no      |
+| ciphertrust_hsm_server           | yes                 | no      |
+| ciphertrust_interface            | yes                 | no      |
+| ciphertrust_license              | yes                 | no      |
+| ciphertrust_log_forwarder        | yes                 | no      |
+| ciphertrust_ntp                  | yes                 | no      |
+| ciphertrust_password_policy      | yes                 | no      |
+| ciphertrust_policies             | yes                 | no      |
+| ciphertrust_policy_attachments   | yes                 | no      |
+| ciphertrust_property             | yes                 | no      |
+| ciphertrust_proxy                | yes                 | no      |
+| ciphertrust_scheduler            | yes                 | yes     |
+| ciphertrust_syslog               | yes                 | no      |
+| ciphertrust_user                 | yes                 | yes     |
+| ciphertrust_virtual_key          | yes                 | no      |

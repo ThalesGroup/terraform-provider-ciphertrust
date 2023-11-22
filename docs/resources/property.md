@@ -10,6 +10,8 @@ description: |-
 
 Set server level properties.
 
+This resource is applicable to CipherTrust Manager only.
+
 ## Example Usage
 
 ```terraform

@@ -8,7 +8,7 @@ description: |-
 
 # ciphertrust_log_forwarder (Resource)
 
-
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

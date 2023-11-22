@@ -15,6 +15,8 @@ Primary uses of the ciphertrust_aws_cloudhsm_key resource include:
 - Creating an AWS key in custom key store of type AWS_CLOUDHSM
 - Updating attributes of an linked AWS HYOK key (description, tags, alias, policy, enable/disable)
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 ## Prerequisites
 - CloudHSM cluster setup on AWS is required before creating custom key store of type AWS_CLOUDHSM (refer AWS CloudHSM documentation including the AWS Key Management Service Developer Guide and AWS CloudHSM User Guide.)
 - For CloudHSM key, CloudHSM Key Store needs to be in `Connected` state before creating CloudHSM key. It takes upto 30 minutes for Connect/Disconnect operations.

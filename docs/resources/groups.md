@@ -14,6 +14,7 @@ Users can be added to groups by using the id.
 
 This resource is dependent on a [ciphertrust_user](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/user) resource.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 

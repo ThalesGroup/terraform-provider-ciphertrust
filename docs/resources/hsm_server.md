@@ -12,6 +12,7 @@ This resource established a network connection between CipherTrust Manager and t
 
 [ciphertrust_hsm_connection](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_connection) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

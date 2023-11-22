@@ -14,6 +14,7 @@ A connection is required before operations can be performed on the DSM.
 
 [ciphertrust_dsm_domain](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/dsm_domain) resources are dependent on this resource.
 
+This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 

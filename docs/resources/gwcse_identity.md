@@ -14,6 +14,7 @@ This resource manages a customer specific identity provider which is used for au
 
 It's possible to create ciphertrust_gwcse_identity using a variety of optional fields.
 
+This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 
