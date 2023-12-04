@@ -1,3 +1,8 @@
+# 0.10.4-beta
+
+## Documentation
+    Published updated documentation.
+
 # 0.10.3-beta
 
 ## New Data Source
