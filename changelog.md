@@ -1,3 +1,32 @@
+# 0.10.5-beta
+
+## New Resources
+    Resource to support creating Oracle External Vaults and Keys:
+        ciphertrust_oci_tenancy
+        ciphertrust_oci_connection
+        ciphertrust_oci_issuer
+        ciphertrust_oci_external_vault
+        ciphertrust_oci_acl
+        ciphertrust_oci_external_key
+        ciphertrust_oci_external_key_version
+
+## New Data Sources
+    Corresponding data sources for the above Oracle resources:
+        ciphertrust_oci_tenancy
+        ciphertrust_oci_external_key_versions
+        ciphertrust_oci_connection
+        ciphertrust_oci_external_vault
+        ciphertrust_oci_external_key
+        ciphertrust_oci_regions
+    Added the ciphertrust_aws_kms data source
+
+## Fixes
+    Removed the possibility of nil pointer derefernce when destroying Azure keys.
+
+## Documentation
+    Updates for the new resources and data sources.
+    Updates to existing azure_key_resource.
+
 # 0.10.4-beta
 
 ## Documentation
@@ -135,7 +164,7 @@
 
 # 0.9.0-beta7
 
-## Fixes:
+## Fixes
     ciphertrust_cm_key 
         Added read-only linked_keys attribute.
         Linked keys are deleted when the resource is destroyed.     

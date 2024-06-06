@@ -1,0 +1,71 @@
+# Schedule Rotation of OCI Keys using CipherTrust Manager as the Key Source
+
+This example shows how to:
+- Create an OCI Cloud connection
+- Configure a scheduled rotation job for OCI keys using Ciphertrust as the key source
+- Create a OCI key that will be rotated by the scheduler
+
+The following steps explain how to:
+- Configure CipherTrust Manager Provider parameters required to run the examples
+- Configure OCI parameters required to create OCI keys
+- Run the example
+
+## Configure CipherTrust Manager
+
+### Use environment variables
+
+```bash
+export CM_ADDRESS=https://cm-address
+export CM_USERNAME=cm-username
+export CM_PASSWORD=cm-password
+export CM_DOMAIN=cm-domain
+```
+### Use a configuration file
+
+Create a ~/.ciphertrust/config file and configure these keys with your values.
+
+```bash
+address = https://cm-address
+username = cm-username
+password = cm-password
+domain = cm-domain
+```
+
+### Edit the provider block in main.tf
+
+```bash
+provider "ciphertrust" {
+  address  = "https://cm-address"
+  username = "cm-username"
+  password = "cm-password"
+  domain   = "cm-domain"
+}
+```
+
+## Configure OCI Cloud Credentials
+
+### Configure for all OCI Cloud examples
+
+Update values in scripts/oci_vars.sh and run the script.
+
+This updates all oci_vars.tf files found in the subdirectories.
+
+### Configure for this example only
+
+Edit oci_vars.tf in this directory and update with your values.
+
+## Run the Example
+
+```bash
+terraform init
+terraform apply
+```
+
+## Destroy Resources
+
+Resources must be destroyed before another sample script using the same cloud is run.
+
+```bash
+terraform destroy
+```
+Run this step even if the apply step fails.

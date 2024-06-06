@@ -11,9 +11,11 @@ description: |-
 Primary uses of the ciphertrust_azure_key resource include:
 - Creating a native Azure key
 - Uploading an existing key to Azure
+- Creating a new version of the same key. To create a new version of an existing key, simply create a new azure_key resource using the same key name. The new key version can be a native Azure key or created using key material from any of the supported source_key_tiers
 - Scheduling key rotation that is managed by CipherTrust Manager
 - Updating existing ciphertrust_azure_key resources
 - Enabling/Disabling an Azure key
+
 
 Key resources for upload are:
 - CipherTrust Manager Key [ciphertrust_cm_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/cm_key)
@@ -241,5 +243,3 @@ Optional:
 - `pfx_password` (String) PFX password. Specify only if the PFX certificate is provided.
 - `release_policy` (String) Exportable keys require a release policy.
 - `source_key_tier` (String) Options: local, pfx, dsm and hsm-luna. Default is local.
-
-

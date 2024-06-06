@@ -11,6 +11,8 @@ description: |-
 Luna-HSM keys are primarily used to create the following:
 - [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
 - [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
+- [ciphertrust_oci_external_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/oci_external_key) resources
+- [ciphertrust_oci_external_key_version](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/oci_external_key_version) resources
 
 This resource is dependent on a [ciphertrust_hsm_partition](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/hsm_partition) resource.
 
@@ -75,5 +77,3 @@ resource "ciphertrust_hsm_key" "hsm_key" {
 - `id` (String) For asymmetric keys this is a concatenation of public_key_id and private_key_id. For symmetric keys the CipherTrust Key ID.
 - `private_key_id` (String) ID of the private key. Second ID in the resourceID string.
 - `public_key_id` (String) ID of the public key. First ID in the resourceID string.
-
-

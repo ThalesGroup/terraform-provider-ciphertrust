@@ -42,10 +42,10 @@ resource "ciphertrust_hsm_key" "hsm_aes_key" {
     ciphertrust_hsm_partition.hsm_partition,
   ]
   attributes = ["CKA_ENCRYPT", "CKA_DECRYPT", "CKA_WRAP", "CKA_UNWRAP"]
+  key_size     = 256
   label        = "key-name"
   mechanism    = "CKM_AES_KEY_GEN"
   partition_id = ciphertrust_hsm_partition.hsm_partition.id
-  key_size     = 256
   hyok_key     = true
 }
 

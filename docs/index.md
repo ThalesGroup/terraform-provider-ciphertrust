@@ -8,9 +8,11 @@ description: |-
 
 # CipherTrust Provider
 
-Use the navigation to the left to read about the available resources.
+Use the navigation pane to the left to read about the available Resources and Data Sources.
 
-[Sample scripts](https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/main/sample-scripts) allow you to easily create CipherTrust Manager resources for your cloud and includes some practical examples of using the CipherTrust provider with other cloud providers. 
+[Sample scripts](https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/main/sample-scripts) allow you to easily create CipherTrust Manager resources for your cloud and includes some practical examples of using the CipherTrust provider with other cloud providers.
+
+Refer to the [change log](https://github.com/ThalesGroup/terraform-provider-ciphertrust/blob/main/changelog.md) for changes in this version.
 
 ## Supported Clouds
 
