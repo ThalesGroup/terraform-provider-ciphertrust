@@ -1,3 +1,52 @@
+# 0.10.6-beta
+
+## New Resources
+
+    ciphertrust_ldap_connection
+        Resource for creating a ldap connection on Ciphertrust Manager.
+
+    ciphertrust_oidc_connection
+        Resource for creating a oidc connection on Ciphertrust Manager.
+
+    ciphertrust_smb_connection
+        Resource for creating a smb connection on Ciphertrust Manager.
+
+    ciphertrust_cte_profile
+        A profile contains the CipherTrust Manager logging criteria for CTE clients.
+
+    ciphertrust_cte_clientgroup
+        A client group is used to group one or more clients to simplify configuration and administration. 
+
+    ciphertrust_cte_registration_token
+        This resource is used to create a CTE Registration Token used to register a CTE client with Ciphertrust Manager.
+    
+    ciphertrust_cte_csigroup
+        An CSI storage group communication service contains a group of Kubernetes CTE clients that can communicate with each other.
+
+    ciphertrust_cte_ldtgroupcomms
+        An LDT group communication service contains a group of LDT-enabled CTE clients that can communicate with each other.
+
+    ciphertrust_cte_resourcegroup
+        A resource is a combination of a directory, a file, and patterns or special variables. A resource set is a named collection of directories, files, or both, that a user or process will be permitted or denied access to.
+
+    ciphertrust_cte_user_set
+        A user set is a collection of users and user groups that you want to grant or deny access to GuardPoints. User sets are configured in policies. Policies can be applied to user sets, not to individual users.
+
+    ciphertrust_cte_process_set
+        A process set is a collection of processes (executables) that you want to grant or deny access to GuardPoints.
+
+    ciphertrust_cte_sig_set
+        A signature set is a collection of hashes of processes and executables that you want to grant or deny access to GuardPoints.
+
+## Updated Resources
+    ciphertrust_cm_key
+        remove_from_state_on_destroy - This parameter allows a ciphertrust_cm_key resource to be destroyed even if 'undeleteable' is true. 
+        If remove_from_state_on_destroy is false, 'undeleteable' will have to be updated to false before it can be destroyed.
+        Default is false.
+    
+    ciphertrust_cte_policies
+        Added support for force_restrict_update flag for policy modifications.
+
 # 0.10.5-beta
 
 ## New Resources

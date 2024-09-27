@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.10.5-beta"
+      version = "0.10.6-beta"
     }
   }
 }
@@ -52,7 +52,6 @@ output "cm_ec" {
 }
 
 # Create a key that can be used for Hold Your Own Key (HYOK) keys, eg: AWS XKS key, OCI External key
-# Note this key can not be destroyed until undeleteable is set as false and the key is updated
 resource "ciphertrust_cm_key" "cm_hyok" {
   name         = local.hyok_name
   algorithm    = "AES"
@@ -61,4 +60,30 @@ resource "ciphertrust_cm_key" "cm_hyok" {
 }
 output "cm_hyok" {
   value = ciphertrust_cm_key.cm_hyok
+}
+
+# Create a key that can be used for Hold Your Own Key (HYOK) keys, eg: AWS XKS key, OCI External key
+# This key can not be destroyed until 'undeletable' is set as false and the key is updated
+# Alternatively set remove_from_state_on_destroy to true. See example below.
+resource "ciphertrust_cm_key" "cm_hyok_undeleteable" {
+  name                         = local.hyok_name
+  algorithm                    = "AES"
+  unexportable                 = true
+  undeletable                  = true
+}
+output "cm_hyok_undeleteable" {
+  value = ciphertrust_cm_key.cm_hyok_undeleteable
+}
+
+# Create a key that can be used for Hold Your Own Key (HYOK) keys, eg: AWS XKS key, OCI External key
+# This key can be destroyed by terraform but will be retained by CipherTrustManager
+resource "ciphertrust_cm_key" "cm_hyok_remove_from_state_on_destroy" {
+  name                         = local.hyok_name
+  algorithm                    = "AES"
+  unexportable                 = true
+  undeletable                  = true
+  remove_from_state_on_destroy = true
+}
+output "cm_hyok_remove_from_state_on_destroy" {
+  value = ciphertrust_cm_key.cm_hyok_remove_from_state_on_destroy
 }

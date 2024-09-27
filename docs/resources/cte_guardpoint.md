@@ -22,7 +22,7 @@ This resource is applicable to CipherTrust Manager only.
 
 - `client_id` (String) IP Address/hostname/ID of client.
 - `gp_type` (String) Type of Guardpoint.
-- `guard_enabled` (Boolean) Guard Enabled
+- `guard_enabled` (Boolean) (Updateable) Guard Enabled
 - `guard_paths` (List of String) List of GP paths
 - `policy_id` (String) ID of the policy applied with this GuardPoint.
 
@@ -30,18 +30,16 @@ This resource is applicable to CipherTrust Manager only.
 
 - `automount_enabled` (Boolean) Whether automount is enabled with the GuardPoint. Supported for Standard and LDT policies.
 - `cifs_enabled` (Boolean) Whether to enable CIFS. Available on LDT enabled windows clients only. The default value is false. If you enable the setting, it cannot be disabled.
-- `data_classification_enabled` (Boolean) Whether data classification (tagging) is enabled.
-- `data_lineage_enabled` (Boolean) Whether data lineage (tracking) is enabled. Enabled only if data classification is enabled. Supported for Standard and LDT policies.
+- `data_classification_enabled` (Boolean) (Updateable) Whether data classification (tagging) is enabled.
+- `data_lineage_enabled` (Boolean) (Updateable) Whether data lineage (tracking) is enabled. Enabled only if data classification is enabled. Supported for Standard and LDT policies.
 - `disk_group_name` (String) Name of the disk group if the selected raw partition is a member of an Oracle ASM disk group.
 - `disk_name` (String) Name of the disk if the selected raw partition is a member of an Oracle ASM disk group.
 - `docker_cont_id` (String) Docker container ID
 - `docker_img_id` (String) Docker image ID
 - `is_esg_capable_device` (Boolean) Whether the device where GuardPoint is applied is ESG capable or not.
 - `is_idt_capable_device` (Boolean) Whether the device where GuardPoint is applied is IDT capable or not. Supported for IDT policies.
-- `mfa_enabled` (Boolean) MFA enabled
+- `mfa_enabled` (Boolean) (Updateable) MFA enabled
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-
-

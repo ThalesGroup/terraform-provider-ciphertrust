@@ -42,21 +42,23 @@ Types of Policies:
 
 ### Required
 
-- `description` (String) Description of policy
+- `description` (String) (Updateable) Description of policy
 - `name` (String) This is the name of the policy.
 - `type` (String) Type of policy
 
 ### Optional
 
 - `data_transform_rules` (Block List) Policy data transform rules (see [below for nested schema](#nestedblock--data_transform_rules))
+- `restrict_update` (Boolean) restrict_update
 - `idt_key_rules` (Block List) Policy IDT key rules (see [below for nested schema](#nestedblock--idt_key_rules))
 - `key_combine_algorithm` (String) Key combine algorithm
 - `key_rules` (Block List) Policy key rules (see [below for nested schema](#nestedblock--key_rules))
 - `ldt_key_rules` (Block List) Policy LDT key rules (see [below for nested schema](#nestedblock--ldt_key_rules))
-- `never_deny` (Boolean) Never deny
+- `never_deny` (Boolean) (Updateable) Never deny
 - `permit_combine_algorithm` (String) Permit combine algorithm
 - `policy_key_version` (Number) Policy key version
 - `policy_version` (Number) Policy Version
+- `restrict_update` (Boolean) (Updateable) Restrict_update flag toggler
 - `schema_version` (Number) Schema version
 - `security_rules` (Block List) Policy security rules (see [below for nested schema](#nestedblock--security_rules))
 - `updated_by` (String) Updated By
@@ -106,11 +108,11 @@ Optional:
 
 Optional:
 
-- `current_key` (Block List) Current key (see [below for nested schema](#nestedblock--ldt_key_rules--current_key))
+- `current_key` (Block List) (Updateable) Current key (see [below for nested schema](#nestedblock--ldt_key_rules--current_key))
 - `is_exclusion_rule` (Boolean)
 - `order_number` (Number)
 - `resource_set_id` (String)
-- `transformation_key` (Block List) Transformation key (see [below for nested schema](#nestedblock--ldt_key_rules--transformation_key))
+- `transformation_key` (Block List) (Updateable) Transformation key (see [below for nested schema](#nestedblock--ldt_key_rules--transformation_key))
 
 <a id="nestedblock--ldt_key_rules--current_key"></a>
 ### Nested Schema for `ldt_key_rules.current_key`
@@ -149,5 +151,3 @@ Optional:
 - `process_signed` (String)
 - `resource_set_id` (String)
 - `user_set_id` (String)
-
-

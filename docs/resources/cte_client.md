@@ -18,21 +18,19 @@ This resource is applicable to CipherTrust Manager only.
 ### Required
 
 - `name` (String) Name to uniquely identify the client. This name will be visible on the CipherTrust Manager.
-- `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
+- `password_creation_method` (String) (Updateable) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
 
 ### Optional
 
-- `client_locked` (Boolean) Whether the CTE client is locked. The default value is false. Enable this option to lock the configuration of the CTE Agent on the client.
+- `client_locked` (Boolean) (Updateable) Whether the CTE client is locked. The default value is false. Enable this option to lock the configuration of the CTE Agent on the client.
 - `client_type` (String) Type of CTE Client. The default value is FS. Valid values are CTE-U and FS.
-- `communication_enabled` (Boolean) Whether communication with the client is enabled.
-- `description` (String) Description of client
-- `password` (String) Password for the client. Required when password_creation_method is MANUAL.
-- `profile_identifier` (String) Identifier of the Client Profile to be associated with the client. If not provided, the default profile will be linked.
-- `registration_allowed` (Boolean) Whether client's registration with the CipherTrust Manager is allowed. The default value is false. Set to true to allow registration.
-- `system_locked` (Boolean) Whether the system is locked. The default value is false. Enable this option to lock the important operating system files of the client.
+- `communication_enabled` (Boolean) (Updateable) Whether communication with the client is enabled.
+- `description` (String) (Updateable) Description of client
+- `password` (String) (Updateable) Password for the client. Required when password_creation_method is MANUAL.
+- `profile_identifier` (String) (Updateable) Identifier of the Client Profile to be associated with the client. If not provided, the default profile will be linked.
+- `registration_allowed` (Boolean) (Updateable) Whether client's registration with the CipherTrust Manager is allowed. The default value is false. Set to true to allow registration.
+- `system_locked` (Boolean) (Updateable) Whether the system is locked. The default value is false. Enable this option to lock the important operating system files of the client.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-
-
