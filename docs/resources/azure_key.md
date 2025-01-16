@@ -30,7 +30,10 @@ Scheduling key rotation requires a [ciphertrust_scheduler](https://registry.terr
 
 This resource is dependent on a [ciphertrust_azure_vault](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_vault) resource.
 
+Note: What happens after to a key when terraform destroy is applied can be modified by [cloud_key_manager/azure](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs) settings in the provider block.
+
 This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
+
 
 ## Example Usage
 
@@ -57,7 +60,7 @@ resource "ciphertrust_azure_key" "azure_key" {
 resource "ciphertrust_azure_key" "azure_key" {
   name = "key-name"
   upload_key {
-    local_key_id = ciphertrust_cm_key.cihpertrust_key.id
+    local_key_id    = ciphertrust_cm_key.cihpertrust_key.id
     source_key_tier = "local"
   }
   vault = ciphertrust_azure_vault.azure_vault.id
@@ -80,7 +83,7 @@ resource "ciphertrust_azure_key" "azure_key" {
     hsm_key_id      = ciphertrust_hsm_key.hsm_key.private_key_id
     source_key_tier = "hsm-luna"
     exportable      = true
-    release_policy  =  <<-EOT
+    release_policy  = <<-EOT
     {
       "anyOf": [{
         "anyOf": [{
@@ -117,10 +120,20 @@ resource "ciphertrust_azure_key" "azure_key" {
   vault = ciphertrust_azure_vault.azure_vault.id
 }
 
+# A scheduler resource suitable for the rotation of Azure keys
+resource "ciphertrust_scheduler" "azure_scheduled_key_rotation" {
+  cckm_key_rotation_params {
+    cloud_name = "AzureCloud"
+  }
+  name       = "rotation-job-name"
+  operation  = "cckm_key_rotation"
+  run_at     = "0 9 * * sat"
+}
+
 # Schedule key rotation using Azure as the key source
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
-    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
     key_source    = "native"
   }
   name  = "key-name"
@@ -130,7 +143,7 @@ resource "ciphertrust_azure_key" "azure_key" {
 # Schedule key rotation using CipherTrust Manager as the key source
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
-    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
     key_source    = "ciphertrust"
   }
   name  = "key-name"
@@ -141,7 +154,7 @@ resource "ciphertrust_azure_key" "azure_key" {
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
     hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
-    job_config_id    = ciphertrust_scheduler.scheduled_rotation_job.id
+    job_config_id    = ciphertrust_scheduler.azure_scheduled_key_rotation.id
     key_source       = "hsm-luna"
   }
   name  = "key-name"
@@ -152,11 +165,27 @@ resource "ciphertrust_azure_key" "azure_key" {
 resource "ciphertrust_azure_key" "azure_key" {
   enable_rotation {
     dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
-    job_config_id = ciphertrust_scheduler.scheduled_rotation_job.id
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
     key_source    = "dsm"
   }
   name  = "key-name"
   vault = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Restore an Azure key to another vault
+resource "ciphertrust_azure_key" "restored_key" {
+  restore_key_id = ciphertrust_azure_key.azure_key.key_id
+  vault          = ciphertrust_azure_vault.azure_vault.id
+}
+
+# Restore an Azure key to another vault and enable it for rotation
+resource "ciphertrust_azure_key" "restored_key" {
+  restore_key_id = ciphertrust_azure_key.azure_key.key_id
+  vault          = ciphertrust_azure_vault.azure_vault.id
+  enable_rotation {
+    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
+    key_source    = "ciphertrust"
+  }
 }
 ```
 
@@ -165,7 +194,6 @@ resource "ciphertrust_azure_key" "azure_key" {
 
 ### Required
 
-- `name` (String) Name for the key.
 - `vault` (String) Name or ID of the vault.
 
 ### Optional
@@ -178,6 +206,8 @@ resource "ciphertrust_azure_key" "azure_key" {
 - `key_ops` (List of String) (Updateable) Allowed key operations. RSA/RSA-HSM key options: encrypt, decrypt, sign, verify, wrapKey, unwrapKey and import. EC/EC-HSM key options: sign and verify. Import is applicable only for RSA-HSM keys and mandatory to be set when creating a Key Encryption Key. Default for RSA keys is encrypt, decrypt, sign, verify, wrapKey and unwrapKey. Default for EC keys is sign and verify.
 - `key_size` (Number) Size for RSA keys. Options: 2048, 3072, 4096. Default is 2048.
 - `key_type` (String) The type of key to create. EC      - Elliptic Curve key, RSA     - RSA key, EC-HSM  - Elliptic Curve key for premium and managed HSM key vaults only, RSA-HSM - RSA key for premium key and managed HSM vaults only. Keys created in managed HSM vaults must be RSA-HSM or EC-HSM. Default is RSA-HSM for managed HSM vaults otherwise RSA.
+- `name` (String) Name for the key unless a key is being restored to a different vault. If changed, the current key will be destroyed and a new key created.
+- `restore_key_id` (String) CipherTrust key ID of a key to restore to the specified vault. Keys can be restored in the AVAILABLE, SOFT-DELETED or DELETED states. Restoring keys in the AVAILABLE or SOFT_DELETED state is only valid for CipherTrust Manager versions >= 2.17 and they must be restored to a different vault.
 - `tags` (Map of String) (Updateable) A list of key:value pairs to assign to the key.
 - `upload_key` (Block List, Max: 1) Key upload details. (see [below for nested schema](#nestedblock--upload_key))
 
@@ -243,3 +273,5 @@ Optional:
 - `pfx_password` (String) PFX password. Specify only if the PFX certificate is provided.
 - `release_policy` (String) Exportable keys require a release policy.
 - `source_key_tier` (String) Options: local, pfx, dsm and hsm-luna. Default is local.
+
+

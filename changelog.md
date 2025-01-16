@@ -1,3 +1,29 @@
+# 0.10.7-beta
+
+## Updated Provider Block
+
+    cloud_key_manager {
+        azure {
+            purge_keys_on_delete:           Purge or only soft-delete keys on destroy. 
+                                            Defaults to purge.
+            recover_soft_deleted_keys:      Recover soft-deleted keys if an attempt is made to create a key of the same name. 
+                                            Defaults to false.
+            retain_key_backups_after_purge: Retain or remove Azure key backups from Ciphertrust allowing for a new key of the same 
+                                            name to be created or allowing for the opportunity to restore keys from backups. 
+                                            Defaults to retain key backups.
+        }
+    }
+
+## Updated Resources
+    ciphertrust_azure_key
+        restore_key_id - "CipherTrust key ID of a key to restore to the specified vault. 
+                         Keys can be restored in the AVAILABLE, SOFT-DELETED or DELETED states. 
+                         Restoring keys in the AVAILABLE or SOFT_DELETED state is only valid for CipherTrust Manager versions >= 2.17 and they must be restored to a different vault." 
+        name - 'ForceNew' has been applied to this attribute. If the key name is changed the current key will be destroyed and a new key created.   
+
+## New Data Sources
+    Added the ciphertrust_cm_key data source.
+
 # 0.10.6-beta
 
 ## New Resources

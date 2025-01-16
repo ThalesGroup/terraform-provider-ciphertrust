@@ -145,6 +145,7 @@ provider "ciphertrust" {}
 - `auth_domain` (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CM_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `aws_operation_timeout` (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
 - `azure_operation_timeout` (Number) Azure key operations can take time to complete. This specifies how long to wait for an operation to complete in seconds. azure_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 240.
+- `cloud_key_manager` (Block List, Max: 1) Cloud Key Manager Settings (see [below for nested schema](#nestedblock--cloud_key_manager))
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `gcp_operation_timeout` (Number) Some Google Cloud operations, for example, schedule destroy, are not synchronous. This specifies how long to wait for an operation to complete in seconds. gcp_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
 - `hsm_operation_timeout` (Number) HSM connection operations are not synchronous. This specifies how long to wait for an operation to complete in seconds. hsm_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 120.
@@ -152,3 +153,19 @@ provider "ciphertrust" {}
 - `log_level` (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
 - `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
+
+<a id="nestedblock--cloud_key_manager"></a>
+### Nested Schema for `cloud_key_manager`
+
+Optional:
+
+- `azure` (Block List, Max: 1) Azure Key Settings (see [below for nested schema](#nestedblock--cloud_key_manager--azure))
+
+<a id="nestedblock--cloud_key_manager--azure"></a>
+### Nested Schema for `cloud_key_manager.azure`
+
+Optional:
+
+- `purge_keys_on_delete` (Boolean) Should ciphertrust_azure_key resources be purged when destroyed? Defaults to true. If not true, the key will only be soft-deleted.
+- `recover_soft_deleted_keys` (Boolean) Should ciphertrust_azure_key resources recover Soft-Deleted keys if an attempt is made to create a key of the same name? Defaults to true. If true, the key will be recovered and a new key will be created.
+- `retain_key_backups_after_purge` (Boolean) Should CipherTrust Manager retain key backups when the key is purged? Defaults to true. If true, a purged key will be retained by CipherTrust Manager and it can be restored from a key backup using the CipherTrust Cloud Key Manager User Interface or CipherTrust Cloud Key Manager API. It will not be possible to create a key of the same name in CipherTrust Manager until it is restored. If false, it will not be possible to restore the key from a backup but it will be possible to create a new key with the same name.
