@@ -1,3 +1,10 @@
+# 0.10.8-beta
+## Updated Resources
+    ciphertrust_cm_key
+        name - 'ForceNew' has been applied to this attribute. 
+               If the key name is changed the current key will be destroyed and a new key created.
+               Note: The key must already be deletable for a name change to be successful. Either 'undeletable' must already be false, or if 'undeletable' is true, 'remove_from_state_on_destroy' must already be true.
+
 # 0.10.7-beta
 
 ## Updated Provider Block

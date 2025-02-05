@@ -81,7 +81,7 @@ resource "ciphertrust_cm_key" "cm_rsa_key" {
 ### Required
 
 - `algorithm` (String) Algorithm of the key. Options: AES, EC and RSA.
-- `name` (String) Name of the key.
+- `name` (String) (Updateable) Name of the key. If the value of this parameter is changed, the key will be destroyed and a new key created. The key must already be deletable for a name change to be successful. Either 'undeletable' must already be false, or if 'undeletable' is true, 'remove_from_state_on_destroy' must already be true.
 
 ### Optional
 
