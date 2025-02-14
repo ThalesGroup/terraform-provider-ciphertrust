@@ -1,3 +1,7 @@
+# 0.10.9-beta
+## Updated Resources
+    Fixes an ldap user creating a ciphertrust_cm_key resource.
+
 # 0.10.8-beta
 ## Updated Resources
     ciphertrust_cm_key
