@@ -17,24 +17,35 @@ description: |-
 
 ### Required
 
-- `name` (String) This is the name of the user set.
+- `name` (String) Name of the user set.
 
 ### Optional
 
-- `description` (String) (Updateable) Description of user set
-- `users` (Block List) User set list. (see [below for nested schema](#nestedblock--users))
+- `description` (String) Description of the user set.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/. To add a label, set the label's value as follows.
+"labels": {
+	"key1": "value1",
+	"key2": "value2"
+}
+- `users` (Attributes List) List of users to be added to the user set. (see [below for nested schema](#nestedatt--users))
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `account` (String) The account which owns this resource.
+- `application` (String) The application this resource belongs to.
+- `created_at` (String) Date/time the application was created
+- `dev_account` (String) The developer account which owns this resource's application.
+- `id` (String) The unique identifier of the resource
+- `updated_at` (String) Date/time the application was updated
+- `uri` (String) A human readable unique identifier of the resource
 
-<a id="nestedblock--users"></a>
+<a id="nestedatt--users"></a>
 ### Nested Schema for `users`
 
 Optional:
 
-- `gid` (Number) (Updateable) Group ID of the user to be added to the user set.
-- `gname` (String) (Updateable) Group name of the user to be added to the user set.
-- `os_domain` (String) (Updateable) OS domain name for Windows platforms.
-- `uid` (Number) (Updateable) ID of the user to be added to the user set..
-- `uname` (String) (Updateable) Name of the user to be added to the user set.
+- `gid` (Number) Group ID of the user to be added to the user set.
+- `gname` (String) Group name of the user to be added to the user set.
+- `os_domain` (String) OS domain name for Windows platforms.
+- `uid` (Number) ID of the user to be added to the user set.
+- `uname` (String) Name of the user to be added to the user set.

@@ -8,100 +8,301 @@ description: |-
 
 # ciphertrust_cm_key (Resource)
 
-CipherTrust Manager keys are primarily used to create the following:
-- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
-- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
-- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
-- [ciphertrust_oci_external_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/oci_external_key) resources
-- [ciphertrust_oci_external_key_version](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/oci_external_key_version) resources
 
-This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 
 ```terraform
-# Create a 2048 bit RSA key
-resource "ciphertrust_cm_key" "cm_rsa_key" {
-  name      = "key-name"
-  algorithm = "RSA"
-  key_size  = 2048
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of a 256 bit AES Key
+# with the CipherTrust provider, including setting up key details.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
+    }
+  }
 }
 
-# Create a 256 bit AES key
-resource "ciphertrust_cm_key" "cm_aes_key" {
-  name      = "key-name"
-  algorithm = "AES"
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
 }
 
-# Create a 128 bit AES key
-resource "ciphertrust_cm_key" "cm_aes_key" {
-  name      = "key-name"
-  algorithm = "AES"
-  key_size  = 128
+# Add a resource of type CM Key with the name terraform, algorithm AES and size 256 bits
+# This will also use the Users data source to get the User ID from username, terraform
+data "ciphertrust_cm_users_list" "list" {
+  filters = {
+    username = "terraform"
+  }
 }
 
-# Create a secp384r1 EC key
-resource "ciphertrust_cm_key" "cm_ec_key" {
-  name      = "key-name"
-  algorithm = "EC"
+resource "ciphertrust_cm_key" "sample_key" {
+  # Name of the key
+  name="terraform"
+
+  # Cryptographic algorithm this key is used with. Defaults to 'aes'.
+  algorithm="aes"
+
+  # Bit length for the key.
+  size=256
+
+  # Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303.
+  usage_mask=76
+
+  # Key is deletable
+  undeletable=false
+
+  # Key is exportable
+  unexportable=false
+
+  # Optional end-user or service data stored with the key
+  meta={
+    owner_id=tolist(data.ciphertrust_cm_users_list.list.users)[0].user_id
+    permissions={
+      decrypt_with_key=["CTE Clients"]
+      encrypt_with_key=["CTE Clients"]
+      export_key=["CTE Clients"]
+      mac_verify_with_key=["CTE Clients"]
+      mac_with_key=["CTE Clients"]
+      read_key=["CTE Clients"]
+      sign_verify_with_key=["CTE Clients"]
+      sign_with_key=["CTE Clients"]
+      use_key=["CTE Clients"]
+    }
+    cte={
+      persistent_on_client=true
+      encryption_mode="CBC"
+      cte_versioned=false
+    }
+    xts=false
+  }
 }
 
-# Create a curve25519 EC key
-resource "ciphertrust_cm_key" "cm_ec_key" {
-  name      = "key-name"
-  algorithm = "EC"
-  curve  = "curve25519"
+# Output the unique ID of the created CM Key
+output "key_id" {
+    # The value will be the ID of the CM Key
+    value = ciphertrust_cm_key.sample_key.id
 }
 
-# Create a 2048 bit HYOK RSA key
-# To allow it to be destroyed including deleting in CipherTrust Manager 'undeletable' must be udpated to 'false'.
-# To allow it to be destroyed but not deleted from CipherTrust Manager update 'remove_from_state_on_destroy' to 'true'.
-resource "ciphertrust_cm_key" "cm_rsa_key" {
-  name         = "key-name"
-  algorithm    = "RSA"
-  key_size     = 2048
-  undeletable  = true
-  unexportable = true
-}
-
-# Create a 2048 bit HYOK RSA key and allow it to be removed from terraform state on destroy but retained in CipherTrust Manager.
-resource "ciphertrust_cm_key" "cm_rsa_key" {
-  name         = "key-name"
-  algorithm    = "RSA"
-  key_size     = 2048
-  undeletable  = true
-  unexportable = true
-  remove_from_state_on_destroy = true
+# Output the name of the created CM Key
+output "key_name" {
+    # The value will be the name of the CM Key
+    value = ciphertrust_cm_key.sample_key.name
 }
 ```
 
 <!-- schema generated by tfplugindocs -->
 ## Schema
 
-### Required
-
-- `algorithm` (String) Algorithm of the key. Options: AES, EC and RSA.
-- `name` (String) (Updateable) Name of the key. If the value of this parameter is changed, the key will be destroyed and a new key created. The key must already be deletable for a name change to be successful. Either 'undeletable' must already be false, or if 'undeletable' is true, 'remove_from_state_on_destroy' must already be true.
-
 ### Optional
 
-- `curve` (String) Curve for an EC key. Options: secp224k1, secp224r1, secp256k1, secp384r1, secp521r1, prime256v1, brainpoolP224r1, brainpoolP224t1, brainpoolP256r1, brainpoolP256t1, brainpoolP384r1, brainpoolP384t1, brainpoolP512r1, brainpoolP512t1 and curve25519. Default is secp384r1.
-- `key_size` (Number) Required for RSA keys. Optional for AES keys. Defaults to 256 for AES keys. Options are: 128, 192, 256 for AES keys and 1024, 2048, 3072, 4096 for RSA keys.
-- `remove_from_state_on_destroy` (Boolean) (Updateable) This parameter only applies to keys that are 'undeleteable'. If this parameter is true the key will be removed from terraform state during the terraform destroy process. It can not be deleted from CipherTrust Manager while 'undeleteable' is true. Default is 'false'.
-- `undeletable` (Boolean) (Updateable) Parameter to indicate if CM key is undeletable. If 'remove_from_state_on_destroy' is false 'undeleteable' must first be set to 'false' before this key and any linked keys can be destroyed. Default is false.
-- `unexportable` (Boolean) (Updateable) Parameter to indicate if CM key is unexportable.
+- `activation_date` (String) Date/time the object becomes active
+- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'
+- `aliases` (Attributes List) Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified. (see [below for nested schema](#nestedatt--aliases))
+- `all_versions` (Boolean)
+- `archive_date` (String) Date/time the object becomes archived
+- `assign_self_as_owner` (Boolean) If set to true, the user who is creating the key is set as the key owner. Specify either assignSelfAsOwner or ownerId in the meta, not both. Specifying both in the meta returns an error.
+- `cert_type` (String) This specifies the type of certificate object that is being created. Valid values are 'x509-pem' and 'x509-der'. At present, we only support x.509 certificates. The cerfificate data is passed in via the 'material' field. The certificate type is infered from the material if it is left blank.
+- `compromise_date` (String) Date/time the object entered into the compromised state.
+- `compromise_occurrence_date` (String) Date/time when the object was first believed to be compromised, if known. Only valid if the revocation reason is CACompromise or KeyCompromise, otherwise ignored.
+- `curveid` (String) Cryptographic curve id for elliptic key. Key algorithm must be 'EC'.
+- `deactivation_date` (String) Date/time the object becomes inactive
+- `default_iv` (String) Deprecated. This field was introduced to support specific legacy integrations and applications. New applications are strongly recommended to use a unique IV for each encryption request. Refer to Crypto encrypt endpoint for more details. Must be a 16 byte hex encoded string (32 characters long). If specified, this will be set as the default IV for this key.
+- `description` (String) It store information about key
+- `destroy_date` (String) Date/time the object was destroyed.
+- `empty_material` (Boolean) If set to true, the key material is not created and left empty.
+- `encoding` (String) Specifies the encoding used for the 'material' field.
+- `format` (String) This parameter is used while importing keys ('material' is not empty), and also when returning the key material after the key is created ('includeMaterial' is true).
+For Asymmetric keys: When this parameter is not specified, while importing keys, the format of the material is inferred from the material itself. When this parameter is specified, while importing keys, the only allowed format is 'pkcs12', and this only applies to the 'rsa' algorithm (the 'material' should contain the base64 encoded value of the PFX file in this case).
+When returning the key material, this parameter specifies the format of the returned key material.
+Options are pkcs1, pkcs8 (default), pkcs12
+For Symmetric keys: When importing keys if specified, the value must be given according to the format of the material.
+When returning the key material, this parameter specifies the format of the returned key material. Options are raw or opaque
+- `generate_key_id` (Boolean) If specified as true, the key's keyId identifier of type long is generated. Defaults to false.
+- `hkdf_create_parameters` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--hkdf_create_parameters))
+- `id_size` (Number) Size of the ID for the key
+- `key_id` (String) Additional identifier of the key. The format of this value is of type long. This is optional and applicable for import key only. If set, the value is imported as the key's keyId.
+- `labels` (Map of String)
+- `mac_sign_bytes` (String) This parameter specifies the MAC/Signature bytes to be used for verification while importing a key. The wrappingMethod should be mac/sign and the required parameters for the verification must be set.
+- `mac_sign_key_identifier` (String) This parameter specifies the identifier of the key to be used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the MAC/signature(macSignBytes) of the key material(material). For verifying the MAC, the key has to be a HMAC key. For verifying the signature, the key has to be an RSA private or public key.
+- `mac_sign_key_identifier_type` (String) This parameter specifies the identifier of the key(macSignKeyIdentifier) used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the mac/signature(macSignBytes) of the key material(material).
+- `material` (String) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\n'.
+- `meta` (Attributes) Optional end-user or service data stored with the key (see [below for nested schema](#nestedatt--meta))
+- `muid` (String) Additional identifier of the key. This is optional and applicable for import key only. If set, the value is imported as the key's muid.
+- `name` (String) Optional friendly name, The key name should not contain special characters such as angular brackets (<,>) and backslash (\).
+- `object_type` (String) This specifies the type of object that is being created. Valid values are 'Symmetric Key', 'Public Key', 'Private Key', 'Secret Data', 'Opaque Object', or 'Certificate'. The object type is inferred for many objects, but must be supplied for the certificate object.
+- `padded` (Boolean) This parameter determines the padding for the wrap algorithm while unwrapping a symmetric key,
+if wrappingMethod is encrypt and the wrappingEncryptionAlgo doesn't have a mode set
+if wrappingMethod is pbe.
+If true, the RFC 5649(AES Key Wrap with Padding) is followed and if false, RFC 3394(AES Key Wrap) is followed for unwrapping the material for the symmetric key.
+If a certificate is being unwrapped with the wrappingMethod set to encrypt, the padded parameter has to be set to true. This parameter defaults to false.
+- `password` (String) For pkcs12 format, either password or secretDataLink should be specified. This should be the base64 encoded value of the password.
+- `process_start_date` (String) Date/time when a Managed Symmetric Key Object MAY begin to be used to process cryptographically protected information (e.g., decryption or unwrapping)
+- `protect_stop_date` (String) Date/time after which a Managed Symmetric Key Object SHALL NOT be used for applying cryptographic protection (e.g., encryption or wrapping)
+- `public_key_parameters` (Attributes) Information needed to create a public key. (see [below for nested schema](#nestedatt--public_key_parameters))
+- `revocation_message` (String) Message explaining revocation.
+- `revocation_reason` (String) The reason the key is being revoked.
+- `rotation_frequency_days` (String) Number of days from current date to rotate the key. It should be greater than or equal to 0. Default is an empty string. If set to 0, rotationFrequencyDays set to an empty string and auto rotation of key will be disabled.
+- `secret_data_encoding` (String) For pkcs12 format, this field specifies the encoding method used for the secretDataLink material. Ignore this field if secretData is created from REST and is in plain format. Specify the value of this field as HEX format if secretData is created from KMIP.
+- `secret_data_link` (String) For pkcs12 format, either secretDataLink or password should be specified. The value can be either ID or name of Secret Data.
+- `signing_algo` (String) This parameter specifies the algorithm to be used for generating the signature for the verification of the macSignBytes during import of key material. The wrappingMethod should be mac/sign to verify the signature(macSignBytes) of the key material(material).
+- `size` (Number) Bit length for the key.
+- `state` (String) Optional initial key state (Pre-Active) upon creation. Defaults to Active. If set, activationDate and processStartDate can not be specified during key creation. In case of import, allowed values are Pre-Active, Active, Deactivated, Destroyed, Compromised and Destroyed Compromised. If key material is not specified, it will not be autogenerated if input parameters correspond to either of these states - Deactivated, Destroyed, Compromised and Destroyed Compromised. Key in Destroyed or Destroyed Compromised state would not have key material even if specified during key creation.
+- `template_id` (String)
+- `undeletable` (Boolean) Key is not deletable. Defaults to false.
+- `unexportable` (Boolean) Key is not exportable. Defaults to false.
 - `usage_mask` (Number) Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks).
+- `uuid` (String) Additional identifier of the key. The format of this value is 32 hexadecimal lowercase digits with 4 dashes. This is optional and applicable for import key only.
+If set, the value is imported as the key's uuid.
+If not set, new key uuid is generated on the server.
+- `wrap_hkdf` (Attributes) Information which is used to wrap a Key using HKDF. (see [below for nested schema](#nestedatt--wrap_hkdf))
+- `wrap_key_id_type` (String) IDType specifies how the wrapKeyName should be interpreted.
+- `wrap_key_name` (String) While creating a new key, If 'includeMaterial' is true, then only the key material will be wrapped with material of the specified key name. The response material property will be the base64 encoded ciphertext. For more details, view wrapKeyName in export parameters.
+While importing a key, the key material will be unwrapped with material of the specified key name. The only applicable wrappingMethod for the unwrapping is encrypt and the wrapping key has to be an AES key or an RSA private key.
+- `wrap_pbe` (Attributes) WrapPBE derives the key from the password and other parameters such as salt, iteration count, hashing algorithm, and derived key-length. PBE currently supports wrapping of symmetric keys (AES), private keys, and certificates. WrapPBE is a two-step process to export a key as mentioned below. The key import is similar to the key export but it unwraps the target key in the second step. Step 1 Use PBKDF2 with the specified parameters (pwd, hash-function, salt, iterations, purpose (opt), KEK length) to derive the KEK. For more details, refer to RFC 2898. Step 2 Perform AES-KW/KWP to wrap the target key using the KEK derived from Step 1. The AES KEK size is calculated by the KEK length parameter as described in Step 1. For more details, refer to RFC 3394 and 5649. (see [below for nested schema](#nestedatt--wrap_pbe))
+- `wrap_public_key` (String) If the algorithm is 'aes','tdes','hmac-*', 'seed' or 'aria', this value will be used to encrypt the returned key material. This value is ignored for other algorithms. Value must be an RSA public key, PEM-encoded public key in either PKCS1 or PKCS8 format, or a PEM-encoded X.509 certificate. If set, the returned 'material' value will be a Base64 encoded PKCS#1 v1.5 encrypted key. View wrapPublicKey in export parameters for more information. Only applicable if 'includeMaterial' is true.
+- `wrap_public_key_padding` (String) WrapPublicKeyPadding specifies the type of padding scheme that needs to be set when importing the Key using the specified wrapkey. Accepted values are pkcs1, oaep, oaep256, oaep384, oaep512, and will default to pkcs1 when 'wrapPublicKeyPadding' is not set and 'WrapPublicKey' is set.
+While creating a new key, wrapPublicKeyPadding parameter should be specified only if 'includeMaterial' is true. In this case, key will get created and in response wrapped material using specified wrapPublicKeyPadding and other wrap parameters will be returned.
+- `wrap_rsaaes` (Attributes) (see [below for nested schema](#nestedatt--wrap_rsaaes))
+- `wrapping_encryption_algo` (String) It indicates the Encryption Algorithm information for wrapping the key. Format is : Algorithm/Mode/Padding. For example : AES/AESKEYWRAP. Here AES is Algorithm, AESKEYWRAP is Mode & Padding is not specified. AES/AESKEYWRAP is RFC-3394 & AES/AESKEYWRAPPADDING is RFC-5649. For wrapping private key, only AES/AESKEYWRAPPADDING is allowed. RSA/RSAAESKEYWRAPPADDING is used to wrap/unwrap asymmetric keys using RSA AES KWP method. Refer WrapRSAAES to provide optional parameters.
+- `wrapping_hash_algo` (String) This parameter specifies the hashing algorithm used if wrappingMethod corresponds to mac/sign. In case of MAC operation, the hashing algorithm used will be inferred from the type of HMAC key(macSignKeyIdentifier).
+- `wrapping_method` (String) This parameter specifies the wrapping method used to wrap/mac/sign the key material
+- `xts` (Boolean) If set to true, then key created will be XTS/CBC-CS1 Key. Defaults to false. Key algorithm must be 'AES'.
 
 ### Read-Only
 
-- `id` (String) CipherTrust key ID.
-- `linked_keys` (Set of Object) (see [below for nested schema](#nestedatt--linked_keys))
-- `owner_id` (String) User ID of the key owner
+- `id` (String) The ID of this resource.
 
-<a id="nestedatt--linked_keys"></a>
-### Nested Schema for `linked_keys`
+<a id="nestedatt--aliases"></a>
+### Nested Schema for `aliases`
 
-Read-Only:
+Optional:
 
-- `key_id` (String)
-- `key_type` (String)
+- `alias` (String) An alias for a key name.
+- `index` (String) Index associated with alias. Each alias within an object has a unique index.
+- `type` (String) Type of alias (allowed values are string and uri).
+
+
+<a id="nestedatt--hkdf_create_parameters"></a>
+### Nested Schema for `hkdf_create_parameters`
+
+Optional:
+
+- `hash_algorithm` (String) Hash Algorithm is used for HKDF. This is required if ikmKeyName is specified, default is hmac-sha256.
+- `ikm_key_name` (String) Any existing symmetric key. Mandatory while using HKDF key generation.
+- `info` (String) Info is an optional hex value for HKDF based derivation.
+- `salt` (String) Salt is an optional hex value for HKDF based derivation.
+
+
+<a id="nestedatt--meta"></a>
+### Nested Schema for `meta`
+
+Optional:
+
+- `cte` (Attributes) CTE specific attributes (see [below for nested schema](#nestedatt--meta--cte))
+- `owner_id` (String) Optional owner information for the key, required for non-admin. Value should be the user's user_id
+- `permissions` (Attributes) Key permissions (see [below for nested schema](#nestedatt--meta--permissions))
+
+<a id="nestedatt--meta--cte"></a>
+### Nested Schema for `meta.cte`
+
+Optional:
+
+- `cte_versioned` (Boolean)
+- `encryption_mode` (String)
+- `persistent_on_client` (Boolean)
+
+
+<a id="nestedatt--meta--permissions"></a>
+### Nested Schema for `meta.permissions`
+
+Optional:
+
+- `decrypt_with_key` (List of String)
+- `encrypt_with_key` (List of String)
+- `export_key` (List of String)
+- `mac_verify_with_key` (List of String)
+- `mac_with_key` (List of String)
+- `read_key` (List of String)
+- `sign_verify_with_key` (List of String)
+- `sign_with_key` (List of String)
+- `use_key` (List of String)
+
+
+
+<a id="nestedatt--public_key_parameters"></a>
+### Nested Schema for `public_key_parameters`
+
+Optional:
+
+- `activation_date` (String) Date/time the object becomes active
+- `aliases` (Attributes List) (see [below for nested schema](#nestedatt--public_key_parameters--aliases))
+- `archive_date` (String) Date/time the object becomes archived
+- `deactivation_date` (String) Date/time the object becomes inactive
+- `name` (String) Friendly name of the corresponding public key
+- `state` (String) Optional initial key state (Pre-Active) upon creation. If set, activationDate and processStartDate can not be specified during key creation. Defaults to Active.
+- `undeletable` (Boolean) Key is not deletable. Defaults to false.
+- `unexportable` (Boolean) Key is not exportable. Defaults to false.
+- `usage_mask` (Number) Defined in PostKey parameters
+
+<a id="nestedatt--public_key_parameters--aliases"></a>
+### Nested Schema for `public_key_parameters.aliases`
+
+Required:
+
+- `alias` (String) An alias for a key name.
+- `index` (Number) Index associated with alias. Each alias within an object has a unique index.
+- `type` (String) Type of alias (allowed values are string and uri).
+
+
+
+<a id="nestedatt--wrap_hkdf"></a>
+### Nested Schema for `wrap_hkdf`
+
+Optional:
+
+- `hash_algorithm` (String) Hash Algorithm is used for HKDF Wrapping.
+- `info` (String) Info is an optional hex value for HKDF based derivation.
+- `okm_len` (Number) The desired output key material length in integer.
+- `salt` (String) Salt is an optional hex value for HKDF based derivation.
+
+
+<a id="nestedatt--wrap_pbe"></a>
+### Nested Schema for `wrap_pbe`
+
+Optional:
+
+- `dklen` (Number) Intended length in octets of the derived key. dklen must be in range of 14 bytes to 512 bytes.
+- `hash_algorithm` (String) Underlying hashing algorithm that acts as a pseudorandom function to generate derive keys.
+- `iteration` (Number) Iteration count increase the cost of producing keys from a password. Iteration must be in range of 1 to 1,00,00,000.
+- `password` (String) Base password to generate derive keys. It cannot be used in conjunction with passwordidentifier. password must be in range of 8 bytes to 128 bytes.
+- `password_identifier` (String) Secret password identifier for password. It cannot be used in conjunction with password.
+- `password_identifier_type` (String) Type of the Passwordidentifier. If not set then default value is name.
+- `purpose` (String) User defined purpose. If specified will be prefixed to pbeSalt. pbePurpose must not be greater than 128 bytes.
+- `salt` (String) A Hex encoded string. pbeSalt must be in range of 16 bytes to 512 bytes.
+
+
+<a id="nestedatt--wrap_rsaaes"></a>
+### Nested Schema for `wrap_rsaaes`
+
+Optional:
+
+- `aes_key_size` (Number) Size of AES key for RSA AES KWP. Accepted value are 128, 192, 256. Default value is 256.
+- `padding` (String) Padding specifies the type of padding scheme that needs to be set when exporting the Key using RSA AES wrap.

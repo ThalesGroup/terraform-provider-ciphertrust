@@ -8,23 +8,68 @@ description: |-
 
 # ciphertrust_log_forwarder (Resource)
 
-This resource is applicable to CipherTrust Manager only.
+
 
 ## Example Usage
 
 ```terraform
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of an log forwarder for ElasticSerach resource
+# with the CipherTrust provider, including setting up log forwarder details.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
+    }
+  }
+}
+
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
+}
+
+# Add a resource of type log forwarder with the name es_test and type elasticsearch
 resource "ciphertrust_log_forwarder" "log_forwarder_1" {
+    # connection id of log-forwarder connection (elasticsearch, loki, syslog).
     connection_id = "61dfa3f4-1c14-4827-9dd4-c22988ce10d6"
+
+    # Unique name of the Log Forwarder.
     name = "es_test"
+
+    # Type of the Log Forwarder
     type = "elasticsearch"
-    elasticsearch_params {
-        indices {
+
+    # Optional attributes specifying extra configuration fields specific to Elasticsearch
+    elasticsearch_params = {
+        indices = {
             activity_kmip = "index_kmip"
             activity_nae = "index_nae"
             server_audit_records = "index_server"
             client_audit_records = "index_client"
         }
     }
+}
+
+# Output the unique ID of the created log forwarder
+output "log_forwarder_id" {
+    value = ciphertrust_log_forwarder.log_forwarder_1.id
 }
 ```
 
@@ -37,74 +82,70 @@ resource "ciphertrust_log_forwarder" "log_forwarder_1" {
 - `name` (String) Unique name of the Log Forwarder.
 - `type` (String) Type of the Log Forwarder
 
-Options:
-elasticsearch
-loki
-syslog
-
 ### Optional
 
-- `elasticsearch_params` (Block List) Optional attributes specifying extra configuration fields specific to Elasticsearch (see [below for nested schema](#nestedblock--elasticsearch_params))
-- `loki_params` (Block List) Optional attributes specifying extra configuration fields specific to Loki (see [below for nested schema](#nestedblock--loki_params))
-- `syslog_params` (Block List) Optional attributes specifying extra configuration fields specific to Syslog (see [below for nested schema](#nestedblock--syslog_params))
+- `elasticsearch_params` (Attributes) Optional attributes specifying extra configuration fields specific to Elasticsearch (see [below for nested schema](#nestedatt--elasticsearch_params))
+- `loki_params` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--loki_params))
+- `syslog_params` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--syslog_params))
 
 ### Read-Only
 
+- `account` (String)
+- `created_at` (String)
 - `id` (String) The ID of this resource.
+- `updated_at` (String)
 
-<a id="nestedblock--elasticsearch_params"></a>
+<a id="nestedatt--elasticsearch_params"></a>
 ### Nested Schema for `elasticsearch_params`
 
 Optional:
 
-- `indices` (Block List) Optional attributes specifying index field for different logs (see [below for nested schema](#nestedblock--elasticsearch_params--indices))
+- `indices` (Attributes) Optional attributes specifying index field for different logs (see [below for nested schema](#nestedatt--elasticsearch_params--indices))
 
-<a id="nestedblock--elasticsearch_params--indices"></a>
+<a id="nestedatt--elasticsearch_params--indices"></a>
 ### Nested Schema for `elasticsearch_params.indices`
 
 Optional:
 
 - `activity_kmip` (String) Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
-- `activity_nae` (String) Index to be used for entries coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
-- `client_audit_records` (String) Index to be used for entries coming from the client audit log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
-- `server_audit_records` (String) Index to be used for entries coming from the server audit log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
+- `activity_nae` (String) Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
+- `client_audit_records` (String) Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters.
+- `server_audit_records` (String) Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
 
 
 
-<a id="nestedblock--loki_params"></a>
+<a id="nestedatt--loki_params"></a>
 ### Nested Schema for `loki_params`
 
 Optional:
 
-- `labels` (Block List) Optional attributes specifying label field for different logs (see [below for nested schema](#nestedblock--loki_params--labels))
+- `labels` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--loki_params--labels))
 
-<a id="nestedblock--loki_params--labels"></a>
+<a id="nestedatt--loki_params--labels"></a>
 ### Nested Schema for `loki_params.labels`
 
 Optional:
 
-- `activity_kmip` (String) Label to be used for entries coming from the KMIP activity log. Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
-- `activity_nae` (String) Label to be used for entries coming from the NAE activity log. Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
-- `client_audit_records` (String) Label to be used for entries coming from the client audit log. Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
-- `server_audit_records` (String) Label to be used for entries coming from the server audit log. Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
+- `activity_kmip` (String) Labels to be used for entries coming from the KMIP activity log, for example "jobs=activity_kmip". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
+- `activity_nae` (String) Labels to be used for entries coming from the NAE activity log, for example "jobs=activity_nae". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
+- `client_audit_records` (String) Labels to be used for entries coming from client audit records, for example "jobs=client_audit_records". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters.
+- `server_audit_records` (String) Labels to be used for entries coming from server audit records, for example "jobs=server_audit_records". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
 
 
 
-<a id="nestedblock--syslog_params"></a>
+<a id="nestedatt--syslog_params"></a>
 ### Nested Schema for `syslog_params`
 
 Optional:
 
-- `forward_logs` (Block List) Attributes specifying which log-type to be forwarded to syslog (see [below for nested schema](#nestedblock--syslog_params--forward_logs))
+- `forward_logs` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--syslog_params--forward_logs))
 
-<a id="nestedblock--syslog_params--forward_logs"></a>
+<a id="nestedatt--syslog_params--forward_logs"></a>
 ### Nested Schema for `syslog_params.forward_logs`
 
 Optional:
 
 - `activity_kmip` (Boolean) When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them.
 - `activity_nae` (Boolean) When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them.
-- `client_audit_records` (Boolean) When true, client audit logs will be forwarded.
-- `server_audit_records` (Boolean) When true, server audit logs will be forwarded.
-
-
+- `client_audit_records` (Boolean) When true, Client Audit Records will be forwarded.
+- `server_audit_records` (Boolean) When true, Server Audit Records will be forwarded.

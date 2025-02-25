@@ -17,12 +17,12 @@ description: |-
 
 ### Required
 
-- `name` (String) Name of LDTGroupCommService.
+- `name` (String) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager.
 
 ### Optional
 
-- `client_list` (String) (Updateable) LDTGroupCommService type
-- `description` (String) (Updateable) LDTGroupCommService description.
+- `client_list` (List of String) List of identifiers of clients to be associated with the LDT group communication service. This identifier can be the Name, ID (a UUIDv4), URI, or slug of the client.
+- `description` (String) Description to identify the LDT group communication service.
 
 ### Read-Only
 

@@ -1,25 +1,83 @@
-# Create an AWS connection without using environment variables
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of an AWS connection resource
+# with the CipherTrust provider, including setting up AWS connection details,
+# labels, and custom metadata.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
+    }
+  }
+}
+
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
+}
+
+# Define an AWS connection resource with CipherTrust
 resource "ciphertrust_aws_connection" "aws_connection" {
-  name              = "connection-name"
-  access_key_id     = "access-key-id"
-  secret_access_key = "secret-access-key"
+  # Name of the AWS connection (unique identifier)
+  name = "tf-aws-connection"
+
+  # List of products associated with this AWS connection
+  # In this case, it's related to backup/restore operations
+  products = [
+    "cckm"
+  ]
+
+  # Key ID of the AWS user.
+  access_key_id = "ACCESS_KEY_ID"
+
+  # Secret associated with the access key ID of the AWS user.
+  secret_access_key = "SECRET_ACCESS_KEY"
+
+  # Name of the cloud.
+  cloud_name= "aws"
+
+  # AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given. For aws, default region will be "us-east-1".
+  aws_region = "us-east-1"
+
+  # Description about the connection.
+  description = "Terraform Generated"
+
+  # Labels for categorizing the AWS connection
+  labels = {
+      "environment" = "devenv"
+  }
+
+  # Custom metadata for the AWS connection
+  # This can be used to store additional information related to the AWS connection
+  meta = {
+      "custom_meta_key1" = "custom_value1"
+      "customer_meta_key2" = "custom_value2"
+  }
 }
 
-# Create an AWS connection using the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables
-resource "ciphertrust_azure_connection" "azure_connection" {
-  name = "connection-name"
+# Output the unique ID of the created AWS connection
+output "aws_connection_id" {
+  # The value will be the ID of the AWS connection resource
+  value = ciphertrust_aws_connection.aws_connection.id
 }
 
-# Create a ciphertrust_aws_kms resource and assign it to the connection
-resource "ciphertrust_aws_kms" "kms" {
-  account_id     = "aws-account-id"
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions        = ["aws-region", "aws-region"]
-}
-
-# Create an AWS key
-resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
-  region = "aws-region"
+# Output the name of the created AWS connection
+output "aws_connection_name" {
+  # The value will be the name of the AWS connection resource
+  value = ciphertrust_aws_connection.aws_connection.name
 }

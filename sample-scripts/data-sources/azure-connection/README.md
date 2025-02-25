@@ -1,27 +1,9 @@
-# Azure Connection Data Source
+# Google Cloud Connection Data Source
 
-This example demonstrates how the ciphertrust_azure_connection data source can be used.
+This example demonstrates how the ciphertrust_azure_connection_list data source can be used.
+
 
 ## Configure CipherTrust Manager
-
-### Use environment variables
-
-```bash
-export CM_ADDRESS=https://cm-address
-export CM_USERNAME=cm-username
-export CM_PASSWORD=cm-password
-export CM_DOMAIN=cm-domain
-```
-### Use a configuration file
-
-Create a ~/.ciphertrust/config file and configure these keys with your values.
-
-```bash
-address = https://cm-address
-username = cm-username
-password = cm-password
-domain = cm-domain
-```
 
 ### Edit the provider block in main.tf
 
@@ -31,41 +13,29 @@ provider "ciphertrust" {
   username = "cm-username"
   password = "cm-password"
   domain   = "cm-domain"
+  bootstrap = "no"
 }
 ```
 
-## Configure Azure Credentials
+## Configure Azure connection data source
 
-### Use environment variables
-
-```bash
-export ARM_CLIENT_ID=client-id
-export ARM_CLIENT_SECRET=client-secret
-export ARM_TENANT_ID=tenant-id
-```
-
-### Edit the connection resource in main.tf
+### Edit the azure connection data source in main.tf
 
 ```bash
-resource "ciphertrust_azure_connection" "azure_connection" {
-  name          = "azure-connection"
-  client_id     = "client-id"
-  client_secret = "client-secret"
-  tenant_id     = "tenant-id"
+# Data source for retrieving azure connection details
+data "ciphertrust_azure_connection_list" "example_azure_connection" {
+  # Filters to narrow down the Azure connections
+  filters = {
+    # The unique ID of the Azure connection to fetch
+    id = "7a844b20-8f63-4608-86a9-d349daf1e32c"
+  }
+  # Similarly can provide 'name', 'labels' etc to fetch the existing azure connection
+  # example for fetching en existing azure connection with labels
+  # filters = {
+  #   labels = "key=value"
+  # }
 }
 ```
-
-## Configure Azure Vaults
-
-### Update Azure for all Azure examples
-
-Update values in scripts/azure_vars.sh and run the script.
-
-This updates all azure_vars.tf files found in the subdirectories.
-
-### Configure for this example only
-
-Edit azure_vars.tf in this directory and update with your values.
 
 ## Run the Example
 
@@ -75,10 +45,10 @@ terraform apply
 ```
 
 ## Destroy Resources
-
 Resources must be destroyed before another sample script using the same cloud is run.
 
 ```bash
 terraform destroy
 ```
+
 Run this step even if the apply step fails.

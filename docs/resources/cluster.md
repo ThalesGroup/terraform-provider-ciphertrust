@@ -3,47 +3,93 @@
 page_title: "ciphertrust_cluster Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  A cluster is a group of one or more system nodes that synchronize their data. The nodes should be freshly launched instances of CipherTrust Manager.
-  Cluster operations will not use the "address" configured for the provider. It will use the "public_address" of one of the nodes instead. If a "node" block is marked as
-  "original" then we will try and use that one. The provider will attempt to use the "username" and "password" values configured at the provider level. But if those do not
-  work we will attempt to use the default credentials and then change the password to the "password" value.
+  
 ---
 
 # ciphertrust_cluster (Resource)
 
-A cluster is a group of one or more system nodes that synchronize their data. The nodes should be freshly launched instances of CipherTrust Manager.
-Cluster operations will not use the "address" configured for the provider. It will use the "public_address" of one of the nodes instead. If a "node" block is marked as
-"original" then we will try and use that one. The provider will attempt to use the "username" and "password" values configured at the provider level. But if those do not
-work we will attempt to use the default credentials and then change the password to the "password" value.
 
-This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 
 ```terraform
-# Create cluster from set of AWS EC2 instances
-# // https://registry.terraform.io/providers/hashicorp/aws/latest/docs
-resource "ciphertrust_cluster" "cluster" {
-  dynamic "node" {
-    for_each = module.ec2_instance
-    content {
-      host           = node.value.private_ip
-      public_address = node.value.public_ip
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of a Cluster of CipherTrust Manager nodes
+# with the CipherTrust provider for primary and secondary nodes, including setting up cluster details.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
     }
   }
 }
 
-# Create cluster from fixed instances, specify which node is to be the first member
-resource "ciphertrust_cluster" "cluster" {
-  node {
-    original       = true
-    host           = "1.1.1.1"
-    public_address = "2.2.2.2"
-  }
-  node {
-    host           = "3.3.3.3"
-    public_address = "4.4.4.5"
-  }
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+	# The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
+}
+
+# Add a resource of type CM Cluster with three nodes
+# Node 10.10.10.11 is the original node in the cluster
+# Nodes 10.10.10.12 and 10.10.10.13 are nodes looking to join the cluster
+resource "ciphertrust_cluster" "cluster_info" {
+  # List of CipherTrust Manager nodes to be added to cluster
+  # Original = true would mean that this node is originally in cluster
+  # or new cluster operation will happen on this node
+	nodes = [
+		{
+			host = "https://10.10.10.11"
+			port = 5432
+			original = true
+			public_address = "https://10.10.10.11"
+			credentials = {
+				username = "admin"
+				password = "ChangeMe101!"
+			}
+		},
+		{
+			host = "https://10.10.10.12"
+			port = 5432
+			original = false
+			public_address = "https://10.10.10.12"
+			credentials = {
+				username = "admin"
+				password = "ChangeMe102!"
+			}
+		},
+		{
+			host = "https://10.10.10.13"
+			port = 5432
+			original = false
+			public_address = "https://10.10.10.13"
+			credentials = {
+				username = "admin"
+				password = "ChangeMe103!"
+			}
+		}
+	]
+}
+
+# Output the unique ID of the created CM Cluster
+output "cluster_id" {
+    # The value will be the ID of the CM Cluster resource
+    value = ciphertrust_cluster.cluster_info.id
 }
 ```
 
@@ -52,33 +98,37 @@ resource "ciphertrust_cluster" "cluster" {
 
 ### Optional
 
-- `node` (Block Set) (see [below for nested schema](#nestedblock--node))
+- `nodes` (Attributes List) (see [below for nested schema](#nestedatt--nodes))
 
 ### Read-Only
 
-- `id` (String) "ciphertrust_cluster"
+- `id` (String) The ID of this resource.
 - `node_count` (Number) Number of nodes in the cluster
 - `node_id` (String) This CipherTrust manager node ID
 - `status_code` (String) short code for cluster status: r == ready
 - `status_description` (String) cluster status
 
-<a id="nestedblock--node"></a>
-### Nested Schema for `node`
+<a id="nestedatt--nodes"></a>
+### Nested Schema for `nodes`
 
 Required:
 
 - `host` (String) The hostname or IP of the node
-
-Optional:
-
-- `original` (Boolean) This node is the same server as the provider is configured to use. It is used as the first node in the cluster. All other nodes will have the same state as this node.
 - `port` (Number) The port of the node, typically 5432
 - `public_address` (String) The fully qualified domain name (FQDN) or public IP of this node. This attribute is used by CipherTrust Manager connectors to learn how to access this particular node of the cluster remotely.
 
-Read-Only:
+Optional:
 
-- `id` (String) This CipherTrust manager node ID
-- `status_code` (String) Status code of the node in the cluster, r == ready
-- `status_description` (String) Descriptive status name of the node in the cluster
+- `credentials` (Attributes) Credentials for the node that want to join the cluster. This is optional and if not provided, provider's config node credentials shall be tried. (see [below for nested schema](#nestedatt--nodes--credentials))
+- `original` (Boolean) This node is the same server as the provider is configured to use. It is used as the first node in the cluster. All other nodes will have the same state as this node.
 
+<a id="nestedatt--nodes--credentials"></a>
+### Nested Schema for `nodes.credentials`
 
+Optional:
+
+- `auth_domain` (String) CipherTrust authentication domain of the user. This is the domain where the user was created.
+- `domain` (String) CipherTrust domain to log in to. Default is the empty string (root domain).
+- `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name.
+- `password` (String) Password for the node
+- `username` (String) Username for the node

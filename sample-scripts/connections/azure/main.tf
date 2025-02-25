@@ -1,44 +1,43 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source  = "ThalesGroup/ciphertrust"
-      version = "0.10.9-beta"
+      source = "thalesgroup.com/oss/ciphertrust"
+      version = "1.0.0"
     }
   }
 }
 
-provider "ciphertrust" {}
-
-resource "random_id" "random" {
-  byte_length = 8
+provider "ciphertrust" {
+  address = "https://10.10.10.10"
+  username = "admin"
+  password = "SamplePassword@1"
+  bootstrap = "no"
 }
 
-locals {
-  connection_name = "azure-connection-${lower(random_id.random.hex)}"
-}
-
-# Create an Azure connection
 resource "ciphertrust_azure_connection" "azure_connection" {
-  name = local.connection_name
+  name        = "azure-connection"
+    products = [
+      "cckm"
+    ]
+  client_secret="3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  cloud_name= "AzureCloud"
+  client_id="3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
+  tenant_id= "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  description = "connection description"
+  labels = {
+    "environment" = "devenv"
+  }
+  meta = {
+    "custom_meta_key1" = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
+  }
+
 }
+
 output "azure_connection_id" {
   value = ciphertrust_azure_connection.azure_connection.id
 }
 
-# Get Azure subscription
-data "ciphertrust_azure_account_details" "subscriptions" {
-  azure_connection = ciphertrust_azure_connection.azure_connection.name
-}
-output "subscriptions" {
-  value = data.ciphertrust_azure_account_details.subscriptions
-}
-
-# Add a vault
-resource "ciphertrust_azure_vault" "azure_vault" {
-  azure_connection = ciphertrust_azure_connection.azure_connection.name
-  subscription_id  = data.ciphertrust_azure_account_details.subscriptions.subscription_id
-  name             = var.vault_name
-}
-output "azure_vault" {
-  value = ciphertrust_azure_vault.azure_vault
+output "azure_connection_name" {
+  value = ciphertrust_azure_connection.azure_connection.name
 }

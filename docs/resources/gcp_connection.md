@@ -8,35 +8,29 @@ description: |-
 
 # ciphertrust_gcp_connection (Resource)
 
-This resource creates a connection between CipherTrust Manager and Google cloud.
+ciphertrust_gcp_connection resource creates a connection between CipherTrust Manager and Google Cloud Platform (GCP) cloud.
 
 A connection is required before operations can be performed on Google cloud.
-
-[ciphertrust_gcp_keyring](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_keyring) resources are dependent on this resource.
-
-This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 
 ```terraform
 # Create a connection to Google cloud
 resource "ciphertrust_gcp_connection" "gcp_connection" {
-  key_file = "gcp-key-file.json"
-  name     = "connection-name"
-}
-
-# Assign a keyring to the connection
-resource "ciphertrust_gcp_keyring" "gcp_keyring" {
-  gcp_connection = ciphertrust_gcp_connection.gcp_connection.name
-  name           = "keyring-name"
-  project_id     = "project-id"
-}
-
-# Create a Google cloud key
-resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key-name"
+  name        = "gcp-connection"
+  products = [
+    "cckm"
+  ]
+  key_file    = "{\"type\":\"service_account\",\"private_key_id\":\"y437c51g956b8ab4908yb41541262a2fa3b0f84f\",\"private_key\":\"-----BEGIN RSA PRIVATE KEY-----\\...\\n-----END RSA PRIVATE KEY-----\\n\\n\",\"client_email\":\"test@some-project.iam.gserviceaccount.com\"}"
+  cloud_name  = "gcp"
+  description = "connection description"
+  labels = {
+    "environment" = "devenv"
+  }
+  meta = {
+    "custom_meta_key1" = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
+  }
 }
 ```
 
@@ -45,17 +39,93 @@ resource "ciphertrust_gcp_key" "gcp_key" {
 
 ### Required
 
-- `key_file` (String) (Updateable) Path to or data of a Google Cloud Service Account key file.
+- `key_file` (String) The private key for a Google Cloud Platform (GCP) service account. It can be provided in two formats:
+  - As a JSON file
+    
+    Example:
+    ```terraform
+    key_file    = "gcp-key-file.json"
+    ```
+    Sample gcp-key-file.json :
+    ```terraform
+        {
+        "type": "service_account",
+        "private_key_id":"y437c51g956b8ab4908yb41541262a2fa3b0f84f",
+        "private_key":"-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+        "client_email":"test@some-project.iam.gserviceaccount.com"
+        }
+    ```
+    
+  - As a string
+   
+    Example:
+    ```terraform
+    key_file    = "{\"type\":\"service_account\",\"private_key_id\":\"y437c51g956b8ab4908yb41541262a2fa3b0f84f\",\"private_key\":\"-----BEGIN RSA PRIVATE KEY-----\\n....\\n-----END RSA PRIVATE KEY-----\\n\\n\",\"client_email\":\"test@some-project.iam.gserviceaccount.com\"}"
+    ```
+  
 - `name` (String) Unique connection name.
 
 ### Optional
 
-- `cloud_name` (String) (Updateable) Name of the cloud. Options: gcp. Default is gcp.
-- `description` (String) (Updateable) Description of the Google Cloud connection.
-- `meta` (Map of String) (Updateable) A list of key:value pairs to store with the connection.
+- `cloud_name` (String) Name of the cloud. Default value is gcp. 
+   - Options:
+     - gcp
+     
+
+- `description` (String) Description about the connection.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+
+   - To add a label, set the label's value as follows.
+  
+         "labels": {
+            "key1": "value1",
+            "key2": "value2"
+         }
+
+   - To remove a key/value pair, pass value null to the particular key
+
+         "labels": {
+           "key1": null
+         }
+
+- `meta` (Map of String) Optional end-user or service data stored with the connection.
+   - To add meta, set the meta's value as follows.
+
+           meta = {
+              "custom_meta_key1" = "custom_value1"
+              "customer_meta_key2" = "custom_value2"
+           }
+
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
+
+    - "cckm" for:
+        - AWS
+        - Azure
+        - GCP
+        - Luna connections
+        - DSM
+        - Salesforce
+        - SAP Data Custodian
+    - "ddc" for:
+        - GCP
+        - Hadoop connections
+    - "cte" for:
+        - Hadoop connections
+        - SMB
+        - OIDC
+        - LDAP connections
+    - "data discovery" for Hadoop connections.
+    - "backup/restore" for SCP/SFTP connections.
+    - "logger" for:
+        - loki connections
+        - elasticsearch connections
+        - syslog connections
+    - "hsm_anchored_domain" for:
+        - Luna connections
+    - "csm" for:
+        - Akeyless connections
+
 
 ### Read-Only
 
-- `id` (String) CipherTrust Google Cloud connection ID.
-
-
+- `id` (String) The ID of this resource.

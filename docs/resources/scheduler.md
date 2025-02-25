@@ -8,196 +8,120 @@ description: |-
 
 # ciphertrust_scheduler (Resource)
 
-A ciphertrust_scheduler resource can be used to either:
-- Schedule rotation of cloud keys. Scheduler resources for rotation are required to be attached to key resources.
-- Synchronize the cloud keys stored in CipherTrust Manager with those in the specified cloud container.
 
-A ciphertrust_scheduler used for rotation can be assigned to the following:
-- [ciphertrust_aws_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_key) resources
-- [ciphertrust_azure_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/azure_key) resources
-- [ciphertrust_gcp_key](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/gcp_key) resources
-
-A schedule can be created to synchronize keys for:
-- AWS
-- Azure
-- Google Cloud
-
-This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
 
 ## Example Usage
 
 ```terraform
-# A scheduler resource suitable for the rotation of AWS keys
-resource "ciphertrust_scheduler" "aws_scheduled_key_rotation" {
-  cckm_key_rotation_params {
-    cloud_name = "aws"
-  }
-  name       = "rotation-job-name"
-  operation  = "cckm_key_rotation"
-  run_at     = "0 9 * * sat"
-}
-
-# An example of attaching the scheduler resource to an AWS key using CipherTrust as the key source
-resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
-  region = "aws-region"
-  enable_rotation {
-    disable_encrypt = false
-    job_config_id   = ciphertrust_scheduler.aws_scheduled_key_rotation.id
-    key_source      = "ciphertrust"
+# Specify the Terraform block to define required providers and their versions.
+terraform {
+  required_providers {
+    ciphertrust = {
+      # Define the provider source and version.
+      source = "thalesgroup.com/oss/ciphertrust"
+      version = "1.0.0"
+    }
   }
 }
 
-# An example of attaching the scheduler resource to an AWS key using a DSM as the key source
-resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
-  region = "aws-region"
-  enable_rotation {
-    disable_encrypt = true
-    dsm_domain_id   = ciphertrust_dsm_domain.dsm_domain.id
-    job_config_id   = ciphertrust_scheduler.aws_scheduled_key_rotation.id
-    key_source      = "dsm"
+# Configure the CipherTrust provider with connection details.
+provider "ciphertrust" {
+  # Address of the CipherTrust Manager.
+  address = "https://54.159.702.196"
+  # Username for authentication.
+  username = "admin"
+  # Password for authentication.
+  password = "SamplePass@12"
+  bootstrap = "no"
+}
+
+
+# Define an SCP connection resource with CipherTrust
+resource "ciphertrust_scp_connection" "scp_connection" {
+  # Name of the SCP connection (unique identifier)
+  name = "scp-connection"
+
+  # List of products associated with this SCP connection
+  # In this case, it's related to backup/restore operations
+  products = [
+    "backup/restore"
+  ]
+
+  # Description of the SCP connection
+  description = "a description of the connection"
+
+  # Host IP address or domain of the SCP server
+  host = "1.2.3.55"
+
+  # Port used for SCP communication (default SCP port is 22)
+  port = 22
+
+  # Username for authentication on the SCP server
+  username = "user"
+
+  # Authentication method to be used, here it's set to "Password"
+  auth_method = "Password"
+
+  # Password for the SCP server authentication
+  password = "password"
+
+  # Path on the remote server to store or retrieve files
+  path_to = "/home/path/to/directory/"
+
+  # Protocol used for SCP connection (can be sftp, scp, etc.)
+  protocol = "sftp"
+
+  # Public SSH key for authentication, if using key-based authentication
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
+
+  # Labels for categorizing the SCP connection
+  labels = {
+    "environment" = "devenv"
+  }
+
+  # Custom metadata for the SCP connection
+  # This can be used to store additional information related to the SCP connection
+  meta = {
+    "custom_meta_key1" = "custom_value1"  # Example custom metadata key-value pair
+    "customer_meta_key2" = "custom_value2"  # Another custom metadata entry
   }
 }
 
-# A scheduler resource suitable for the rotation of Azure keys
-resource "ciphertrust_scheduler" "azure_scheduled_key_rotation" {
-  cckm_key_rotation_params {
-    cloud_name = "AzureCloud"
-  }
-  name       = "rotation-job-name"
-  operation  = "cckm_key_rotation"
-  run_at     = "0 9 * * sat"
-}
 
-# An example of attaching the scheduler resource to an Azure key using CipherTrust as the key source
-resource "ciphertrust_azure_key" "azure_key" {
-  name  = "key-name"
-  vault = ciphertrust_azure_vault.azure_vault.id
-  enable_rotation {
-    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
-    key_source    = "ciphertrust"
-  }
-}
+# Define a resource block to configure a scheduler in CipherTrust.
+resource "ciphertrust_scheduler" "scheduler" {
+  # Name of the scheduler.
+  name = "db_backup1-terraform"
+  # Type of operation the scheduler will perform.
+  operation = "database_backup"
+  # Description of the scheduler.
+  description = "This is to backup db updated cancelleed"
+  # Specify when the scheduler should run (e.g., "any" for no specific conditions).
+  run_on = "any"
+  # Cron-style schedule specifying when the job should run. Refer to the schema description to know more about the cron-style
+  run_at = "*/15 * * * *"
 
-# An example of attaching the scheduler resource to an Azure key using a DSM as the key source
-resource "ciphertrust_azure_key" "azure_key" {
-  name  = "key-name"
-  vault = ciphertrust_azure_vault.azure_vault.id
-  enable_rotation {
-    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
-    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
-    key_source    = "dsm"
-  }
-}
-
-# An example of attaching the scheduler resource to an Azure key using Luna-HSM as the key source
-resource "ciphertrust_azure_key" "azure_key" {
-  name  = "key-name"
-  vault = ciphertrust_azure_vault.azure_vault.id
-  enable_rotation {
-    hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
-    job_config_id    = ciphertrust_scheduler.azure_scheduled_key_rotation.id
-    key_source       = "hsm-luna"
+  # Configuration for the database backup parameters.
+  database_backup_params = {
+    # Backup ID for the database backup.
+    backup_key = "d370535b-a035-4251-9780-e608f713be77"
+    # SCP Connection ID for the backup operation.
+    connection = ciphertrust_scp_connection.scp_connection.id
+    # Description of the backup job.
+    description = "sample description"
+    # Indicates if SCP should be used for the backup (true in this case).
+    do_scp = true
+    # Scope of the backup (e.g., "system","domain").
+    scope = "system"
+    # Indicates if the backup is tied to an HSM (false in this case).
+    tied_to_hsm = false
   }
 }
 
-# An example of attaching the scheduler resource to an Azure key using Azure as the key source
-resource "ciphertrust_azure_key" "azure_key" {
-  name  = "key-name"
-  vault = ciphertrust_azure_vault.azure_vault.id
-  enable_rotation {
-    job_config_id = ciphertrust_scheduler.azure_scheduled_key_rotation.id
-    key_source    = "native"
-  }
-}
-
-# A scheduler resource suitable for the rotation of Google cloud keys
-resource "ciphertrust_scheduler" "gcp_scheduled_key_rotation" {
-  cckm_key_rotation_params {
-    cloud_name = "gcp"
-  }
-  name       = "rotation-job-name"
-  operation  = "cckm_key_rotation"
-  run_at     = "0 9 * * sat"
-}
-
-# An example of attaching the scheduler resource to a Google cloud key using CipherTrust as the key source
-resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key-name"
-  enable_rotation {
-    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
-    key_source    = "ciphertrust"
-  }
-}
-
-# An example of attaching the scheduler resource to a Google cloud key using a DSM as the key source
-resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key-name"
-  enable_rotation {
-    dsm_domain_id = ciphertrust_dsm_domain.dsm_domain.id
-    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
-    key_source    = "dsm"
-  }
-}
-
-# An example of attaching the scheduler resource to a Google cloud key using Luna-HSM as the key source
-resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key-name"
-  enable_rotation {
-    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
-    hsm_partition_id = ciphertrust_hsm_partition.hsm_partition.id
-  }
-}
-
-# An example of attaching the scheduler resource to a Google cloud key using Google cloud as the key source
-resource "ciphertrust_gcp_key" "gcp_key" {
-  algorithm = "RSA_DECRYPT_OAEP_4096_SHA512"
-  key_ring  = ciphertrust_gcp_keyring.gcp_keyring.id
-  name      = "key-name"
-  enable_rotation {
-    job_config_id = ciphertrust_scheduler.gcp_scheduled_key_rotation.id
-    key_source    = "native"
-  }
-}
-
-# A scheduler resource for synchronizing AWS keys with CipherTrust Manager
-resource "ciphertrust_scheduler" "aws_key_sync" {
-  cckm_synchronization_params {
-    cloud_name      = "AzureCloud"
-    synchronize_all = true
-  }
-  name       = "sync-job-name"
-  operation  = "cckm_synchronization"
-  run_at     = "0 9 * * fri"
-}
-
-# A scheduler resource for synchronizing Azure keys with CipherTrust Manager
-resource "ciphertrust_scheduler" "azure_key_sync" {
-  cckm_synchronization_params {
-    cloud_name      = "aws"
-    synchronize_all = true
-  }
-  name       = "sync-job-name"
-  operation  = "cckm_synchronization"
-  run_at     = "0 9 * * fri"
-}
-
-# A scheduler suitable for synchronizing Google cloud keys with CipherTrust Manager
-resource "ciphertrust_scheduler" "gcp_key_sync" {
-  cckm_synchronization_params {
-    cloud_name      = "gcp"
-    synchronize_all = true
-  }
-  name       = "sync-job-name"
-  operation  = "cckm_synchronization"
-  run_at     = "0 9 * * fri"
+# Output block to display details of the created scheduler resource.
+output "scheduler" {
+  # Outputs all attributes of the scheduler resource.
+  value = ciphertrust_scheduler.scheduler
 }
 ```
 
@@ -206,50 +130,63 @@ resource "ciphertrust_scheduler" "gcp_key_sync" {
 
 ### Required
 
-- `name` (String) Name of the job configuration.
-- `run_at` (String) (Updateable) Described using the cron expression format: '* * * * * 'These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case-insensitive. For example, To run on Saturday at 23:45(11:45 PM): '45 23 * * 6' or '45 23 * * sat' To run on the first of the month at 09:00: '0 9 1 * *'
+- `name` (String) The name of the job configuration.
+- `operation` (String) The operation field specifies the type of operation to be performed. Currently, only 'database_backup' is supported. Ensure that the database_backup_params parameter is specified when using this operation.
+- `run_at` (String) Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
+
+For example:
+
+    To run every min: "* * * * *"
+    To run on Saturday at 23:45(11:45 PM): "45 23 * * 6"
+    To run on Monday at 09:00: "0 9 * * 1"
 
 ### Optional
 
-- `cckm_key_rotation_params` (Block List, Max: 1) (Updateable) Specifies key rotation parameters (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
-- `cckm_synchronization_params` (Block List, Max: 1) (Updateable) Specifies key synchronization parameters (see [below for nested schema](#nestedblock--cckm_synchronization_params))
-- `description` (String) (Updateable) Description of the job configuration.
-- `disabled` (Boolean) (Updateable) Disable the job configuration. Defaults to false.
-- `end_date` (String) (Updateable) Date the job configuration becomes inactive. RFC3339 format, for example, 2021-07-03T14:24Z.
-- `operation` (String) Type of operation. Currently, only cckm_key_rotation and cckm_synchronization are supported. Default is cckm_key_rotation.
-- `run_on` (String) (Updateable) Use 'any' to run the rotation job on any node in the cluster. Use a specific node ID to run the rotation job on that node. Default is 'any'.
-- `start_date` (String) (Updateable) Date the job configuration becomes active. RFC3339 format, for example, 2021-07-03T14:24:00Z.
+- `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
+- `description` (String) Description for the job configuration.
+- `disabled` (Boolean) By default, the job configuration starts in an active state. True disables the job configuration.
+- `end_date` (String) Date the job configuration becomes inactive. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
+- `run_on` (String) Default is 'any'. For database_backup, the default will be the current node if in a cluster.
+- `start_date` (String) Date the job configuration becomes active. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
 
 ### Read-Only
 
-- `id` (String) CipherTrust job configuration ID.
+- `account` (String)
+- `application` (String)
+- `created_at` (String)
+- `dev_account` (String)
+- `id` (String) The ID of this resource.
+- `updated_at` (String)
+- `uri` (String)
 
-<a id="nestedblock--cckm_key_rotation_params"></a>
-### Nested Schema for `cckm_key_rotation_params`
-
-Required:
-
-- `cloud_name` (String) (Updateable) Name of the cloud for which to schedule the key rotation. Options are: aws, AzureCloud and gcp.
-
-Optional:
-
-- `aws_retain_alias` (Boolean) (Updateable) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
-- `expiration` (String) (Updateable) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
-- `expire_in` (String) (Updateable) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
-
-
-<a id="nestedblock--cckm_synchronization_params"></a>
-### Nested Schema for `cckm_synchronization_params`
-
-Required:
-
-- `cloud_name` (String) (Updateable) Name of the cloud that will be synchronized on schedule. Options are: aws, AzureCloud and gcp.
+<a id="nestedatt--database_backup_params"></a>
+### Nested Schema for `database_backup_params`
 
 Optional:
 
-- `key_rings` (Set of String) (Updateable) IDs or name of key ring from which Google keys will be synchronized. Unless synchronizing all Google keys, at least one key ring is required.
-- `key_vaults` (Set of String) (Updateable) IDs or name of vault from which azure keys will be synchronized. Unless synchronizing all Azure keys, at least one vault is required.
-- `kms` (Set of String) (Updateable) IDs or names of kms resources from which AWS keys will be synchronized. Unless synchronizing all AWS keys, At least one kms is required.
-- `synchronize_all` (Boolean) (Updateable) Set true to synchronize all keys. Default is false.
+- `backup_key` (String) ID of backup key used for encrypting the backup. The default backup key is used if this is not specified.
+- `connection` (String) Name or ID of the SCP connection which stores the details for SCP server.
+- `description` (String) User defined description associated with the backup. This is stored along with the backup, and is returned while retrieving the backup information, or while listing backups. Users may find it useful to store various types of information here: a backup name or description, ID of the HSM the backup is tied to, etc.
+- `do_scp` (Boolean) If true, the system backup will also be transferred to the external server via SCP.
+- `filters` (Attributes List) A set of selection criteria to specify what resources to include in the backup. Only applicable to domain-scoped backups. By default, no filters are applied and the backup includes all keys. For example, to back up all keys with a name containing 'enc-key', set the filters to [{"resourceType": "Keys", "resourceQuery":{"name":"*enc-key*"}}]. (see [below for nested schema](#nestedatt--database_backup_params--filters))
+- `retention_count` (Number) Number of backups saved for this job config. Default is an unlimited quantity.
+- `scope` (String) Scope of the backup to be taken - system (default) or domain.
+- `tied_to_hsm` (Boolean) If true, the system backup can only be restored to instances that use the same HSM partition. Valid only with the system scoped backup.
 
+<a id="nestedatt--database_backup_params--filters"></a>
+### Nested Schema for `database_backup_params.filters`
 
+Required:
+
+- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".
+
+Optional:
+
+- `resource_query` (String) A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
+
+For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the “Users” page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
+
+For Customer fragments, valid resourceQuery parameter values are 'ids' and 'names' of Customer fragments. To backup specific customer fragments using ids, use {"ids":["370c4373-2675-4aa1-8cc7-07a9f95a5861", "4e1b9dec-2e38-40d7-b4d6-244043200546"]}. To backup specific customer fragments using names, use {"names":["customerFragment1", "customerFragment2"]}.
+
+Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines. 
+For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"

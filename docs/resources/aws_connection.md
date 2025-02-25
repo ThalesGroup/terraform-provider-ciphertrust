@@ -3,54 +3,104 @@
 page_title: "ciphertrust_aws_connection Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  The APIs in this section deal with connections to the AWS cloud. The following operations can be performed:
+  Create/Delete/Get/Update an AWS connection.List all AWS connections.Test an existing AWS connection.
+  *Test a connection that hasn't been created yet by passing in the connection parameters.
 ---
 
 # ciphertrust_aws_connection (Resource)
 
-This resource creates a connection between CipherTrust Manager and an AWS cloud.
-
-A connection is required before operations can be performed on the AWS cloud.
-
-[ciphertrust_aws_kms](https://registry.terraform.io/providers/ThalesGroup/ciphertrust/latest/docs/resources/aws_kms) resources are dependent on this resource.
-
-This resource is applicable to CipherTrust Manager and CipherTrust Data Security Platform as a Service(CDSPaaS).
-
-## Optional Use of Environment Variables 
-
-| Parameter          | Environment Variable  |
-|--------------------|-----------------------|
-| access_key_id      | AWS_ACCESS_KEY_ID     |
-| secret_access_key  | AWS_SECRET_ACCESS_KEY |
-
+The APIs in this section deal with connections to the AWS cloud. The following operations can be performed:
+* Create/Delete/Get/Update an AWS connection.
+* List all AWS connections.
+* Test an existing AWS connection.
+*Test a connection that hasn't been created yet by passing in the connection parameters.
 
 ## Example Usage
 
 ```terraform
-# Create an AWS connection without using environment variables
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of an AWS connection resource
+# with the CipherTrust provider, including setting up AWS connection details,
+# labels, and custom metadata.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
+    }
+  }
+}
+
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
+}
+
+# Define an AWS connection resource with CipherTrust
 resource "ciphertrust_aws_connection" "aws_connection" {
-  name              = "connection-name"
-  access_key_id     = "access-key-id"
-  secret_access_key = "secret-access-key"
+  # Name of the AWS connection (unique identifier)
+  name = "tf-aws-connection"
+
+  # List of products associated with this AWS connection
+  # In this case, it's related to backup/restore operations
+  products = [
+    "cckm"
+  ]
+
+  # Key ID of the AWS user.
+  access_key_id = "ACCESS_KEY_ID"
+
+  # Secret associated with the access key ID of the AWS user.
+  secret_access_key = "SECRET_ACCESS_KEY"
+
+  # Name of the cloud.
+  cloud_name= "aws"
+
+  # AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given. For aws, default region will be "us-east-1".
+  aws_region = "us-east-1"
+
+  # Description about the connection.
+  description = "Terraform Generated"
+
+  # Labels for categorizing the AWS connection
+  labels = {
+      "environment" = "devenv"
+  }
+
+  # Custom metadata for the AWS connection
+  # This can be used to store additional information related to the AWS connection
+  meta = {
+      "custom_meta_key1" = "custom_value1"
+      "customer_meta_key2" = "custom_value2"
+  }
 }
 
-# Create an AWS connection using the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables
-resource "ciphertrust_azure_connection" "azure_connection" {
-  name = "connection-name"
+# Output the unique ID of the created AWS connection
+output "aws_connection_id" {
+  # The value will be the ID of the AWS connection resource
+  value = ciphertrust_aws_connection.aws_connection.id
 }
 
-# Create a ciphertrust_aws_kms resource and assign it to the connection
-resource "ciphertrust_aws_kms" "kms" {
-  account_id     = "aws-account-id"
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions        = ["aws-region", "aws-region"]
-}
-
-# Create an AWS key
-resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
-  region = "aws-region"
+# Output the name of the created AWS connection
+output "aws_connection_name" {
+  # The value will be the name of the AWS connection resource
+  value = ciphertrust_aws_connection.aws_connection.name
 }
 ```
 
@@ -59,18 +109,58 @@ resource "ciphertrust_aws_key" "aws_key" {
 
 ### Required
 
-- `name` (String) Unique connection name.
+- `name` (String) Unique connection name
 
 ### Optional
 
-- `access_key_id` (String) (Updateable) AWS Key ID of the AWS user. Default is the AWS_ACCESS_KEY_ID environment variable.
-- `assume_role_arn` (String) (Updateable) AWS IAM role ARN.
-- `assume_role_external_id` (String) (Updateable) AWS role external ID.
-- `cloud_name` (String) (Updateable) Name of the cloud. Options: aws, aws-us-gov and aws-cn. Default is aws.
-- `description` (String) (Updateable) Description of the AWS connection.
-- `meta` (Map of String) (Updateable) A list of key:value pairs to store with the connection.
-- `secret_access_key` (String, Sensitive) (Updateable) Secret associated with the access key of the AWS user. Default is the AWS_SECRET_ACCESS_KEY environment variable.
+- `access_key_id` (String) Key ID of the AWS user
+- `assume_role_arn` (String) AWS IAM role ARN
+- `assume_role_external_id` (String) Specify AWS Role external ID
+- `aws_region` (String) AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given.Default values are: 
+for aws, default region will be "us-east-1" 
+for aws-us-gov, default region will be "us-gov-east-1" 
+for aws-cn, default region will be "cn-north-1"
+- `aws_sts_regional_endpoints` (String) By default, AWS Security Token Service (AWS STS) is available as a global service, and all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints instead of the global endpoint to reduce latency, build in redundancy, and increase session token validity. valid values are: 
+legacy (default): Uses the global AWS STS endpoint, sts.amazonaws.com 
+regional: The SDK or tool always uses the AWS STS endpoint for the currently configured Region.
+- `cloud_name` (String) Name of the cloud. Options are: 
+aws (default) 
+aws-us-gov 
+aws-cn
+- `description` (String) Description about the connection
+- `iam_role_anywhere` (Attributes) (see [below for nested schema](#nestedatt--iam_role_anywhere))
+- `is_role_anywhere` (Boolean) Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+- `meta` (Map of String) Optional end-user or service data stored with the connection.
+- `products` (List of String) Array of the CipherTrust products associated with the connection
+- `secret_access_key` (String) Secret associated with the access key ID of the AWS user
 
 ### Read-Only
 
-- `id` (String) CipherTrust AWS connection ID.
+- `account` (String)
+- `application` (String) The application this resource belongs to.
+- `category` (String)
+- `created_at` (String)
+- `dev_account` (String) The developer account which owns this resource's application.
+- `id` (String) The unique identifier of the resource
+- `last_connection_at` (String)
+- `last_connection_error` (String)
+- `last_connection_ok` (Boolean)
+- `resource_url` (String)
+- `service` (String)
+- `updated_at` (String)
+- `uri` (String)
+
+<a id="nestedatt--iam_role_anywhere"></a>
+### Nested Schema for `iam_role_anywhere`
+
+Required:
+
+- `anywhere_role_arn` (String) Specify AWS IAM Anywhere Role ARN
+- `certificate` (String) Upload the external certificate for AWS IAM Anywhere Cloud connections. This option is used when "role_anywhere" is set to "true".
+- `profile_arn` (String) Specify AWS IAM Anywhere Profile ARN
+- `trust_anchor_arn` (String) Specify AWS IAM Anywhere Trust Anchor ARN
+
+Optional:
+
+- `private_key` (String) The private key associated with the certificate

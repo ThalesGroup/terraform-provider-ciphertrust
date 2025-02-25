@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cte_process_set Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  A process set is a collection of processes (executables) that you want to grant or deny access to GuardPoints. This provides a way to manage processes independent of the policy. Policies can be applied to process sets, not to individual processes. Optionally, file signing can be configured to check the authenticity and integrity of executables and applications before they are allowed to access GuardPoint data. A signature set must already exist before you can configure file signing in a policy for a process set.
 ---
 
 # ciphertrust_cte_process_set (Resource)
 
-
+A process set is a collection of processes (executables) that you want to grant or deny access to GuardPoints. This provides a way to manage processes independent of the policy. Policies can be applied to process sets, not to individual processes. Optionally, file signing can be configured to check the authenticity and integrity of executables and applications before they are allowed to access GuardPoint data. A signature set must already exist before you can configure file signing in a policy for a process set.
 
 
 
@@ -17,22 +17,42 @@ description: |-
 
 ### Required
 
-- `name` (String) This is the name of the process set.
+- `name` (String) Name of the ProcessSet
 
 ### Optional
 
-- `description` (String) (Updateable) Description of process set
-- `processes` (Block List) Process set list. (see [below for nested schema](#nestedblock--processes))
+- `description` (String) Description of the process set.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+When labels are provided they are merged with the resource's existing labels.
+To remove a label, set the label's value to null.
+"labels": {
+	"critical": null
+}
+To remove all labels, set labels to null.
+"labels": null
+- `processes` (Attributes List) List of processes to be added to the process set. (see [below for nested schema](#nestedatt--processes))
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `account` (String) The account which owns this resource.
+- `application` (String) The application this resource belongs to.
+- `created_at` (String) Date/time the application was created
+- `dev_account` (String) The developer account which owns this resource's application.
+- `id` (String) The unique identifier of the resource
+- `updated_at` (String) Date/time the application was updated
+- `uri` (String) A human readable unique identifier of the resource
 
-<a id="nestedblock--processes"></a>
+<a id="nestedatt--processes"></a>
 ### Nested Schema for `processes`
 
 Optional:
 
-- `directory` (String) (Updateable) ProcessDirectory of the process to be added to the process set.
-- `file` (String) (Updateable) File name of the process to be added to the process set.
-- `signature` (String) (Updateable) ID of the signature set to link to the process set.
+- `directory` (String) Directory of the process to be added to the process set.
+- `file` (String) File name of the process to be added to the process set.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/. To add a label, set the label's value as follows.
+"labels": {
+	"key1": "value1",
+	"key2": "value2"
+}
+- `resource_set_id` (String) ID or name of the resource set to link to the process set. It is used for ransomware clients as a resources exempt.
+- `signature` (String) ID or name of the signature set to link to the process set.

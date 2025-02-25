@@ -8,16 +8,52 @@ description: |-
 
 # ciphertrust_syslog (Resource)
 
-Audit records can optionally be sent to one or more external syslog server(s). By default audit records are stored in the local database and will continue to do so even if syslog connections are configured. Each audit record will be sent to each configured syslog connection.
 
-This resource is applicable to CipherTrust Manager only.
 
 ## Example Usage
 
 ```terraform
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of a Syslog connection resource
+# with the CipherTrust provider, including setting up Syslog connection details.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "thalesgroup.com/oss/ciphertrust"
+      # Version of the provider to use
+      version = "1.0.0"
+    }
+  }
+}
+
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+
+  bootstrap = "no"
+}
+
+# Add a resource of type Syslog connection with the host example.syslog.com
 resource "ciphertrust_syslog" "syslog_1" {
     host = "example.syslog.com"
     transport = "udp"
+}
+
+# Output the unique ID of the created syslog connection resource
+output "syslog_connection_value" {
+	value = ciphertrust_syslog.syslog_1.host
 }
 ```
 
@@ -26,22 +62,18 @@ resource "ciphertrust_syslog" "syslog_1" {
 
 ### Required
 
-- `host` (String) The hostname or IP address of the syslog connection
+- `host` (String) The hostname or IP address of the syslog connection.
 - `transport` (String) udp, tcp or tls
 
 ### Optional
 
-- `ca_cert` (String) he trusted CA cert in PEM format. Only used in TLS transport mode
-- `message_format` (String) The log message format for new log messages:
-
-    rfc5424 (default)
-    plain_message
-    cef
-    leef
+- `ca_cert` (String) The trusted CA cert in PEM format. Only used in TLS transport mode
+- `message_format` (String) The log message format for new log messages: rfc5424 (default) plain_message cef leef.
 - `port` (Number) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls
 
 ### Read-Only
 
+- `account` (String)
+- `created_at` (String)
 - `id` (String) The ID of this resource.
-
-
+- `updated_at` (String)
