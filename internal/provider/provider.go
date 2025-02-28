@@ -1,9 +1,13 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -85,7 +89,6 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			},
 			"bootstrap": schema.StringAttribute{
 				Optional:    true,
-				Sensitive:   true,
 				Description: "Is it a bootstrap operation. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "bootstrap", "no"),
 			},
 			"auth_domain": schema.StringAttribute{
@@ -115,56 +118,99 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	// Retrieve provider data from configuration
 	var config ciphertrustProviderModel
+	var address string
+	var username string
+	var password string
+	var domain string
+	var bootstrap string
+	var auth_domain string
+	var no_ssl_verify bool
+	var rest_api_timeout int64
+
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// If practitioner provided a configuration value for any of the
-	// attributes, it must be a known value.
+	//Some default values
+	bootstrap = "no"
+	no_ssl_verify = true
+	rest_api_timeout = 180
 
-	if config.Address.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("address"),
-			"Unknown CipherTrust IP/FQDN",
-			"The provider cannot create the CipherTrust API client as there is an unknown configuration value for the host address. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the CIPHERTRUST_ADDRESS environment variable.",
-		)
+	//First read from the config file
+	homeDir, _ := os.UserHomeDir()
+	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
+
+	file, _ := os.Open(configFileName)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "address":
+			address = value
+		case "username":
+			username = value
+		case "password":
+			password = value
+		case "bootstrap":
+			bootstrap = value
+		case "domain":
+			domain = value
+		case "auth_domain":
+			auth_domain = value
+		case "no_ssl_verify":
+			no_ssl_verify, _ = strconv.ParseBool(value)
+		case "rest_api_timeout":
+			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
+		}
 	}
 
-	if config.Username.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("username"),
-			"Unknown CipherTrust API Username",
-			"The provider cannot create the CipherTrust API client as there is an unknown configuration value for the CipherTrust API username. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the CIPHERTRUST_USERNAME environment variable.",
-		)
+	// If environment vars are found, make them higher priority
+	addressEnvVal, addressEnvExists := os.LookupEnv("CIPHERTRUST_ADDRESS")
+	if addressEnvExists {
+		address = addressEnvVal
+	}
+	usernameEnvVal, usernameEnvExists := os.LookupEnv("CIPHERTRUST_USERNAME")
+	if usernameEnvExists {
+		username = usernameEnvVal
+	}
+	passwordEnvVal, passwordEnvExists := os.LookupEnv("CIPHERTRUST_PASSWORD")
+	if passwordEnvExists {
+		password = passwordEnvVal
+	}
+	bootstrapEnvVal, bootstrapEnvExists := os.LookupEnv("BOOTSTRAP")
+	if bootstrapEnvExists {
+		bootstrap = bootstrapEnvVal
+	}
+	domainEnvVal, domainEnvExists := os.LookupEnv("CIPHERTRUST_DOMAIN")
+	if domainEnvExists {
+		domain = domainEnvVal
+	}
+	authDomainEnvVal, authDomainEnvExists := os.LookupEnv("CIPHERTRUST_AUTH_DOMAIN")
+	if authDomainEnvExists {
+		auth_domain = authDomainEnvVal
+	}
+	noSSLVerifyEnvVal, noSSLVerifyEnvExists := os.LookupEnv("NO_SSL_VERIFY")
+	if noSSLVerifyEnvExists {
+		no_ssl_verify, _ = strconv.ParseBool(noSSLVerifyEnvVal)
+	}
+	restAPITimeoutEnvVal, restAPITimeoutEnvExists := os.LookupEnv("REST_API_TIMEOUT")
+	if restAPITimeoutEnvExists {
+		rest_api_timeout, _ = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
 	}
 
-	if config.Password.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("password"),
-			"Unknown CipherTrust API Password",
-			"The provider cannot create the CipherTrust API client as there is an unknown configuration value for the CipherTrust API password. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the CIPHERTRUST_PASSWORD environment variable.",
-		)
-	}
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Default values to environment variables, but override
-	// with Terraform configuration value if set.
-
-	address := os.Getenv("CIPHERTRUST_ADDRESS")
-	username := os.Getenv("CIPHERTRUST_USERNAME")
-	password := os.Getenv("CIPHERTRUST_PASSWORD")
-	bootstrap := os.Getenv("BOOTSTRAP")
-	domain := os.Getenv("CIPHERTRUST_DOMAIN")
-	auth_domain := os.Getenv("CIPHERTRUST_AUTH_DOMAIN")
-
+	// Finally if the provider block has values, make that highest priority
 	if !config.Address.IsNull() {
 		address = config.Address.ValueString()
 	}
@@ -189,9 +235,19 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		auth_domain = config.AuthDomain.ValueString()
 	}
 
+	if !config.InsecureSkipVerify.IsNull() {
+		no_ssl_verify = config.InsecureSkipVerify.ValueBool()
+	}
+
+	if !config.RestOperationTimeout.IsNull() {
+		rest_api_timeout = config.RestOperationTimeout.ValueInt64()
+	}
+
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
 	if bootstrap == "no" {
+		// If not bootstrap, we want address, username, and password should be there
+		// Else address is mandatory
 		if address == "" {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("address"),
@@ -225,6 +281,20 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		if resp.Diagnostics.HasError() {
 			return
 		}
+	} else {
+		if address == "" {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("address"),
+				"Missing CipherTrust API IP/FQDN",
+				"The provider cannot create the CipherTrust API client as there is a missing or empty value for the CipherTrust API host. "+
+					"Set the host value in the configuration or use the CIPHERTRUST_ADDRESS environment variable. "+
+					"If either is already set, ensure the value is not empty.",
+			)
+		}
+
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	ctx = tflog.SetField(ctx, "cm_host", address)
@@ -237,21 +307,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	if bootstrap == "no" {
 		// Create a new CipherTrust client using the configuration values
-		client, err := common.NewClient(ctx, id, &address, &auth_domain, &domain, &username, &password)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Unable to Create CipherTrust API Client",
-				"An unexpected error occurred when creating the CipherTrust API client. "+
-					"If the error is not clear, please contact the provider developers.\n\n"+
-					"CipherTrust Client Error: "+err.Error(),
-			)
-			return
-		}
-
-		resp.DataSourceData = client
-		resp.ResourceData = client
-	} else if bootstrap == "yes" {
-		client, err := common.NewCMClientBoot(ctx, id, &address)
+		client, err := common.NewClient(ctx, id, &address, &auth_domain, &domain, &username, &password, no_ssl_verify, rest_api_timeout)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Unable to Create CipherTrust API Client",
@@ -265,11 +321,19 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
-		resp.Diagnostics.AddError(
-			"Unable to Create CipherTrust API Client",
-			"Error Message: bootstrap value can be either yes or no, No other value is allowed!",
-		)
-		return
+		client, err := common.NewCMClientBoot(ctx, id, &address, no_ssl_verify, rest_api_timeout)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create CipherTrust API Client",
+				"An unexpected error occurred when creating the CipherTrust API client. "+
+					"If the error is not clear, please contact the provider developers.\n\n"+
+					"CipherTrust Client Error: "+err.Error(),
+			)
+			return
+		}
+
+		resp.DataSourceData = client
+		resp.ResourceData = client
 	}
 }
 

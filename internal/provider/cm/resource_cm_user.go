@@ -48,13 +48,13 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Required: true,
 			},
 			"nickname": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"email": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"full_name": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"password": schema.StringAttribute{
 				Required: true,
@@ -91,16 +91,33 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
-
-	payload.Email = common.TrimString(plan.Email.String())
-	payload.Name = common.TrimString(plan.Name.String())
-	payload.Nickname = common.TrimString(plan.Nickname.String())
 	payload.UserName = common.TrimString(plan.UserName.String())
 	payload.Password = common.TrimString(plan.Password.String())
-	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
-	payload.LoginFlags = loginFlags
-	payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+
+	if plan.PreventUILogin.ValueBool() != types.BoolNull().ValueBool() {
+		loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
+		payload.LoginFlags = loginFlags
+	}
+
+	if common.TrimString(plan.Email.ValueString()) != "" && common.TrimString(plan.Email.ValueString()) != types.StringNull().ValueString() {
+		payload.Email = common.TrimString(plan.Email.ValueString())
+	}
+
+	if common.TrimString(plan.Name.ValueString()) != "" && common.TrimString(plan.Name.ValueString()) != types.StringNull().ValueString() {
+		payload.Name = common.TrimString(plan.Name.ValueString())
+	}
+
+	if common.TrimString(plan.Nickname.ValueString()) != "" && common.TrimString(plan.Nickname.ValueString()) != types.StringNull().ValueString() {
+		payload.Nickname = common.TrimString(plan.Nickname.ValueString())
+	}
+
+	if plan.IsDomainUser.ValueBool() != types.BoolNull().ValueBool() {
+		payload.IsDomainUser = plan.IsDomainUser.ValueBool()
+	}
+
+	if plan.PasswordChangeRequired.ValueBool() != types.BoolNull().ValueBool() {
+		payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {

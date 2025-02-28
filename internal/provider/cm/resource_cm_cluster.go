@@ -191,7 +191,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			node_password := node.Creds.Password.ValueString()
 			node_domain := node.Creds.Domain.ValueString()
 			node_auth_domain := node.Creds.AuthDomain.ValueString()
-			node_client, err := common.NewClient(ctx, id, &node_address, &node_auth_domain, &node_domain, &node_username, &node_password)
+			node_client, err := common.NewClient(ctx, id, &node_address, &node_auth_domain, &node_domain, &node_username, &node_password, true, 180)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cluster.go -> Create]["+id+"]")
 				resp.Diagnostics.AddError(
