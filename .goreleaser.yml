@@ -16,5 +16,5 @@ archives:
   - format: zip
 release:
   github:
-    owner: anugram
+    owner: ThalesGroup
     name: terraform-provider-ciphertrust
