@@ -1,2 +1,5 @@
 /vendor
 *.tfstate
+# Added by goreleaser init:
+dist/
+examples/resources/ciphertrust_cm_key/terraform.tfstate.backup

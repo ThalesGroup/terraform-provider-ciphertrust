@@ -18,23 +18,13 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
-  address = "https://10.10.10.10"
-
-  # Username for authenticating with the CipherTrust appliance
-  username = "admin"
-
-  # Password for authenticating with the CipherTrust appliance
-  password = "ChangeMe101!"
-
-  bootstrap = "no"
 }
 
 # Add a resource of type CM Key with the name terraform, algorithm AES and size 256 bits
 # This will also use the Users data source to get the User ID from username, terraform
 data "ciphertrust_cm_users_list" "list" {
   filters = {
-    username = "terraform"
+    username = "admin"
   }
 }
 
