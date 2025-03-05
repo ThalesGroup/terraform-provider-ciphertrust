@@ -28,3 +28,4 @@ release:
   github:
     owner: ThalesGroup
     name: terraform-provider-ciphertrust
+  prerelease: true
