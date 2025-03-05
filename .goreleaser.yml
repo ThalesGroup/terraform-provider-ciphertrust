@@ -24,6 +24,9 @@ checksum:
 signs:
   - artifacts: checksum
     args: ["--output", "${signature}", "--detach-sign", "${artifact}"]
+    signature: "${artifact}.sig"
+    ids:
+      - "${GPG_KEY_ID}"
 release:
   github:
     owner: ThalesGroup
