@@ -8,12 +8,22 @@ builds:
       - linux
       - darwin
       - windows
+      - freebsd
     goarch:
       - amd64
+      - 386
+      - arm
+      - arm64
     flags: -trimpath
     ldflags: -s -w
 archives:
   - format: zip
+checksum:
+  name_template: "SHA256SUMS"
+  algorithm: sha256
+signs:
+  - artifacts: checksum
+    args: ["--output", "${signature}", "--detach-sign", "${artifact}"]
 release:
   github:
     owner: ThalesGroup
