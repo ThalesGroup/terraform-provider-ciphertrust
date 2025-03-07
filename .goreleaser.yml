@@ -1,34 +1,66 @@
-before:
-  hooks:
-    - go mod download
+version: 2
+env:
+  - CGO_ENABLED=0
+  - BUILD_NUMBER={{ if index .Env "BUILD_NUMBER"  }}{{ .Env.BUILD_NUMBER }}{{ else }}dev{{ end }}
 builds:
-  - env:
-      - CGO_ENABLED=0
+  - mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - '-s -w -X main.version={{.Version}} -X main.commit={{.FullCommit}} -X main.date={{.Date}} -X main.branch={{.Branch}} -X main.build={{.Env.BUILD_NUMBER}}'
     goos:
+      - freebsd
+      - windows
       - linux
       - darwin
-      - windows
-      - freebsd
     goarch:
       - amd64
-      - 386
+      - '386'
       - arm
       - arm64
-    flags: -trimpath
-    ldflags: -s -w
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
 archives:
   - format: zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
-  name_template: "SHA256SUMS"
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
 signs:
   - artifacts: checksum
-    args: ["--output", "${signature}", "--detach-sign", "${artifact}"]
-    signature: "${artifact}.sig"
+    args:
+      - "--local-user"
+      - "${GPG_KEY_ID}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
     ids:
       - "${GPG_KEY_ID}"
 release:
+  extra_files:
+    - glob: 'terraform-registry-manifest.json'
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+# If you want to manually examine the release before its live, uncomment this line:
+# draft: true
   github:
-    owner: ThalesGroup
-    name: terraform-provider-ciphertrust
-  prerelease: true
+      owner: ThalesGroup
+      name: terraform-provider-ciphertrust
+changelog:
+  disable: true
+dist: build/dist
