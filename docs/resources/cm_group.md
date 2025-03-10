@@ -24,16 +24,16 @@ terraform {
     # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
       # The source of the provider
-      source = "thalesgroup.com/oss/ciphertrust"
+      source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
+	# The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -41,20 +41,12 @@ provider "ciphertrust" {
 
   # Password for authenticating with the CipherTrust appliance
   password = "ChangeMe101!"
-
-  bootstrap = "no"
 }
 
 # Add a resource of type CM Group with the name TestGroup
 resource "ciphertrust_cm_group" "testGroup" {
   # Name of the group to be created on CM
   name = "TestGroup"
-}
-
-# Output the unique ID of the created CM group
-output "group_id" {
-    # The value will be the ID of the CM group
-    value = ciphertrust_cm_group.testGroup.id
 }
 
 # Output the name of the created CM group

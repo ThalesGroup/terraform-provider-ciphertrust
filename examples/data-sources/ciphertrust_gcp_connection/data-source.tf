@@ -4,30 +4,28 @@
 # about the GCP (Google Cloud Platform) connection.
 
 terraform {
-  # Specify required providers
+  # Define the required providers for the configuration
   required_providers {
+    # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
-      # Source location for the CipherTrust provider
-      source = "thalesgroup.com/oss/ciphertrust"
-      # Version of the provider to be used
-      version = "1.0.0"
+      # The source of the provider
+      source = "ThalesGroup/CipherTrust"
+      # Version of the provider to use
+      version = "1.0.0-pre3"
     }
   }
 }
 
-# Configuration for the CipherTrust provider for authentication
+# Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance
-  # Replace with the actual address of your CipherTrust instance
+	# The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
-  # Username to authenticate against the CipherTrust appliance
+  # Username for authenticating with the CipherTrust appliance
   username = "admin"
 
-  # Password to authenticate against the CipherTrust appliance
-  password = "SamplePassword@1"
-
-  bootstrap = "no"
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
 }
 
 # Data source for retrieving GCP connection details

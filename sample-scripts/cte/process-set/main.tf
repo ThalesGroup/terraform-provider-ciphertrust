@@ -1,16 +1,16 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source = "thalesgroup.com/oss/ciphertrust"
-      version = "1.0.0"
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
     }
   }
 }
+
 provider "ciphertrust" {
-  address = "https://52.87.160.91"
-  username = "admin"
-  password = "SamplePassword@1"
-  bootstrap = "no"
+	address = "https://10.10.10.10"
+	username = "admin"
+	password = "ChangeMe101!"
 }
 
 resource "ciphertrust_cte_process_set" "process_set" {

@@ -1,10 +1,10 @@
 terraform {
-	required_providers {
-	  ciphertrust = {
-		source = "thalesgroup.com/oss/ciphertrust"
-		version = "1.0.0"
-	  }
-	}
+  required_providers {
+    ciphertrust = {
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
+    }
+  }
 }
 provider "ciphertrust" {
 	address = "https://192.168.2.158"

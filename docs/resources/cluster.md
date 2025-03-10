@@ -24,9 +24,9 @@ terraform {
     # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
       # The source of the provider
-      source = "thalesgroup.com/oss/ciphertrust"
+      source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0"
+      version = "1.0.0-pre3"
     }
   }
 }
@@ -41,8 +41,6 @@ provider "ciphertrust" {
 
   # Password for authenticating with the CipherTrust appliance
   password = "ChangeMe101!"
-
-  bootstrap = "no"
 }
 
 # Add a resource of type CM Cluster with three nodes

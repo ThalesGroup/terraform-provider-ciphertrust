@@ -1,25 +1,26 @@
 terraform {
+  # Define the required providers for the configuration
   required_providers {
-    # Defining the 'ciphertrust' provider, which will be sourced from thalesgroup.com
+    # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
-      source = "thalesgroup.com/oss/ciphertrust"  # Source of the provider
-      version = "1.0.0"  # Version of the provider to use
+      # The source of the provider
+      source = "ThalesGroup/CipherTrust"
+      # Version of the provider to use
+      version = "1.0.0-pre3"
     }
   }
 }
 
-# Define the CipherTrust provider configuration
+# Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # Address of the CipherTrust server where the API is hosted
-  address = "https://10.10.10.10"  # Replace with your CipherTrust server address
+	# The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
 
-  # The username used to authenticate with the CipherTrust server
-  username = "admin"  # Replace with your actual username
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
 
-  # The password used to authenticate with the CipherTrust server
-  password = "SamplePassword_1"  # Replace with your actual password
-
-  bootstrap = "no"
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
 }
 
 # Define a resource for managing the Prometheus integration in CipherTrust

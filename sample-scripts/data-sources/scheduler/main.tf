@@ -1,17 +1,16 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source = "thalesgroup.com/oss/ciphertrust"
-      version = "1.0.0"
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 provider "ciphertrust" {
-  address = "https://10.10.10.10"
-  username = "admin"
-  password = "Sample@34"
-  bootstrap = "no"
+	address = "https://10.10.10.10"
+	username = "admin"
+	password = "ChangeMe101!"
 }
 
 data "ciphertrust_scheduler_list" "jobs" {

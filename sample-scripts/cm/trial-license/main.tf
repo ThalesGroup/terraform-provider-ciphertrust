@@ -1,17 +1,17 @@
 terraform {
-	required_providers {
-	  ciphertrust = {
-		source = "thalesgroup.com/oss/ciphertrust"
-		version = "1.0.0"
-	  }
-	}
+  required_providers {
+    ciphertrust = {
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
+    }
   }
-  provider "ciphertrust" {
-	address = "https://192.168.2.137"
+}
+
+provider "ciphertrust" {
+	address = "https://10.10.10.10"
 	username = "admin"
-	password = "ChangeIt01!"
-	bootstrap = "no"
-  }
+	password = "ChangeMe101!"
+}
 
   resource "ciphertrust_trial_license" "trial_license" {
   }

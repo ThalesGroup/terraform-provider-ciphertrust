@@ -25,25 +25,23 @@ terraform {
     # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
       # The source of the provider
-      source = "thalesgroup.com/oss/ciphertrust"
+      source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
-  address = "https://52.87.160.91"
+	# The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
   username = "admin"
 
   # Password for authenticating with the CipherTrust appliance
-  password = "SamplePassword@1"
-
-  bootstrap = "no"
+  password = "ChangeMe101!"
 }
 
 # Define an azure connection resource with CipherTrust
@@ -112,7 +110,7 @@ output "azure_connection_name" {
 - `azure_stack_connection_type` (String) Azure stack connection type
 
 	Options:
-	
+
 		AAD
 		ADFS
 - `azure_stack_server_cert` (String) Azure stack server certificate.The certificate should be provided in \n (newline) format.
@@ -124,7 +122,7 @@ output "azure_connection_name" {
 - `cloud_name` (String) Name of the cloud.
 
 	Options:
-	
+
 		AzureCloud
 		AzureChinaCloud
 		AzureUSGovernment

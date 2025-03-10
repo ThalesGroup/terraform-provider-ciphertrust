@@ -25,25 +25,23 @@ terraform {
     # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
       # The source of the provider
-      source = "thalesgroup.com/oss/ciphertrust"
+      source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
-  address = "https://52.87.160.91"
+	# The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
   username = "admin"
 
   # Password for authenticating with the CipherTrust appliance
-  password = "SamplePassword@1"
-
-  bootstrap = "no"
+  password = "ChangeMe101!"
 }
 
 # Define an SCP connection resource with CipherTrust
@@ -61,7 +59,7 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   description = "a description of the connection"
 
   # Host IP address or domain of the SCP server
-  host = "1.2.3.55"
+  host = "10.10.10.10"
 
   # Port used for SCP communication (default SCP port is 22)
   port = 22

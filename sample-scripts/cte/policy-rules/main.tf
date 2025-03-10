@@ -1,19 +1,17 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source  = "thales.com/terraform/ciphertrust"
-      version = "0.9.0-beta4"
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 provider "ciphertrust" {
-	address = "https://192.168.2.137"
+	address = "https://10.10.10.10"
 	username = "admin"
-	password = "ChangeIt01!"
-	bootstrap = "no"
+	password = "ChangeMe101!"
 }
-
 
 # Add standard policy rule
 resource "ciphertrust_cte_policy" "std_policy" {

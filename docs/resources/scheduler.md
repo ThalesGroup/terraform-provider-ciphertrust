@@ -15,24 +15,28 @@ description: |-
 ```terraform
 # Specify the Terraform block to define required providers and their versions.
 terraform {
+  # Define the required providers for the configuration
   required_providers {
+    # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
-      # Define the provider source and version.
-      source = "thalesgroup.com/oss/ciphertrust"
-      version = "1.0.0"
+      # The source of the provider
+      source = "ThalesGroup/CipherTrust"
+      # Version of the provider to use
+      version = "1.0.0-pre3"
     }
   }
 }
 
-# Configure the CipherTrust provider with connection details.
+# Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # Address of the CipherTrust Manager.
-  address = "https://54.159.702.196"
-  # Username for authentication.
+	# The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
   username = "admin"
-  # Password for authentication.
-  password = "SamplePass@12"
-  bootstrap = "no"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
 }
 
 
@@ -51,7 +55,7 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   description = "a description of the connection"
 
   # Host IP address or domain of the SCP server
-  host = "1.2.3.55"
+  host = "10.10.10.10"
 
   # Port used for SCP communication (default SCP port is 22)
   port = 22
@@ -188,5 +192,5 @@ For CTE policies, valid resourceQuery parameter values are the same as query par
 
 For Customer fragments, valid resourceQuery parameter values are 'ids' and 'names' of Customer fragments. To backup specific customer fragments using ids, use {"ids":["370c4373-2675-4aa1-8cc7-07a9f95a5861", "4e1b9dec-2e38-40d7-b4d6-244043200546"]}. To backup specific customer fragments using names, use {"names":["customerFragment1", "customerFragment2"]}.
 
-Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines. 
+Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
 For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"

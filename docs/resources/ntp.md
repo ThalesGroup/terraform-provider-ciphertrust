@@ -24,16 +24,16 @@ terraform {
     # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
       # The source of the provider
-      source = "thalesgroup.com/oss/ciphertrust"
+      source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0"
+      version = "1.0.0-pre3"
     }
   }
 }
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
+	# The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -41,8 +41,6 @@ provider "ciphertrust" {
 
   # Password for authenticating with the CipherTrust appliance
   password = "ChangeMe101!"
-
-  bootstrap = "no"
 }
 
 # Add a resource of type NTP server with the host time1.google.com
@@ -52,8 +50,8 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 }
 
 # Output the unique ID of the created NTP resource
-output "ntp_server_id" {
-	value = ciphertrust_ntp.ntp_server_1.id
+output "ntp_server_host" {
+	value = ciphertrust_ntp.ntp_server_1.host
 }
 ```
 

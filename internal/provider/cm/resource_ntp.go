@@ -52,6 +52,7 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"key": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Symmetric key value to be used for authenticated NTP servers",
 			},
 			"key_type": schema.StringAttribute{
@@ -103,7 +104,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostDataV2(ctx, id, common.URL_DOMAIN, payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -113,6 +114,8 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.Host = types.StringValue(gjson.Get(response, "host").String())
+	plan.Key = types.StringValue(gjson.Get(response, "key").String())
 
 	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
 
@@ -135,7 +138,7 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
+	response, err := r.client.ReadDataByParam(ctx, id, state.Host.ValueString(), common.URL_NTP)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -146,9 +149,8 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.Host = types.StringValue(gjson.Get(response, "name").String())
+	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.Key = types.StringValue(gjson.Get(response, "key").String())
-	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -174,7 +176,7 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	// Delete existing license
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.ID.ValueString())
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_NTP, state.Host.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {

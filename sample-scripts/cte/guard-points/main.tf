@@ -1,22 +1,19 @@
 terraform {
-	required_providers {
-	  ciphertrust = {
-		source = "thalesgroup.com/oss/ciphertrust"
-		version = "1.0.0"
-	  }
-	}
+  required_providers {
+    ciphertrust = {
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
+    }
+  }
 }
 
 provider "ciphertrust" {
-    address = "https://192.168.2.158"
-    username = "admin"
-    password = "ChangeIt01!"
-    bootstrap = "no"
-    alias = "primary"
+	address = "https://10.10.10.10"
+	username = "admin"
+	password = "ChangeMe101!"
 }
 
 resource "ciphertrust_cte_policy" "standard_policy" {
-    provider        = ciphertrust.primary
     name            = "TF_CTE_Policy"
     policy_type     = "Standard"
     description     = "Created via TF"
@@ -30,7 +27,6 @@ resource "ciphertrust_cte_policy" "standard_policy" {
 }
 
 resource "ciphertrust_cte_client" "cte_client" {
-    provider                    = ciphertrust.primary
     name                        = "TF_CTE_Client"
     client_type                 = "FS"
     registration_allowed        = true
@@ -43,7 +39,6 @@ resource "ciphertrust_cte_client" "cte_client" {
 }
 
 resource "ciphertrust_cte_guardpoint" "dir_auto_gp" {
-  provider = ciphertrust.primary
   guard_paths = ["/opt/path1"]
   client_id = ciphertrust_cte_client.cte_client.id
   guard_point_params = {

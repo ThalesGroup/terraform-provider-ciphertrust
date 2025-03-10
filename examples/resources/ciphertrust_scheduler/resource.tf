@@ -1,23 +1,27 @@
 # Specify the Terraform block to define required providers and their versions.
 terraform {
+  # Define the required providers for the configuration
   required_providers {
+    # CipherTrust provider for managing CipherTrust resources
     ciphertrust = {
-      # Define the provider source and version.
-      source = "thalesgroup.com/oss/ciphertrust"
-      version = "1.0.0"
+      # The source of the provider
+      source = "ThalesGroup/CipherTrust"
+      # Version of the provider to use
+      version = "1.0.0-pre3"
     }
   }
 }
 
-# Configure the CipherTrust provider with connection details.
+# Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-  # Address of the CipherTrust Manager.
+	# The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
-  # Username for authentication.
+
+  # Username for authenticating with the CipherTrust appliance
   username = "admin"
-  # Password for authentication.
-  password = "SamplePass@12"
-  bootstrap = "no"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
 }
 
 

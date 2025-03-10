@@ -48,4 +48,5 @@ const (
 	URL_CM_PROXY              = "api/v1/configs/proxy"
 	URL_CM_PASSWORD_POLICY    = "api/v1/usermgmt/pwdpolicies"
 	URL_CM_LOG_FORWARDS       = "api/v1/configs/log-forwarders"
+	URL_NTP                   = "api/v1/system/ntp/servers"
 )

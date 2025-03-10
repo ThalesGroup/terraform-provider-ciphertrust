@@ -1,13 +1,17 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source  = "thalesgroup.com/oss/ciphertrust"
-      version = "1.0.0"
+      source = "ThalesGroup/CipherTrust"
+      version = "1.0.0-pre3"
     }
   }
 }
 
-provider "ciphertrust" {}
+provider "ciphertrust" {
+	address = "https://10.10.10.10"
+	username = "admin"
+	password = "ChangeMe101!"
+}
 
 resource "ciphertrust_hsm_root_of_trust_setup" "cm_hsm_rot_setup" {
   type         = "lunatct"
