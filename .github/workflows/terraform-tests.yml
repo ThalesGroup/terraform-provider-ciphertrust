@@ -30,6 +30,7 @@ jobs:
           CIPHERTRUST_PASSWORD: ${{ secrets[format('CIPHERTRUST_PASSWORD_{0}', matrix.instance)] }}
           CIPHERTRUST_BOOTSTRAP: ${{ secrets[format('CIPHERTRUST_BOOTSTRAP_{0}', matrix.instance)] }}
         run: |
+          echo "Matrix instance: ${{ matrix.instance }}"
           echo "CIPHERTRUST_ADDRESS: $CIPHERTRUST_ADDRESS"
           echo "CIPHERTRUST_USERNAME: $CIPHERTRUST_USERNAME"
           echo "CIPHERTRUST_PASSWORD: $CIPHERTRUST_PASSWORD"
