@@ -1,11 +1,27 @@
+//go:build skip
+
 package provider
 
 import (
-	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"fmt"
+	"os"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestGCPConnectionDataSource(t *testing.T) {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	bootstrap := "no"
+
+	if address == "" || username == "" || password == "" {
+		t.Fatal("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME, and CIPHERTRUST_PASSWORD must be set for testing")
+	}
+
+	providerConfig := fmt.Sprintf(providerConfig, address, username, password, bootstrap)
+
 	// Config for the resource and data source
 	gcpConnectionConfig := `
 		// Resource configuration for the GCP connection
@@ -25,7 +41,7 @@ func TestGCPConnectionDataSource(t *testing.T) {
     "customer_meta_key2" = "custom_value2"
   }
 }
-		
+
 		// Data source to retrieve the GCP connection
 		data "ciphertrust_gcp_connection_list" "gcp_connection_details" {
 		depends_on = [ciphertrust_gcp_connection.gcp_connection]

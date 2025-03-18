@@ -1,12 +1,25 @@
 package provider
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestCiphertrustSCPConnectionDataSource(t *testing.T) {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	bootstrap := "no"
+
+	if address == "" || username == "" || password == "" {
+		t.Fatal("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME, and CIPHERTRUST_PASSWORD must be set for testing")
+	}
+
+	providerConfig := fmt.Sprintf(providerConfig, address, username, password, bootstrap)
+
 	// Config for the resource and data source
 	scpConnectionConfig := `
 		// Resource configuration for the SCP connection
@@ -25,7 +38,7 @@ func TestCiphertrustSCPConnectionDataSource(t *testing.T) {
 		  }
 		  products = ["backup/restore"]
 		}
-		
+
 		// Data source to retrieve the SCP connection
 		data "ciphertrust_scp_connection_list" "scp_connection_details" {
 		depends_on = [ciphertrust_scp_connection.scp_connection]

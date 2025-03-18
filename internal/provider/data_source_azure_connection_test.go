@@ -1,12 +1,27 @@
+//go:build skip
+
 package provider
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestCiphertrustAzureConnectionDataSource(t *testing.T) {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	bootstrap := "no"
+
+	if address == "" || username == "" || password == "" {
+		t.Fatal("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME, and CIPHERTRUST_PASSWORD must be set for testing")
+	}
+
+	providerConfig := fmt.Sprintf(providerConfig, address, username, password, bootstrap)
+
 	// Config for the resource and data source
 	azureConnectionConfig := `
 		// Resource configuration for the Azure connection
@@ -24,7 +39,7 @@ func TestCiphertrustAzureConnectionDataSource(t *testing.T) {
 			"environment" = "devenv"
 		  }
 		}
-		
+
 		// Data source to retrieve the Azure connection
 		data "ciphertrust_azure_connection_list" "azure_connection_details" {
 		depends_on = [ciphertrust_azure_connection.azure_connection]

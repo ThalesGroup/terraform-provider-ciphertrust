@@ -1,11 +1,27 @@
+//go:build skip
+
 package provider
 
 import (
-	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"fmt"
+	"os"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceHSMRootOfTrustSetupLuna(t *testing.T) {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	bootstrap := "no"
+
+	if address == "" || username == "" || password == "" {
+		t.Fatal("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME, and CIPHERTRUST_PASSWORD must be set for testing")
+	}
+
+	providerConfig := fmt.Sprintf(providerConfig, address, username, password, bootstrap)
+
 	// Remove skip after actual HSM data is used in test
 	t.Skip("Skipped!! dummy data in resource parameters")
 
