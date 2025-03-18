@@ -1,4 +1,4 @@
-name: CipherTrust Terraform Provider Tests
+name: Run CipherTrust Provider Tests
 
 on:
   push:
