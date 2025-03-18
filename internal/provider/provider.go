@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	adp "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/adp"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
@@ -411,5 +412,9 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMProperty,
 		cm.NewResourceCMProxy,
 		cm.NewResourceCMSyslog,
+		adp.NewResourceADPAccessPolicy,
+		adp.NewResourceADPProtectionPolicy,
+		adp.NewResourceADPClientProfile,
+		adp.NewResourceDPGPolicy,
 	}
 }
