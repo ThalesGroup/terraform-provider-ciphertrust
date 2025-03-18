@@ -1,4 +1,4 @@
-name: Terraform Provider Tests
+name: CipherTrust Terraform Provider Tests
 
 on:
   push:
