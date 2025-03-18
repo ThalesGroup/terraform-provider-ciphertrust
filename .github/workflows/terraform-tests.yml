@@ -25,6 +25,7 @@ jobs:
 
       - name: Run tests for Ciphertrust instance ${{ matrix.instance }}
         env:
+          TF_ACC: 1
           CIPHERTRUST_ADDRESS: ${{ secrets[format('CIPHERTRUST_ADDRESS_{0}', matrix.instance)] }}
           CIPHERTRUST_USERNAME: ${{ secrets[format('CIPHERTRUST_USERNAME_{0}', matrix.instance)] }}
           CIPHERTRUST_PASSWORD: ${{ secrets[format('CIPHERTRUST_PASSWORD_{0}', matrix.instance)] }}
