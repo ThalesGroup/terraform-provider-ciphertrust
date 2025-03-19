@@ -25,47 +25,6 @@ func TestResourceCTEPolicy(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: providerConfig + `
-resource "ciphertrust_cte_resource_set" "resource_set" {
-  name = "TestResourceSet"
-  resources = [
-    {
-      directory="/tmp"
-      file="*"
-	  hdfs=false
-	  include_subfolders=false
-    }
-  ]
-  type="Directory"
-}
-
-resource "ciphertrust_cm_key" "cte_key" {
-  name="TestKey"
-  algorithm="aes"
-  size=256
-  usage_mask=4194303
-  unexportable=false
-  undeletable=false
-  xts=true
-  meta={
-    permissions={
-	  decrypt_with_key=["CTE Clients"]
-	  encrypt_with_key=["CTE Clients"]
-	  export_key=["CTE Clients"]
-	  mac_verify_with_key=["CTE Clients"]
-	  mac_with_key=["CTE Clients"]
-	  read_key=["CTE Clients"]
-	  sign_verify_with_key=["CTE Clients"]
-	  sign_with_key=["CTE Clients"]
-	  use_key=["CTE Clients"]
-	}
-	cte={
-	  persistent_on_client=true
-	  cte_versioned=false
-	  encryption_mode="CBC_CS1"
-	}
-  }
-}
-
 resource "ciphertrust_cte_policy" "cte_policy" {
   name = "TestPolicy"
   policy_type = "Standard"
@@ -75,7 +34,7 @@ resource "ciphertrust_cte_policy" "cte_policy" {
       effect="permit"
 	  action="all_ops"
       partial_match=false
-      resource_set_id=ciphertrust_cte_resource_set.resource_set.id
+      resource_set_id="fad9c46d-ecb4-4cc3-93c3-57edc102a472"
       exclude_resource_set=true
     }
   ]

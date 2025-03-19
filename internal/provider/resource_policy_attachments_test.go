@@ -39,7 +39,7 @@ resource "ciphertrust_policies" "policy" {
 
 resource "ciphertrust_policy_attachments" "policy_attachment" {
   	policy = "mypolicy"
-	principalSelector = {
+	principal_selector = {
 		acct = "pers-jsmith"
 		user = "apitestuser"
 	}

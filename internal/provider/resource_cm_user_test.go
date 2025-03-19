@@ -26,7 +26,7 @@ func TestResourceCMUser(t *testing.T) {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_cm_user" "testUser" {
-  name="frank"
+  full_name="frank"
   email="frank@local"
   username="frank"
   password="ChangeIt01!"

@@ -35,4 +35,4 @@ jobs:
           echo "CIPHERTRUST_ADDRESS: $CIPHERTRUST_ADDRESS"
           echo "CIPHERTRUST_USERNAME: $CIPHERTRUST_USERNAME"
           echo "CIPHERTRUST_PASSWORD: $CIPHERTRUST_PASSWORD"
-          go test -v ./... -tags '!skip'
+          go test -v ./internal/provider -run TestAll

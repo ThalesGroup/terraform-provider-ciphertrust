@@ -53,8 +53,8 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.PasswordPolicy", "id"),
-					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.CustomPasswordPolicy", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.PasswordPolicy", "created_at"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.CustomPasswordPolicy", "created_at"),
 				),
 			},
 			{
@@ -87,8 +87,8 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.PasswordPolicy", "id"),
-					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.CustomPasswordPolicy", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.PasswordPolicy", "updated_at"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.CustomPasswordPolicy", "updated_at"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase

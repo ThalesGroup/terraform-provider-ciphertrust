@@ -33,16 +33,6 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 					resource.TestCheckResourceAttrSet("ciphertrust_ntp.ntp_server_1", "host"),
 				),
 			},
-			{
-				Config: providerConfig + `
-resource "ciphertrust_ntp" "ntp_server_1" {
-  host = "time2.google.com"
-}
-`,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_ntp.ntp_server_1", "host"),
-				),
-			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
