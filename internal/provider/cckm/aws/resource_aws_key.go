@@ -465,7 +465,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						},
 					},
 				},
-			}, //"key_policy": schema.ListNestedBlock{
+			},
 			"replicate_key": schema.ListNestedBlock{
 				Description: "Replicate key parameters.",
 				Validators: []validator.List{
@@ -518,7 +518,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Default:     booldefault.StaticBool(false),
 							Description: "Enable key expiration. Default is false.",
 						},
-						"source_key_tier": schema.StringAttribute{ //	Computed:    true,
+						"source_key_tier": schema.StringAttribute{
 							Computed:    true,
 							Optional:    true,
 							Default:     stringdefault.StaticString("local"),
@@ -1813,12 +1813,10 @@ func (r *resourceAWSKey) setAliases(response string, state *AWSKeyTFSDK, diags *
 func (r *resourceAWSKey) setPolicyTemplateTag(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	state.PolicyTemplateTag = types.MapNull(types.StringType)
 	tags := gjson.Get(response, "aws_param.Tags").Array()
-	//	if tags != nil {
 	for _, tag := range tags {
 		tagKey := gjson.Get(tag.String(), "TagKey").String()
 		if tagKey == PolicyTemplateTagKey {
 			tagValue := gjson.Get(tag.String(), "TagValue").String()
-			//*policyTemplateTag = types.StringValue(tagKey)
 			elements := map[string]attr.Value{
 				tagKey: types.StringValue(tagValue),
 			}
