@@ -73,6 +73,14 @@ func (d *dataSourceAWSAccountDetails) Schema(_ context.Context, _ datasource.Sch
 				Optional:    true,
 				Description: "Validate that the AWS account is already managed by a connection.",
 			},
+			"assume_role_arn": schema.StringAttribute{
+				Optional:    true,
+				Description: "Amazon Resource Name (ARN) of the role to be assumed.",
+			},
+			"assume_role_external_id": schema.StringAttribute{
+				Optional:    true,
+				Description: "External ID for the role to be assumed. This parameter can be specified only with 'assume_role_arn'.",
+			},
 		},
 	}
 }
