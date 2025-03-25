@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -245,6 +246,14 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		productsArr = append(productsArr, product.ValueString())
 	}
 	payload.Products = productsArr
+
+	// Backwards compatability
+	if payload.SecretAccessKey == "" {
+		payload.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	}
+	if payload.AccessKeyID == "" {
+		payload.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
+	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
