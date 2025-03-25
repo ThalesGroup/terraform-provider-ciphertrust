@@ -69,7 +69,8 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"hmac-sha512",
 						"seed",
 						"aria",
-						"opaque"}...),
+						"opaque",
+						"AES", "EC", "RSA"}...),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
@@ -1047,7 +1048,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostData(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON, "id")
+	response, err := r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(

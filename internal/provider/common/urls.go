@@ -34,11 +34,9 @@ const (
 	URL_SCHEDULER_JOB_CONFIGS = "api/v1/scheduler/job-configs"
 	// CCKM Endpoints
 	URL_AWS_CONNECTION        = "api/v1/connectionmgmt/services/aws/connections"
-	URL_AWS_KMS               = "api/v1/cckm/aws/kms"
 	URL_AWS_XKS               = "api/v1/cckm/aws/custom-key-stores"
 	URL_HSM_SETUP             = "api/v1/system/hsm/setup"
 	URL_HSM_Server            = "api/v1/system/hsm/servers"
-	URL_AWS_KEY               = "api/v1/cckm/aws/keys"
 	URL_GCP_CONNECTION        = "api/v1/connectionmgmt/services/gcp/connections"
 	URL_AZURE_CONNECTION      = "api/v1/connectionmgmt/services/azure/connections"
 	URL_CM_PROPERTIES         = "api/v1/configs/properties"

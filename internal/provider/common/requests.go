@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -68,6 +69,23 @@ func (c *Client) GetAll(ctx context.Context, uuid string, endpoint string) (stri
 	responseJson := gjson.Get(string(body), "resources").String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAll]["+uuid+"]")
 	return responseJson, nil
+}
+
+func (c *Client) ListWithFilters(ctx context.Context, uuid string, endpoint string, filters url.Values) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAll][Request ID: "+uuid+
+		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s?%s", c.CipherTrustURL, endpoint, filters.Encode()), nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		return "", err
+	}
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		return "", err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAll]["+uuid+"]")
+	return string(body), nil
 }
 
 func (c *Client) GetById(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
@@ -145,6 +163,24 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 	}
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		return "", err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
+
+	return string(body), nil
+}
+func (c *Client) PostNoData(ctx context.Context, uuid string, endpoint string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
 		return "", err
