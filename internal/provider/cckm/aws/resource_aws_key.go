@@ -601,7 +601,6 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 			return
 		}
 	}
-
 	if plan.AutoRotate.ValueBool() {
 		response = r.enableDisableAutoRotation(ctx, uid, &plan, response, Creating, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -622,6 +621,14 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	region := gjson.Get(response, "region").String()
 	plan.ID = types.StringValue(r.encodeTerraformResourceID(region, kid))
 	keyID := plan.KeyID.ValueString()
+	response, err := r.client.GetById(ctx, uid, keyID, AWSKeysURL)
+	if err != nil {
+		msg := "Error reading 'ciphertrust_aws_key'."
+		details := map[string]interface{}{"key_id": keyID, "error": err.Error()}
+		tflog.Error(ctx, msg, details)
+		resp.Diagnostics.AddError(msg, apiDetail(details))
+		return
+	}
 	r.setKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error creating 'ciphertrust_aws_key', failed to set resource state."
@@ -723,6 +730,14 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		if resp.Diagnostics.HasError() {
 			return
 		}
+	}
+	response, err = r.client.GetById(ctx, uid, keyID, AWSKeysURL)
+	if err != nil {
+		msg := "Error reading 'ciphertrust_aws_key'."
+		details := map[string]interface{}{"key_id": keyID, "error": err.Error()}
+		tflog.Error(ctx, msg, details)
+		resp.Diagnostics.AddError(msg, apiDetail(details))
+		return
 	}
 	r.setKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
