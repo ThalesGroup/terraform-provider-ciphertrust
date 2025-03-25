@@ -15,6 +15,7 @@ type AWSParamTFSDK struct {
 	XKSProxyURIEndpoint            types.String `tfsdk:"xks_proxy_uri_endpoint"`
 	XKSProxyVPCEndpointServiceName types.String `tfsdk:"xks_proxy_vpc_endpoint_service_name"`
 }
+
 type LocalHostedParamsTFSDK struct {
 	Blocked          types.Bool   `tfsdk:"blocked"`
 	HealthCheckKeyID types.String `tfsdk:"health_check_key_id"`
@@ -23,6 +24,7 @@ type LocalHostedParamsTFSDK struct {
 	PartitionID      types.String `tfsdk:"partition_id"`
 	SourceKeyTier    types.String `tfsdk:"source_key_tier"`
 }
+
 type AWSCustomKeyStoreTFSDK struct {
 	ID                      types.String           `tfsdk:"id"`
 	AccessKeyID             types.String           `tfsdk:"access_key_id"`
@@ -43,21 +45,6 @@ type AWSCustomKeyStoreTFSDK struct {
 	UpdateOpType            types.String           `tfsdk:"update_op_type"`
 }
 
-//	type AWSKeyParamTagTFSDK struct {
-//		TagKey   types.String `tfsdk:"tag_key"`
-//		TagValue types.String `tfsdk:"tag_values"`
-//	}
-type AWSKeyParamTFSDK struct {
-	Alias                          types.String `tfsdk:"alias"`
-	BypassPolicyLockoutSafetyCheck types.Bool   `tfsdk:"bypass_policy_lockout_safety_check"`
-	CustomerMasterKeySpec          types.String `tfsdk:"customer_master_key_spec"`
-	Description                    types.String `tfsdk:"description"`
-	KeyUsage                       types.String `tfsdk:"key_usage"`
-	MultiRegion                    types.Bool   `tfsdk:"multi_region"`
-	Origin                         types.String `tfsdk:"origin"`
-	Policy                         types.Map    `tfsdk:"policy"`
-	Tags                           types.Map    `tfsdk:"tags"`
-}
 type AWSKeyEnableRotationTFSDK struct {
 	JobConfigID                           types.String `tfsdk:"job_config_id"`
 	AutoRotateDisableEncrypt              types.Bool   `tfsdk:"disable_encrypt"`
@@ -65,12 +52,14 @@ type AWSKeyEnableRotationTFSDK struct {
 	AutoRotateKeySource                   types.String `tfsdk:"key_source"`
 	AutoRotatePartitionID                 types.String `tfsdk:"hsm_partition_id"`
 }
+
 type AWSKeyImportKeyMaterialTFSDK struct {
 	SourceKeyName types.String `tfsdk:"source_key_name"`
 	SourceKeyTier types.String `tfsdk:"source_key_tier"`
 	KeyExpiration types.Bool   `tfsdk:"key_expiration"`
 	ValidTo       types.String `tfsdk:"valid_to"`
 }
+
 type AWSKeyPolicyCommonTFSDK struct {
 	ExternalAccounts types.List   `tfsdk:"external_accounts"`
 	KeyAdmins        types.List   `tfsdk:"key_admins"`
@@ -79,10 +68,12 @@ type AWSKeyPolicyCommonTFSDK struct {
 	KeyUsersRoles    types.List   `tfsdk:"key_users_roles"`
 	Policy           types.String `tfsdk:"policy"`
 }
+
 type AWSKeyPolicyTFSDK struct {
 	AWSKeyPolicyCommonTFSDK
 	PolicyTemplate types.String `tfsdk:"policy_template"`
 }
+
 type AWSKeyPolicyTemplateTFSDK struct {
 	ID         types.String `tfsdk:"id"`
 	Kms        types.String `tfsdk:"kms"`
@@ -169,6 +160,7 @@ type AWSKeyTFSDK struct {
 	UpdatedAt                      types.String               `tfsdk:"updated_at"`
 	ValidTo                        types.String               `tfsdk:"valid_to"`
 }
+
 type AWSAccountDetailsModelTFSDK struct {
 	Connection           types.String `tfsdk:"aws_connection"`
 	AssumeRoleArn        types.String `tfsdk:"assume_role_arn"`
@@ -187,6 +179,7 @@ type AWSParamJSON struct {
 	XKSProxyURIEndpoint            string `json:"xks_proxy_uri_endpoint"`
 	XKSProxyVPCEndpointServiceName string `json:"xks_proxy_vpc_endpoint_service_name"`
 }
+
 type LocalHostedParamsJSON struct {
 	Blocked          bool   `json:"blocked"`
 	HealthCheckKeyID string `json:"health_check_key_id"`
@@ -195,6 +188,7 @@ type LocalHostedParamsJSON struct {
 	PartitionID      string `json:"partition_id"`
 	SourceKeyTier    string `json:"source_key_tier"`
 }
+
 type AWSCustomKeyStoreJSON struct {
 	ID                      string                 `json:"id"`
 	AWSParams               *AWSParamJSON          `json:"aws_param"`
@@ -223,6 +217,7 @@ type CommonAWSParamsJSON struct {
 	Policy json.RawMessage      `json:"Policy"`
 	Tags   []AWSKeyParamTagJSON `json:"Tags"`
 }
+
 type AWSKeyParamJSON struct {
 	CommonAWSParamsJSON
 	Origin string `json:"Origin"`
@@ -238,14 +233,17 @@ type CommonAWSKeyCreatePayloadJSON struct {
 	KeyUsersRoles    *[]string `json:"key_users_roles"`
 	PolicyTemplate   *string   `json:"policytemplate"`
 }
+
 type CreateAWSKeyPayloadJSON struct {
 	CommonAWSKeyCreatePayloadJSON
 	AWSParam AWSKeyParamJSON `json:"aws_param"`
 }
+
 type UploadAWSKeyParamJSON struct {
 	CommonAWSParamsJSON
 	ValidTo string `json:"ValidTo"`
 }
+
 type UploadAWSKeyPayloadJSON struct {
 	CommonAWSKeyCreatePayloadJSON
 	AWSParam            *UploadAWSKeyParamJSON `json:"aws_param"`
@@ -253,12 +251,14 @@ type UploadAWSKeyPayloadJSON struct {
 	KeyExpiration       bool                   `json:"key_expiration"`
 	SourceKeyTier       string                 `json:"source_key_tier"`
 }
+
 type AWSKeyImportKeyPayloadJSON struct {
 	SourceKeyID   string `tfsdk:"source_key_identifier"`
 	SourceKeyTier string `tfsdk:"source_key_tier"`
 	KeyExpiration bool   `tfsdk:"key_expiration"`
 	ValidTo       string `tfsdk:"ValidTo"`
 }
+
 type AWSEnableKeyRotationJobPayloadJSON struct {
 	JobConfigID                           string `json:"job_config_id"`
 	AutoRotateDisableEncrypt              bool   `json:"auto_rotate_disable_encrypt"`
@@ -268,6 +268,7 @@ type AWSEnableKeyRotationJobPayloadJSON struct {
 	AutoRotateKeySource                   string `json:"auto_rotate_key_source"`
 	AutoRotatePartitionID                 string `json:"auto_rotate_partition_id"`
 }
+
 type AWSKeyJSON struct {
 	ID                                    string               `json:"id"`
 	KMS                                   string               `json:"kms"`
