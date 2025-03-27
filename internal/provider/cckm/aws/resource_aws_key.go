@@ -67,6 +67,7 @@ const (
 	UpdateKeyPolicyURL     = "api/v1/cckm/aws/keys/%s/policy"
 	UpdatePrimaryRegionURL = "api/v1/cckm/aws/keys/%s/update-primary-region"
 	UploadKeyURL           = "api/v1/cckm/aws/upload-key"
+	DisableRotationJobURL  = "api/v1/cckm/aws/keys/%s/disable-rotation-job"
 )
 
 func NewResourceAWSKey() resource.Resource {
@@ -176,37 +177,6 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Description: "Enable or disable the key. Default is true.",
 				Computed:    true,
 				Default:     booldefault.StaticBool(true),
-			},
-			"enable_rotation": schema.SingleNestedAttribute{
-				Optional: true,
-				PlanModifiers: []planmodifier.Object{
-					common.NewObjectUseStateForUnknown(),
-				},
-				Description: "Enable the key for scheduled rotation job.",
-				Attributes: map[string]schema.Attribute{
-					"job_config_id": schema.StringAttribute{
-						Required:    true,
-						Description: "ID of the scheduler configuration job that will schedule the key rotation.",
-					},
-					"key_source": schema.StringAttribute{
-						Required:    true,
-						Description: "Key source from where the key will be uploaded. Current option is local, the key will be rotated with a CipherTrust key.",
-						Validators: []validator.String{
-							stringvalidator.OneOf([]string{"local",
-								"dsm",
-								"hsm-luna",
-								"external-cm"}...),
-						},
-					},
-					"disable_encrypt": schema.BoolAttribute{
-						Optional:    true,
-						Description: "Disable encryption on the old key.",
-					},
-					"disable_encrypt_on_all_accounts": schema.BoolAttribute{
-						Optional:    true,
-						Description: "Disable encryption permissions on the old key for all the accounts. Parameters auto_rotate_disable_encrypt and auto_rotate_disable_encrypt_on_all_accounts are mutually exclusive. Specify either auto_rotate_disable_encrypt or auto_rotate_disable_encrypt_on_all_accounts.",
-					},
-				},
 			},
 			"key_usage": schema.StringAttribute{
 				Optional:    true,
@@ -522,7 +492,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Computed:    true,
 							Optional:    true,
 							Default:     stringdefault.StaticString("local"),
-							Description: "Source key tier. Current option is local. Default is 'local', a CipherTrust key.",
+							Description: "Source key tier. Current option is 'local' only. Default is 'local'",
 						},
 						"valid_to": schema.StringAttribute{
 							Optional:    true,
@@ -568,6 +538,35 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 					},
 				},
 			},
+			"enable_rotation": schema.ListNestedBlock{
+				Description: "Enable the key for scheduled rotation job.",
+				Validators: []validator.List{
+					listvalidator.SizeAtMost(1),
+				},
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"job_config_id": schema.StringAttribute{
+							Required:    true,
+							Description: "ID of the scheduler configuration job that will schedule the key rotation.",
+						},
+						"key_source": schema.StringAttribute{
+							Required:    true,
+							Description: "Key source from where the key will be uploaded. Currently, the only option is 'ciphertrust'.",
+							Validators: []validator.String{
+								stringvalidator.OneOf([]string{"ciphertrust"}...),
+							},
+						},
+						"disable_encrypt": schema.BoolAttribute{
+							Optional:    true,
+							Description: "Disable encryption on the old key.",
+						},
+						"disable_encrypt_on_all_accounts": schema.BoolAttribute{
+							Optional:    true,
+							Description: "Disable encryption permissions on the old key for all the accounts. Parameters auto_rotate_disable_encrypt and auto_rotate_disable_encrypt_on_all_accounts are mutually exclusive. Specify either auto_rotate_disable_encrypt or auto_rotate_disable_encrypt_on_all_accounts.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -582,11 +581,11 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	var response string
-	if !plan.ImportKeyMaterial.IsUnknown() && len(plan.ImportKeyMaterial.Elements()) != 0 {
+	if len(plan.ImportKeyMaterial.Elements()) != 0 {
 		response = r.importKeyMaterial(ctx, uid, &plan, &resp.Diagnostics)
-	} else if !plan.UploadKey.IsUnknown() && len(plan.UploadKey.Elements()) != 0 {
+	} else if len(plan.UploadKey.Elements()) != 0 {
 		response = r.uploadKey(ctx, uid, &plan, &resp.Diagnostics)
-	} else if !plan.ReplicateKey.IsUnknown() && len(plan.ReplicateKey.Elements()) != 0 {
+	} else if len(plan.ReplicateKey.Elements()) != 0 {
 		response = r.replicateKey(ctx, uid, &plan, &resp.Diagnostics)
 	} else {
 		response = r.createKey(ctx, uid, &plan, &resp.Diagnostics)
@@ -595,7 +594,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
-	if !plan.Alias.IsNull() && len(plan.Alias.Elements()) > 1 {
+	if len(plan.Alias.Elements()) > 1 {
 		response = r.addAliases(ctx, uid, &plan, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
@@ -607,7 +606,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 			return
 		}
 	}
-	if !reflect.DeepEqual((*AWSKeyEnableRotationTFSDK)(nil), plan.EnableRotation) {
+	if len(plan.EnableRotation.Elements()) != 0 {
 		response = r.enableKeyRotationJob(ctx, uid, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
@@ -731,6 +730,10 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 	}
+	r.enableDisableKeyRotation(ctx, uid, &plan, &state, response, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	response, err = r.client.GetById(ctx, uid, keyID, AWSKeysURL)
 	if err != nil {
 		msg := "Error reading 'ciphertrust_aws_key'."
@@ -769,7 +772,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	keyID := state.KeyID.ValueString()
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error deleting 'ciphertrust_aws_key'. Error marshaling payload."
+		msg := "Error deleting 'ciphertrust_aws_key', error marshaling payload."
 		details := map[string]interface{}{"key_id": keyID, "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
@@ -777,7 +780,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 	_, err = r.client.PostDataV2(ctx, uid, fmt.Sprintf(ScheduleDeletionURL, keyID), payloadJSON)
 	if err != nil {
-		msg := "Error deleting 'ciphertrust_aws_key'. Error posting payload."
+		msg := "Error deleting 'ciphertrust_aws_key', error posting payload."
 		details := map[string]interface{}{"key_id": keyID, "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
@@ -809,7 +812,7 @@ func (r *resourceAWSKey) createKey(ctx context.Context, uid string, plan *AWSKey
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Error marshaling payload."
+		msg := "Error creating 'ciphertrust_aws_key', error marshaling payload."
 		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -817,7 +820,7 @@ func (r *resourceAWSKey) createKey(ctx context.Context, uid string, plan *AWSKey
 	}
 	response, err := r.client.PostDataV2(ctx, uid, AWSKeysURL, payloadJSON)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Error posting payload."
+		msg := "Error creating 'ciphertrust_aws_key', error posting payload."
 		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -879,7 +882,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 	if plan.KMS.ValueString() == "" {
 		plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
 	}
-	plan.Labels = common.ParseMap(response, diags, "labels")
+	r.setKeyLabels(ctx, response, plan, diags)
 	if diags.HasError() {
 		return
 	}
@@ -927,7 +930,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 			}
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
-				msg := fmt.Sprintf("Error %s 'ciphertrust_aws_key'. Failed to enable auto-rotation. Error marshaling payload.", operation)
+				msg := fmt.Sprintf("Error %s 'ciphertrust_aws_key'. Failed to enable auto-rotation, error marshaling payload.", operation)
 				details := map[string]interface{}{"key_id": keyID, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 				tflog.Error(ctx, msg, details)
 				if operation == Creating {
@@ -1007,35 +1010,50 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 }
 
 func (r *resourceAWSKey) enableKeyRotationJob(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	var payload AWSEnableKeyRotationJobPayloadJSON
-	if plan.EnableRotation.JobConfigID.ValueString() != "" && plan.EnableRotation.JobConfigID.ValueString() != types.StringNull().ValueString() {
-		payload.JobConfigID = plan.EnableRotation.JobConfigID.ValueString()
+	rotationParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableRotation.Elements()))
+	if !plan.EnableRotation.IsUnknown() {
+		diags.Append(plan.EnableRotation.ElementsAs(ctx, &rotationParams, false)...)
+		if diags.HasError() {
+			return ""
+		}
 	}
-	if plan.EnableRotation.AutoRotateDisableEncrypt.ValueBool() != types.BoolNull().ValueBool() {
-		payload.AutoRotateDisableEncrypt = plan.EnableRotation.AutoRotateDisableEncrypt.ValueBool()
+	var response string
+	for _, params := range rotationParams {
+		payload := AWSEnableKeyRotationJobPayloadJSON{
+			JobConfigID:                           params.JobConfigID.ValueString(),
+			AutoRotateDisableEncrypt:              params.AutoRotateDisableEncrypt.ValueBool(),
+			AutoRotateDisableEncryptOnAllAccounts: params.AutoRotateDisableEncryptOnAllAccounts.ValueBool(),
+		}
+		if params.AutoRotateKeySource.ValueString() != "" {
+			payload.AutoRotateKeySource = params.AutoRotateKeySource.ValueStringPointer()
+		}
+		keyID := plan.KeyID.ValueString()
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			msg := "Failed to enable key rotation for 'ciphertrust_aws_key' " + keyID + ", error marshaling payload."
+			tflog.Error(ctx, msg, map[string]interface{}{"error": err.Error()})
+			diags.AddError(msg, err.Error())
+			return ""
+		}
+		response, err = r.client.PostDataV2(ctx, uid, fmt.Sprintf(EnableRotationJobURL, keyID), payloadJSON)
+		if err != nil {
+			msg := "Failed to enable key rotation for 'ciphertrust_aws_key' " + keyID + ", error posting payload."
+			tflog.Error(ctx, msg, map[string]interface{}{"error": err.Error()})
+			diags.AddError(msg, err.Error())
+			return ""
+		}
 	}
-	if plan.EnableRotation.AutoRotateDisableEncryptOnAllAccounts.ValueBool() != types.BoolNull().ValueBool() {
-		payload.AutoRotateDisableEncryptOnAllAccounts = plan.EnableRotation.AutoRotateDisableEncryptOnAllAccounts.ValueBool()
-	}
-	if plan.EnableRotation.AutoRotateKeySource.ValueString() != "" && plan.EnableRotation.AutoRotateKeySource.ValueString() != types.StringNull().ValueString() {
-		payload.AutoRotateKeySource = plan.EnableRotation.AutoRotateKeySource.ValueString()
-	}
-	if plan.EnableRotation.AutoRotatePartitionID.ValueString() != "" && plan.EnableRotation.AutoRotatePartitionID.ValueString() != types.StringNull().ValueString() {
-		payload.AutoRotatePartitionID = plan.EnableRotation.AutoRotatePartitionID.ValueString()
-	}
+	return response
+}
+
+func (r *resourceAWSKey) disableKeyRotationJob(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
 	keyID := plan.KeyID.ValueString()
-	payloadJSON, err := json.Marshal(payload)
+	response, err := r.client.PostNoData(ctx, uid, fmt.Sprintf(DisableRotationJobURL, keyID))
 	if err != nil {
-		msg := "Failed to enable key rotation for 'ciphertrust_aws_key' " + keyID + ", error marshaling payload."
-		tflog.Error(ctx, msg, map[string]interface{}{"error": err.Error()})
-		diags.AddError(msg, err.Error())
-		return ""
-	}
-	response, err := r.client.PostDataV2(ctx, uid, fmt.Sprintf(EnableRotationJobURL, keyID), payloadJSON)
-	if err != nil {
-		msg := "Failed to enable key rotation for 'ciphertrust_aws_key' " + keyID + ", error posting payload."
-		tflog.Error(ctx, msg, map[string]interface{}{"error": err.Error()})
-		diags.AddError(msg, err.Error())
+		msg := fmt.Sprintf("Error updating 'ciphertrust_aws_key'. Failed to disable key rotation job for 'ciphertrust_aws_key', error posting.")
+		details := map[string]interface{}{"key_id": keyID, "error": err.Error()}
+		diags.AddError(msg, apiDetail(details))
+		tflog.Error(ctx, msg, details)
 		return ""
 	}
 	return response
@@ -1060,6 +1078,9 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 		plan.Origin = types.StringValue("EXTERNAL")
 	}
 	response := r.createKey(ctx, uid, plan, diags)
+	if diags.HasError() {
+		return ""
+	}
 	keyID := gjson.Get(response, "id").String()
 	payload := AWSKeyImportKeyPayloadJSON{
 		SourceKeyID:   sourceKeyID,
@@ -1069,7 +1090,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material. Error marshaling payload."
+		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material, error marshaling payload."
 		details := map[string]interface{}{"key_id": keyID, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -1077,7 +1098,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 	}
 	response, err = r.client.PostDataV2(ctx, uid, fmt.Sprintf(ImportKeyMaterialURL, keyID), payloadJSON)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material. Error posting payload."
+		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material, error posting payload."
 		details := map[string]interface{}{"key_id": keyID, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -1116,10 +1137,9 @@ func (r *resourceAWSKey) uploadKey(ctx context.Context, uid string, plan *AWSKey
 		SourceKeyTier:                 uploadKeyPlan.SourceKeyTier.ValueString(),
 		KeyExpiration:                 uploadKeyPlan.KeyExpiration.ValueBool(),
 	}
-
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material, error marshaling payload."
+		msg := "Error creating 'ciphertrust_aws_key'. Failed to upload, error marshaling payload."
 		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -1127,7 +1147,7 @@ func (r *resourceAWSKey) uploadKey(ctx context.Context, uid string, plan *AWSKey
 	}
 	response, err := r.client.PostDataV2(ctx, uid, UploadKeyURL, payloadJSON)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_key'. Failed to import key material, error posting payload."
+		msg := "Error creating 'ciphertrust_aws_key'. Failed to upload key, error posting payload."
 		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		diags.AddError(msg, apiDetail(details))
@@ -1144,7 +1164,6 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 	if diags.HasError() {
 		return ""
 	}
-	keyID := plan.KeyID.ValueString()
 	keyPolicy := r.getKeyPolicy(ctx, plan, diags)
 	if diags.HasError() {
 		return ""
@@ -1166,6 +1185,7 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 			return ""
 		}
 	}
+	keyID := replicateKeyPlan.KeyID.ValueString()
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating 'ciphertrust_aws_key'. Failed to replicate key, error marshaling payload."
@@ -1337,9 +1357,11 @@ func (r *resourceAWSKey) updateAliases(ctx context.Context, uid string, plan *AW
 		return ""
 	}
 	planAliases := make([]string, 0, len(plan.Alias.Elements()))
-	diags.Append(plan.Alias.ElementsAs(ctx, &planAliases, false)...)
-	if diags.HasError() {
-		return ""
+	if len(plan.Alias.Elements()) != 0 {
+		diags.Append(plan.Alias.ElementsAs(ctx, &planAliases, false)...)
+		if diags.HasError() {
+			return ""
+		}
 	}
 	var response string
 	keyID := plan.KeyID.ValueString()
@@ -1466,10 +1488,12 @@ func (r *resourceAWSKey) updateTags(ctx context.Context, uid string, plan *AWSKe
 	if diags.HasError() {
 		return ""
 	}
-	planTags := make(map[string]string, len(state.Tags.Elements()))
-	diags.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
-	if diags.HasError() {
-		return ""
+	planTags := make(map[string]string, len(plan.Tags.Elements()))
+	if len(plan.Tags.Elements()) != 0 {
+		diags.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+		if diags.HasError() {
+			return ""
+		}
 	}
 	for stateKey, stateValue := range stateTags {
 		found := false
@@ -1626,9 +1650,40 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, uid string, pl
 	return response
 }
 
+func (r *resourceAWSKey) enableDisableKeyRotation(ctx context.Context, uid string, plan *AWSKeyTFSDK, state *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKeyRotation]["+uid+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKeyRotation]["+uid+"]")
+	response := keyJSON
+	planParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableRotation.Elements()))
+	if !plan.EnableRotation.IsUnknown() {
+		diags.Append(plan.EnableRotation.ElementsAs(ctx, &planParams, false)...)
+		if diags.HasError() {
+			return ""
+		}
+	}
+	stateParams := make([]AWSKeyEnableRotationTFSDK, 0, len(state.EnableRotation.Elements()))
+	diags.Append(state.EnableRotation.ElementsAs(ctx, &stateParams, false)...)
+	if diags.HasError() {
+		return ""
+	}
+	if len(planParams) == 0 && len(stateParams) != 0 {
+		response = r.disableKeyRotationJob(ctx, uid, plan, diags)
+		if diags.HasError() {
+			return ""
+		}
+	}
+	if !reflect.DeepEqual(planParams, stateParams) {
+		response = r.enableKeyRotationJob(ctx, uid, plan, diags)
+		if diags.HasError() {
+			return ""
+		}
+	}
+	return response
+}
+
 func (r *resourceAWSKey) getCommonAWSParams(ctx context.Context, plan *AWSKeyTFSDK, diags *diag.Diagnostics) *CommonAWSParamsJSON {
 	var awsParams CommonAWSParamsJSON
-	if !plan.Alias.IsNull() && len(plan.Alias.Elements()) != 0 {
+	if len(plan.Alias.Elements()) != 0 {
 		aliases := make([]string, 0, len(plan.Alias.Elements()))
 		diags.Append(plan.Alias.ElementsAs(ctx, &aliases, false)...)
 		if diags.HasError() {
@@ -1660,14 +1715,14 @@ func (r *resourceAWSKey) getCommonAWSParams(ctx context.Context, plan *AWSKeyTFS
 	if plan.MultiRegion.ValueBool() != types.BoolNull().ValueBool() {
 		awsParams.MultiRegion = plan.MultiRegion.ValueBool()
 	}
-	if !plan.Tags.IsNull() && len(plan.Tags.Elements()) != 0 {
+	if len(plan.Tags.Elements()) != 0 {
 		tags := r.getTagsParam(ctx, plan, diags)
 		if diags.HasError() {
 			return nil
 		}
 		awsParams.Tags = tags
 	}
-	if !plan.KeyPolicy.IsNull() && len(plan.KeyPolicy.Elements()) != 0 {
+	if len(plan.KeyPolicy.Elements()) != 0 {
 		for _, v := range plan.KeyPolicy.Elements() {
 			var keyPolicy AWSKeyPolicyTFSDK
 			diags.Append(tfsdk.ValueAs(ctx, v, &keyPolicy)...)
@@ -1831,7 +1886,7 @@ func (r *resourceAWSKey) setPolicyTemplateTag(ctx context.Context, response stri
 	}
 }
 
-func (r *resourceAWSKey) setKeyTags(ctx context.Context, response string, state *AWSKeyTFSDK, includePolicyTag bool, diags *diag.Diagnostics) {
+func (r *resourceAWSKey) setKeyTags(ctx context.Context, response string, plan *AWSKeyTFSDK, includePolicyTag bool, diags *diag.Diagnostics) {
 	elements := make(map[string]string)
 	for _, tag := range gjson.Get(response, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
@@ -1843,7 +1898,27 @@ func (r *resourceAWSKey) setKeyTags(ctx context.Context, response string, state 
 		}
 	}
 	var d diag.Diagnostics
-	state.Tags, d = types.MapValueFrom(ctx, types.StringType, elements)
+	plan.Tags, d = types.MapValueFrom(ctx, types.StringType, elements)
+	if d.HasError() {
+		diags.Append(d...)
+		return
+	}
+}
+
+func (r *resourceAWSKey) setKeyLabels(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
+	elements := make(map[string]string)
+	if gjson.Get(response, "labels").Exists() {
+		labelsJSON := gjson.Get(response, "labels").Raw
+		if err := json.Unmarshal([]byte(labelsJSON), &elements); err != nil {
+			msg := "Error unmarshaling 'ciphertrust_aws_key' labels."
+			details := map[string]interface{}{"key_id": state.ID, "error": err.Error()}
+			tflog.Error(ctx, msg, details)
+			diags.AddError(msg, apiDetail(details))
+			return
+		}
+	}
+	var d diag.Diagnostics
+	state.Labels, d = types.MapValueFrom(ctx, types.StringType, elements)
 	if d.HasError() {
 		diags.Append(d...)
 		return

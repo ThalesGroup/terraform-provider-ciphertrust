@@ -3,7 +3,6 @@ package cckm
 import (
 	"encoding/json"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 type AWSParamTFSDK struct {
@@ -50,7 +49,6 @@ type AWSKeyEnableRotationTFSDK struct {
 	AutoRotateDisableEncrypt              types.Bool   `tfsdk:"disable_encrypt"`
 	AutoRotateDisableEncryptOnAllAccounts types.Bool   `tfsdk:"disable_encrypt_on_all_accounts"`
 	AutoRotateKeySource                   types.String `tfsdk:"key_source"`
-	AutoRotatePartitionID                 types.String `tfsdk:"hsm_partition_id"`
 }
 
 type AWSKeyImportKeyMaterialTFSDK struct {
@@ -99,66 +97,66 @@ type AWSUploadKeyTFSDK struct {
 }
 
 type AWSKeyTFSDK struct {
-	ID                             types.String               `tfsdk:"id"`
-	Region                         types.String               `tfsdk:"region"`
-	Alias                          types.Set                  `tfsdk:"alias"`
-	AutoRotate                     types.Bool                 `tfsdk:"auto_rotate"`
-	AutoRotationPeriodInDays       types.Int64                `tfsdk:"auto_rotation_period_in_days"`
-	BypassPolicyLockoutSafetyCheck types.Bool                 `tfsdk:"bypass_policy_lockout_safety_check"`
-	CustomerMasterKeySpec          types.String               `tfsdk:"customer_master_key_spec"`
-	Description                    types.String               `tfsdk:"description"`
-	EnableKey                      types.Bool                 `tfsdk:"enable_key"`
-	EnableRotation                 *AWSKeyEnableRotationTFSDK `tfsdk:"enable_rotation"`
-	ImportKeyMaterial              basetypes.ListValue        `tfsdk:"import_key_material"`
-	KeyUsage                       types.String               `tfsdk:"key_usage"`
-	KMS                            types.String               `tfsdk:"kms"`
-	MultiRegion                    types.Bool                 `tfsdk:"multi_region"`
-	Origin                         types.String               `tfsdk:"origin"`
-	PrimaryRegion                  types.String               `tfsdk:"primary_region"`
-	ReplicateKey                   types.List                 `tfsdk:"replicate_key"`
-	ScheduleForDeletionDays        types.Int64                `tfsdk:"schedule_for_deletion_days"`
-	Tags                           types.Map                  `tfsdk:"tags"`
-	UploadKey                      basetypes.ListValue        `tfsdk:"upload_key"`
-	ARN                            types.String               `tfsdk:"arn"`
-	AWSAccountID                   types.String               `tfsdk:"aws_account_id"`
-	AWSKeyID                       types.String               `tfsdk:"aws_key_id"`
-	CloudName                      types.String               `tfsdk:"cloud_name"`
-	CreatedAt                      types.String               `tfsdk:"created_at"`
-	DeletionDate                   types.String               `tfsdk:"deletion_date"`
-	Enabled                        types.Bool                 `tfsdk:"enabled"`
-	EncryptionAlgorithms           types.List                 `tfsdk:"encryption_algorithms"`
-	ExpirationModel                types.String               `tfsdk:"expiration_model"`
-	ExternalAccounts               types.List                 `tfsdk:"external_accounts"`
-	KeyAdmins                      types.List                 `tfsdk:"key_admins"`
-	KeyAdminsRoles                 types.List                 `tfsdk:"key_admins_roles"`
-	KeyID                          types.String               `tfsdk:"key_id"`
-	KeyManager                     types.String               `tfsdk:"key_manager"`
-	KeyMaterialOrigin              types.String               `tfsdk:"key_material_origin"`
-	KeyPolicy                      types.List                 `tfsdk:"key_policy"`
-	KeyRotationEnabled             types.Bool                 `tfsdk:"key_rotation_enabled"`
-	KeySource                      types.String               `tfsdk:"key_source"`
-	KeyState                       types.String               `tfsdk:"key_state"`
-	KeyType                        types.String               `tfsdk:"key_type"`
-	KeyUsers                       types.List                 `tfsdk:"key_users"`
-	KeyUsersRoles                  types.List                 `tfsdk:"key_users_roles"`
-	KMSID                          types.String               `tfsdk:"kms_id"`
-	Labels                         types.Map                  `tfsdk:"labels"`
-	LocalKeyID                     types.String               `tfsdk:"local_key_id"`
-	LocalKeyName                   types.String               `tfsdk:"local_key_name"`
-	MultiRegionKeyType             types.String               `tfsdk:"multi_region_key_type"`
-	MultiRegionPrimaryKey          types.Map                  `tfsdk:"multi_region_primary_key"`
-	MultiRegionReplicaKeys         basetypes.ListValue        `tfsdk:"multi_region_replica_keys"`
-	NextRotationDate               types.String               `tfsdk:"next_rotation_date"`
-	Policy                         types.String               `tfsdk:"policy"`
-	PolicyTemplateTag              types.Map                  `tfsdk:"policy_template_tag"`
-	ReplicaPolicy                  types.String               `tfsdk:"replica_policy"`
-	RotatedAt                      types.String               `tfsdk:"rotated_at"`
-	RotatedFrom                    types.String               `tfsdk:"rotated_from"`
-	RotatedTo                      types.String               `tfsdk:"rotated_to"`
-	RotationStatus                 types.String               `tfsdk:"rotation_status"`
-	SyncedAt                       types.String               `tfsdk:"synced_at"`
-	UpdatedAt                      types.String               `tfsdk:"updated_at"`
-	ValidTo                        types.String               `tfsdk:"valid_to"`
+	ID                             types.String `tfsdk:"id"`
+	Region                         types.String `tfsdk:"region"`
+	Alias                          types.Set    `tfsdk:"alias"`
+	AutoRotate                     types.Bool   `tfsdk:"auto_rotate"`
+	AutoRotationPeriodInDays       types.Int64  `tfsdk:"auto_rotation_period_in_days"`
+	BypassPolicyLockoutSafetyCheck types.Bool   `tfsdk:"bypass_policy_lockout_safety_check"`
+	CustomerMasterKeySpec          types.String `tfsdk:"customer_master_key_spec"`
+	Description                    types.String `tfsdk:"description"`
+	EnableKey                      types.Bool   `tfsdk:"enable_key"`
+	EnableRotation                 types.List   `tfsdk:"enable_rotation"`
+	ImportKeyMaterial              types.List   `tfsdk:"import_key_material"`
+	KeyUsage                       types.String `tfsdk:"key_usage"`
+	KMS                            types.String `tfsdk:"kms"`
+	MultiRegion                    types.Bool   `tfsdk:"multi_region"`
+	Origin                         types.String `tfsdk:"origin"`
+	PrimaryRegion                  types.String `tfsdk:"primary_region"`
+	ReplicateKey                   types.List   `tfsdk:"replicate_key"`
+	ScheduleForDeletionDays        types.Int64  `tfsdk:"schedule_for_deletion_days"`
+	Tags                           types.Map    `tfsdk:"tags"`
+	UploadKey                      types.List   `tfsdk:"upload_key"`
+	ARN                            types.String `tfsdk:"arn"`
+	AWSAccountID                   types.String `tfsdk:"aws_account_id"`
+	AWSKeyID                       types.String `tfsdk:"aws_key_id"`
+	CloudName                      types.String `tfsdk:"cloud_name"`
+	CreatedAt                      types.String `tfsdk:"created_at"`
+	DeletionDate                   types.String `tfsdk:"deletion_date"`
+	Enabled                        types.Bool   `tfsdk:"enabled"`
+	EncryptionAlgorithms           types.List   `tfsdk:"encryption_algorithms"`
+	ExpirationModel                types.String `tfsdk:"expiration_model"`
+	ExternalAccounts               types.List   `tfsdk:"external_accounts"`
+	KeyAdmins                      types.List   `tfsdk:"key_admins"`
+	KeyAdminsRoles                 types.List   `tfsdk:"key_admins_roles"`
+	KeyID                          types.String `tfsdk:"key_id"`
+	KeyManager                     types.String `tfsdk:"key_manager"`
+	KeyMaterialOrigin              types.String `tfsdk:"key_material_origin"`
+	KeyPolicy                      types.List   `tfsdk:"key_policy"`
+	KeyRotationEnabled             types.Bool   `tfsdk:"key_rotation_enabled"`
+	KeySource                      types.String `tfsdk:"key_source"`
+	KeyState                       types.String `tfsdk:"key_state"`
+	KeyType                        types.String `tfsdk:"key_type"`
+	KeyUsers                       types.List   `tfsdk:"key_users"`
+	KeyUsersRoles                  types.List   `tfsdk:"key_users_roles"`
+	KMSID                          types.String `tfsdk:"kms_id"`
+	Labels                         types.Map    `tfsdk:"labels"`
+	LocalKeyID                     types.String `tfsdk:"local_key_id"`
+	LocalKeyName                   types.String `tfsdk:"local_key_name"`
+	MultiRegionKeyType             types.String `tfsdk:"multi_region_key_type"`
+	MultiRegionPrimaryKey          types.Map    `tfsdk:"multi_region_primary_key"`
+	MultiRegionReplicaKeys         types.List   `tfsdk:"multi_region_replica_keys"`
+	NextRotationDate               types.String `tfsdk:"next_rotation_date"`
+	Policy                         types.String `tfsdk:"policy"`
+	PolicyTemplateTag              types.Map    `tfsdk:"policy_template_tag"`
+	ReplicaPolicy                  types.String `tfsdk:"replica_policy"`
+	RotatedAt                      types.String `tfsdk:"rotated_at"`
+	RotatedFrom                    types.String `tfsdk:"rotated_from"`
+	RotatedTo                      types.String `tfsdk:"rotated_to"`
+	RotationStatus                 types.String `tfsdk:"rotation_status"`
+	SyncedAt                       types.String `tfsdk:"synced_at"`
+	UpdatedAt                      types.String `tfsdk:"updated_at"`
+	ValidTo                        types.String `tfsdk:"valid_to"`
 }
 
 type AWSAccountDetailsModelTFSDK struct {
@@ -260,13 +258,10 @@ type AWSKeyImportKeyPayloadJSON struct {
 }
 
 type AWSEnableKeyRotationJobPayloadJSON struct {
-	JobConfigID                           string `json:"job_config_id"`
-	AutoRotateDisableEncrypt              bool   `json:"auto_rotate_disable_encrypt"`
-	AutoRotateDisableEncryptOnAllAccounts bool   `json:"auto_rotate_disable_encrypt_on_all_accounts"`
-	AutoRotateDomainID                    string `json:"auto_rotate_domain_id"`
-	AutoRotateExternalCMDomainID          string `json:"auto_rotate_external_cm_domain_id"`
-	AutoRotateKeySource                   string `json:"auto_rotate_key_source"`
-	AutoRotatePartitionID                 string `json:"auto_rotate_partition_id"`
+	JobConfigID                           string  `json:"job_config_id"`
+	AutoRotateDisableEncrypt              bool    `json:"auto_rotate_disable_encrypt"`
+	AutoRotateDisableEncryptOnAllAccounts bool    `json:"auto_rotate_disable_encrypt_on_all_accounts"`
+	AutoRotateKeySource                   *string `json:"auto_rotate_key_source"`
 }
 
 type AWSKeyJSON struct {
