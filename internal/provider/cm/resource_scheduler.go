@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"regexp"
@@ -274,6 +275,8 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							),
 						},
 						"synchronize_all": schema.BoolAttribute{
+							Computed:    true,
+							Default:     booldefault.StaticBool(false),
 							Optional:    true,
 							Description: "Set true to synchronize all keys.",
 						},

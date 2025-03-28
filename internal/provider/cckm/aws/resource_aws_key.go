@@ -560,10 +560,6 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Optional:    true,
 							Description: "Disable encryption on the old key.",
 						},
-						"disable_encrypt_on_all_accounts": schema.BoolAttribute{
-							Optional:    true,
-							Description: "Disable encryption permissions on the old key for all the accounts. Parameters auto_rotate_disable_encrypt and auto_rotate_disable_encrypt_on_all_accounts are mutually exclusive. Specify either auto_rotate_disable_encrypt or auto_rotate_disable_encrypt_on_all_accounts.",
-						},
 					},
 				},
 			},
@@ -1020,9 +1016,8 @@ func (r *resourceAWSKey) enableKeyRotationJob(ctx context.Context, uid string, p
 	var response string
 	for _, params := range rotationParams {
 		payload := AWSEnableKeyRotationJobPayloadJSON{
-			JobConfigID:                           params.JobConfigID.ValueString(),
-			AutoRotateDisableEncrypt:              params.AutoRotateDisableEncrypt.ValueBool(),
-			AutoRotateDisableEncryptOnAllAccounts: params.AutoRotateDisableEncryptOnAllAccounts.ValueBool(),
+			JobConfigID:              params.JobConfigID.ValueString(),
+			AutoRotateDisableEncrypt: params.AutoRotateDisableEncrypt.ValueBool(),
 		}
 		if params.AutoRotateKeySource.ValueString() != "" {
 			payload.AutoRotateKeySource = params.AutoRotateKeySource.ValueStringPointer()

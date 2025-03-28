@@ -45,10 +45,9 @@ type AWSCustomKeyStoreTFSDK struct {
 }
 
 type AWSKeyEnableRotationTFSDK struct {
-	JobConfigID                           types.String `tfsdk:"job_config_id"`
-	AutoRotateDisableEncrypt              types.Bool   `tfsdk:"disable_encrypt"`
-	AutoRotateDisableEncryptOnAllAccounts types.Bool   `tfsdk:"disable_encrypt_on_all_accounts"`
-	AutoRotateKeySource                   types.String `tfsdk:"key_source"`
+	JobConfigID              types.String `tfsdk:"job_config_id"`
+	AutoRotateDisableEncrypt types.Bool   `tfsdk:"disable_encrypt"`
+	AutoRotateKeySource      types.String `tfsdk:"key_source"`
 }
 
 type AWSKeyImportKeyMaterialTFSDK struct {
@@ -258,34 +257,31 @@ type AWSKeyImportKeyPayloadJSON struct {
 }
 
 type AWSEnableKeyRotationJobPayloadJSON struct {
-	JobConfigID                           string  `json:"job_config_id"`
-	AutoRotateDisableEncrypt              bool    `json:"auto_rotate_disable_encrypt"`
-	AutoRotateDisableEncryptOnAllAccounts bool    `json:"auto_rotate_disable_encrypt_on_all_accounts"`
-	AutoRotateKeySource                   *string `json:"auto_rotate_key_source"`
+	JobConfigID              string  `json:"job_config_id"`
+	AutoRotateDisableEncrypt bool    `json:"auto_rotate_disable_encrypt"`
+	AutoRotateKeySource      *string `json:"auto_rotate_key_source"`
 }
 
 type AWSKeyJSON struct {
-	ID                                    string               `json:"id"`
-	KMS                                   string               `json:"kms"`
-	Region                                string               `json:"region"`
-	AWSParam                              *AWSKeyParamJSON     `json:"aws_param"`
-	JobConfigID                           string               `json:"job_config_id"`
-	AutoRotateDisableEncrypt              bool                 `json:"auto_rotate_disable_encrypt"`
-	AutoRotateDisableEncryptOnAllAccounts bool                 `json:"auto_rotate_disable_encrypt_on_all_accounts"`
-	AutoRotateDomainID                    string               `json:"auto_rotate_domain_id"`
-	AutoRotateExternalCMDomainID          string               `json:"auto_rotate_external_cm_domain_id"`
-	AutoRotateKeySource                   string               `json:"auto_rotate_key_source"`
-	AutoRotatePartitionID                 string               `json:"auto_rotate_partition_id"`
-	KeyExpiration                         bool                 `json:"key_expiration"`
-	SourceKeyIdentifier                   string               `json:"source_key_identifier"`
-	SourceKeyTier                         string               `json:"source_key_tier"`
-	ValidTo                               string               `json:"valid_to"`
-	DisableEncrypt                        bool                 `json:"disable_encrypt"`
-	DisableEncryptOnAllAccounts           bool                 `json:"disable_encrypt_on_all_accounts"`
-	RetainAlias                           bool                 `json:"retain_alias"`
-	SourceKeyID                           string               `json:"source_key_id"`
-	Days                                  int64                `json:"days"`
-	Tags                                  []AWSKeyParamTagJSON `json:"tags"`
+	ID                           string               `json:"id"`
+	KMS                          string               `json:"kms"`
+	Region                       string               `json:"region"`
+	AWSParam                     *AWSKeyParamJSON     `json:"aws_param"`
+	JobConfigID                  string               `json:"job_config_id"`
+	AutoRotateDisableEncrypt     bool                 `json:"auto_rotate_disable_encrypt"`
+	AutoRotateDomainID           string               `json:"auto_rotate_domain_id"`
+	AutoRotateExternalCMDomainID string               `json:"auto_rotate_external_cm_domain_id"`
+	AutoRotateKeySource          string               `json:"auto_rotate_key_source"`
+	AutoRotatePartitionID        string               `json:"auto_rotate_partition_id"`
+	KeyExpiration                bool                 `json:"key_expiration"`
+	SourceKeyIdentifier          string               `json:"source_key_identifier"`
+	SourceKeyTier                string               `json:"source_key_tier"`
+	ValidTo                      string               `json:"valid_to"`
+	DisableEncrypt               bool                 `json:"disable_encrypt"`
+	RetainAlias                  bool                 `json:"retain_alias"`
+	SourceKeyID                  string               `json:"source_key_id"`
+	Days                         int64                `json:"days"`
+	Tags                         []AWSKeyParamTagJSON `json:"tags"`
 	//	DeleteTags                            []string             `json:"delete_tags"`
 	Alias                string `json:"alias"`
 	RotationPeriodInDays int64  `json:"rotation_period_in_days"`
