@@ -265,7 +265,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) setCustomKeyStoreState(response 
 	plan.Region = types.StringValue(gjson.Get(response, "region").String())
 	plan.EnableSuccessAuditEvent = types.BoolValue(gjson.Get(response, "enable_success_audit_event").Bool())
 	plan.LinkedState = types.BoolValue(gjson.Get(response, "local_hosted_params.linked_state").Bool())
-	plan.ConnectDisconnectKeystore = types.StringValue(attr.NullValueString)
 
 	var awsParamJSONResponse AWSParamJSONResponse
 	err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse)
@@ -277,16 +276,17 @@ func (d *datasourceAWSCustomKeyStoreDataSource) setCustomKeyStoreState(response 
 		return
 	}
 	attributeTypes := map[string]attr.Type{
+		"custom_key_store_name":  types.StringType,
+		"xks_proxy_connectivity": types.StringType,
+		"connection_state":       types.StringType,
+		"xks_proxy_uri_endpoint": types.StringType,
+		"xks_proxy_uri_path":     types.StringType,
+		"custom_key_store_type":  types.StringType,
+
 		"cloud_hsm_cluster_id":                types.StringType,
-		"connection_state":                    types.StringType,
 		"custom_key_store_id":                 types.StringType,
-		"custom_key_store_name":               types.StringType,
-		"custom_key_store_type":               types.StringType,
 		"key_store_password":                  types.StringType,
 		"trust_anchor_certificate":            types.StringType,
-		"xks_proxy_connectivity":              types.StringType,
-		"xks_proxy_uri_endpoint":              types.StringType,
-		"xks_proxy_uri_path":                  types.StringType,
 		"xks_proxy_vpc_endpoint_service_name": types.StringType,
 	}
 	itemObjectType := types.ObjectType{

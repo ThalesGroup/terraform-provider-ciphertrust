@@ -24,18 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-type Bool struct {
-	Value bool
-}
-
-func (b Bool) DefaultBool() bool {
-	return b.Value
-}
-
-func NewBool(v bool) Bool {
-	return Bool{Value: v}
-}
-
 var (
 	_ resource.Resource              = &resourceAWSCustomKeyStore{}
 	_ resource.ResourceWithConfigure = &resourceAWSCustomKeyStore{}
@@ -111,12 +99,12 @@ func (r *resourceAWSCustomKeyStore) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.",
 			},
 			"linked_state": schema.BoolAttribute{
+				Computed:    true,
 				Optional:    true,
 				Default:     booldefault.StaticBool(false),
 				Description: "Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
-				Computed: true,
 				Optional: true,
 			},
 		},
@@ -189,6 +177,7 @@ func (r *resourceAWSCustomKeyStore) Schema(_ context.Context, _ resource.SchemaR
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"blocked": schema.BoolAttribute{
+							Computed:    true,
 							Optional:    true,
 							Default:     booldefault.StaticBool(false),
 							Description: "This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Applicable to a custom key store of type EXTERNAL_KEY_STORE.",
@@ -202,13 +191,13 @@ func (r *resourceAWSCustomKeyStore) Schema(_ context.Context, _ resource.SchemaR
 						},
 						"linked_state": schema.BoolAttribute{
 							Computed: true,
-							Default:  booldefault.StaticBool(false),
 						},
 						"max_credentials": schema.Int32Attribute{
 							Optional:    true,
 							Description: "Max number of credentials that can be associated with custom key store (min value 2. max value 20). Required field for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"mtls_enabled": schema.BoolAttribute{
+							Computed:    true,
 							Optional:    true,
 							Default:     booldefault.StaticBool(false),
 							Description: "Set it to true to enable tls client-side certificate verification — where cipher trust manager authenticates the AWS KMS client . Default value is false.",
@@ -291,63 +280,63 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		payload.LinkedState = plan.LinkedState.ValueBool()
 	}
 	var awsParamJSON AWSParamJSON
+	var planAWSParamTFSDK AWSParamTFSDK
 	for _, v := range plan.AWSParams.Elements() {
-		var awsParamTFSDK AWSParamTFSDK
-		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &awsParamTFSDK)...)
+		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		if awsParamTFSDK.CloudHSMClusterID.ValueString() != "" && awsParamTFSDK.CloudHSMClusterID.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.CloudHSMClusterID = awsParamTFSDK.CloudHSMClusterID.ValueString()
-		}
-		if awsParamTFSDK.CustomKeystoreType.ValueString() != "" && awsParamTFSDK.CustomKeystoreType.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.CustomKeystoreType = awsParamTFSDK.CustomKeystoreType.ValueString()
-		}
-		if awsParamTFSDK.KeyStorePassword.ValueString() != "" && awsParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.KeyStorePassword = awsParamTFSDK.KeyStorePassword.ValueString()
-		}
-		if awsParamTFSDK.TrustAnchorCertificate.ValueString() != "" && awsParamTFSDK.TrustAnchorCertificate.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.TrustAnchorCertificate = awsParamTFSDK.TrustAnchorCertificate.ValueString()
-		}
-		if awsParamTFSDK.XKSProxyConnectivity.ValueString() != "" && awsParamTFSDK.XKSProxyConnectivity.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.XKSProxyConnectivity = awsParamTFSDK.XKSProxyConnectivity.ValueString()
-		}
-		if awsParamTFSDK.XKSProxyURIEndpoint.ValueString() != "" && awsParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.XKSProxyURIEndpoint = awsParamTFSDK.XKSProxyURIEndpoint.ValueString()
-		}
-		if awsParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != "" && awsParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != types.StringNull().ValueString() {
-			awsParamJSON.XKSProxyVPCEndpointServiceName = awsParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString()
-		}
-		payload.AWSParams = &awsParamJSON
 	}
+	if planAWSParamTFSDK.CloudHSMClusterID.ValueString() != "" && planAWSParamTFSDK.CloudHSMClusterID.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.CloudHSMClusterID = planAWSParamTFSDK.CloudHSMClusterID.ValueString()
+	}
+	if planAWSParamTFSDK.CustomKeystoreType.ValueString() != "" && planAWSParamTFSDK.CustomKeystoreType.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.CustomKeystoreType = planAWSParamTFSDK.CustomKeystoreType.ValueString()
+	}
+	if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.KeyStorePassword = planAWSParamTFSDK.KeyStorePassword.ValueString()
+	}
+	if planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != "" && planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.TrustAnchorCertificate = planAWSParamTFSDK.TrustAnchorCertificate.ValueString()
+	}
+	if planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != "" && planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.XKSProxyConnectivity = planAWSParamTFSDK.XKSProxyConnectivity.ValueString()
+	}
+	if planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != "" && planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.XKSProxyURIEndpoint = planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString()
+	}
+	if planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != "" && planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != types.StringNull().ValueString() {
+		awsParamJSON.XKSProxyVPCEndpointServiceName = planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString()
+	}
+	payload.AWSParams = &awsParamJSON
 
 	var LocalHostedParams LocalHostedParamsJSON
+	var planLocalHostedParamsTFSDK LocalHostedParamsTFSDK
 	for _, v := range plan.LocalHostedParams.Elements() {
-		var _LocalHostedParamsTFSDK LocalHostedParamsTFSDK
-		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &_LocalHostedParamsTFSDK)...)
+		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &planLocalHostedParamsTFSDK)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		if _LocalHostedParamsTFSDK.Blocked.ValueBool() != types.BoolNull().ValueBool() {
-			LocalHostedParams.Blocked = _LocalHostedParamsTFSDK.Blocked.ValueBool()
-		}
-		if _LocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && _LocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
-			LocalHostedParams.HealthCheckKeyID = _LocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
-		}
-		if !_LocalHostedParamsTFSDK.MaxCredentials.IsNull() {
-			LocalHostedParams.MaxCredentials = _LocalHostedParamsTFSDK.MaxCredentials.ValueInt32()
-		}
-		if _LocalHostedParamsTFSDK.MTLSEnabled.ValueBool() != types.BoolNull().ValueBool() {
-			LocalHostedParams.MTLSEnabled = _LocalHostedParamsTFSDK.MTLSEnabled.ValueBool()
-		}
-		if _LocalHostedParamsTFSDK.PartitionID.ValueString() != "" && _LocalHostedParamsTFSDK.PartitionID.ValueString() != types.StringNull().ValueString() {
-			LocalHostedParams.PartitionID = _LocalHostedParamsTFSDK.PartitionID.ValueString()
-		}
-		if _LocalHostedParamsTFSDK.SourceKeyTier.ValueString() != "" && _LocalHostedParamsTFSDK.SourceKeyTier.ValueString() != types.StringNull().ValueString() {
-			LocalHostedParams.SourceKeyTier = _LocalHostedParamsTFSDK.SourceKeyTier.ValueString()
-		}
-		payload.LocalHostedParams = &LocalHostedParams
 	}
+	if planLocalHostedParamsTFSDK.Blocked.ValueBool() != types.BoolNull().ValueBool() {
+		LocalHostedParams.Blocked = planLocalHostedParamsTFSDK.Blocked.ValueBool()
+	}
+	if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
+		LocalHostedParams.HealthCheckKeyID = planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
+	}
+	if !planLocalHostedParamsTFSDK.MaxCredentials.IsNull() {
+		LocalHostedParams.MaxCredentials = planLocalHostedParamsTFSDK.MaxCredentials.ValueInt32()
+	}
+	if planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool() != types.BoolNull().ValueBool() {
+		LocalHostedParams.MTLSEnabled = planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool()
+	}
+	if planLocalHostedParamsTFSDK.PartitionID.ValueString() != "" && planLocalHostedParamsTFSDK.PartitionID.ValueString() != types.StringNull().ValueString() {
+		LocalHostedParams.PartitionID = planLocalHostedParamsTFSDK.PartitionID.ValueString()
+	}
+	if planLocalHostedParamsTFSDK.SourceKeyTier.ValueString() != "" && planLocalHostedParamsTFSDK.SourceKeyTier.ValueString() != types.StringNull().ValueString() {
+		LocalHostedParams.SourceKeyTier = planLocalHostedParamsTFSDK.SourceKeyTier.ValueString()
+	}
+	payload.LocalHostedParams = &LocalHostedParams
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+id+"]")
@@ -368,9 +357,62 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	r.setCustomKeyStoreState(response, &plan, nil, &resp.Diagnostics)
+	r.setCustomKeyStoreState(ctx, response, &plan, nil, &resp.Diagnostics)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
+
+	if plan.ConnectDisconnectKeystore.ValueString() != "" &&
+		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() {
+		if plan.ConnectDisconnectKeystore.ValueString() == StateConnectKeystore {
+			var payload AWSCustomKeyStoreJSON
+			var awsParamJSON AWSParamJSON
+			if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
+				awsParamJSON.KeyStorePassword = common.TrimString(planAWSParamTFSDK.KeyStorePassword.String())
+			}
+			payload.AWSParams = &awsParamJSON
+			payloadJSON, err := json.Marshal(payload)
+			if err != nil {
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddError(
+					"Invalid data input: AWS Custom Key Store Update",
+					err.Error(),
+				)
+				return
+			}
+			//var payload []byte
+			response, err := r.client.PostDataV2(
+				ctx,
+				plan.ID.ValueString(),
+				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/connect",
+				payloadJSON)
+			if err != nil {
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddError(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
+				return
+			}
+			r.setCustomKeyStoreState(ctx, response, &plan, &plan, &resp.Diagnostics)
+		}
+		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
+			var payload []byte
+			response, err := r.client.PostDataV2(
+				ctx,
+				plan.ID.ValueString(),
+				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/disconnect",
+				payload)
+			if err != nil {
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddError(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
+				return
+			}
+			r.setCustomKeyStoreState(ctx, response, &plan, &plan, &resp.Diagnostics)
+		}
+	}
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -390,7 +432,6 @@ func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_XKS)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Read]["+state.ID.ValueString()+"]")
@@ -400,7 +441,7 @@ func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadR
 		)
 		return
 	}
-	r.setCustomKeyStoreState(response, &state, &state, &resp.Diagnostics)
+	r.setCustomKeyStoreState(ctx, response, &state, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -414,8 +455,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var prevState AWSCustomKeyStoreTFSDK
-	resp.Diagnostics.Append(req.State.Get(ctx, &prevState)...)
+	var state AWSCustomKeyStoreTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -423,8 +464,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	var payload AWSCustomKeyStoreJSON
 
 	var toBeUpdated bool
-	if prevState.Name.ValueString() != plan.Name.ValueString() ||
-		prevState.EnableSuccessAuditEvent.ValueBool() != plan.EnableSuccessAuditEvent.ValueBool() {
+	if state.Name.ValueString() != plan.Name.ValueString() ||
+		state.EnableSuccessAuditEvent.ValueBool() != plan.EnableSuccessAuditEvent.ValueBool() {
 		toBeUpdated = true
 	}
 	if plan.Name.ValueString() != "" &&
@@ -443,19 +484,19 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			return
 		}
 	}
-	var prevStateAWSParamTFSDK AWSParamTFSDK
-	for _, v := range prevState.AWSParams.Elements() {
-		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &prevStateAWSParamTFSDK)...)
+	var stateAWSParamTFSDK AWSParamTFSDK
+	for _, v := range state.AWSParams.Elements() {
+		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &stateAWSParamTFSDK)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
 
-	if prevStateAWSParamTFSDK.CloudHSMClusterID.ValueString() != planAWSParamTFSDK.CloudHSMClusterID.ValueString() ||
-		prevStateAWSParamTFSDK.KeyStorePassword.ValueString() != planAWSParamTFSDK.KeyStorePassword.ValueString() ||
-		prevStateAWSParamTFSDK.XKSProxyConnectivity.ValueString() != planAWSParamTFSDK.XKSProxyConnectivity.ValueString() ||
-		prevStateAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() ||
-		prevStateAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() {
+	if stateAWSParamTFSDK.CloudHSMClusterID.ValueString() != planAWSParamTFSDK.CloudHSMClusterID.ValueString() ||
+		stateAWSParamTFSDK.KeyStorePassword.ValueString() != planAWSParamTFSDK.KeyStorePassword.ValueString() ||
+		stateAWSParamTFSDK.XKSProxyConnectivity.ValueString() != planAWSParamTFSDK.XKSProxyConnectivity.ValueString() ||
+		stateAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() ||
+		stateAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() {
 		toBeUpdated = true
 	}
 
@@ -489,15 +530,15 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			return
 		}
 	}
-	var prevStateLocalHostedParamsTFSDK LocalHostedParamsTFSDK
-	for _, v := range prevState.LocalHostedParams.Elements() {
-		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &prevStateLocalHostedParamsTFSDK)...)
+	var stateLocalHostedParamsTFSDK LocalHostedParamsTFSDK
+	for _, v := range state.LocalHostedParams.Elements() {
+		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &stateLocalHostedParamsTFSDK)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
-	if prevStateLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() ||
-		prevStateLocalHostedParamsTFSDK.MTLSEnabled.ValueBool() != planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool() {
+	if stateLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() ||
+		stateLocalHostedParamsTFSDK.MTLSEnabled.ValueBool() != planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool() {
 		toBeUpdated = true
 	}
 	if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
@@ -527,8 +568,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			)
 			return
 		}
-		r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
-	} else if prevStateLocalHostedParamsTFSDK.Blocked.ValueBool() != planLocalHostedParamsTFSDK.Blocked.ValueBool() {
+		r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+	} else if stateLocalHostedParamsTFSDK.Blocked.ValueBool() != planLocalHostedParamsTFSDK.Blocked.ValueBool() {
 		if toBeBlock := planLocalHostedParamsTFSDK.Blocked.ValueBool(); toBeBlock {
 			var payload []byte
 			response, err := r.client.PostDataV2(
@@ -544,7 +585,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
+			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		} else {
 			var payload []byte
 			response, err := r.client.PostDataV2(
@@ -560,10 +601,10 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
+			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 	} else if plan.LinkedState.ValueBool() &&
-		prevState.LinkedState.ValueBool() != plan.LinkedState.ValueBool() {
+		state.LinkedState.ValueBool() != plan.LinkedState.ValueBool() {
 		var payload AWSCustomKeyStoreJSON
 		var awsParamJSON AWSParamJSON
 		if planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != "" && planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() {
@@ -595,10 +636,10 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			)
 			return
 		}
-		r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
+		r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 	} else if plan.ConnectDisconnectKeystore.ValueString() != "" &&
 		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() &&
-		plan.ConnectDisconnectKeystore.ValueString() != prevState.ConnectDisconnectKeystore.ValueString() {
+		plan.ConnectDisconnectKeystore.ValueString() != state.ConnectDisconnectKeystore.ValueString() {
 		if plan.ConnectDisconnectKeystore.ValueString() == StateConnectKeystore {
 			var payload AWSCustomKeyStoreJSON
 			var awsParamJSON AWSParamJSON
@@ -629,7 +670,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
+			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
 			var payload []byte
@@ -646,7 +687,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			r.setCustomKeyStoreState(response, &plan, &prevState, &resp.Diagnostics)
+			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 	}
 
@@ -696,25 +737,57 @@ func (d *resourceAWSCustomKeyStore) Configure(_ context.Context, req resource.Co
 	d.client = client
 }
 
-func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(response string, plan *AWSCustomKeyStoreTFSDK, prevState *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
+func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, response string, plan *AWSCustomKeyStoreTFSDK, state *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
+	var (
+		planAWSParamTFSDK          AWSParamTFSDK
+		planLocalHostedParamsTFSDK LocalHostedParamsTFSDK
+	)
+	if plan != nil {
+		for _, v := range plan.AWSParams.Elements() {
+			diags.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
+			if diags.HasError() {
+				return
+			}
+		}
+		for _, v := range plan.LocalHostedParams.Elements() {
+			diags.Append(tfsdk.ValueAs(ctx, v, &planLocalHostedParamsTFSDK)...)
+			if diags.HasError() {
+				return
+			}
+		}
+	}
+
+	var (
+		stateAWSParamTFSDK          AWSParamTFSDK
+		stateLocalHostedParamsTFSDK LocalHostedParamsTFSDK
+	)
+	if state != nil {
+		for _, v := range state.AWSParams.Elements() {
+			diags.Append(tfsdk.ValueAs(ctx, v, &stateAWSParamTFSDK)...)
+			if diags.HasError() {
+				return
+			}
+		}
+		for _, v := range state.LocalHostedParams.Elements() {
+			diags.Append(tfsdk.ValueAs(ctx, v, &stateLocalHostedParamsTFSDK)...)
+			if diags.HasError() {
+				return
+			}
+		}
+	}
+
 	plan.AccessKeyID = types.StringValue(gjson.Get(response, "access_key_id").String())
 	plan.SecretAccessKey = types.StringValue(gjson.Get(response, "secret_access_key").String())
+	if state != nil {
+		plan.AccessKeyID = state.AccessKeyID
+		plan.SecretAccessKey = state.SecretAccessKey
+	}
 	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	plan.CredentialVersion = types.StringValue(gjson.Get(response, "credential_version").String())
-	plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
 	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
 	plan.Type = types.StringValue(gjson.Get(response, "type").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	plan.Name = types.StringValue(gjson.Get(response, "name").String())
-	plan.Region = types.StringValue(gjson.Get(response, "region").String())
-	plan.EnableSuccessAuditEvent = types.BoolValue(gjson.Get(response, "enable_success_audit_event").Bool())
-	plan.LinkedState = types.BoolValue(gjson.Get(response, "local_hosted_params.linked_state").Bool())
-	plan.ConnectDisconnectKeystore = types.StringValue(attr.NullValueString)
-	if prevState != nil {
-		plan.AccessKeyID = prevState.AccessKeyID
-		plan.SecretAccessKey = prevState.SecretAccessKey
-	}
 
 	var awsParamJSONResponse AWSParamJSONResponse
 	err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse)
@@ -727,33 +800,36 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(response string, plan
 	}
 	attributeTypes := map[string]attr.Type{
 		"cloud_hsm_cluster_id":                types.StringType,
-		"connection_state":                    types.StringType,
-		"custom_key_store_id":                 types.StringType,
-		"custom_key_store_name":               types.StringType,
 		"custom_key_store_type":               types.StringType,
 		"key_store_password":                  types.StringType,
 		"trust_anchor_certificate":            types.StringType,
 		"xks_proxy_connectivity":              types.StringType,
 		"xks_proxy_uri_endpoint":              types.StringType,
-		"xks_proxy_uri_path":                  types.StringType,
 		"xks_proxy_vpc_endpoint_service_name": types.StringType,
+
+		"connection_state":      types.StringType,
+		"custom_key_store_id":   types.StringType,
+		"custom_key_store_name": types.StringType,
+		"xks_proxy_uri_path":    types.StringType,
 	}
 	itemObjectType := types.ObjectType{
 		AttrTypes: attributeTypes,
 	}
 	terraformList := make([]attr.Value, 0)
+
 	attributeValues := map[string]attr.Value{
-		"cloud_hsm_cluster_id":                types.StringValue(awsParamJSONResponse.CloudHSMClusterID),
-		"connection_state":                    types.StringValue(awsParamJSONResponse.ConnectionState),
-		"custom_key_store_id":                 types.StringValue(awsParamJSONResponse.CustomKeystoreID),
-		"custom_key_store_name":               types.StringValue(awsParamJSONResponse.CustomKeystoreName),
-		"custom_key_store_type":               types.StringValue(awsParamJSONResponse.CustomKeystoreType),
-		"key_store_password":                  types.StringValue(awsParamJSONResponse.KeyStorePassword),
-		"trust_anchor_certificate":            types.StringValue(awsParamJSONResponse.TrustAnchorCertificate),
-		"xks_proxy_connectivity":              types.StringValue(awsParamJSONResponse.XKSProxyConnectivity),
-		"xks_proxy_uri_endpoint":              types.StringValue(awsParamJSONResponse.XKSProxyURIEndpoint),
-		"xks_proxy_uri_path":                  types.StringValue(awsParamJSONResponse.XKSProxyURIPath),
-		"xks_proxy_vpc_endpoint_service_name": types.StringValue(awsParamJSONResponse.XKSProxyVPCEndpointServiceName),
+		"cloud_hsm_cluster_id":                types.StringValue(planAWSParamTFSDK.CloudHSMClusterID.ValueString()),
+		"custom_key_store_type":               types.StringValue(planAWSParamTFSDK.CustomKeystoreType.ValueString()),
+		"key_store_password":                  types.StringValue(planAWSParamTFSDK.KeyStorePassword.ValueString()),
+		"trust_anchor_certificate":            types.StringValue(planAWSParamTFSDK.TrustAnchorCertificate.ValueString()),
+		"xks_proxy_connectivity":              types.StringValue(planAWSParamTFSDK.XKSProxyConnectivity.ValueString()),
+		"xks_proxy_uri_endpoint":              types.StringValue(planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString()),
+		"xks_proxy_vpc_endpoint_service_name": types.StringValue(planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString()),
+
+		"connection_state":      types.StringValue(awsParamJSONResponse.ConnectionState),
+		"custom_key_store_id":   types.StringValue(awsParamJSONResponse.CustomKeystoreID),
+		"custom_key_store_name": types.StringValue(awsParamJSONResponse.CustomKeystoreName),
+		"xks_proxy_uri_path":    types.StringValue(awsParamJSONResponse.XKSProxyURIPath),
 	}
 	objectValue, newDiags := types.ObjectValue(attributeTypes, attributeValues)
 	diags.Append(newDiags...)
@@ -775,35 +851,38 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(response string, plan
 		)
 		return
 	}
+
 	attributeTypesLocalHostedParams := map[string]attr.Type{
-		"blocked":                 types.BoolType,
+		"blocked":             types.BoolType,
+		"health_check_key_id": types.StringType,
+		"max_credentials":     types.Int32Type,
+		"mtls_enabled":        types.BoolType,
+		"partition_id":        types.StringType,
+		"source_key_tier":     types.StringType,
+
 		"health_check_ciphertext": types.StringType,
-		"health_check_key_id":     types.StringType,
 		"linked_state":            types.BoolType,
-		"max_credentials":         types.Int32Type,
-		"mtls_enabled":            types.BoolType,
-		"partition_id":            types.StringType,
 		"partition_label":         types.StringType,
 		"source_container_id":     types.StringType,
 		"source_container_type":   types.StringType,
-		"source_key_tier":         types.StringType,
 	}
 	itemObjectTypeLocalHostedParams := types.ObjectType{
 		AttrTypes: attributeTypesLocalHostedParams,
 	}
 	terraformListLocalHostedParams := make([]attr.Value, 0)
 	attributeValuesLocalHostedParams := map[string]attr.Value{
-		"blocked":                 types.BoolValue(_LocalHostedParamsJSONResponse.Blocked),
+		"blocked":             types.BoolValue(planLocalHostedParamsTFSDK.Blocked.ValueBool()),
+		"health_check_key_id": types.StringValue(planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()),
+		"max_credentials":     types.Int32Value(planLocalHostedParamsTFSDK.MaxCredentials.ValueInt32()),
+		"mtls_enabled":        types.BoolValue(planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool()),
+		"partition_id":        types.StringValue(planLocalHostedParamsTFSDK.PartitionID.ValueString()),
+		"source_key_tier":     types.StringValue(planLocalHostedParamsTFSDK.SourceKeyTier.ValueString()),
+
 		"health_check_ciphertext": types.StringValue(_LocalHostedParamsJSONResponse.HealthCheckCiphertext),
-		"health_check_key_id":     types.StringValue(_LocalHostedParamsJSONResponse.HealthCheckKeyID),
 		"linked_state":            types.BoolValue(_LocalHostedParamsJSONResponse.LinkedState),
-		"max_credentials":         types.Int32Value(_LocalHostedParamsJSONResponse.MaxCredentials),
-		"mtls_enabled":            types.BoolValue(_LocalHostedParamsJSONResponse.MTLSEnabled),
-		"partition_id":            types.StringValue(_LocalHostedParamsJSONResponse.PartitionID),
 		"partition_label":         types.StringValue(_LocalHostedParamsJSONResponse.PartitionLabel),
 		"source_container_id":     types.StringValue(_LocalHostedParamsJSONResponse.SourceContainerID),
 		"source_container_type":   types.StringValue(_LocalHostedParamsJSONResponse.SourceContainerType),
-		"source_key_tier":         types.StringValue(_LocalHostedParamsJSONResponse.SourceKeyTier),
 	}
 	objectValueLocalHostedParams, newDiagsLocalHostedParams := types.ObjectValue(attributeTypesLocalHostedParams, attributeValuesLocalHostedParams)
 	diags.Append(newDiagsLocalHostedParams...)
