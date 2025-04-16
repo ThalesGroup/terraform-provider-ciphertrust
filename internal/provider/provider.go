@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	cckm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
 
 	"github.com/google/uuid"
 
@@ -380,6 +381,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		cm.NewDataSourceScheduler,
 		connections.NewDataSourceAWSConnection,
 		cckm.NewDataSourceAWSAccountDetails,
+		cckm.NewDataSourceAWSKeys,
 	}
 }
 
@@ -431,6 +433,7 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMSyslog,
 		cckm.NewResourceCCKMAWSKMS,
 		cckm.NewResourceAWSKey,
+		cckm.NewResourceAWSCustomKeyStore,
 		cckm.NewResourceAWSPolicyTemplate,
 	}
 }

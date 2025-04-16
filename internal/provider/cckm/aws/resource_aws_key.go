@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"reflect"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -27,11 +33,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
-	"net/url"
-	"reflect"
-	"regexp"
-	"strings"
-	"time"
 )
 
 var (
@@ -624,7 +625,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
-	r.setKeyState(ctx, response, &plan, &resp.Diagnostics)
+	setKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error creating 'ciphertrust_aws_key', failed to set resource state."
 		details := map[string]interface{}{"key_id": keyID}
@@ -657,7 +658,7 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
-	r.setKeyState(ctx, response, &state, &resp.Diagnostics)
+	setKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading 'ciphertrust_aws_key', failed to set resource state."
 		details := map[string]interface{}{"key_id": keyID}
@@ -738,7 +739,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
-	r.setKeyState(ctx, response, &plan, &resp.Diagnostics)
+	setKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating 'ciphertrust_aws_key', failed to set resource state."
 		details := map[string]interface{}{"key_id": keyID}
@@ -826,9 +827,9 @@ func (r *resourceAWSKey) createKey(ctx context.Context, uid string, plan *AWSKey
 	return response
 }
 
-func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func /*(r *resourceAWSKey)*/ setKeyState(ctx context.Context, response string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
-	r.setAliases(response, plan, diags)
+	setAliases(response, plan, diags)
 	if diags.HasError() {
 		return
 	}
@@ -878,7 +879,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 	if plan.KMS.ValueString() == "" {
 		plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
 	}
-	r.setKeyLabels(ctx, response, plan, diags)
+	setKeyLabels(ctx, response, plan, diags)
 	if diags.HasError() {
 		return
 	}
@@ -886,14 +887,14 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 	plan.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	plan.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
 	plan.MultiRegionKeyType = types.StringValue(gjson.Get(response, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String())
-	r.setMultiRegionConfiguration(ctx, response, plan, diags)
+	setMultiRegionConfiguration(ctx, response, plan, diags)
 	if diags.HasError() {
 		return
 	}
 	plan.NextRotationDate = types.StringValue(gjson.Get(response, "aws_param.NextRotationDate").String())
 	plan.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
 	plan.Policy = types.StringValue(gjson.Get(response, "aws_param.Policy").String())
-	r.setPolicyTemplateTag(ctx, response, plan, diags)
+	setPolicyTemplateTag(ctx, response, plan, diags)
 	if diags.HasError() {
 		return
 	}
@@ -903,7 +904,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 	plan.RotationStatus = types.StringValue(gjson.Get(response, "rotation_status").String())
 	plan.RotatedTo = types.StringValue(gjson.Get(response, "rotated_to").String())
 	plan.SyncedAt = types.StringValue(gjson.Get(response, "synced_at").String())
-	r.setKeyTags(ctx, response, plan, false, diags)
+	setKeyTags(ctx, response, plan, false, diags)
 	if diags.HasError() {
 		return
 	}
@@ -1842,7 +1843,7 @@ func flattenStringSliceJSON(jsonString []gjson.Result, diags *diag.Diagnostics) 
 	return stringList
 }
 
-func (r *resourceAWSKey) setAliases(response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func setAliases(response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	var aliases []attr.Value
 	aliasesJSON := gjson.Get(response, "aws_param.Alias").Array()
 	for _, item := range aliasesJSON {
@@ -1860,7 +1861,7 @@ func (r *resourceAWSKey) setAliases(response string, state *AWSKeyTFSDK, diags *
 	}
 }
 
-func (r *resourceAWSKey) setPolicyTemplateTag(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func setPolicyTemplateTag(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	state.PolicyTemplateTag = types.MapNull(types.StringType)
 	tags := gjson.Get(response, "aws_param.Tags").Array()
 	for _, tag := range tags {
@@ -1881,7 +1882,7 @@ func (r *resourceAWSKey) setPolicyTemplateTag(ctx context.Context, response stri
 	}
 }
 
-func (r *resourceAWSKey) setKeyTags(ctx context.Context, response string, plan *AWSKeyTFSDK, includePolicyTag bool, diags *diag.Diagnostics) {
+func setKeyTags(ctx context.Context, response string, plan *AWSKeyTFSDK, includePolicyTag bool, diags *diag.Diagnostics) {
 	elements := make(map[string]string)
 	for _, tag := range gjson.Get(response, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
@@ -1900,7 +1901,7 @@ func (r *resourceAWSKey) setKeyTags(ctx context.Context, response string, plan *
 	}
 }
 
-func (r *resourceAWSKey) setKeyLabels(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func setKeyLabels(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	elements := make(map[string]string)
 	if gjson.Get(response, "labels").Exists() {
 		labelsJSON := gjson.Get(response, "labels").Raw
@@ -1920,7 +1921,7 @@ func (r *resourceAWSKey) setKeyLabels(ctx context.Context, response string, stat
 	}
 }
 
-func (r *resourceAWSKey) setMultiRegionConfiguration(ctx context.Context, keyJSON string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func setMultiRegionConfiguration(ctx context.Context, keyJSON string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	primaryKeyJSON := gjson.Get(keyJSON, "aws_param.MultiRegionConfiguration.PrimaryKey")
 	element := make(map[string]string)
 	if len(primaryKeyJSON.Raw) != 0 {
@@ -2051,51 +2052,4 @@ func apiDetail(details map[string]interface{}) string {
 		}
 	}
 	return str
-}
-
-//nolint:unused
-func (r *resourceAWSKey) decodeKeyTerraformResourceID(resourceID string) (region string, kid string, err error) {
-	idParts := strings.Split(resourceID, "\\")
-	if len(idParts) == 1 {
-		kid = idParts[0]
-	} else if len(idParts) == 2 {
-		region = idParts[0]
-		kid = idParts[1]
-	} else {
-		err = fmt.Errorf("%s is not a valid aws key resource id", resourceID)
-	}
-	return
-}
-
-//nolint:unused
-func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, uid string, terraformID string, diags *diag.Diagnostics) string {
-	region, kid, err := r.decodeKeyTerraformResourceID(terraformID)
-	if err != nil {
-		diags.AddError("Failed to decode terraform ID "+terraformID+".", err.Error())
-		return ""
-	}
-	filters := url.Values{}
-	filters.Add("keyid", kid)
-	filters.Add("region", region)
-	response, err := r.client.ListWithFilters(ctx, uid, AWSKeysURL, filters)
-	if err != nil {
-		msg := "Failed to list 'ciphertrust_aws_key'."
-		details := map[string]interface{}{"kid": kid, "region": region, "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		diags.AddError(msg, apiDetail(details))
-		return ""
-	}
-	total := gjson.Get(response, "total").Int()
-	if total != 1 {
-		msg := "Failed list key, error listing single key."
-		details := map[string]interface{}{"kid": kid, "region": region}
-		tflog.Error(ctx, msg, details)
-		diags.AddError(msg, apiDetail(details))
-	}
-	resources := gjson.Get(response, "resources").Array()
-	var keyJSON string
-	for _, keyResourceJSON := range resources {
-		keyJSON = keyResourceJSON.String()
-	}
-	return keyJSON
 }
