@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -32,6 +33,12 @@ var (
 const (
 	StateConnectKeystore    = "CONNECT_KEYSTORE"
 	StateDisconnectKeystore = "DISCONNECT_KEYSTORE"
+
+	CustomKeystoreTypeAWSCloudHSM = "AWS_CLOUDHSM"
+	StateConnected                = "CONNECTED"
+	StateDisConnected             = "DISCONNECTED"
+	StateFailed                   = "FAILED"
+	operationRetryDelay           = 20
 )
 
 func NewResourceAWSCustomKeyStore() resource.Resource {
@@ -363,7 +370,14 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 
 	if plan.ConnectDisconnectKeystore.ValueString() != "" &&
 		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() {
+		state := plan
+		operationTimeOutInSeconds := 2 * 60
 		if plan.ConnectDisconnectKeystore.ValueString() == StateConnectKeystore {
+			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
+				operationTimeOutInSeconds = 21 * 60
+			}
+			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
+
 			var payload AWSCustomKeyStoreJSON
 			var awsParamJSON AWSParamJSON
 			if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
@@ -373,44 +387,55 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
-				resp.Diagnostics.AddError(
-					"Invalid data input: AWS Custom Key Store Update",
-					err.Error(),
-				)
-				return
 			}
-			//var payload []byte
-			response, err := r.client.PostDataV2(
-				ctx,
-				plan.ID.ValueString(),
-				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/connect",
-				payloadJSON)
-			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
-				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
-				)
-				return
+			if err == nil {
+				_, err = r.client.PostDataV2(
+					ctx,
+					plan.ID.ValueString(),
+					common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/connect",
+					payloadJSON)
+				if err != nil {
+					tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				}
+
+				if err == nil {
+					response, err = retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+					if err != nil {
+						resp.Diagnostics.AddError(
+							"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+							"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+						)
+						return
+					}
+					r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+				}
 			}
-			r.setCustomKeyStoreState(ctx, response, &plan, &plan, &resp.Diagnostics)
 		}
 		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
 			var payload []byte
-			response, err := r.client.PostDataV2(
+			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
+				operationTimeOutInSeconds = 11 * 60
+			}
+			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
+			_, err := r.client.PostDataV2(
 				ctx,
 				plan.ID.ValueString(),
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/disconnect",
 				payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
-				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
-				)
-				return
 			}
-			r.setCustomKeyStoreState(ctx, response, &plan, &plan, &resp.Diagnostics)
+			if err == nil {
+				response, err = retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+						"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					)
+					return
+				}
+				r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+			}
 		}
 	}
 
@@ -449,7 +474,7 @@ func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadR
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-
+	id := uuid.New().String()
 	var plan AWSCustomKeyStoreTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -640,7 +665,13 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	} else if plan.ConnectDisconnectKeystore.ValueString() != "" &&
 		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() &&
 		plan.ConnectDisconnectKeystore.ValueString() != state.ConnectDisconnectKeystore.ValueString() {
+		operationTimeOutInSeconds := 2 * 60
 		if plan.ConnectDisconnectKeystore.ValueString() == StateConnectKeystore {
+			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
+				operationTimeOutInSeconds = 21 * 60
+			}
+			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
+
 			var payload AWSCustomKeyStoreJSON
 			var awsParamJSON AWSParamJSON
 			if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
@@ -656,8 +687,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			//var payload []byte
-			response, err := r.client.PostDataV2(
+			_, err = r.client.PostDataV2(
 				ctx,
 				plan.ID.ValueString(),
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/connect",
@@ -670,17 +700,38 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
+
+			response, err := retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
+				return
+			}
 			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
 			var payload []byte
-			response, err := r.client.PostDataV2(
+			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
+				operationTimeOutInSeconds = 11 * 60
+			}
+			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
+			_, err := r.client.PostDataV2(
 				ctx,
 				plan.ID.ValueString(),
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/disconnect",
 				payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddError(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
+				return
+			}
+			response, err := retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			if err != nil {
 				resp.Diagnostics.AddError(
 					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
 					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
@@ -895,4 +946,43 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	if diags.HasError() {
 		return
 	}
+}
+
+func retryOperation(ctx context.Context, wantState string, operation func() (string, error), maxRetries int, retryDelay time.Duration) (string, error) {
+	var (
+		response string
+		err      error
+	)
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		response, err = operation()
+		if err != nil {
+			return "", err
+		}
+		var awsParamJSONResponse AWSParamJSONResponse
+		if err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse); err != nil {
+			return "", err
+		}
+		if awsParamJSONResponse.ConnectionState == wantState {
+			return response, nil
+		}
+		if awsParamJSONResponse.ConnectionState == StateFailed {
+			break
+		}
+		tflog.Debug(ctx, fmt.Sprintf("Operation failed (attempt %d/%d): %v", attempt, maxRetries, err))
+		if attempt < maxRetries {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return "", fmt.Errorf("operation failed after %d retries: %v", maxRetries, err)
+}
+
+func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id string, state *AWSCustomKeyStoreTFSDK) (string, error) {
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_XKS)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Read]["+state.ID.ValueString()+"]")
+		return "", err
+	}
+	return response, nil
 }
