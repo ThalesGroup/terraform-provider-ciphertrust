@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"reflect"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -27,11 +33,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
-	"net/url"
-	"reflect"
-	"regexp"
-	"strings"
-	"time"
 )
 
 var (
@@ -861,7 +862,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 		return
 	}
 	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
