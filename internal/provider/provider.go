@@ -381,6 +381,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		cm.NewDataSourceScheduler,
 		connections.NewDataSourceAWSConnection,
 		cckm.NewDataSourceAWSAccountDetails,
+		cckm.NewDataSourceAWSKeys,
 		cckm.NewDataSourceAWSCustomKeyStore,
 	}
 }
@@ -433,6 +434,7 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMSyslog,
 		cckm.NewResourceCCKMAWSKMS,
 		cckm.NewResourceAWSKey,
+		cckm.NewResourceAWSCustomKeyStore,
 		cckm.NewResourceAWSPolicyTemplate,
 		cckm.NewResourceAWSCustomKeyStore,
 	}
