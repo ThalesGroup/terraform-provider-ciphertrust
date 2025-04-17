@@ -153,6 +153,7 @@ func (c *Client) PostData(ctx context.Context, uuid string, endpoint string, dat
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
 	return ret, nil
 }
+
 func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
 	var payload io.Reader
@@ -177,6 +178,7 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 
 	return string(body), nil
 }
+
 func (c *Client) PostNoData(ctx context.Context, uuid string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
 
