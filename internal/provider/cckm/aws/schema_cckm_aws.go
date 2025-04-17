@@ -2,46 +2,56 @@ package cckm
 
 import (
 	"encoding/json"
+
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 type AWSParamTFSDK struct {
 	CloudHSMClusterID              types.String `tfsdk:"cloud_hsm_cluster_id"`
-	XKSType                        types.String `tfsdk:"custom_key_store_type"`
+	ConnectionState                types.String `tfsdk:"connection_state"`
+	CustomKeystoreID               types.String `tfsdk:"custom_key_store_id"`
+	CustomKeystoreName             types.String `tfsdk:"custom_key_store_name"`
+	CustomKeystoreType             types.String `tfsdk:"custom_key_store_type"`
 	KeyStorePassword               types.String `tfsdk:"key_store_password"`
 	TrustAnchorCertificate         types.String `tfsdk:"trust_anchor_certificate"`
 	XKSProxyConnectivity           types.String `tfsdk:"xks_proxy_connectivity"`
 	XKSProxyURIEndpoint            types.String `tfsdk:"xks_proxy_uri_endpoint"`
+	XKSProxyURIPath                types.String `tfsdk:"xks_proxy_uri_path"`
 	XKSProxyVPCEndpointServiceName types.String `tfsdk:"xks_proxy_vpc_endpoint_service_name"`
 }
 
 type LocalHostedParamsTFSDK struct {
-	Blocked          types.Bool   `tfsdk:"blocked"`
-	HealthCheckKeyID types.String `tfsdk:"health_check_key_id"`
-	MaxCredentials   types.String `tfsdk:"max_credentials"`
-	MTLSEnabled      types.Bool   `tfsdk:"mtls_enabled"`
-	PartitionID      types.String `tfsdk:"partition_id"`
-	SourceKeyTier    types.String `tfsdk:"source_key_tier"`
+	Blocked               types.Bool   `tfsdk:"blocked"`
+	HealthCheckCiphertext types.String `tfsdk:"health_check_ciphertext"`
+	HealthCheckKeyID      types.String `tfsdk:"health_check_key_id"`
+	LinkedState           types.Bool   `tfsdk:"linked_state"`
+	MaxCredentials        types.Int32  `tfsdk:"max_credentials"`
+	MTLSEnabled           types.Bool   `tfsdk:"mtls_enabled"`
+	PartitionID           types.String `tfsdk:"partition_id"`
+	PartitionLabel        types.String `tfsdk:"partition_label"`
+	SourceContainerID     types.String `tfsdk:"source_container_id"`
+	SourceContainerType   types.String `tfsdk:"source_container_type"`
+	SourceKeyTier         types.String `tfsdk:"source_key_tier"`
 }
 
 type AWSCustomKeyStoreTFSDK struct {
-	ID                      types.String           `tfsdk:"id"`
-	AccessKeyID             types.String           `tfsdk:"access_key_id"`
-	CloudName               types.String           `tfsdk:"cloud_name"`
-	CreatedAt               types.String           `tfsdk:"created_at"`
-	CredentialVersion       types.String           `tfsdk:"credential_version"`
-	KMSID                   types.String           `tfsdk:"kms_id"`
-	SecretAccessKey         types.String           `tfsdk:"secret_access_key"`
-	Type                    types.String           `tfsdk:"type"`
-	UpdatedAt               types.String           `tfsdk:"updated_at"`
-	AWSParams               AWSParamTFSDK          `tfsdk:"aws_param"`
-	KMS                     types.String           `tfsdk:"kms"`
-	Name                    types.String           `tfsdk:"name"`
-	Region                  types.String           `tfsdk:"region"`
-	EnableSuccessAuditEvent types.Bool             `tfsdk:"enable_success_audit_event"`
-	LinkedState             types.Bool             `tfsdk:"linked_state"`
-	LocalHostedParams       LocalHostedParamsTFSDK `tfsdk:"local_hosted_params"`
-	UpdateOpType            types.String           `tfsdk:"update_op_type"`
+	ID                        types.String `tfsdk:"id"`
+	AccessKeyID               types.String `tfsdk:"access_key_id"`
+	SecretAccessKey           types.String `tfsdk:"secret_access_key"`
+	CloudName                 types.String `tfsdk:"cloud_name"`
+	CredentialVersion         types.String `tfsdk:"credential_version"`
+	KMS                       types.String `tfsdk:"kms"`
+	KMSID                     types.String `tfsdk:"kms_id"`
+	Type                      types.String `tfsdk:"type"`
+	CreatedAt                 types.String `tfsdk:"created_at"`
+	UpdatedAt                 types.String `tfsdk:"updated_at"`
+	Name                      types.String `tfsdk:"name"`
+	Region                    types.String `tfsdk:"region"`
+	EnableSuccessAuditEvent   types.Bool   `tfsdk:"enable_success_audit_event"`
+	LinkedState               types.Bool   `tfsdk:"linked_state"`
+	ConnectDisconnectKeystore types.String `tfsdk:"connect_disconnect_keystore"`
+	AWSParams                 types.List   `tfsdk:"aws_param"`
+	LocalHostedParams         types.List   `tfsdk:"local_hosted_params"`
 }
 
 type AWSKeyEnableRotationTFSDK struct {
@@ -169,7 +179,7 @@ type AWSAccountDetailsModelTFSDK struct {
 
 type AWSParamJSON struct {
 	CloudHSMClusterID              string `json:"cloud_hsm_cluster_id"`
-	XKSType                        string `json:"custom_key_store_type"`
+	CustomKeystoreType             string `json:"custom_key_store_type"`
 	KeyStorePassword               string `json:"key_store_password"`
 	TrustAnchorCertificate         string `json:"trust_anchor_certificate"`
 	XKSProxyConnectivity           string `json:"xks_proxy_connectivity"`
@@ -177,15 +187,42 @@ type AWSParamJSON struct {
 	XKSProxyVPCEndpointServiceName string `json:"xks_proxy_vpc_endpoint_service_name"`
 }
 
+type AWSParamJSONResponse struct {
+	CloudHSMClusterID              string `json:"cloud_hsm_cluster_id"`
+	ConnectionState                string `json:"connection_state"`
+	CustomKeystoreID               string `json:"custom_key_store_id"`
+	CustomKeystoreName             string `json:"custom_key_store_name"`
+	CustomKeystoreType             string `json:"custom_key_store_type"`
+	KeyStorePassword               string `json:"key_store_password"`
+	TrustAnchorCertificate         string `json:"trust_anchor_certificate"`
+	XKSProxyConnectivity           string `json:"xks_proxy_connectivity"`
+	XKSProxyURIEndpoint            string `json:"xks_proxy_uri_endpoint"`
+	XKSProxyURIPath                string `json:"xks_proxy_uri_path"`
+	XKSProxyVPCEndpointServiceName string `json:"xks_proxy_vpc_endpoint_service_name"`
+}
+
 type LocalHostedParamsJSON struct {
 	Blocked          bool   `json:"blocked"`
 	HealthCheckKeyID string `json:"health_check_key_id"`
-	MaxCredentials   string `json:"max_credentials"`
+	MaxCredentials   int32  `json:"max_credentials"`
 	MTLSEnabled      bool   `json:"mtls_enabled"`
 	PartitionID      string `json:"partition_id"`
 	SourceKeyTier    string `json:"source_key_tier"`
 }
 
+type LocalHostedParamsJSONResponse struct {
+	Blocked               bool   `json:"blocked"`
+	HealthCheckCiphertext string `json:"health_check_ciphertext"`
+	HealthCheckKeyID      string `json:"health_check_key_id"`
+	LinkedState           bool   `json:"linked_state"`
+	MaxCredentials        int32  `json:"max_credentials"`
+	MTLSEnabled           bool   `json:"mtls_enabled"`
+	PartitionID           string `json:"partition_id"`
+	PartitionLabel        string `json:"partition_label"`
+	SourceContainerID     string `json:"source_container_id"`
+	SourceContainerType   string `json:"source_container_type"`
+	SourceKeyTier         string `json:"source_key_tier"`
+}
 type AWSCustomKeyStoreJSON struct {
 	ID                      string                 `json:"id"`
 	AWSParams               *AWSParamJSON          `json:"aws_param"`
