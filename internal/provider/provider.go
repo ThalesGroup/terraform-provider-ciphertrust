@@ -434,7 +434,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMSyslog,
 		cckm.NewResourceCCKMAWSKMS,
 		cckm.NewResourceAWSKey,
-		cckm.NewResourceAWSCustomKeyStore,
 		cckm.NewResourceAWSPolicyTemplate,
 		cckm.NewResourceAWSCustomKeyStore,
 	}
