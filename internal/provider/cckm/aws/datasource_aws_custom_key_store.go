@@ -83,31 +83,26 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 			},
 			"kms": schema.StringAttribute{
 				Computed:    true,
-				Optional:    true,
 				Description: "Name or ID of the AWS Account container in which to create the key store.",
 			},
 			"name": schema.StringAttribute{
 				Computed:    true,
-				Optional:    true,
 				Description: "Unique name for the custom key store.",
 			},
 			"region": schema.StringAttribute{
 				Computed:    true,
-				Optional:    true,
 				Description: "Name of the available AWS regions.",
 			},
 			"enable_success_audit_event": schema.BoolAttribute{
 				Computed:    true,
-				Optional:    true,
 				Description: "Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.",
 			},
 			"linked_state": schema.BoolAttribute{
-				Optional:    true,
+				Computed:    true,
 				Description: "Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Computed: true,
-				Optional: true,
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -120,7 +115,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 					Attributes: map[string]schema.Attribute{
 						"cloud_hsm_cluster_id": schema.StringAttribute{
 							Computed:    true,
-							Optional:    true,
 							Description: "ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. Required field for a custom key store of type AWS_CLOUDHSM.",
 						},
 						"connection_state": schema.StringAttribute{
@@ -133,7 +127,7 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 							Computed: true,
 						},
 						"custom_key_store_type": schema.StringAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "Specifies the type of custom key store. The default value is EXTERNAL_KEY_STORE. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
 							Validators: []validator.String{
 								stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...),
@@ -141,23 +135,21 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 						},
 						"key_store_password": schema.StringAttribute{
 							Computed:    true,
-							Optional:    true,
 							Description: "The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. Required field for custom key store of type AWS_CLOUDHSM.",
 						},
 						"trust_anchor_certificate": schema.StringAttribute{
 							Computed:    true,
-							Optional:    true,
 							Description: "The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. Required field for a custom key store of type AWS_CLOUDHSM",
 						},
 						"xks_proxy_connectivity": schema.StringAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.",
 							Validators: []validator.String{
 								stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...),
 							},
 						},
 						"xks_proxy_uri_endpoint": schema.StringAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. This field is required for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"xks_proxy_uri_path": schema.StringAttribute{
@@ -165,7 +157,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 						},
 						"xks_proxy_vpc_endpoint_service_name": schema.StringAttribute{
 							Computed:    true,
-							Optional:    true,
 							Description: "Indicates the VPC endpoint service name the custom key store uses. This field is required when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.",
 						},
 					},
@@ -179,30 +170,29 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"blocked": schema.BoolAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Applicable to a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"health_check_ciphertext": schema.StringAttribute{
 							Computed: true,
 						},
 						"health_check_key_id": schema.StringAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. Required field for custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"linked_state": schema.BoolAttribute{
 							Computed: true,
 						},
 						"max_credentials": schema.Int32Attribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "Max number of credentials that can be associated with custom key store (min value 2. max value 20). Required field for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"mtls_enabled": schema.BoolAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "Set it to true to enable tls client-side certificate verification — where cipher trust manager authenticates the AWS KMS client . Default value is false.",
 						},
 						"partition_id": schema.StringAttribute{
 							Computed:    true,
-							Optional:    true,
 							Description: "ID of Luna HSM partition. Required field, if custom key store is of type EXTERNAL_KEY_STORE and source key tier is 'hsm-luna'.",
 						},
 						"partition_label": schema.StringAttribute{
@@ -215,7 +205,7 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 							Computed: true,
 						},
 						"source_key_tier": schema.StringAttribute{
-							Optional:    true,
+							Computed:    true,
 							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.",
 							Validators: []validator.String{
 								stringvalidator.OneOf([]string{"local", "luna-hsm"}...),
