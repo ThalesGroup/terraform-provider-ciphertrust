@@ -387,6 +387,10 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddWarning(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
 			}
 			if err == nil {
 				_, err = r.client.PostDataV2(
@@ -396,18 +400,23 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 					payloadJSON)
 				if err != nil {
 					tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+					resp.Diagnostics.AddWarning(
+						"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+						"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					)
 				}
 
 				if err == nil {
 					response, err = retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 					if err != nil {
-						resp.Diagnostics.AddError(
+						resp.Diagnostics.AddWarning(
 							"Error updating AWS Custom Key Store on CipherTrust Manager: ",
 							"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
 						)
-						return
 					}
-					r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+					if err == nil {
+						r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+					}
 				}
 			}
 		}
@@ -424,17 +433,22 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				resp.Diagnostics.AddWarning(
+					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
 			}
 			if err == nil {
 				response, err = retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 				if err != nil {
-					resp.Diagnostics.AddError(
+					resp.Diagnostics.AddWarning(
 						"Error updating AWS Custom Key Store on CipherTrust Manager: ",
 						"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
 					)
-					return
 				}
-				r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+				if err == nil {
+					r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+				}
 			}
 		}
 	}
