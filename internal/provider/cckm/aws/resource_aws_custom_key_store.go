@@ -364,7 +364,12 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	r.setCustomKeyStoreState(ctx, response, &plan, nil, &resp.Diagnostics)
+
+	var warningDiags diag.Diagnostics
+	r.setCustomKeyStoreState(ctx, response, &plan, nil, &warningDiags)
+	for _, d := range warningDiags {
+		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
 
@@ -388,8 +393,8 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddWarning(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 			}
 			if err == nil {
@@ -401,8 +406,8 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				if err != nil {
 					tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
 					resp.Diagnostics.AddWarning(
-						"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-						"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+						"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
+						"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 					)
 				}
 
@@ -410,12 +415,16 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 					response, err = retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 					if err != nil {
 						resp.Diagnostics.AddWarning(
-							"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-							"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+							"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
+							"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 						)
 					}
 					if err == nil {
-						r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+						var warningDiags diag.Diagnostics
+						r.setCustomKeyStoreState(ctx, response, &plan, &state, &warningDiags)
+						for _, d := range warningDiags {
+							resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+						}
 					}
 				}
 			}
@@ -434,20 +443,24 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddWarning(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 			}
 			if err == nil {
 				response, err = retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 				if err != nil {
 					resp.Diagnostics.AddWarning(
-						"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-						"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+						"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
+						"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
 					)
 				}
 				if err == nil {
-					r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+					var warningDiags diag.Diagnostics
+					r.setCustomKeyStoreState(ctx, response, &plan, &state, &warningDiags)
+					for _, d := range warningDiags {
+						resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+					}
 				}
 			}
 		}
@@ -602,8 +615,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		if err != nil {
 			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
 			resp.Diagnostics.AddError(
-				"Error creating AWS Custom Key Store on CipherTrust Manager: ",
-				"Could not create AWS Custom Key Store, unexpected error: "+err.Error(),
+				"Error updating AWS Custom Key Store on CipherTrust Manager: ",
+				"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
 			)
 			return
 		}
@@ -619,8 +632,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error blocking AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not block AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
@@ -633,10 +646,10 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/unblock",
 				payload)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> unblock]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error unblocking AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not unblock AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
@@ -655,9 +668,9 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		payload.AWSParams = &awsParamJSON
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> link]["+plan.ID.ValueString()+"]")
 			resp.Diagnostics.AddError(
-				"Invalid data input: AWS Custom Key Store Update",
+				"Invalid data input: AWS Custom Key Store link",
 				err.Error(),
 			)
 			return
@@ -668,10 +681,10 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/link",
 			payloadJSON)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> link]["+plan.ID.ValueString()+"]")
 			resp.Diagnostics.AddError(
-				"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-				"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+				"Error linking AWS Custom Key Store on CipherTrust Manager: ",
+				"Could not link AWS Custom Key Store, unexpected error: "+err.Error(),
 			)
 			return
 		}
@@ -694,7 +707,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			payload.AWSParams = &awsParamJSON
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> connect]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddError(
 					"Invalid data input: AWS Custom Key Store Update",
 					err.Error(),
@@ -707,10 +720,10 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/connect",
 				payloadJSON)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> connect]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
@@ -718,8 +731,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			response, err := retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 			if err != nil {
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
@@ -737,18 +750,18 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/disconnect",
 				payload)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> disconnect]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
 			response, err := retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 			if err != nil {
 				resp.Diagnostics.AddError(
-					"Error updating AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
+					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
 				)
 				return
 			}
