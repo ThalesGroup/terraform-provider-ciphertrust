@@ -862,7 +862,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan 
 		return
 	}
 	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
