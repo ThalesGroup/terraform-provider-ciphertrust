@@ -516,6 +516,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	var payload AWSCustomKeyStoreJSON
 
 	var toBeUpdated bool
+	var toBeUpdatedOps bool
 	if state.Name.ValueString() != plan.Name.ValueString() ||
 		state.EnableSuccessAuditEvent.ValueBool() != plan.EnableSuccessAuditEvent.ValueBool() {
 		toBeUpdated = true
@@ -622,6 +623,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		}
 		r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 	} else if stateLocalHostedParamsTFSDK.Blocked.ValueBool() != planLocalHostedParamsTFSDK.Blocked.ValueBool() {
+		toBeUpdatedOps = true
 		if toBeBlock := planLocalHostedParamsTFSDK.Blocked.ValueBool(); toBeBlock {
 			var payload []byte
 			response, err := r.client.PostDataV2(
@@ -657,6 +659,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		}
 	} else if plan.LinkedState.ValueBool() &&
 		state.LinkedState.ValueBool() != plan.LinkedState.ValueBool() {
+		toBeUpdatedOps = true
 		var payload AWSCustomKeyStoreJSON
 		var awsParamJSON AWSParamJSON
 		if planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != "" && planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() {
@@ -694,6 +697,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		plan.ConnectDisconnectKeystore.ValueString() != state.ConnectDisconnectKeystore.ValueString() {
 		operationTimeOutInSeconds := 2 * 60
 		if plan.ConnectDisconnectKeystore.ValueString() == StateConnectKeystore {
+			toBeUpdatedOps = true
 			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
 				operationTimeOutInSeconds = 21 * 60
 			}
@@ -739,6 +743,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
+			toBeUpdatedOps = true
 			var payload []byte
 			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
 				operationTimeOutInSeconds = 11 * 60
@@ -768,7 +773,17 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 	}
-
+	if !(toBeUpdated || toBeUpdatedOps) {
+		response, err := r.customKeyStoreById(ctx, id, &state)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error getting AWS Custom Key Store on CipherTrust Manager: ",
+				"Could not get AWS Custom Key Store, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	if resp.Diagnostics.HasError() {
 		return
