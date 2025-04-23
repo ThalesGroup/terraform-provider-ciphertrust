@@ -147,9 +147,13 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description of the AWS key.",
+				Description: "Description of the AWS key. Descriptions can be updated but not removed.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"enable_key": schema.BoolAttribute{
+				Optional:    true,
 				Computed:    true,
 				Description: "Enable or disable the key. Default is true.",
 				Default:     booldefault.StaticBool(true),
