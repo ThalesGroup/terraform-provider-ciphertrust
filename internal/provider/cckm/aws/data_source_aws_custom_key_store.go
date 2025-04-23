@@ -220,8 +220,8 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(_ context.Context, _ data
 
 func (d *datasourceAWSCustomKeyStoreDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[datasource_aws_custom_key_store.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[datasource_aws_custom_key_store.go -> Read]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
 	var state AWSCustomKeyStoreTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -229,7 +229,7 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Read(ctx context.Context, req da
 	}
 	response, err := d.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_XKS)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [datasource_aws_custom_key_store.go -> Read]["+state.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_custom_key_store.go -> Read]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error reading AWS Custom Key Store on CipherTrust Manager: ",
 			"Could not read AWS Custom Key Store, unexpected error: "+err.Error(),

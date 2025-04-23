@@ -3,6 +3,7 @@ package cckm
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/url"
 	"regexp"
 	"strings"
@@ -21,15 +22,15 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKey{}
+	_ datasource.DataSource              = &dataSourceAWSXKSKey{}
+	_ datasource.DataSourceWithConfigure = &dataSourceAWSXKSKey{}
 )
 
-func NewDataSourceAWSKeys() datasource.DataSource {
-	return &dataSourceAWSKey{}
+func NewDataSourceAWSXKSKeys() datasource.DataSource {
+	return &dataSourceAWSXKSKey{}
 }
 
-func (d *dataSourceAWSKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSXKSKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -44,20 +45,20 @@ func (d *dataSourceAWSKey) Configure(ctx context.Context, req datasource.Configu
 	d.client = client
 }
 
-type dataSourceAWSKey struct {
+type dataSourceAWSXKSKey struct {
 	client *common.Client
 }
 
-type AWSKey struct {
-	AWSKeyDataSourceTFSDK
+type AWSXKSKey struct {
+	AWSXKSKeyDataSourceTFSDK
 }
 
-func (d *dataSourceAWSKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_aws_key"
+func (d *dataSourceAWSXKSKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_xks_key"
 }
-func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve the AWS key by id.",
+		Description: "Use this data source to retrieve the AWS XKS key by id.",
 		Attributes: map[string]schema.Attribute{
 			// Optional input parameters
 			"region": schema.StringAttribute{
@@ -87,21 +88,13 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Description: "The Amazon Resource Name (ARN) of the key.",
 			},
 			// Read only parameters
-			"auto_rotate": schema.BoolAttribute{
-				Computed:    true,
-				Description: "Enable AWS autorotation on the key.",
-			},
-			"auto_rotation_period_in_days": schema.Int64Attribute{
-				Computed:    true,
-				Description: "Rotation period in days.",
-			},
 			"customer_master_key_spec": schema.StringAttribute{
 				Computed:    true,
 				Description: "Key specification",
 			},
 			"description": schema.StringAttribute{
 				Computed:    true,
-				Description: "Description of the AWS key.",
+				Description: "Description of the AWS XKS key.",
 			},
 			"enable_key": schema.BoolAttribute{
 				Computed:    true,
@@ -114,10 +107,6 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"kms": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name or ID of the KMS to be used to create the key.",
-			},
-			"multi_region": schema.BoolAttribute{
-				Computed:    true,
-				Description: "Creates or identifies a multi-region key.",
 			},
 			"origin": schema.StringAttribute{
 				Computed:    true,
@@ -134,7 +123,7 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"aws_key_id": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "AWS key ID.",
+				Description: "AWS XKS key ID.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -155,7 +144,7 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"encryption_algorithms": schema.ListAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Encryption algorithms of the AWS key.",
+				Description: "Encryption algorithms of an asymmetric key",
 			},
 			"expiration_model": schema.StringAttribute{
 				Computed:    true,
@@ -215,10 +204,6 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
 			},
-			"kms_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "ID of the kms",
-			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
@@ -232,36 +217,14 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Computed:    true,
 				Description: "CipherTrust key name of the external key.",
 			},
-			"multi_region_key_type": schema.StringAttribute{
-				Computed:    true,
-				Description: "Indicates if the key is the primary key or a replica key.",
-			},
-			"multi_region_primary_key": schema.MapAttribute{
-				Computed:    true,
-				ElementType: types.StringType,
-			},
-			"multi_region_replica_keys": schema.ListAttribute{
-				Computed: true,
-				ElementType: types.MapType{
-					ElemType: types.StringType,
-				},
-			},
-			"next_rotation_date": schema.StringAttribute{
-				Computed:    true,
-				Description: "Date when auto-rotation will happen next.",
-			},
 			"policy": schema.StringAttribute{
 				Computed:    true,
-				Description: "AWS key policy.",
+				Description: "AWS XKS key policy.",
 			},
 			"policy_template_tag": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				Description: "AWS key tag for an associated policy template.",
-			},
-			"replica_policy": schema.StringAttribute{
-				Computed:    true,
-				Description: "Replication policy.",
+				Description: "AWS XKS key tag for an associated policy template.",
 			},
 			"rotated_at": schema.StringAttribute{
 				Computed:    true,
@@ -291,15 +254,35 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Computed:    true,
 				Description: "Date of key material expiry.",
 			},
+			"linked": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
+			},
+			"blocked": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
+			},
+			"aws_xks_key_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "XKS key ID in AWS.",
+			},
+			"aws_custom_key_store_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Custom keystore ID in AWS.",
+			},
+			"source_key_tier": schema.StringAttribute{
+				Computed:    true,
+				Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
+			},
 		},
 	}
 }
 
-func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
-	var state AWSKeyDataSourceTFSDK
+	var state AWSXKSKeyDataSourceTFSDK
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
 		resp.Diagnostics = append(resp.Diagnostics, diags...)
@@ -309,16 +292,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 	if state.KeyID.ValueString() != "" {
 		filters.Add("id", state.KeyID.ValueString())
 	} else if state.ID.ValueString() != "" {
-		region, kid, err := decodeAwsKeyResourceID(state.ID.ValueString())
-		if err != nil {
-			msg := "Error decoding AWS XKS key resource ID, failed to set resource state."
-			details := map[string]interface{}{"id": state.ID.ValueString(), "error": err.Error()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
-			return
-		}
-		filters.Add("region", region)
-		filters.Add("keyid", kid)
+		filters.Add("id", state.ID.ValueString())
 	} else if state.ARN.ValueString() != "" {
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
@@ -360,7 +334,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	d.setKeyDataStoreState(ctx, response, &state, &resp.Diagnostics)
+	d.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -370,84 +344,34 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func listAwsKeys(ctx context.Context, id string, client *common.Client, filters url.Values, diags *diag.Diagnostics) string {
-	response, err := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
-	if err != nil {
-		msg := "Failed to list AWS key."
-		tflog.Error(ctx, msg)
-		details := map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "error": err.Error()}
-		diags.AddError(msg, apiDetail(details))
-		return ""
-	}
-	total := gjson.Get(response, "total").Int()
-	if total != 1 {
-		msg := "Failed list key, error listing single key."
-		tflog.Error(ctx, msg)
-		details := map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int())}
-		diags.AddError(msg, apiDetail(details))
-		return ""
-	}
-	resources := gjson.Get(response, "resources").Array()
-	var keyJSON string
-	for _, keyResourceJSON := range resources {
-		keyJSON = keyResourceJSON.String()
-	}
-	return keyJSON
-}
-
-func (d *dataSourceAWSKey) setKeyDataStoreState(ctx context.Context, response string, plan *AWSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
+func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyDataStoreState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
-	setAliases(response, &plan.Alias, diags)
-	setKeyTags(ctx, response, &plan.Tags, diags)
-	plan.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
-	plan.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
-	plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
-	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
-	if plan.KMS.ValueString() == "" {
-		plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
+	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
+	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
+	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
+	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
+	if plan.Linked.ValueBool() {
+		plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+		setAliases(response, &plan.Alias, diags)
+		setKeyTags(ctx, response, &plan.Tags, diags)
+	} else {
+		if len(plan.Alias.Elements()) == 0 {
+			var aliases []attr.Value
+			var d diag.Diagnostics
+			plan.Alias, d = types.SetValue(types.StringType, aliases)
+			if d.HasError() {
+				diags.Append(d...)
+			}
+		}
+		if len(plan.Tags.Elements()) == 0 {
+			tags := make(map[string]string)
+			var d diag.Diagnostics
+			plan.Tags, d = types.MapValueFrom(ctx, types.StringType, tags)
+			if d.HasError() {
+				diags.Append(d...)
+			}
+		}
 	}
-	plan.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
-	plan.MultiRegionKeyType = types.StringValue(gjson.Get(response, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String())
-	setMultiRegionConfiguration(ctx, response, &plan.MultiRegionPrimaryKey, &plan.MultiRegionReplicaKeys, diags)
-	plan.NextRotationDate = types.StringValue(gjson.Get(response, "aws_param.NextRotationDate").String())
-	plan.ReplicaPolicy = types.StringValue(gjson.Get(response, "replica_policy").String())
-}
-
-func setCommonKeyDataStoreState(ctx context.Context, response string, plan *AWSKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
-	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
-	plan.ARN = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
-	plan.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
-	plan.AWSKeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
-	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	plan.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
-	plan.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
-	plan.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	plan.EncryptionAlgorithms = flattenStringSliceJSON(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	plan.ExpirationModel = types.StringValue(gjson.Get(response, "").String())
-	plan.ExternalAccounts = flattenStringSliceJSON(gjson.Get(response, "external_accounts").Array(), diags)
-	plan.KeyAdmins = flattenStringSliceJSON(gjson.Get(response, "key_admins").Array(), diags)
-	plan.KeyAdminsRoles = flattenStringSliceJSON(gjson.Get(response, "key_admins_roles").Array(), diags)
-	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
-	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
-	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
-	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
-	plan.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
-	plan.KeyUsers = flattenStringSliceJSON(gjson.Get(response, "key_users").Array(), diags)
-	plan.KeyUsersRoles = flattenStringSliceJSON(gjson.Get(response, "key_users_roles").Array(), diags)
-	setKeyLabels(ctx, response, plan.KeyID.ValueString(), &plan.Labels, diags)
-	plan.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
-	plan.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
-	plan.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
-	plan.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
-	plan.Policy = types.StringValue(gjson.Get(response, "aws_param.Policy").String())
-	setPolicyTemplateTag(ctx, response, &plan.PolicyTemplateTag, diags)
-	plan.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
-	plan.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_to").String())
-	plan.RotationStatus = types.StringValue(gjson.Get(response, "rotation_status").String())
-	plan.RotatedTo = types.StringValue(gjson.Get(response, "rotated_to").String())
-	plan.SyncedAt = types.StringValue(gjson.Get(response, "synced_at").String())
-	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	plan.ValidTo = types.StringValue(gjson.Get(response, "aws_param.ValidTo").String())
+	plan.Region = types.StringValue(gjson.Get(response, "region").String())
 }

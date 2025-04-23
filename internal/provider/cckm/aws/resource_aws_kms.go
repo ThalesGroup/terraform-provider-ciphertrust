@@ -28,11 +28,6 @@ Use the APIs in this section to:
 * Grant permissions to CCKM users to perform specific actions on the AWS KMS.`
 )
 
-const (
-	KmsURL       = "api/v1/cckm/aws/kms"
-	KmsWithIDURL = "api/v1/cckm/aws/kms/%s"
-)
-
 func NewResourceCCKMAWSKMS() resource.Resource {
 	return &resourceCCKMAWSKMS{}
 }
@@ -132,8 +127,10 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Create]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Create]["+id+"]")
-	var plan KMSModelTFSDK
-	var payload KMSModelJSON
+	var (
+		plan    KMSModelTFSDK
+		payload KMSModelJSON
+	)
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -155,16 +152,16 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_kms', error marshaling payload."
-		details := map[string]interface{}{"name": payload.Name, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
+		msg := "Error creating AWS KMS, invalid data input."
+		details := map[string]interface{}{"name": payload.Name, "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
-	response, err := r.client.PostDataV2(ctx, id, KmsURL, payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
-		msg := "Error creating 'ciphertrust_aws_kms', error posting payload."
-		details := map[string]interface{}{"name": payload.Name, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
+		msg := "Error creating AWS KMS"
+		details := map[string]interface{}{"payload": string(payloadJSON), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -173,7 +170,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	r.setKmsState(response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		details := map[string]interface{}{"kms id": plan.ID.ValueString()}
-		msg := "Error creating 'ciphertrust_aws_kms', failed to set resource state."
+		msg := "Error creating AWS KMS, failed to set resource state."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -196,10 +193,10 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	kmsID := state.ID.ValueString()
-	response, err := r.client.GetById(ctx, id, kmsID, KmsURL)
+	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
 		details := map[string]interface{}{"kms id": kmsID, "error": err.Error()}
-		msg := "Error reading 'ciphertrust_aws_kms'."
+		msg := "Error reading AWS KMS."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -207,7 +204,7 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 	r.setKmsState(response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		details := map[string]interface{}{"kms id": kmsID}
-		msg := "Error reading 'ciphertrust_aws_kms', failed to set resource state."
+		msg := "Error reading AWS KMS, failed to set resource state."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -219,8 +216,10 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Update]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Update]["+id+"]")
-	var plan KMSModelTFSDK
-	var payload KMSModelJSON
+	var (
+		plan    KMSModelTFSDK
+		payload KMSModelJSON
+	)
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -243,16 +242,16 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	kmsID := plan.ID.ValueString()
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error updating 'ciphertrust_aws_kms', error marshaling payload."
-		details := map[string]interface{}{"kms id": kmsID, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
+		msg := "Error updating AWS KMS, invalid data input."
+		details := map[string]interface{}{"kms id": kmsID, "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
-	response, err := r.client.UpdateDataV2(ctx, kmsID, KmsURL, payloadJSON)
+	response, err := r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
-		msg := "Error updating 'ciphertrust_aws_kms', error posting payload."
-		details := map[string]interface{}{"kms id": kmsID, "payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
+		msg := "Error updating AWS KMS."
+		details := map[string]interface{}{"kms id": kmsID, "payload": string(payloadJSON), "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -260,7 +259,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	r.setKmsState(response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		details := map[string]interface{}{"kms id": kmsID}
-		msg := "Error updating 'ciphertrust_aws_kms', failed to set resource state."
+		msg := "Error updating AWS KMS, failed to set resource state."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
@@ -283,10 +282,10 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	kmsID := state.ID.ValueString()
-	_, err := r.client.DeleteByURL(ctx, kmsID, fmt.Sprintf(KmsWithIDURL, kmsID))
+	_, err := r.client.DeleteByURL(ctx, kmsID, common.URL_AWS_KMS+"/"+kmsID)
 	if err != nil {
-		msg := "Error deleting 'ciphertrust_aws_kms'."
-		details := map[string]interface{}{"key_id": kmsID, "error": err.Error()}
+		msg := "Error deleting AWS KMS."
+		details := map[string]interface{}{"kms_id": kmsID, "error": err.Error()}
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return

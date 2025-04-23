@@ -86,8 +86,8 @@ func (d *dataSourceAWSAccountDetails) Schema(_ context.Context, _ datasource.Sch
 }
 
 func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_account_details.go -> Read start]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_account_details.go -> Read end]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_account_details.go -> Read]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_account_details.go -> Read]")
 	var state AWSAccountDetailsDataSourceModel
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
@@ -105,16 +105,16 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
-		msg := "Error reading 'data.ciphertrust_aws_account_details'. Error marshaling payload."
+		details := map[string]interface{}{"error": err.Error()}
+		msg := "Error reading AWS account details, invalid data input."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return
 	}
 	response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
 	if err != nil {
-		details := map[string]interface{}{"payload": fmt.Sprintf("%+v", payload), "error": err.Error()}
-		msg := "Error reading 'data.ciphertrust_aws_account_details'. Error posting payload."
+		details := map[string]interface{}{"payload": string(payloadJSON), "error": err.Error()}
+		msg := "Error reading AWS account details."
 		tflog.Error(ctx, msg, details)
 		resp.Diagnostics.AddError(msg, apiDetail(details))
 		return

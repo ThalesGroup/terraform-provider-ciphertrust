@@ -371,8 +371,6 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
-
 	if plan.ConnectDisconnectKeystore.ValueString() != "" &&
 		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() {
 		state := plan
