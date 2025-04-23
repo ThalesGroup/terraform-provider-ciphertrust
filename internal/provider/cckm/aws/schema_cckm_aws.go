@@ -2,6 +2,8 @@ package cckm
 
 import (
 	"encoding/json"
+
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -34,23 +36,24 @@ type LocalHostedParamsTFSDK struct {
 }
 
 type AWSCustomKeyStoreTFSDK struct {
-	ID                        types.String `tfsdk:"id"`
-	AccessKeyID               types.String `tfsdk:"access_key_id"`
-	SecretAccessKey           types.String `tfsdk:"secret_access_key"`
-	CloudName                 types.String `tfsdk:"cloud_name"`
-	CredentialVersion         types.String `tfsdk:"credential_version"`
-	KMS                       types.String `tfsdk:"kms"`
-	KMSID                     types.String `tfsdk:"kms_id"`
-	Type                      types.String `tfsdk:"type"`
-	CreatedAt                 types.String `tfsdk:"created_at"`
-	UpdatedAt                 types.String `tfsdk:"updated_at"`
-	Name                      types.String `tfsdk:"name"`
-	Region                    types.String `tfsdk:"region"`
-	EnableSuccessAuditEvent   types.Bool   `tfsdk:"enable_success_audit_event"`
-	LinkedState               types.Bool   `tfsdk:"linked_state"`
-	ConnectDisconnectKeystore types.String `tfsdk:"connect_disconnect_keystore"`
-	AWSParams                 types.List   `tfsdk:"aws_param"`
-	LocalHostedParams         types.List   `tfsdk:"local_hosted_params"`
+	ID                        types.String   `tfsdk:"id"`
+	AccessKeyID               types.String   `tfsdk:"access_key_id"`
+	SecretAccessKey           types.String   `tfsdk:"secret_access_key"`
+	CloudName                 types.String   `tfsdk:"cloud_name"`
+	CredentialVersion         types.String   `tfsdk:"credential_version"`
+	KMS                       types.String   `tfsdk:"kms"`
+	KMSID                     types.String   `tfsdk:"kms_id"`
+	Type                      types.String   `tfsdk:"type"`
+	CreatedAt                 types.String   `tfsdk:"created_at"`
+	UpdatedAt                 types.String   `tfsdk:"updated_at"`
+	Name                      types.String   `tfsdk:"name"`
+	Region                    types.String   `tfsdk:"region"`
+	EnableSuccessAuditEvent   types.Bool     `tfsdk:"enable_success_audit_event"`
+	LinkedState               types.Bool     `tfsdk:"linked_state"`
+	ConnectDisconnectKeystore types.String   `tfsdk:"connect_disconnect_keystore"`
+	AWSParams                 types.List     `tfsdk:"aws_param"`
+	LocalHostedParams         types.List     `tfsdk:"local_hosted_params"`
+	Timeouts                  timeouts.Value `tfsdk:"timeouts"`
 }
 
 type AWSKeyEnableRotationTFSDK struct {
