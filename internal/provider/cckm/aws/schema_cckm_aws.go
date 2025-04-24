@@ -303,6 +303,7 @@ type CreateAWSKeyPayloadJSON struct {
 type UploadAWSKeyParamJSON struct {
 	CommonAWSParamsJSON
 	ValidTo string `json:"ValidTo"`
+	Origin  string `json:"Origin"`
 }
 
 type UploadAWSKeyPayloadJSON struct {
@@ -456,7 +457,7 @@ type EnableAutoRotationPayloadJSON struct {
 	RotationPeriodInDays *int64 `json:"rotation_period_in_days"`
 }
 
-type UpdatePrimaryRegionJSON struct {
+type UpdatePrimaryRegionPayloadJSON struct {
 	PrimaryRegion *string `json:"PrimaryRegion"`
 }
 
