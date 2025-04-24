@@ -314,10 +314,10 @@ type UploadAWSKeyPayloadJSON struct {
 }
 
 type AWSKeyImportKeyPayloadJSON struct {
-	SourceKeyID   string `tfsdk:"source_key_identifier"`
-	SourceKeyTier string `tfsdk:"source_key_tier"`
-	KeyExpiration bool   `tfsdk:"key_expiration"`
-	ValidTo       string `tfsdk:"ValidTo"`
+	SourceKeyID   string `json:"source_key_identifier"`
+	SourceKeyTier string `json:"source_key_tier"`
+	KeyExpiration bool   `json:"key_expiration"`
+	ValidTo       string `json:"valid_to"`
 }
 
 type AWSEnableKeyRotationJobPayloadJSON struct {

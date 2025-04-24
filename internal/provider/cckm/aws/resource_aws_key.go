@@ -141,7 +141,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"customer_master_key_spec": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Specifies a symmetric or asymmetric key and the encryption\\signing algorithms the key supports. Valid values: " + strings.Join(awsKeySpecs, ","),
+				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ","),
 				Validators:  []validator.String{stringvalidator.OneOf(awsKeySpecs...)},
 			},
 			"description": schema.StringAttribute{
@@ -867,7 +867,7 @@ func setCommonKeyState(ctx context.Context, response string, plan *AWSKeyCommonT
 	plan.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
 	plan.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 	plan.EncryptionAlgorithms = flattenStringSliceJSON(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	plan.ExpirationModel = types.StringValue(gjson.Get(response, "").String())
+	plan.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
 	plan.ExternalAccounts = flattenStringSliceJSON(gjson.Get(response, "external_accounts").Array(), diags)
 	plan.KeyAdmins = flattenStringSliceJSON(gjson.Get(response, "key_admins").Array(), diags)
 	plan.KeyAdminsRoles = flattenStringSliceJSON(gjson.Get(response, "key_admins_roles").Array(), diags)
@@ -1038,7 +1038,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 		SourceKeyID:   sourceKeyID,
 		SourceKeyTier: importMaterialPlan.SourceKeyTier.ValueString(),
 		KeyExpiration: importMaterialPlan.KeyExpiration.ValueBool(),
-		ValidTo:       importMaterialPlan.ValidTo.String(),
+		ValidTo:       importMaterialPlan.ValidTo.ValueString(),
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
