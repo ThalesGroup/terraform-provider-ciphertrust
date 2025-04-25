@@ -312,9 +312,9 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 		region, kid, err := decodeAwsKeyResourceID(state.ID.ValueString())
 		if err != nil {
 			msg := "Error decoding AWS XKS key resource ID, failed to set resource state."
-			details := map[string]interface{}{"id": state.ID.ValueString(), "error": err.Error()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "id": state.ID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		filters.Add("region", region)
@@ -323,17 +323,17 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
 			msg := "Unexpected AWS ARN format."
-			details := map[string]interface{}{"arn": state.ARN.ValueString()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
+			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) != 2 {
 			msg := "Unexpected AWS ARN format, unable to extract AWS KID."
-			details := map[string]interface{}{"arn": state.ARN.ValueString()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
+			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		filters.Add("region", arnParts[3])
@@ -374,17 +374,17 @@ func listAwsKeys(ctx context.Context, id string, client *common.Client, filters 
 	response, err := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 	if err != nil {
 		msg := "Failed to list AWS key."
-		tflog.Error(ctx, msg)
-		details := map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "error": err.Error()}
-		diags.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
 		return ""
 	}
 	total := gjson.Get(response, "total").Int()
 	if total != 1 {
 		msg := "Failed list key, error listing single key."
 		tflog.Error(ctx, msg)
-		details := map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int())}
-		diags.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int())})
+		diags.AddError(details, "")
 		return ""
 	}
 	resources := gjson.Get(response, "resources").Array()

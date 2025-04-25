@@ -105,18 +105,18 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		details := map[string]interface{}{"error": err.Error()}
 		msg := "Error reading AWS account details, invalid data input."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
 	if err != nil {
-		details := map[string]interface{}{"payload": string(payloadJSON), "error": err.Error()}
 		msg := "Error reading AWS account details."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())

@@ -153,18 +153,18 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		details := map[string]interface{}{"error": err.Error()}
 		msg := "Error creating AWS key policy template, invalid data input."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
-		details := map[string]interface{}{"payload": string(payloadJSON), "error": err.Error()}
 		msg := "Error creating AWS key policy template."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
@@ -188,18 +188,18 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	templateID := state.ID.ValueString()
 	response, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
 	if err != nil {
-		details := map[string]interface{}{"template id": templateID, "error": err.Error()}
 		msg := "Error reading AWS key policy template."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		details := map[string]interface{}{"template id": templateID}
 		msg := "Error reading AWS key policy template."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, "")
+		details := apiError(msg, map[string]interface{}{"template id": templateID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -232,26 +232,26 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		details := map[string]interface{}{"template id": templateID, "error": err.Error()}
 		msg := "Error updating AWS key policy template, invalid data input."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	response, err := r.client.UpdateDataV2(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
-		details := map[string]interface{}{"template id": templateID, "payload": string(payloadJSON), "error": err.Error()}
 		msg := "Error updating AWS key policy template."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID, "payload": payload})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		details := map[string]interface{}{"template id": templateID}
 		msg := "Error updating AWS key policy template, failed to set resource state."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"template id": templateID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -268,12 +268,14 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 	if err != nil {
 		if strings.Contains(err.Error(), "has one or more key associated") {
 			msg := "AWS policy template " + templateID + " has one or more keys associated with it so it can't be deleted. This includes keys scheduled for deletion."
-			tflog.Warn(ctx, msg, map[string]interface{}{"error": err.Error()})
-			resp.Diagnostics.AddWarning(msg, err.Error())
+			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
 		} else {
 			msg := "Error deleting AWS policy template " + templateID + "."
-			tflog.Error(ctx, msg, map[string]interface{}{"error": err.Error()})
-			resp.Diagnostics.AddError(msg, err.Error())
+			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 		}
 	}
 }
@@ -356,9 +358,9 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, 
 	equivalent, err := jsonBytesEqual([]byte(policy), []byte(state.Policy.ValueString()))
 	if err != nil {
 		msg := "Error comparing state and plan 'ciphertrust_aws_policy_template.policy' of " + state.Name.ValueString() + "."
-		details := map[string]interface{}{"error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		diags.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
 		return
 	}
 	if !equivalent {

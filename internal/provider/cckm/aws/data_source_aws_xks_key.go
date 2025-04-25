@@ -297,17 +297,17 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
 			msg := "Unexpected AWS ARN format."
-			details := map[string]interface{}{"arn": state.ARN.ValueString()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
+			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) != 2 {
 			msg := "Unexpected AWS ARN format, unable to extract AWS KID."
-			details := map[string]interface{}{"arn": state.ARN.ValueString()}
-			tflog.Error(ctx, msg, details)
-			resp.Diagnostics.AddError(msg, apiDetail(details))
+			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		filters.Add("region", arnParts[3])

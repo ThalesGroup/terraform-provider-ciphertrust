@@ -153,26 +153,26 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating AWS KMS, invalid data input."
-		details := map[string]interface{}{"name": payload.Name, "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "name": payload.Name})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS KMS"
-		details := map[string]interface{}{"payload": string(payloadJSON), "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	r.setKmsState(response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		details := map[string]interface{}{"kms id": plan.ID.ValueString()}
 		msg := "Error creating AWS KMS, failed to set resource state."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"kms id": plan.ID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	diags = resp.State.Set(ctx, plan)
@@ -195,18 +195,18 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 	kmsID := state.ID.ValueString()
 	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
-		details := map[string]interface{}{"kms id": kmsID, "error": err.Error()}
 		msg := "Error reading AWS KMS."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setKmsState(response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		details := map[string]interface{}{"kms id": kmsID}
 		msg := "Error reading AWS KMS, failed to set resource state."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Read]["+id+"]")
@@ -243,25 +243,25 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error updating AWS KMS, invalid data input."
-		details := map[string]interface{}{"kms id": kmsID, "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	response, err := r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS KMS."
-		details := map[string]interface{}{"kms id": kmsID, "payload": string(payloadJSON), "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID, "payload": payload})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setKmsState(response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		details := map[string]interface{}{"kms id": kmsID}
 		msg := "Error updating AWS KMS, failed to set resource state."
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	diags = resp.State.Set(ctx, plan)
@@ -285,9 +285,9 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 	_, err := r.client.DeleteByURL(ctx, kmsID, common.URL_AWS_KMS+"/"+kmsID)
 	if err != nil {
 		msg := "Error deleting AWS KMS."
-		details := map[string]interface{}{"kms_id": kmsID, "error": err.Error()}
-		tflog.Error(ctx, msg, details)
-		resp.Diagnostics.AddError(msg, apiDetail(details))
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 }
