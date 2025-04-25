@@ -377,7 +377,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"RSA-PSS"}...),
 				},
 			},
-			"size": schema.Int64Attribute{
+			"key_size": schema.Int64Attribute{
 				Optional:    true,
 				Description: "Bit length for the key.",
 			},

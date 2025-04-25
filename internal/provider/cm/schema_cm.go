@@ -194,7 +194,7 @@ type CMKeyTFSDK struct {
 	SecretDataEncoding       types.String              `tfsdk:"secret_data_encoding"`
 	SecretDataLink           types.String              `tfsdk:"secret_data_link"`
 	SigningAlgo              types.String              `tfsdk:"signing_algo"`
-	Size                     types.Int64               `tfsdk:"size"`
+	Size                     types.Int64               `tfsdk:"key_size"`
 	UnExportable             types.Bool                `tfsdk:"unexportable"`
 	UnDeletable              types.Bool                `tfsdk:"undeletable"`
 	State                    types.String              `tfsdk:"state"`
