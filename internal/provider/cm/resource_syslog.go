@@ -46,23 +46,34 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "The ID of this resource.",
 			},
 			"host": schema.StringAttribute{
-				Required:    true,
+				Required: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The hostname or IP address of the syslog connection.",
 			},
 			"transport": schema.StringAttribute{
-				Required:    true,
+				Required: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "udp, tcp or tls",
 			},
 			"ca_cert": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode",
 			},
 			"message_format": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef.",
 			},
 			"port": schema.Int64Attribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
 			},
 			"account":    schema.StringAttribute{Computed: true},

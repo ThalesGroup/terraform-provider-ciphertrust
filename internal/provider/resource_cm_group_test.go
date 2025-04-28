@@ -43,6 +43,7 @@ resource "ciphertrust_cm_group" "testGroup" {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_cm_group" "testGroup" {
+  name="TestGroup"
   description="Updated via TF"
 }
 `,

@@ -46,18 +46,26 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"username": schema.StringAttribute{
 				Required: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"nickname": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"email": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"full_name": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"password": schema.StringAttribute{
 				Required: true,
+				Computed: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
 				Computed: true,

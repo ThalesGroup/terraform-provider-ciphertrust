@@ -33,7 +33,7 @@ resource "ciphertrust_cm_user" "testUser" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "user_id"),
 				),
 			},
 			//ImportState testing
@@ -47,13 +47,14 @@ resource "ciphertrust_cm_user" "testUser" {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_cm_user" "testUser" {
-  name="john"
+  username="frank"
+  full_name="john"
   email="john@local"
   password="ChangeIt01!"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "user_id"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase

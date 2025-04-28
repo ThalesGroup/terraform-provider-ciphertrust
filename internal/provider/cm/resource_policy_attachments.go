@@ -46,25 +46,33 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				Description: "The ID of this resource.",
 			},
 			"policy": schema.StringAttribute{
-				Required:    true,
+				Required: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The ID for the policy to be attached.",
 			},
 			"principal_selector": schema.MapAttribute{
 				ElementType: types.StringType,
 				Required:    true,
+				Computed:    true,
 				Description: "Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.",
 			},
 			"jurisdiction": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Jurisdiction to which the policy applies.",
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
 				ElementType: types.StringType,
 			},
 			"resources": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
 			},
@@ -167,7 +175,7 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
-	arrResources := (gjson.Get(response, "createdAt").Array())
+	arrResources := (gjson.Get(response, "resources").Array())
 	var resources []types.String
 	for _, resource := range arrResources {
 		resources = append(resources, types.StringValue(resource.String()))

@@ -46,32 +46,42 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"admins": schema.ListAttribute{
 				Required:    true,
+				Computed:    true,
 				Description: "List of administrators for the domain",
 				ElementType: types.StringType,
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
+				Required: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The name of the domain",
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "To allow user creation and management in the domain, set it to true. The default value is false.",
 			},
 			"hsm_connection_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The ID of the HSM connection. Required for HSM-anchored domains.",
 			},
 			"hsm_kek_label": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label.",
 			},
 			"meta_data": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
 				Description: "Optional end-user or service data stored with the domain. Should be JSON-serializable.",
 			},
 			"parent_ca_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
 			},
 			"uri": schema.StringAttribute{

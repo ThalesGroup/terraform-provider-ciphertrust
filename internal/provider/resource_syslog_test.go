@@ -42,7 +42,7 @@ resource "ciphertrust_syslog" "syslog_1" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_ntp.ntp_server_1", "host"),
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog.syslog_1", "host"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase

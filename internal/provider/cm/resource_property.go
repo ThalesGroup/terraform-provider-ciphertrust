@@ -46,11 +46,19 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Name of property",
 			},
 			"value": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "Value to be set",
 			},
 			"description": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "Description of the property and its value",
 			},
 		},
@@ -98,6 +106,8 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 		)
 		return
 	}
+
+	plan.Description = types.StringValue(gjson.Get(response, "description").String())
 
 	tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")

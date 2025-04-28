@@ -41,6 +41,8 @@ resource "ciphertrust_domain" "testDomain" {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_domain" "testDomain" {
+  name = "domain_test"
+  admins = ["admin"]
   meta_data = {
       "abc": "xyz",
 	  "color": "blue"
