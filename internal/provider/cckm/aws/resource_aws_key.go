@@ -707,7 +707,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 	if !plan.PrimaryRegion.IsNull() && plan.PrimaryRegion != state.PrimaryRegion {
 		newPrimaryRegion := plan.PrimaryRegion.ValueString()
-		primaryKeyJSON := r.getPrimaryKey(ctx, uid, &plan, &resp.Diagnostics)
+		primaryKeyJSON := r.getPrimaryKey(ctx, uid, keyID, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -977,7 +977,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 		tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableAutoRotation][response:"+response)
 	}
 	if keyEnabled != planEnabled || keyDays != planDays {
-		msg := "Failed to confirm auto-rotation is configured. Consider extending provider configuration option 'aws_operation_timeout'."
+		msg := "Failed to confirm auto-rotation is configured."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
@@ -1206,7 +1206,8 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 		diags.AddWarning(details, "")
 	} else {
 		if replicateKeyPlan.MakePrimary.ValueBool() {
-			r.updatePrimaryRegion(ctx, uid, primaryKeyID, plan.Region.ValueString(), diags)
+			newPrimaryRegion := plan.Region.ValueString()
+			r.updatePrimaryRegion(ctx, uid, primaryKeyID, newPrimaryRegion, diags)
 			if diags.HasError() {
 				return ""
 			}
@@ -1910,10 +1911,9 @@ func setMultiRegionConfiguration(ctx context.Context, keyJSON string, stateMulti
 	*stateMultiRegionReplicaKeys = stateMultiRegionReplicaKeysList
 }
 
-func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
+func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, keyID string, diags *diag.Diagnostics) string {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> getPrimaryKey]["+uid+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> getPrimaryKey]["+uid+"]")
-	keyID := plan.KeyID.ValueString()
 	response, err := r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Failed get primary key ID of AWS key " + keyID + ", error reading key."
@@ -1926,7 +1926,7 @@ func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, plan *AW
 	primaryKeyARN := gjson.Get(response, "aws_param.MultiRegionConfiguration.PrimaryKey.Arn").String()
 	primaryKeyArnParts := strings.Split(primaryKeyARN, ":")
 	if len(primaryKeyArnParts) != 6 {
-		msg := "Failed get primary key of AWS key, unexpected ARN format."
+		msg := "Failed get primary key of AWS key, unexpected primary key ARN format."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID, "arn": primaryKeyARN})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
@@ -1934,7 +1934,7 @@ func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, plan *AW
 	}
 	kidParts := strings.Split(primaryKeyArnParts[5], "/")
 	if len(kidParts) != 2 {
-		msg := "Failed get primary key of AWS key, unexpected ARN format."
+		msg := "Failed get primary key of AWS key, unexpected primary key  ARN format."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID, "arn": primaryKeyArnParts[5]})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")

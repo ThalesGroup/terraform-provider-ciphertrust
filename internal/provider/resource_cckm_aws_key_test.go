@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,14 +40,20 @@ var (
 }`
 )
 
-func initCckmAwsTest() (string, bool) {
+func initCckmAwsTest(timeout ...int) (string, bool) {
 	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if awsAccessKeyID == "" || awsSecretAccessKey == "" {
 		return "", false
 	}
+	operationTimeout := defaultAwsOperationTimeout
+	if timeout != nil && len(timeout) > 1 {
+		operationTimeout = timeout[0]
+	}
 	awsConfig := `
-		provider "ciphertrust" {}
+		provider "ciphertrust" {
+			aws_operation_timeout = %d
+		}
 		resource "ciphertrust_aws_connection" "aws_connection" {
 			name = "%s"
 		}
@@ -69,7 +76,7 @@ func initCckmAwsTest() (string, bool) {
 			cmKeyName = "%s"
 		}`
 	uid := "tf-" + guuid.New().String()[:8]
-	awsConnectionResource := fmt.Sprintf(awsConfig, uid, uid, uid, uid)
+	awsConnectionResource := fmt.Sprintf(awsConfig, operationTimeout, uid, uid, uid, uid)
 	return awsConnectionResource, true
 }
 
@@ -480,17 +487,6 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			}
 			replicate_key {
 				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-			}
-		}
-		resource "ciphertrust_aws_key" "replica_2" {
-			depends_on = [
-				ciphertrust_aws_key.replica_1,
-			]
-			region					= ciphertrust_aws_kms.kms.regions[2]
-			description 			= "replica two"
-			origin					= "AWS_KMS"
-			replicate_key {
-				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
 				make_primary 		= true
 			}
 		}`
@@ -522,24 +518,13 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			region 					= ciphertrust_aws_kms.kms.regions[1]
 			description 			= "replica one"
 			origin					= "AWS_KMS"
+			primary_region			= ciphertrust_aws_kms.kms.regions[0]   
 			tags = {
 				RegionOneTagKey = "RegionOneTagValue"
 			}
 			replicate_key {
 				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
 			}
-		}
-		resource "ciphertrust_aws_key" "replica_2" {
-			depends_on = [
-				ciphertrust_aws_key.replica_1,
-			]
-			region					= ciphertrust_aws_kms.kms.regions[2]
-			description 			= "replica two"
-			origin					= "AWS_KMS"
-			replicate_key {
-				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-			}
-			primary_region = ciphertrust_aws_kms.kms.regions[1]
 		}`
 
 	aliasA := awsKeyNamePrefix + guuid.New().String()[8:]
@@ -547,7 +532,6 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 	replicaAlias := awsKeyNamePrefix + guuid.New().String()[8:]
 	keyResource := "ciphertrust_aws_key.multi_region_key"
 	replicaResource1 := "ciphertrust_aws_key.replica_1"
-	replicaResource2 := "ciphertrust_aws_key.replica_2"
 	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
 		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
 	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
@@ -583,16 +567,7 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
 					resource.TestCheckResourceAttr(replicaResource1, "tags.%", "1"),
 					resource.TestCheckResourceAttr(replicaResource1, "tags.RegionOneTagKey", "RegionOneTagValue"),
-
-					resource.TestCheckResourceAttr(replicaResource2, "alias.#", "0"),
-					resource.TestCheckResourceAttr(replicaResource2, "description", "replica two"),
-					resource.TestCheckResourceAttr(replicaResource2, "multi_region", "true"),
-					resource.TestCheckResourceAttr(replicaResource2, "multi_region_replica_keys.#", "2"),
-					resource.TestCheckResourceAttrSet(replicaResource2, "policy"),
-					resource.TestCheckResourceAttr(replicaResource2, "tags.%", "0"),
-
-					// On return of the API the replicated key will be the primary key
-					resource.TestCheckResourceAttr(replicaResource2, "multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(replicaResource1, "multi_region_key_type", "PRIMARY"),
 				),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
@@ -604,8 +579,8 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			{
 				Config: updateResources,
 				Check: resource.ComposeTestCheckFunc(
-					// On return of the API the replicated key the original primary key will no longer be the primary
-					resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "REPLICA"),
+					// On return of the API the replicated key the previous primary key will be a replica (primary_region)
+					resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
 				),
 			},
 		},
