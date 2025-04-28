@@ -115,8 +115,7 @@ func (r *resourceADPClientProfile) Schema(_ context.Context, _ resource.SchemaRe
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"DPG",
 						"CADP For Java",
-						"CRDP",
-						"Plaintext"}...),
+						"CRDP"}...),
 				},
 			},
 			"name": schema.StringAttribute{
