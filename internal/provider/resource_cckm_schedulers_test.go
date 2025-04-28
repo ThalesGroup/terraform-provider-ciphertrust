@@ -2,7 +2,7 @@ package provider
 
 import (
 	"fmt"
-	guuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"sort"
@@ -76,8 +76,8 @@ func TestCckmSchedulers(t *testing.T) {
 		awsKeyResource := "ciphertrust_aws_key.aws_key"
 		maxParamsResource := "ciphertrust_scheduler.rotation_max_params"
 		minParamsResource := "ciphertrust_scheduler.rotation_min_params"
-		maxParamsName := "MaxParams" + guuid.New().String()[:8]
-		minParamsName := "MinParams" + guuid.New().String()[:8]
+		maxParamsName := "MaxParams" + uuid.New().String()[:8]
+		minParamsName := "MinParams" + uuid.New().String()[:8]
 		expiration := "44d"
 		expireIn := "22h"
 		createConfig := connectionResource + fmt.Sprintf(createSchedulerParams, expiration, expireIn, maxParamsName, minParamsName)
@@ -198,8 +198,8 @@ func TestCckmSchedulers(t *testing.T) {
 			}`
 		kmsParamsResource := "ciphertrust_scheduler.sync_kms_params"
 		syncAllParamsResource := "ciphertrust_scheduler.sync_all_params"
-		kmsParamsName := "KmsParams" + guuid.New().String()[:8]
-		syncAllParamsName := "SyncAllParams" + guuid.New().String()[:8]
+		kmsParamsName := "KmsParams" + uuid.New().String()[:8]
+		syncAllParamsName := "SyncAllParams" + uuid.New().String()[:8]
 		createConfig := connectionResource + fmt.Sprintf(createParams, kmsParamsName, syncAllParamsName)
 		updateConfig := connectionResource + fmt.Sprintf(updateParams, kmsParamsName, syncAllParamsName)
 		resource.Test(t, resource.TestCase{
