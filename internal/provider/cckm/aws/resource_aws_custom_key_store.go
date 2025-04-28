@@ -425,7 +425,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				}
 
 				if err == nil {
-					response, err = retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+					response, err = r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 					if err != nil {
 						resp.Diagnostics.AddWarning(
 							"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -461,7 +461,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				)
 			}
 			if err == nil {
-				response, err = retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+				response, err = r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 				if err != nil {
 					resp.Diagnostics.AddWarning(
 						"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -754,7 +754,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				return
 			}
 
-			response, err := retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			response, err := r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 			if err != nil {
 				resp.Diagnostics.AddError(
 					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -784,7 +784,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			response, err := retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			response, err := r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
 			if err != nil {
 				resp.Diagnostics.AddError(
 					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -1020,13 +1020,19 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	}
 }
 
-func retryOperation(ctx context.Context, wantState string, operation func() (string, error), maxRetries int, retryDelay time.Duration) (string, error) {
+func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id string, wantState string, operation func() (string, error), maxRetries int, retryDelay time.Duration) (string, error) {
 	var (
 		response string
 		err      error
 	)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt < maxRetries {
+			time.Sleep(retryDelay)
+		}
+		if err := r.client.RefreshToken(ctx, id); err != nil {
+			return "", err
+		}
 		response, err = operation()
 		if err != nil {
 			return "", err
@@ -1042,9 +1048,6 @@ func retryOperation(ctx context.Context, wantState string, operation func() (str
 			break
 		}
 		tflog.Debug(ctx, fmt.Sprintf("Operation failed (attempt %d/%d): %v", attempt, maxRetries, err))
-		if attempt < maxRetries {
-			time.Sleep(retryDelay)
-		}
 	}
 
 	return "", fmt.Errorf("operation failed after %d retries: %v", maxRetries, err)
