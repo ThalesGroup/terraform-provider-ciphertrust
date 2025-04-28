@@ -2,11 +2,10 @@ package provider
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"sort"
-	"testing"
 )
 
 func TestCckmSchedulers(t *testing.T) {
@@ -250,29 +249,4 @@ func TestCckmSchedulers(t *testing.T) {
 			},
 		})
 	})
-}
-
-func testCheckAttributeNotSet(resourceName string, attributeName string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		for rn, rs := range s.RootModule().Resources {
-			if rn != resourceName {
-				continue
-			}
-			if rs.Primary.ID == "" {
-				return fmt.Errorf("error: %s resource ID is not set", resourceName)
-			}
-			keys := make([]string, 0, len(rs.Primary.Attributes))
-			for k := range rs.Primary.Attributes {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				if k == attributeName {
-					return fmt.Errorf("error: found %s:%s is set to %s but it should not be set", resourceName, attributeName, rs.Primary.Attributes[k])
-				}
-			}
-			return nil
-		}
-		return fmt.Errorf("error: did not find resource %s so can't list attributes", resourceName)
-	}
 }

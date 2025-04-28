@@ -2,9 +2,10 @@ package provider
 
 import (
 	"fmt"
-	guuid "github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestCckmAwsPolicyTemplateDefaultPolicy(t *testing.T) {
@@ -29,7 +30,7 @@ func TestCckmAwsPolicyTemplateDefaultPolicy(t *testing.T) {
 			name = "%s"
 		}`
 	resourceName := "ciphertrust_aws_policy_template.policy_template"
-	templateName := "PolicyTemplate-" + guuid.New().String()
+	templateName := "PolicyTemplate-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{

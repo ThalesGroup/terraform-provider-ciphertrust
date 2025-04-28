@@ -2,20 +2,19 @@ package provider
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
-	"github.com/hashicorp/terraform-plugin-testing/statecheck"
-	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	guuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 const (
@@ -75,7 +74,7 @@ func initCckmAwsTest(timeout ...int) (string, bool) {
 			alias   = "%s"
 			cmKeyName = "%s"
 		}`
-	uid := "tf-" + guuid.New().String()[:8]
+	uid := "tf-" + uuid.New().String()[:8]
 	awsConnectionResource := fmt.Sprintf(awsConfig, operationTimeout, uid, uid, uid, uid)
 	return awsConnectionResource, true
 }
@@ -165,8 +164,8 @@ func TestCckmAwsKeyNative(t *testing.T) {
 		}`
 
 	aliasList := []string{
-		awsKeyNamePrefix + guuid.New().String(),
-		awsKeyNamePrefix + guuid.New().String(),
+		awsKeyNamePrefix + uuid.New().String(),
+		awsKeyNamePrefix + uuid.New().String(),
 	}
 	keyResource := "ciphertrust_aws_key.native_key"
 
@@ -185,6 +184,7 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
 					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
 					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
@@ -349,6 +349,7 @@ func TestCckmAwsKeyImport(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(localKeyResource, "description", "import description"),
 					resource.TestCheckResourceAttr(localKeyResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
+					resource.TestCheckResourceAttrSet(localKeyResource, "id"),
 					resource.TestCheckResourceAttrSet(localKeyResource, "key_id"),
 					resource.TestCheckResourceAttr(localKeyResource, "key_material_origin", "cckm"),
 					resource.TestCheckResourceAttr(localKeyResource, "key_state", "Enabled"),
@@ -427,6 +428,7 @@ func TestCckmAwsKeyUpload(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(localKeyResource, "alias.#", "1"),
 					resource.TestCheckResourceAttr(localKeyResource, "description", "upload description"),
+					resource.TestCheckResourceAttrSet(localKeyResource, "id"),
 					resource.TestCheckResourceAttrSet(localKeyResource, "key_id"),
 					resource.TestCheckResourceAttr(localKeyResource, "key_state", "Enabled"),
 					resource.TestCheckResourceAttrSet(localKeyResource, "key_id"),
@@ -518,7 +520,7 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			region 					= ciphertrust_aws_kms.kms.regions[1]
 			description 			= "replica one"
 			origin					= "AWS_KMS"
-			primary_region			= ciphertrust_aws_kms.kms.regions[0]   
+			primary_region			= ciphertrust_aws_kms.kms.regions[0]
 			tags = {
 				RegionOneTagKey = "RegionOneTagValue"
 			}
@@ -527,9 +529,9 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			}
 		}`
 
-	aliasA := awsKeyNamePrefix + guuid.New().String()[8:]
-	aliasB := awsKeyNamePrefix + guuid.New().String()[8:]
-	replicaAlias := awsKeyNamePrefix + guuid.New().String()[8:]
+	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
+	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
+	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
 	keyResource := "ciphertrust_aws_key.multi_region_key"
 	replicaResource1 := "ciphertrust_aws_key.replica_1"
 	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
@@ -544,6 +546,7 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "alias.#", "2"),
 					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "RSA_2048"),
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "multi_region", "true"),
 					resource.TestCheckResourceAttr(keyResource, "multi_region_replica_keys.#", "0"),
 					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
@@ -554,6 +557,7 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(replicaResource1, "alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource1, "alias.0", replicaAlias),
 					resource.TestCheckResourceAttr(replicaResource1, "description", "replica one"),
+					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
 					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
 					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
@@ -607,6 +611,31 @@ func testAccListResourceAttributes(resourceName string) resource.TestCheckFunc {
 				fmt.Printf("k:%s v:%v\n", k, rs.Primary.Attributes[k])
 			}
 			fmt.Printf("**************** end %s attributes\n", resourceName)
+			return nil
+		}
+		return fmt.Errorf("error: did not find resource %s so can't list attributes", resourceName)
+	}
+}
+
+func testCheckAttributeNotSet(resourceName string, attributeName string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		for rn, rs := range s.RootModule().Resources {
+			if rn != resourceName {
+				continue
+			}
+			if rs.Primary.ID == "" {
+				return fmt.Errorf("error: %s resource ID is not set", resourceName)
+			}
+			keys := make([]string, 0, len(rs.Primary.Attributes))
+			for k := range rs.Primary.Attributes {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				if k == attributeName {
+					return fmt.Errorf("error: found %s:%s is set to %s but it should not be set", resourceName, attributeName, rs.Primary.Attributes[k])
+				}
+			}
 			return nil
 		}
 		return fmt.Errorf("error: did not find resource %s so can't list attributes", resourceName)

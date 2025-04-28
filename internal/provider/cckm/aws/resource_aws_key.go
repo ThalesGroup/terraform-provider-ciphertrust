@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"reflect"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -27,11 +33,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
-	"net/url"
-	"reflect"
-	"regexp"
-	"strings"
-	"time"
 )
 
 var (
