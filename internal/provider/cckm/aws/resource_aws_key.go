@@ -550,9 +550,9 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 }
 
 func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	uid := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Create]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Create]["+uid+"]")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Create]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Create]["+id+"]")
 	var (
 		plan     AWSKeyTFSDK
 		response string
@@ -562,13 +562,13 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	if len(plan.ImportKeyMaterial.Elements()) != 0 {
-		response = r.importKeyMaterial(ctx, uid, &plan, &resp.Diagnostics)
+		response = r.importKeyMaterial(ctx, id, &plan, &resp.Diagnostics)
 	} else if len(plan.UploadKey.Elements()) != 0 {
-		response = r.uploadKey(ctx, uid, &plan, &resp.Diagnostics)
+		response = r.uploadKey(ctx, id, &plan, &resp.Diagnostics)
 	} else if len(plan.ReplicateKey.Elements()) != 0 {
-		response = r.replicateKey(ctx, uid, &plan, &resp.Diagnostics)
+		response = r.replicateKey(ctx, id, &plan, &resp.Diagnostics)
 	} else {
-		response = r.createKey(ctx, uid, &plan, &resp.Diagnostics)
+		response = r.createKey(ctx, id, &plan, &resp.Diagnostics)
 	}
 	if resp.Diagnostics.HasError() {
 		return
@@ -576,28 +576,28 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	if len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
-		response = addAliases(ctx, r.client, uid, &plan.AWSKeyCommonTFSDK, response, &diags)
+		response = addAliases(ctx, r.client, id, &plan.AWSKeyCommonTFSDK, response, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
 	if plan.AutoRotate.ValueBool() {
 		var diags diag.Diagnostics
-		r.enableDisableAutoRotation(ctx, uid, &plan, response, &diags)
+		r.enableDisableAutoRotation(ctx, id, &plan, response, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
 	if len(plan.EnableRotation.Elements()) != 0 {
 		var diags diag.Diagnostics
-		enableKeyRotationJob(ctx, uid, r.client, &plan.AWSKeyCommonTFSDK, &diags)
+		enableKeyRotationJob(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
 	if !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
-		enableDisableKey(ctx, uid, r.client, &plan.AWSKeyCommonTFSDK, response, &diags)
+		enableDisableKey(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
@@ -607,7 +607,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	plan.ID = types.StringValue(encodeAWSKeyTerraformResourceID(region, kid))
 	keyID := plan.KeyID.ValueString()
 	var err error
-	response, err = r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -624,16 +624,16 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 }
 
 func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	uid := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Read]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Read]["+uid+"]")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Read]["+id+"]")
 	var state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	keyID := state.KeyID.ValueString()
-	response, err := r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -657,9 +657,9 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 }
 
 func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	uid := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Update]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Update]["+uid+"]")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Update]["+id+"]")
 	var (
 		plan  AWSKeyTFSDK
 		state AWSKeyTFSDK
@@ -674,7 +674,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 	keyID := state.KeyID.ValueString()
 	plan.KeyID = types.StringValue(keyID)
-	response, err := r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS key, failed to read key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -682,11 +682,11 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	updateAwsKeyCommon(ctx, uid, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
+	updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	updateAliases(ctx, uid, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
+	updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -697,24 +697,24 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 	}
-	updateTags(ctx, uid, r.client, planTags, response, &resp.Diagnostics)
+	updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.enableDisableAutoRotation(ctx, uid, &plan, response, &resp.Diagnostics)
+	r.enableDisableAutoRotation(ctx, id, &plan, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	if !plan.PrimaryRegion.IsNull() && plan.PrimaryRegion != state.PrimaryRegion {
 		newPrimaryRegion := plan.PrimaryRegion.ValueString()
-		primaryKeyJSON := r.getPrimaryKey(ctx, uid, keyID, &resp.Diagnostics)
+		primaryKeyJSON := r.getPrimaryKey(ctx, id, keyID, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 		primaryKeyID := gjson.Get(primaryKeyJSON, "id").String()
 		primaryKeyRegion := gjson.Get(primaryKeyJSON, "aws_param.MultiRegionConfiguration.PrimaryKey.Region").String()
 		if primaryKeyRegion != newPrimaryRegion {
-			r.updatePrimaryRegion(ctx, uid, primaryKeyID, newPrimaryRegion, &resp.Diagnostics)
+			r.updatePrimaryRegion(ctx, id, primaryKeyID, newPrimaryRegion, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
@@ -722,7 +722,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 			resp.Diagnostics.AddWarning("'primary_region' specifies the current primary region", "")
 		}
 	}
-	response, err = r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS key, failed to read key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -745,36 +745,36 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	tflog.Trace(ctx, "[resource_aws_key.go -> Update][response:"+response)
 }
 
-func updateAwsKeyCommon(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	updateDescription(ctx, uid, client, plan, keyJSON, diags)
+func updateAwsKeyCommon(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
+	updateDescription(ctx, id, client, plan, keyJSON, diags)
 	if diags.HasError() {
 		return
 	}
-	enableDisableKey(ctx, uid, client, plan, keyJSON, diags)
+	enableDisableKey(ctx, id, client, plan, keyJSON, diags)
 	if diags.HasError() {
 		return
 	}
-	updateKeyPolicy(ctx, uid, client, plan, state, diags)
+	updateKeyPolicy(ctx, id, client, plan, state, diags)
 	if diags.HasError() {
 		return
 	}
-	enableDisableKeyRotation(ctx, uid, client, plan, state, diags)
+	enableDisableKeyRotation(ctx, id, client, plan, state, diags)
 	if diags.HasError() {
 		return
 	}
 }
 
 func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	uid := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Delete]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Delete]["+uid+"]")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Delete]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Delete]["+id+"]")
 	var state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	keyID := state.KeyID.ValueString()
-	response, err := r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -788,7 +788,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
-	removeKeyPolicyTemplateTag(ctx, uid, r.client, response, &resp.Diagnostics)
+	removeKeyPolicyTemplateTag(ctx, id, r.client, response, &resp.Diagnostics)
 	payload := ScheduleForDeletionJSON{
 		Days: state.ScheduleForDeletionDays.ValueInt64(),
 	}
@@ -800,7 +800,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	response, err = r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
+	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 	if err != nil {
 		msg := "Error deleting AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -810,9 +810,9 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	tflog.Trace(ctx, "[resource_aws_key.go -> Delete][response:"+response)
 }
 
-func (r *resourceAWSKey) createKey(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createKey]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createKey]["+uid+"]")
+func (r *resourceAWSKey) createKey(ctx context.Context, id string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createKey]["+id+"]")
 	commonAwsParams := r.getCommonAWSParams(ctx, plan, diags)
 	if diags.HasError() {
 		return ""
@@ -837,7 +837,7 @@ func (r *resourceAWSKey) createKey(ctx context.Context, uid string, plan *AWSKey
 		diags.AddError(details, "")
 		return ""
 	}
-	response, err := r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY, payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
@@ -908,9 +908,9 @@ func setCommonKeyState(ctx context.Context, response string, plan *AWSKeyCommonT
 	plan.ValidTo = types.StringValue(gjson.Get(response, "aws_param.ValidTo").String())
 }
 
-func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableAutoRotation]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableAutoRotation]["+uid+"]")
+func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
 	planEnabled := plan.AutoRotate.ValueBool()
 	planDays := plan.AutoRotationPeriodInDays.ValueInt64()
 	keyEnabled := gjson.Get(keyJSON, "aws_param.KeyRotationEnabled").Bool()
@@ -931,7 +931,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 				diags.AddError(details, "")
 				return
 			}
-			_, err = r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
+			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
 			if err != nil {
 				msg := "Error enabling auto-rotation for AWS key."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -943,7 +943,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 	} else if keyEnabled != planEnabled {
 		var err error
 		updated = true
-		_, err = r.client.PostNoData(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
+		_, err = r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
 		if err != nil {
 			msg := "Error disabling auto-rotation for AWS key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -959,7 +959,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 		)
 		numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / ShortAwsKeyOpSleep)
 		for retry := 0; retry < numRetries; retry++ {
-			response, err = r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+			response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 			if err != nil {
 				msg := "Error enabling/disabling auto-rotation for AWS key, error reading key."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -984,7 +984,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, uid stri
 	}
 }
 
-func enableKeyRotationJob(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+func enableKeyRotationJob(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
 	rotationParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableRotation.Elements()))
 	if !plan.EnableRotation.IsUnknown() {
 		diags.Append(plan.EnableRotation.ElementsAs(ctx, &rotationParams, false)...)
@@ -1009,7 +1009,7 @@ func enableKeyRotationJob(ctx context.Context, uid string, client *common.Client
 			diags.AddError(details, "")
 			return
 		}
-		response, err := client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/enable-rotation-job", payloadJSON)
+		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-rotation-job", payloadJSON)
 		if err != nil {
 			msg := "Failed to enable key rotation for AWS key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1021,9 +1021,9 @@ func enableKeyRotationJob(ctx context.Context, uid string, client *common.Client
 	}
 }
 
-func disableKeyRotationJob(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+func disableKeyRotationJob(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
 	keyID := plan.KeyID.ValueString()
-	response, err := client.PostNoData(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/disable-rotation-job")
+	response, err := client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-rotation-job")
 	if err != nil {
 		msg := "Error updating AWS key, failed to disable key rotation job for AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -1034,9 +1034,9 @@ func disableKeyRotationJob(ctx context.Context, uid string, client *common.Clien
 	tflog.Trace(ctx, "[resource_aws_key.go -> disableKeyRotationJob][response:"+response)
 }
 
-func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> importKeyMaterial]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> importKeyMaterial]["+uid+"]")
+func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> importKeyMaterial]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> importKeyMaterial]["+id+"]")
 	var importMaterialPlan AWSKeyImportKeyMaterialTFSDK
 	for _, v := range plan.ImportKeyMaterial.Elements() {
 		diags.Append(tfsdk.ValueAs(ctx, v, &importMaterialPlan)...)
@@ -1044,7 +1044,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 			return ""
 		}
 	}
-	sourceKeyJSON := r.createKeyMaterial(ctx, uid, &importMaterialPlan, diags)
+	sourceKeyJSON := r.createKeyMaterial(ctx, id, &importMaterialPlan, diags)
 	sourceKeyID := gjson.Get(sourceKeyJSON, "id").String()
 	if diags.HasError() {
 		return ""
@@ -1052,7 +1052,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 	if plan.Origin.ValueString() == "" {
 		plan.Origin = types.StringValue("EXTERNAL")
 	}
-	response := r.createKey(ctx, uid, plan, diags)
+	response := r.createKey(ctx, id, plan, diags)
 	if diags.HasError() {
 		return ""
 	}
@@ -1071,7 +1071,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 		diags.AddError(details, "")
 		return ""
 	}
-	response, err = r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
+	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to import key material."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1083,9 +1083,9 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, uid string, plan
 	return response
 }
 
-func (r *resourceAWSKey) uploadKey(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> UploadKeyAWS]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> UploadKeyAWS]["+uid+"]")
+func (r *resourceAWSKey) uploadKey(ctx context.Context, id string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> UploadKeyAWS]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> UploadKeyAWS]["+id+"]")
 	if plan.Origin.ValueString() == "" {
 		plan.Origin = types.StringValue("EXTERNAL")
 	}
@@ -1124,7 +1124,7 @@ func (r *resourceAWSKey) uploadKey(ctx context.Context, uid string, plan *AWSKey
 		diags.AddError(details, "")
 		return ""
 	}
-	response, err := r.client.PostDataV2(ctx, uid, "api/v1/cckm/aws/upload-key", payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, "api/v1/cckm/aws/upload-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to upload key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
@@ -1136,9 +1136,9 @@ func (r *resourceAWSKey) uploadKey(ctx context.Context, uid string, plan *AWSKey
 	return response
 }
 
-func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> replicateKey]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> replicateKey]["+uid+"]")
+func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> replicateKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> replicateKey]["+id+"]")
 	commonParams := r.getCommonAWSParams(ctx, plan, diags)
 	if diags.HasError() {
 		return ""
@@ -1173,7 +1173,7 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 		diags.AddError(details, "")
 		return ""
 	}
-	response, err := r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+primaryKeyID+"/replicate-key", payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+primaryKeyID+"/replicate-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to replicate key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID, "payload": payload})
@@ -1186,10 +1186,10 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / LongAwsKeyOpSleep)
 	for retry := 0; retry < numRetries && keyState == "Creating"; retry++ {
 		time.Sleep(time.Duration(LongAwsKeyOpSleep) * time.Second)
-		//if err := setAuthToken(ctx, ctp); err != nil {
-		//	return nil, err
-		//}
-		response, err = r.client.GetById(ctx, uid, replicaKeyID, common.URL_AWS_KEY)
+		if err := r.client.RefreshToken(ctx, id); err != nil {
+			return ""
+		}
+		response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error creating AWS key. Failed to replicate key, error reading key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
@@ -1207,13 +1207,13 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 	} else {
 		if replicateKeyPlan.MakePrimary.ValueBool() {
 			newPrimaryRegion := plan.Region.ValueString()
-			r.updatePrimaryRegion(ctx, uid, primaryKeyID, newPrimaryRegion, diags)
+			r.updatePrimaryRegion(ctx, id, primaryKeyID, newPrimaryRegion, diags)
 			if diags.HasError() {
 				return ""
 			}
 		}
 	}
-	response, err = r.client.GetById(ctx, uid, replicaKeyID, common.URL_AWS_KEY)
+	response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error creating AWS key. Failed to replicate key, error reading key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
@@ -1225,10 +1225,10 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, uid string, plan *AWS
 	return response
 }
 
-func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, uid string, primaryKeyID string, newPrimaryRegion string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updatePrimaryRegion]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updatePrimaryRegion]["+uid+"]")
-	response, err := r.client.GetById(ctx, uid, primaryKeyID, common.URL_AWS_KEY)
+func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, primaryKeyID string, newPrimaryRegion string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updatePrimaryRegion]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updatePrimaryRegion]["+id+"]")
+	response, err := r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS key, failed to read key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID})
@@ -1247,7 +1247,7 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, uid string, pr
 		diags.AddError(details, "")
 		return
 	}
-	response, err = r.client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+primaryKeyID+"/update-primary-region", payloadJSON)
+	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+primaryKeyID+"/update-primary-region", payloadJSON)
 	if err != nil {
 		msg := "Error updating primary region."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "primary key_id": primaryKeyID, "payload": payload})
@@ -1258,7 +1258,7 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, uid string, pr
 	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / ShortAwsKeyOpSleep)
 	for retry := 0; retry < numRetries && currentPrimaryRegion != newPrimaryRegion; retry++ {
 		time.Sleep(time.Duration(ShortAwsKeyOpSleep) * time.Second)
-		response, err = r.client.GetById(ctx, uid, primaryKeyID, common.URL_AWS_KEY)
+		response, err = r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error updating AWS key, failed to read key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID})
@@ -1280,9 +1280,9 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, uid string, pr
 	tflog.Trace(ctx, "[resource_aws_key.go -> updatePrimaryRegion][response:"+response)
 }
 
-func enableDisableKey(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKey]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKey]["+uid+"]")
+func enableDisableKey(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKey]["+id+"]")
 	planEnable := plan.EnableKey.ValueBool()
 	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
 	keyID := plan.KeyID.ValueString()
@@ -1292,7 +1292,7 @@ func enableDisableKey(ctx context.Context, uid string, client *common.Client, pl
 			err      error
 		)
 		if planEnable {
-			response, err = client.PostNoData(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/enable")
+			response, err = client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable")
 			if err != nil {
 				msg := "Error enabling AWS key"
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -1301,7 +1301,7 @@ func enableDisableKey(ctx context.Context, uid string, client *common.Client, pl
 			}
 			tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableKey][response:"+response)
 		} else {
-			response, err = client.PostNoData(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/disable")
+			response, err = client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable")
 			if err != nil {
 				msg := "Error disabling AWS key."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -1313,9 +1313,9 @@ func enableDisableKey(ctx context.Context, uid string, client *common.Client, pl
 	}
 }
 
-func addAliases(ctx context.Context, client *common.Client, uid string, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> addAliases]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> addAliases]["+uid+"]")
+func addAliases(ctx context.Context, client *common.Client, id string, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> addAliases]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> addAliases]["+id+"]")
 	planAliases := make([]string, 0, len(plan.Alias.Elements()))
 	diags.Append(plan.Alias.ElementsAs(ctx, &planAliases, false)...)
 	if diags.HasError() {
@@ -1336,7 +1336,7 @@ func addAliases(ctx context.Context, client *common.Client, uid string, plan *AW
 			diags.AddError(details, "")
 			return ""
 		}
-		response, err = client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
+		response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
 		if err != nil {
 			msg := "Error creating AWS key, failed to add alias."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1349,9 +1349,9 @@ func addAliases(ctx context.Context, client *common.Client, uid string, plan *AW
 	return response
 }
 
-func updateAliases(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateAliases]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateAliases]["+uid+"]")
+func updateAliases(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateAliases]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateAliases]["+id+"]")
 	var (
 		keyAliases []string
 		response   string
@@ -1391,7 +1391,7 @@ func updateAliases(ctx context.Context, uid string, client *common.Client, plan 
 				diags.AddError(details, "")
 				return
 			}
-			response, err = client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
+			response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
 			if err != nil {
 				msg := "Error updating AWS key, failed to add alias."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1428,7 +1428,7 @@ func updateAliases(ctx context.Context, uid string, client *common.Client, plan 
 				diags.AddError(details, "")
 				return
 			}
-			response, err = client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/delete-alias", payloadJSON)
+			response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/delete-alias", payloadJSON)
 			if err != nil {
 				msg := "Error updating AWS key, failed to remove alias."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1441,9 +1441,9 @@ func updateAliases(ctx context.Context, uid string, client *common.Client, plan 
 	}
 }
 
-func updateDescription(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateDescription]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateDescription]["+uid+"]")
+func updateDescription(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateDescription]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateDescription]["+id+"]")
 	var (
 		keyDescription  string
 		planDescription string
@@ -1469,7 +1469,7 @@ func updateDescription(ctx context.Context, uid string, client *common.Client, p
 		diags.AddError(details, "")
 		return
 	}
-	response, err := client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/update-description", payloadJSON)
+	response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/update-description", payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS key, failed to update description."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
@@ -1480,9 +1480,9 @@ func updateDescription(ctx context.Context, uid string, client *common.Client, p
 	tflog.Trace(ctx, "[resource_aws_key.go -> updateDescription][response:"+response)
 }
 
-func updateTags(ctx context.Context, uid string, client *common.Client, planTags map[string]string, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateTags]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateTags]["+uid+"]")
+func updateTags(ctx context.Context, id string, client *common.Client, planTags map[string]string, keyJSON string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateTags]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateTags]["+id+"]")
 	var (
 		addTagsPayload    AddTagsJSON
 		removeTagsPayload RemoveTagsJSON
@@ -1518,7 +1518,7 @@ func updateTags(ctx context.Context, uid string, client *common.Client, planTags
 			diags.AddError(details, "")
 			return
 		}
-		response, err := client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
+		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove tags."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": removeTagsPayload})
@@ -1553,7 +1553,7 @@ func updateTags(ctx context.Context, uid string, client *common.Client, planTags
 			diags.AddError(details, "")
 			return
 		}
-		response, err := client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/add-tags", payloadJSON)
+		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to add tags."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": addTagsPayload})
@@ -1565,9 +1565,9 @@ func updateTags(ctx context.Context, uid string, client *common.Client, planTags
 	}
 }
 
-func updateKeyPolicy(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateKeyPolicy]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateKeyPolicy]["+uid+"]")
+func updateKeyPolicy(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateKeyPolicy]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateKeyPolicy]["+id+"]")
 	statePolicy := getKeyPolicy(ctx, state, diags)
 	if diags.HasError() {
 		return
@@ -1592,7 +1592,7 @@ func updateKeyPolicy(ctx context.Context, uid string, client *common.Client, pla
 			diags.AddError(details, "")
 			return
 		}
-		response, err := client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/policy", payloadJSON)
+		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/policy", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to update key policy."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -1605,9 +1605,9 @@ func updateKeyPolicy(ctx context.Context, uid string, client *common.Client, pla
 	}
 }
 
-func enableDisableKeyRotation(ctx context.Context, uid string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKeyRotation]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKeyRotation]["+uid+"]")
+func enableDisableKeyRotation(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKeyRotation]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKeyRotation]["+id+"]")
 	planParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableRotation.Elements()))
 	if !plan.EnableRotation.IsUnknown() {
 		diags.Append(plan.EnableRotation.ElementsAs(ctx, &planParams, false)...)
@@ -1621,13 +1621,13 @@ func enableDisableKeyRotation(ctx context.Context, uid string, client *common.Cl
 		return
 	}
 	if len(planParams) == 0 && len(stateParams) != 0 {
-		disableKeyRotationJob(ctx, uid, client, plan, diags)
+		disableKeyRotationJob(ctx, id, client, plan, diags)
 		if diags.HasError() {
 			return
 		}
 	}
 	if !reflect.DeepEqual(planParams, stateParams) {
-		enableKeyRotationJob(ctx, uid, client, plan, diags)
+		enableKeyRotationJob(ctx, id, client, plan, diags)
 		if diags.HasError() {
 			return
 		}
@@ -1911,10 +1911,10 @@ func setMultiRegionConfiguration(ctx context.Context, keyJSON string, stateMulti
 	*stateMultiRegionReplicaKeys = stateMultiRegionReplicaKeysList
 }
 
-func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, keyID string, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> getPrimaryKey]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> getPrimaryKey]["+uid+"]")
-	response, err := r.client.GetById(ctx, uid, keyID, common.URL_AWS_KEY)
+func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, id string, keyID string, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> getPrimaryKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> getPrimaryKey]["+id+"]")
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Failed get primary key ID of AWS key " + keyID + ", error reading key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error()})
@@ -1943,7 +1943,7 @@ func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, keyID st
 	filters := url.Values{}
 	filters.Add("keyid", kidParts[1])
 	filters.Add("region", primaryKeyRegion)
-	response, err = r.client.ListWithFilters(ctx, uid, common.URL_AWS_KEY, filters)
+	response, err = r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 	if err != nil {
 		msg := "Error reading AWS primary key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kid": kidParts[1], "region": primaryKeyRegion})
@@ -1974,9 +1974,9 @@ func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, uid string, keyID st
 	return response
 }
 
-func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, uid string, importMaterialPlan *AWSKeyImportKeyMaterialTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createKeyMaterial]["+uid+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createKeyMaterial]["+uid+"]")
+func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, importMaterialPlan *AWSKeyImportKeyMaterialTFSDK, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createKeyMaterial]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createKeyMaterial]["+id+"]")
 	var response string
 	if importMaterialPlan.SourceKeyTier.ValueString() == "local" {
 		payload := cm.CMKeyJSON{
@@ -1992,7 +1992,7 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, uid string, impo
 			diags.AddError(details, "")
 			return ""
 		}
-		response, err = r.client.PostDataV2(ctx, uid, common.URL_KEY_MANAGEMENT, payloadJSON)
+		response, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 		if err != nil {
 			msg := "Error creating CipherTrust key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
@@ -2038,7 +2038,7 @@ func (r *resourceAWSKey) decodeKeyTerraformResourceID(resourceID string) (region
 }
 
 //nolint:unused
-func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, uid string, terraformID string, diags *diag.Diagnostics) string {
+func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, id string, terraformID string, diags *diag.Diagnostics) string {
 	region, kid, err := r.decodeKeyTerraformResourceID(terraformID)
 	if err != nil {
 		diags.AddError("Failed to decode terraform ID "+terraformID+".", err.Error())
@@ -2047,7 +2047,7 @@ func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, uid string, te
 	filters := url.Values{}
 	filters.Add("keyid", kid)
 	filters.Add("region", region)
-	response, err := r.client.ListWithFilters(ctx, uid, common.URL_AWS_KEY, filters)
+	response, err := r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 	if err != nil {
 		msg := "Failed to read AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kid": kid, "region": region})
@@ -2078,7 +2078,7 @@ func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, uid string, te
 	return keyJSON
 }
 
-func removeKeyPolicyTemplateTag(ctx context.Context, uid string, client *common.Client, keyJSON string, diags *diag.Diagnostics) {
+func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.Client, keyJSON string, diags *diag.Diagnostics) {
 	var policyTemplateID string
 	for _, tag := range gjson.Get(keyJSON, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
@@ -2100,7 +2100,7 @@ func removeKeyPolicyTemplateTag(ctx context.Context, uid string, client *common.
 			diags.AddWarning(details, "")
 			return
 		}
-		_, err = client.PostDataV2(ctx, uid, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
+		_, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove policy template tag."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": removeTagsPayload})
