@@ -63,7 +63,7 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed: true,
 			},
 			"password": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 				Computed: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
