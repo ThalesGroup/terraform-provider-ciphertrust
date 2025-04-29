@@ -47,7 +47,6 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 			},
 			"policy": schema.StringAttribute{
 				Required: true,
-				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -56,7 +55,9 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 			"principal_selector": schema.MapAttribute{
 				ElementType: types.StringType,
 				Required:    true,
-				Computed:    true,
+				PlanModifiers: []planmodifier.Map{
+					common.NewMapUseStateForUnknown(),
+				},
 				Description: "Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.",
 			},
 			"jurisdiction": schema.StringAttribute{

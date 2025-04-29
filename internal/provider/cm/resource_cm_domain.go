@@ -46,13 +46,14 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"admins": schema.ListAttribute{
 				Required:    true,
-				Computed:    true,
 				Description: "List of administrators for the domain",
+				PlanModifiers: []planmodifier.List{
+					common.NewListUseStateForUnknown(),
+				},
 				ElementType: types.StringType,
 			},
 			"name": schema.StringAttribute{
 				Required: true,
-				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
