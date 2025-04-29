@@ -212,7 +212,6 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	id := uuid.New().String()
 	var plan CMUserTFSDK
 	var loginFlags UserLoginFlagsJSON
 	var payload CMUserJSON
@@ -246,14 +245,14 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 
 	response, err := r.client.UpdateDataV2(
 		ctx,
-		id,
-		common.URL_USER_MANAGEMENT+"/"+plan.UserID.ValueString(),
+		plan.UserID.ValueString(),
+		common.URL_USER_MANAGEMENT,
 		payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
 		resp.Diagnostics.AddError(
-			"Error creating user on CipherTrust Manager: ",
-			"Could not create user, unexpected error: "+err.Error(),
+			"Error updating user on CipherTrust Manager: ",
+			"Could not update user, unexpected error: "+err.Error(),
 		)
 		return
 	}

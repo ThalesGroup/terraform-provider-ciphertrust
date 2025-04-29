@@ -427,6 +427,12 @@ type CMUserJSON struct {
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
 	PasswordChangeRequired bool               `json:"password_change_required"`
+	CreatedAt              string             `json:"created_at"`
+	UpdatedAt              string             `json:"updated_at"`
+	LastLogin              string             `json:"last_login"`
+	LoginsCount            int64              `json:"logins_count"`
+	CertificateDN          string             `json:"certificate_subject_dn"`
+	FailedLoginsCount      int64              `json:"failed_logins_count"`
 }
 
 type CMSSHKeyTFSDK struct {

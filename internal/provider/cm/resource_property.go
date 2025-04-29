@@ -100,7 +100,6 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	plan.Value = types.StringValue(gjson.Get(response, "value").String())
-	plan.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
@@ -133,7 +132,6 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	state.Value = types.StringValue(gjson.Get(response, "value").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Read]["+id+"]")
 	// Set refreshed state

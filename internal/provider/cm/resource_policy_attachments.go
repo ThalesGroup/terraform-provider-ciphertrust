@@ -137,6 +137,7 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.Jurisdiction = types.StringValue(gjson.Get(response, "jurisdiction").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
@@ -173,6 +174,7 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
+	state.Jurisdiction = types.StringValue(gjson.Get(response, "jurisdiction").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 

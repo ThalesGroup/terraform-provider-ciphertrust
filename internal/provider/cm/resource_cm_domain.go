@@ -266,8 +266,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	response, err := r.client.UpdateDataV2(
 		ctx,
-		id,
-		common.URL_DOMAIN+"/"+plan.ID.ValueString(),
+		plan.ID.ValueString(),
+		common.URL_DOMAIN,
 		payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+plan.Name.ValueString()+"]")
