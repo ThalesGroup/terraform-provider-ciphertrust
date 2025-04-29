@@ -53,14 +53,6 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 				},
 				Description: "Value to be set",
 			},
-			"description": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-				Description: "Description of the property and its value",
-			},
 		},
 	}
 }
@@ -107,7 +99,8 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	plan.Description = types.StringValue(gjson.Get(response, "description").String())
+	plan.Value = types.StringValue(gjson.Get(response, "value").String())
+	plan.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
@@ -141,7 +134,6 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 
 	state.Value = types.StringValue(gjson.Get(response, "value").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	state.Description = types.StringValue(gjson.Get(response, "description").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Read]["+id+"]")
 	// Set refreshed state

@@ -82,7 +82,6 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"parent_ca_id": schema.StringAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
 			},
 			"uri": schema.StringAttribute{
@@ -176,6 +175,8 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
+	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
+	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
 
 	tflog.Debug(ctx, "[resource_cm_domain.go -> Create Output]["+response+"]")
 
@@ -263,7 +264,11 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	response, err := r.client.UpdateDataV2(
+		ctx,
+		id,
+		common.URL_DOMAIN+"/"+plan.ID.ValueString(),
+		payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+plan.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -272,7 +277,17 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		)
 		return
 	}
-	plan.UpdatedAt = types.StringValue(response)
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
+	plan.Application = types.StringValue(gjson.Get(response, "application").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
+	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
+	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

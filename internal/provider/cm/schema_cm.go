@@ -405,6 +405,12 @@ type CMUserTFSDK struct {
 	IsDomainUser           types.Bool   `tfsdk:"is_domain_user"`
 	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
 	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
+	CreatedAt              types.String `tfsdk:"created_at"`
+	UpdatedAt              types.String `tfsdk:"updated_at"`
+	LastLogin              types.String `tfsdk:"last_login"`
+	LoginsCount            types.Int64  `tfsdk:"logins_count"`
+	CertificateDN          types.String `tfsdk:"certificate_subject_dn"`
+	FailedLoginsCount      types.Int64  `tfsdk:"failed_logins_count"`
 }
 
 type UserLoginFlagsJSON struct {
@@ -842,9 +848,8 @@ type CreateJobConfigParamsListJSON struct {
 }
 
 type CMPropertyTFSDK struct {
-	Name        types.String `tfsdk:"name"`
-	Value       types.String `tfsdk:"value"`
-	Description types.String `tfsdk:"description"`
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
 }
 
 type CMPropertyJSON struct {
@@ -891,15 +896,15 @@ type CMPolicyJSON struct {
 }
 
 type CMPolicyAttachmentTFSDK struct {
-	ID                types.String   `tfsdk:"id"`
-	Policy            types.String   `tfsdk:"policy"`
-	PrincipalSelector types.Map      `tfsdk:"principal_selector"`
-	Jurisdiction      types.String   `tfsdk:"jurisdiction"`
-	Actions           []types.String `tfsdk:"actions"`
-	Resources         []types.String `tfsdk:"resources"`
-	URI               types.String   `tfsdk:"uri"`
-	Account           types.String   `tfsdk:"account"`
-	CreatedAt         types.String   `tfsdk:"created_at"`
+	ID                types.String `tfsdk:"id"`
+	Policy            types.String `tfsdk:"policy"`
+	PrincipalSelector types.Map    `tfsdk:"principal_selector"`
+	Jurisdiction      types.String `tfsdk:"jurisdiction"`
+	//Actions           []types.String `tfsdk:"actions"`
+	//Resources         []types.String `tfsdk:"resources"`
+	URI       types.String `tfsdk:"uri"`
+	Account   types.String `tfsdk:"account"`
+	CreatedAt types.String `tfsdk:"created_at"`
 }
 
 type CMPolicyAttachmentJSON struct {

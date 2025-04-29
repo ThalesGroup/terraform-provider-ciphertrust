@@ -135,6 +135,11 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.Host = types.StringValue(gjson.Get(response, "host").String())
+	plan.Transport = types.StringValue(gjson.Get(response, "transport").String())
+	plan.CACert = types.StringValue(gjson.Get(response, "caCert").String())
+	plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
+	plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
@@ -239,6 +244,14 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		)
 		return
 	}
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.Host = types.StringValue(gjson.Get(response, "host").String())
+	plan.Transport = types.StringValue(gjson.Get(response, "transport").String())
+	plan.CACert = types.StringValue(gjson.Get(response, "caCert").String())
+	plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
+	plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
+	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

@@ -65,18 +65,18 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				Computed:    true,
 				Description: "Jurisdiction to which the policy applies.",
 			},
-			"actions": schema.ListAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
-				ElementType: types.StringType,
-			},
-			"resources": schema.ListAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Resources is a list of URI strings, which must be in URI format.",
-				ElementType: types.StringType,
-			},
+			// "actions": schema.ListAttribute{
+			// 	Optional:    true,
+			// 	Computed:    true,
+			// 	Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+			// 	ElementType: types.StringType,
+			// },
+			// "resources": schema.ListAttribute{
+			// 	Optional:    true,
+			// 	Computed:    true,
+			// 	Description: "Resources is a list of URI strings, which must be in URI format.",
+			// 	ElementType: types.StringType,
+			// },
 			"uri":        schema.StringAttribute{Computed: true},
 			"account":    schema.StringAttribute{Computed: true},
 			"created_at": schema.StringAttribute{Computed: true},
@@ -176,19 +176,19 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
-	arrResources := (gjson.Get(response, "resources").Array())
-	var resources []types.String
-	for _, resource := range arrResources {
-		resources = append(resources, types.StringValue(resource.String()))
-	}
-	state.Resources = resources
+	// arrResources := (gjson.Get(response, "resources").Array())
+	// var resources []types.String
+	// for _, resource := range arrResources {
+	// 	resources = append(resources, types.StringValue(resource.String()))
+	// }
+	// state.Resources = resources
 
-	arrActions := gjson.Get(response, "actions").Array()
-	var actions []types.String
-	for _, action := range arrActions {
-		actions = append(actions, types.StringValue(action.String()))
-	}
-	state.Actions = actions
+	// arrActions := gjson.Get(response, "actions").Array()
+	// var actions []types.String
+	// for _, action := range arrActions {
+	// 	actions = append(actions, types.StringValue(action.String()))
+	// }
+	// state.Actions = actions
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -201,7 +201,7 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating Policy is not supported", "Unsupported Operation")
+	resp.Diagnostics.AddWarning("Updating Policy is not supported", "Unsupported Operation")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

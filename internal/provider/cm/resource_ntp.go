@@ -180,7 +180,7 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		resp.Diagnostics.AddError(
+		resp.Diagnostics.AddWarning(
 			"Error Deleting CipherTrust NTP",
 			"Could not delete NTP, unexpected error: "+err.Error(),
 		)

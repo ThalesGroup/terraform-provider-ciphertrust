@@ -28,13 +28,11 @@ func TestResourceCMProperty(t *testing.T) {
 resource "ciphertrust_property" "property_1" {
     name = "ENABLE_RECORDS_DB_STORE"
     value = "false"
-	description = "Store audit records in database. Disabling also deletes the audit records. Values: true or false"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "name", "ENABLE_RECORDS_DB_STORE"),
 					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "value", "false"),
-					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "description", "Store audit records in database. Disabling also deletes the audit records. Values: true or false"),
 				),
 			},
 			{
@@ -42,13 +40,11 @@ resource "ciphertrust_property" "property_1" {
 resource "ciphertrust_property" "property_1" {
     name = "ENABLE_RECORDS_DB_STORE"
     value = "true"
-	description = "Store audit records in database. Disabling also deletes the audit records. Values: true or false"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "name", "ENABLE_RECORDS_DB_STORE"),
 					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "value", "true"),
-					resource.TestCheckResourceAttr("ciphertrust_property.property_1", "description", "Store audit records in database. Disabling also deletes the audit records. Values: true or false"),
 				),
 			},
 		},
