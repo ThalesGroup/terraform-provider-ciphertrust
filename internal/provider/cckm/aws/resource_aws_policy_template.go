@@ -170,7 +170,6 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	var diags diag.Diagnostics
-	tflog.Info(ctx, fmt.Sprintf("SARAH Create calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
@@ -196,7 +195,6 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH Read calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS key policy template."
@@ -249,7 +247,6 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH Update calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS key policy template, failed to set resource state."
@@ -370,13 +367,11 @@ func getStateKeyPolicy(ctx context.Context, policy string /*response string,*/, 
 	if err == nil {
 		policy = p
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy policy: <%s>", policy))
 	planPolicy = strings.TrimSpace(planPolicy)
 	p, err = normalizePolicy(planPolicy)
 	if err == nil {
 		planPolicy = p
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy planPolicy: <%s>", planPolicy))
 	equivalent, err := policyBytesEqual([]byte(policy), []byte(planPolicy))
 	if err != nil {
 		msg := "Error comparing state and plan key policy'."
@@ -386,10 +381,8 @@ func getStateKeyPolicy(ctx context.Context, policy string /*response string,*/, 
 		return false
 	}
 	if !equivalent {
-		tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy NOT equivalent returning false"))
-		return false //gjson.Get(response, "policy").String()
+		return false
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy equivalent returning true"))
 	return true
 }
 

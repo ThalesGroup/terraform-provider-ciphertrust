@@ -73,9 +73,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 	resourceNameEx1 := "ciphertrust_aws_policy_template.policy_template_ex1"
 	templateNameEx1 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx1 := fmt.Sprintf(createConfigEx1, templateNameEx1)
-	_ = createConfigStrEx1
 	updateConfigStrEx1 := fmt.Sprintf(updateConfigEx1, templateNameEx1, users, users, roles, roles)
-	_ = updateConfigStrEx1
 
 	createConfigEx2 := `
 		variable "policy" {
@@ -90,10 +88,8 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 			policy = var.policy
 		}`
 	resourceNameEx2 := "ciphertrust_aws_policy_template.policy_template_ex2"
-	_ = resourceNameEx2
 	templateNameEx2 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx2 := fmt.Sprintf(createConfigEx2, templateNameEx2)
-	_ = createConfigStrEx2
 
 	createConfigEx3 := `
 		resource "ciphertrust_aws_policy_template" "policy_template_ex3" {
@@ -104,10 +100,8 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 			EOT
 		}`
 	resourceNameEx3 := "ciphertrust_aws_policy_template.policy_template_ex3"
-	_ = resourceNameEx3
 	templateNameEx3 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx3 := fmt.Sprintf(createConfigEx3, templateNameEx3, defaultPolicy)
-	_ = createConfigStrEx3
 
 	createConfigEx4 := `
 		resource "ciphertrust_aws_policy_template" "policy_template_without_policy" {
@@ -141,12 +135,9 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 			)
 		}`
 	resourceNameEx4 := "ciphertrust_aws_policy_template.policy_template_without_policy"
-	_ = resourceNameEx4
 	templateNameEx4 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx4 := fmt.Sprintf(createConfigEx4, templateNameEx4, users, users, roles, roles)
-	_ = createConfigStrEx4
 	updateConfigStrEx4 := fmt.Sprintf(updateConfigEx4, templateNameEx4)
-	_ = updateConfigStrEx4
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
