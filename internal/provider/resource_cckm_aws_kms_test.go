@@ -18,7 +18,11 @@ func TestCckmAwsKms(t *testing.T) {
 			account_id    = data.ciphertrust_aws_account_details.account_details.account_id
 			aws_connection = ciphertrust_aws_connection.aws_connection.name
 			name          = "TerraformTest"
-			regions       = data.ciphertrust_aws_account_details.account_details.regions
+			regions = [
+				data.ciphertrust_aws_account_details.account_details.regions[0],
+				data.ciphertrust_aws_account_details.account_details.regions[1],
+				data.ciphertrust_aws_account_details.account_details.regions[2]
+			]
 		}`
 	updateKmsRegionsConfig := `
 		resource "ciphertrust_aws_connection" "aws_connection" {

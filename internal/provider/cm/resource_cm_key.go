@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/tidwall/gjson"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -523,6 +524,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						},
 					},
 				},
+			},
+			"remove_from_state_on_destroy": schema.BoolAttribute{
+				Optional:    true,
+				Description: "This parameter only applies to keys that are 'undeleteable'. If this parameter is true the key will be removed from terraform state during the terraform destroy process. It can not be deleted from CipherTrust Manager while 'undeleteable' is true. Default is 'false'.",
 			},
 			"wrap_hkdf": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -1228,6 +1233,9 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 	payload.Labels = labelsPayload
 
+	b, _ := json.MarshalIndent(payload, "", "\t")
+	tflog.Info(ctx, fmt.Sprintf("SARAH Update CM Key payload %s", b))
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
@@ -1272,10 +1280,16 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting CipherTrust Key",
-			"Could not delete key, unexpected error: "+err.Error(),
-		)
+		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
+			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
+				"key id: "+state.ID.ValueString(),
+			)
+		} else {
+			resp.Diagnostics.AddError(
+				"Error Deleting CipherTrust Key",
+				"Could not delete key, unexpected error: "+err.Error(),
+			)
+		}
 		return
 	}
 }

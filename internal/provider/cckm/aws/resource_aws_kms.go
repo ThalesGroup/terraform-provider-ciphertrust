@@ -304,5 +304,5 @@ func (r *resourceCCKMAWSKMS) setKmsState(response string, state *KMSModelTFSDK, 
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
 	state.Arn = types.StringValue(gjson.Get(response, "arn").String())
-	state.Regions = flattenStringSliceJSON(gjson.Get(response, "regions").Array(), diags)
+	state.Regions = stringSliceJSONToListValue(gjson.Get(response, "regions").Array(), diags)
 }

@@ -161,17 +161,17 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Computed:    true,
 				Description: "Expiration model.",
 			},
-			"external_accounts": schema.ListAttribute{
+			"external_accounts": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Other AWS accounts that have access to this key.",
 			},
-			"key_admins": schema.ListAttribute{
+			"key_admins": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - users.",
 			},
-			"key_admins_roles": schema.ListAttribute{
+			"key_admins_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - roles.",
@@ -205,12 +205,12 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Computed:    true,
 				Description: "Key type.",
 			},
-			"key_users": schema.ListAttribute{
+			"key_users": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - users.",
 			},
-			"key_users_roles": schema.ListAttribute{
+			"key_users_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
@@ -423,25 +423,29 @@ func setCommonKeyDataStoreState(ctx context.Context, response string, plan *AWSK
 	plan.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
 	plan.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
 	plan.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	plan.EncryptionAlgorithms = flattenStringSliceJSON(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	plan.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
 	plan.ExpirationModel = types.StringValue(gjson.Get(response, "").String())
-	plan.ExternalAccounts = flattenStringSliceJSON(gjson.Get(response, "external_accounts").Array(), diags)
-	plan.KeyAdmins = flattenStringSliceJSON(gjson.Get(response, "key_admins").Array(), diags)
-	plan.KeyAdminsRoles = flattenStringSliceJSON(gjson.Get(response, "key_admins_roles").Array(), diags)
+	plan.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
+	plan.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
+	plan.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
 	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
 	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
 	plan.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
-	plan.KeyUsers = flattenStringSliceJSON(gjson.Get(response, "key_users").Array(), diags)
-	plan.KeyUsersRoles = flattenStringSliceJSON(gjson.Get(response, "key_users_roles").Array(), diags)
+	plan.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
+	plan.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
 	setKeyLabels(ctx, response, plan.KeyID.ValueString(), &plan.Labels, diags)
 	plan.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
 	plan.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	plan.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
 	plan.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
-	plan.Policy = types.StringValue(gjson.Get(response, "aws_param.Policy").String())
+	policy := gjson.Get(response, "aws_param.Policy").String()
+	equivalent := getStateKeyPolicy(ctx, policy, plan.Policy.ValueString(), diags)
+	if !equivalent {
+		plan.Policy = types.StringValue(policy)
+	}
 	setPolicyTemplateTag(ctx, response, &plan.PolicyTemplateTag, diags)
 	plan.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
 	plan.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_to").String())

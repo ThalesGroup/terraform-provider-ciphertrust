@@ -70,11 +70,11 @@ type AWSKeyImportKeyMaterialTFSDK struct {
 }
 
 type AWSKeyPolicyCommonTFSDK struct {
-	ExternalAccounts types.List   `tfsdk:"external_accounts"`
-	KeyAdmins        types.List   `tfsdk:"key_admins"`
-	KeyAdminsRoles   types.List   `tfsdk:"key_admins_roles"`
-	KeyUsers         types.List   `tfsdk:"key_users"`
-	KeyUsersRoles    types.List   `tfsdk:"key_users_roles"`
+	ExternalAccounts types.Set    `tfsdk:"external_accounts"`
+	KeyAdmins        types.Set    `tfsdk:"key_admins"`
+	KeyAdminsRoles   types.Set    `tfsdk:"key_admins_roles"`
+	KeyUsers         types.Set    `tfsdk:"key_users"`
+	KeyUsersRoles    types.Set    `tfsdk:"key_users_roles"`
 	Policy           types.String `tfsdk:"policy"`
 }
 
@@ -130,9 +130,9 @@ type AWSKeyCommonTFSDK struct {
 	Enabled                        types.Bool   `tfsdk:"enabled"`
 	EncryptionAlgorithms           types.List   `tfsdk:"encryption_algorithms"`
 	ExpirationModel                types.String `tfsdk:"expiration_model"`
-	ExternalAccounts               types.List   `tfsdk:"external_accounts"`
-	KeyAdmins                      types.List   `tfsdk:"key_admins"`
-	KeyAdminsRoles                 types.List   `tfsdk:"key_admins_roles"`
+	ExternalAccounts               types.Set    `tfsdk:"external_accounts"`
+	KeyAdmins                      types.Set    `tfsdk:"key_admins"`
+	KeyAdminsRoles                 types.Set    `tfsdk:"key_admins_roles"`
 	KeyID                          types.String `tfsdk:"key_id"`
 	KeyManager                     types.String `tfsdk:"key_manager"`
 	KeyMaterialOrigin              types.String `tfsdk:"key_material_origin"`
@@ -141,8 +141,8 @@ type AWSKeyCommonTFSDK struct {
 	KeySource                      types.String `tfsdk:"key_source"`
 	KeyState                       types.String `tfsdk:"key_state"`
 	KeyType                        types.String `tfsdk:"key_type"`
-	KeyUsers                       types.List   `tfsdk:"key_users"`
-	KeyUsersRoles                  types.List   `tfsdk:"key_users_roles"`
+	KeyUsers                       types.Set    `tfsdk:"key_users"`
+	KeyUsersRoles                  types.Set    `tfsdk:"key_users_roles"`
 	Labels                         types.Map    `tfsdk:"labels"`
 	LocalKeyID                     types.String `tfsdk:"local_key_id"`
 	LocalKeyName                   types.String `tfsdk:"local_key_name"`
@@ -525,9 +525,9 @@ type AWSKeyDataSourceCommonTFSDK struct {
 	Enabled               types.Bool   `tfsdk:"enabled"`
 	EncryptionAlgorithms  types.List   `tfsdk:"encryption_algorithms"`
 	ExpirationModel       types.String `tfsdk:"expiration_model"`
-	ExternalAccounts      types.List   `tfsdk:"external_accounts"`
-	KeyAdmins             types.List   `tfsdk:"key_admins"`
-	KeyAdminsRoles        types.List   `tfsdk:"key_admins_roles"`
+	ExternalAccounts      types.Set    `tfsdk:"external_accounts"`
+	KeyAdmins             types.Set    `tfsdk:"key_admins"`
+	KeyAdminsRoles        types.Set    `tfsdk:"key_admins_roles"`
 	KeyID                 types.String `tfsdk:"key_id"`
 	KeyManager            types.String `tfsdk:"key_manager"`
 	KeyMaterialOrigin     types.String `tfsdk:"key_material_origin"`
@@ -535,8 +535,8 @@ type AWSKeyDataSourceCommonTFSDK struct {
 	KeySource             types.String `tfsdk:"key_source"`
 	KeyState              types.String `tfsdk:"key_state"`
 	KeyType               types.String `tfsdk:"key_type"`
-	KeyUsers              types.List   `tfsdk:"key_users"`
-	KeyUsersRoles         types.List   `tfsdk:"key_users_roles"`
+	KeyUsers              types.Set    `tfsdk:"key_users"`
+	KeyUsersRoles         types.Set    `tfsdk:"key_users_roles"`
 	Labels                types.Map    `tfsdk:"labels"`
 	LocalKeyID            types.String `tfsdk:"local_key_id"`
 	LocalKeyName          types.String `tfsdk:"local_key_name"`

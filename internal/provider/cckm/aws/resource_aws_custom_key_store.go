@@ -403,7 +403,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			payload.AWSParams = &awsParamJSON
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> connect]["+plan.ID.ValueString()+"]")
 				resp.Diagnostics.AddWarning(
 					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
 					"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),

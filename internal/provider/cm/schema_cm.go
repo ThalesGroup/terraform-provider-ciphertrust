@@ -216,6 +216,7 @@ type CMKeyTFSDK struct {
 	RSAAESWrap               *WrapRSAAESTFSDK          `tfsdk:"wrap_rsaaes"`
 	Labels                   types.Map                 `tfsdk:"labels"`
 	AllVersions              types.Bool                `tfsdk:"all_versions"`
+	RemoveFromStateOnDestroy types.Bool                `tfsdk:"remove_from_state_on_destroy"`
 }
 
 type HKDFParametersJSON struct {

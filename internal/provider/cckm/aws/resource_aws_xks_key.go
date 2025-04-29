@@ -189,17 +189,17 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Description: "Expiration model.",
 			},
-			"external_accounts": schema.ListAttribute{
+			"external_accounts": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Other AWS accounts that have access to this key.",
 			},
-			"key_admins": schema.ListAttribute{
+			"key_admins": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - users.",
 			},
-			"key_admins_roles": schema.ListAttribute{
+			"key_admins_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - roles.",
@@ -232,12 +232,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Description: "Key type.",
 			},
-			"key_users": schema.ListAttribute{
+			"key_users": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - users.",
 			},
-			"key_users_roles": schema.ListAttribute{
+			"key_users_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
@@ -329,27 +329,27 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
-						"external_accounts": schema.ListAttribute{
+						"external_accounts": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Other AWS accounts that can access to the key.",
 						},
-						"key_admins": schema.ListAttribute{
+						"key_admins": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key administrators - users.",
 						},
-						"key_admins_roles": schema.ListAttribute{
+						"key_admins_roles": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key administrators - roles.",
 						},
-						"key_users": schema.ListAttribute{
+						"key_users": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key users - users.",
 						},
-						"key_users_roles": schema.ListAttribute{
+						"key_users_roles": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key users - roles.",
@@ -748,6 +748,10 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 		}
 	}
 	plan.Region = types.StringValue(gjson.Get(response, "region").String())
+}
+
+func (r *resourceAWSXKSKey) setXKSKeyPolicyState(ctx context.Context, response string, plan *AWSXKSKeyTFSDK, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
+
 }
 
 func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {

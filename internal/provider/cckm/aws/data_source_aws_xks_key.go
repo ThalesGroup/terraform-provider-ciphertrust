@@ -150,17 +150,17 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 				Computed:    true,
 				Description: "Expiration model.",
 			},
-			"external_accounts": schema.ListAttribute{
+			"external_accounts": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Other AWS accounts that have access to this key.",
 			},
-			"key_admins": schema.ListAttribute{
+			"key_admins": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - users.",
 			},
-			"key_admins_roles": schema.ListAttribute{
+			"key_admins_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - roles.",
@@ -194,12 +194,12 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 				Computed:    true,
 				Description: "Key type.",
 			},
-			"key_users": schema.ListAttribute{
+			"key_users": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - users.",
 			},
-			"key_users_roles": schema.ListAttribute{
+			"key_users_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",

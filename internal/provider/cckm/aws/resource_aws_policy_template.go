@@ -80,27 +80,27 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 				Computed:    true,
 				Description: "If tre, the policy template has been applied.",
 			},
-			"external_accounts": schema.ListAttribute{
+			"external_accounts": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Other AWS accounts that can access to the key.",
 			},
-			"key_admins": schema.ListAttribute{
+			"key_admins": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - users.",
 			},
-			"key_admins_roles": schema.ListAttribute{
+			"key_admins_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - roles.",
 			},
-			"key_users": schema.ListAttribute{
+			"key_users": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Key users - users.",
 			},
-			"key_users_roles": schema.ListAttribute{
+			"key_users_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
@@ -170,6 +170,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	var diags diag.Diagnostics
+	tflog.Info(ctx, fmt.Sprintf("SARAH Create calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
@@ -195,6 +196,7 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Info(ctx, fmt.Sprintf("SARAH Read calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS key policy template."
@@ -247,6 +249,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Info(ctx, fmt.Sprintf("SARAH Update calling setPolicyTemplateState"))
 	r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS key policy template, failed to set resource state."
@@ -336,40 +339,75 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, 
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	externalAccounts := gjson.Get(response, "external_accounts").Array()
 	if len(externalAccounts) != 0 {
-		state.ExternalAccounts = flattenStringSliceJSON(externalAccounts, diags)
+		state.ExternalAccounts = stringSliceJSONToSetValue(externalAccounts, diags)
 	}
 	state.IsVerified = types.BoolValue(gjson.Get(response, "is_verified").Bool())
 	keyAdmins := gjson.Get(response, "key_admins").Array()
 	if len(keyAdmins) != 0 {
-		state.KeyAdmins = flattenStringSliceJSON(keyAdmins, diags)
+		state.KeyAdmins = stringSliceJSONToSetValue(keyAdmins, diags)
 	}
 	keyAdminsRoles := gjson.Get(response, "key_admins_roles").Array()
 	if len(keyAdminsRoles) != 0 {
-		state.KeyAdminsRoles = flattenStringSliceJSON(keyAdminsRoles, diags)
+		state.KeyAdminsRoles = stringSliceJSONToSetValue(keyAdminsRoles, diags)
 	}
 	keyUsers := gjson.Get(response, "key_users").Array()
 	if len(keyUsers) != 0 {
-		state.KeyUsers = flattenStringSliceJSON(keyUsers, diags)
+		state.KeyUsers = stringSliceJSONToSetValue(keyUsers, diags)
 	}
 	keyUsersRoles := gjson.Get(response, "key_users_roles").Array()
 	if len(keyUsersRoles) != 0 {
-		state.KeyUsersRoles = flattenStringSliceJSON(keyUsersRoles, diags)
+		state.KeyUsersRoles = stringSliceJSONToSetValue(keyUsersRoles, diags)
 	}
-	policy := gjson.Get(response, "policy").String()
-	equivalent, err := jsonBytesEqual([]byte(policy), []byte(state.Policy.ValueString()))
-	if err != nil {
-		msg := "Error comparing state and plan 'ciphertrust_aws_policy_template.policy' of " + state.Name.ValueString() + "."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return
-	}
+	equivalent := getStateKeyPolicy(ctx, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
 	if !equivalent {
 		state.Policy = types.StringValue(gjson.Get(response, "policy").String())
 	}
 }
 
-func jsonBytesEqual(a []byte, b []byte) (bool, error) {
+func getStateKeyPolicy(ctx context.Context, policy string /*response string,*/, planPolicy string, diags *diag.Diagnostics) bool {
+	//	keyPolicy := strings.TrimSpace(gjson.Get(response, "policy").String())
+	p, err := normalizePolicy(policy)
+	if err == nil {
+		policy = p
+	}
+	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy policy: <%s>", policy))
+	planPolicy = strings.TrimSpace(planPolicy)
+	p, err = normalizePolicy(planPolicy)
+	if err == nil {
+		planPolicy = p
+	}
+	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy planPolicy: <%s>", planPolicy))
+	equivalent, err := policyBytesEqual([]byte(policy), []byte(planPolicy))
+	if err != nil {
+		msg := "Error comparing state and plan key policy'."
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return false
+	}
+	if !equivalent {
+		tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy NOT equivalent returning false"))
+		return false //gjson.Get(response, "policy").String()
+	}
+	tflog.Info(ctx, fmt.Sprintf("SARAH getStateKeyPolicy equivalent returning true"))
+	return true
+}
+
+func normalizePolicy(jsonString interface{}) (string, error) {
+	var j interface{}
+	if jsonString == nil || jsonString.(string) == "" {
+		return "", nil
+	}
+	s := jsonString.(string)
+	err := json.Unmarshal([]byte(s), &j)
+	if err != nil {
+		return s, err
+	}
+	bytes, _ := json.Marshal(j)
+	return string(bytes[:]), nil
+}
+
+func policyBytesEqual(a []byte, b []byte) (bool, error) {
 	var j, j2 interface{}
 	if len(a) != len(b) {
 		return false, nil

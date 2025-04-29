@@ -121,7 +121,7 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 		return
 	}
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
-	state.Regions = flattenStringSliceJSON(gjson.Get(response, "regions").Array(), &resp.Diagnostics)
+	state.Regions = stringSliceJSONToListValue(gjson.Get(response, "regions").Array(), &resp.Diagnostics)
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }

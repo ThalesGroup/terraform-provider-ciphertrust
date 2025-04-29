@@ -53,11 +53,12 @@ var (
 )
 
 const (
-	PolicyTemplateTagKey = "cckm_policy_template_id"
-	LongAwsKeyOpSleep    = 20
-	ShortAwsKeyOpSleep   = 5
-	AwsValidToRegEx      = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
-	AwsValidToFormatMsg  = "must conform to the following example 2024-07-03T14:24:00Z"
+	policyTemplateTagKey = "cckm_policy_template_id"
+	longAwsKeyOpSleep    = 20
+	shortAwsKeyOpSleep   = 5
+	awsValidToRegEx      = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
+	awsValidToFormatMsg  = "must conform to the following example 2024-07-03T14:24:00Z"
+	refreshTokenSeconds  = 20
 )
 
 func NewResourceAWSKey() resource.Resource {
@@ -245,17 +246,17 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:    true,
 				Description: "Expiration model.",
 			},
-			"external_accounts": schema.ListAttribute{
+			"external_accounts": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Other AWS accounts that have access to this key.",
 			},
-			"key_admins": schema.ListAttribute{
+			"key_admins": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - users.",
 			},
-			"key_admins_roles": schema.ListAttribute{
+			"key_admins_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key administrators - roles.",
@@ -288,12 +289,12 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:    true,
 				Description: "Key type.",
 			},
-			"key_users": schema.ListAttribute{
+			"key_users": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - users.",
 			},
-			"key_users_roles": schema.ListAttribute{
+			"key_users_roles": schema.SetAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
@@ -383,27 +384,27 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
-						"external_accounts": schema.ListAttribute{
+						"external_accounts": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Other AWS accounts that can access to the key.",
 						},
-						"key_admins": schema.ListAttribute{
+						"key_admins": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key administrators - users.",
 						},
-						"key_admins_roles": schema.ListAttribute{
+						"key_admins_roles": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key administrators - roles.",
 						},
-						"key_users": schema.ListAttribute{
+						"key_users": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key users - users.",
 						},
-						"key_users_roles": schema.ListAttribute{
+						"key_users_roles": schema.SetAttribute{
 							Optional:    true,
 							ElementType: types.StringType,
 							Description: "Key users - roles.",
@@ -447,7 +448,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Description: "Date the key material of the replicated key expires. Only applies to external keys. Set as UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
-									regexp.MustCompile(AwsValidToRegEx), AwsValidToFormatMsg,
+									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,
 								),
 							},
 						},
@@ -482,7 +483,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Description: "Date of key expiry in UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z. Only valid if 'key_expiration' is true.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
-									regexp.MustCompile(AwsValidToRegEx), AwsValidToFormatMsg,
+									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,
 								),
 							},
 						},
@@ -514,7 +515,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Description: "Date of key material expiry in UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
-									regexp.MustCompile(AwsValidToRegEx), AwsValidToFormatMsg,
+									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,
 								),
 							},
 						},
@@ -805,8 +806,13 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	if err != nil {
 		msg := "Error deleting AWS key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+		if strings.Contains(err.Error(), "is pending deletion") {
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
+		} else {
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+		}
 	}
 	tflog.Trace(ctx, "[resource_aws_key.go -> Delete][response:"+response)
 }
@@ -880,25 +886,29 @@ func setCommonKeyState(ctx context.Context, response string, plan *AWSKeyCommonT
 	plan.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
 	plan.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 	plan.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	plan.EncryptionAlgorithms = flattenStringSliceJSON(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	plan.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
 	plan.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	plan.ExternalAccounts = flattenStringSliceJSON(gjson.Get(response, "external_accounts").Array(), diags)
-	plan.KeyAdmins = flattenStringSliceJSON(gjson.Get(response, "key_admins").Array(), diags)
-	plan.KeyAdminsRoles = flattenStringSliceJSON(gjson.Get(response, "key_admins_roles").Array(), diags)
+	plan.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
+	plan.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
+	plan.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
 	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
 	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
 	plan.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
-	plan.KeyUsers = flattenStringSliceJSON(gjson.Get(response, "key_users").Array(), diags)
-	plan.KeyUsersRoles = flattenStringSliceJSON(gjson.Get(response, "key_users_roles").Array(), diags)
+	plan.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
+	plan.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
 	setKeyLabels(ctx, response, plan.KeyID.ValueString(), &plan.Labels, diags)
 	plan.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
 	plan.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	plan.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
 	plan.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
-	plan.Policy = types.StringValue(gjson.Get(response, "aws_param.Policy").String())
+	policy := gjson.Get(response, "aws_param.Policy").String()
+	equivalent := getStateKeyPolicy(ctx, policy, plan.Policy.ValueString(), diags)
+	if !equivalent {
+		plan.Policy = types.StringValue(policy)
+	}
 	setPolicyTemplateTag(ctx, response, &plan.PolicyTemplateTag, diags)
 	plan.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
 	plan.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_to").String())
@@ -958,7 +968,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 			response string
 			err      error
 		)
-		numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / ShortAwsKeyOpSleep)
+		numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
 		for retry := 0; retry < numRetries; retry++ {
 			response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 			if err != nil {
@@ -973,7 +983,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 			if keyEnabled == planEnabled && keyDays == planDays {
 				break
 			}
-			time.Sleep(time.Duration(ShortAwsKeyOpSleep) * time.Second)
+			time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
 		}
 		tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableAutoRotation][response:"+response)
 	}
@@ -1184,18 +1194,25 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 	}
 	replicaKeyID := gjson.Get(response, "id").String()
 	keyState := gjson.Get(response, "aws_param.KeyState").String()
-	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / LongAwsKeyOpSleep)
+	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / longAwsKeyOpSleep)
+	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyState == "Creating"; retry++ {
-		time.Sleep(time.Duration(LongAwsKeyOpSleep) * time.Second)
-		if err := r.client.RefreshToken(ctx, id); err != nil {
-			return ""
+		time.Sleep(time.Duration(longAwsKeyOpSleep) * time.Second)
+		if time.Since(tStart).Seconds() > refreshTokenSeconds {
+			if err = r.client.RefreshToken(ctx, id); err != nil {
+				msg := "Error creating AWS key. Error refreshing authentication token."
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
+				tflog.Warn(ctx, details)
+				diags.AddWarning(details, "")
+				return ""
+			}
 		}
 		response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {
-			msg := "Error creating AWS key. Failed to replicate key, error reading key."
+			msg := "Error creating AWS key. Error reading replicated key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
+			tflog.Warn(ctx, details)
+			diags.AddWarning(details, "")
 			return ""
 		}
 		keyState = gjson.Get(response, "aws_param.KeyState").String()
@@ -1216,10 +1233,10 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 	}
 	response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error creating AWS key. Failed to replicate key, error reading key."
+		msg := "Error creating AWS key. Error reading replicated key"
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
+		tflog.Warn(ctx, details)
+		diags.AddWarning(details, "")
 		return ""
 	}
 	tflog.Trace(ctx, "[resource_aws_key.go -> replicateKey][response:"+response)
@@ -1256,9 +1273,9 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, pri
 		diags.AddError(details, "")
 		return
 	}
-	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / ShortAwsKeyOpSleep)
+	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
 	for retry := 0; retry < numRetries && currentPrimaryRegion != newPrimaryRegion; retry++ {
-		time.Sleep(time.Duration(ShortAwsKeyOpSleep) * time.Second)
+		time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
 		response, err = r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error updating AWS key, failed to read key."
@@ -1493,7 +1510,7 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 	for _, tag := range gjson.Get(keyJSON, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
 		tagValue := gjson.Get(tag.Raw, "TagValue").String()
-		if tagKey != PolicyTemplateTagKey {
+		if tagKey != policyTemplateTagKey {
 			keyTags[tagKey] = tagValue
 		}
 	}
@@ -1787,7 +1804,7 @@ func getKeyPolicy(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diag
 	return &keyPolicy
 }
 
-func flattenStringSliceJSON(jsonString []gjson.Result, diags *diag.Diagnostics) basetypes.ListValue {
+func stringSliceJSONToListValue(jsonString []gjson.Result, diags *diag.Diagnostics) basetypes.ListValue {
 	var values []attr.Value
 	for _, item := range jsonString {
 		values = append(values, types.StringValue(item.String()))
@@ -1797,6 +1814,18 @@ func flattenStringSliceJSON(jsonString []gjson.Result, diags *diag.Diagnostics) 
 		diags.Append(d...)
 	}
 	return stringList
+}
+
+func stringSliceJSONToSetValue(jsonString []gjson.Result, diags *diag.Diagnostics) basetypes.SetValue {
+	var values []attr.Value
+	for _, item := range jsonString {
+		values = append(values, types.StringValue(item.String()))
+	}
+	stringSet, d := types.SetValue(types.StringType, values)
+	if d.HasError() {
+		diags.Append(d...)
+	}
+	return stringSet
 }
 
 func setAliases(response string, stateAlias *types.Set, diags *diag.Diagnostics) {
@@ -1822,7 +1851,7 @@ func setPolicyTemplateTag(ctx context.Context, response string, statePolicyTempl
 	tags := gjson.Get(response, "aws_param.Tags").Array()
 	for _, tag := range tags {
 		tagKey := gjson.Get(tag.String(), "TagKey").String()
-		if tagKey == PolicyTemplateTagKey {
+		if tagKey == policyTemplateTagKey {
 			tagValue := gjson.Get(tag.String(), "TagValue").String()
 			elements := map[string]attr.Value{
 				tagKey: types.StringValue(tagValue),
@@ -1844,7 +1873,7 @@ func setKeyTags(ctx context.Context, response string, planTags *types.Map, diags
 	for _, tag := range gjson.Get(response, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
 		tagValue := gjson.Get(tag.Raw, "TagValue").String()
-		if tagKey != PolicyTemplateTagKey {
+		if tagKey != policyTemplateTagKey {
 			tags[tagKey] = tagValue
 		}
 	}
@@ -2083,7 +2112,7 @@ func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.C
 	var policyTemplateID string
 	for _, tag := range gjson.Get(keyJSON, "aws_param.Tags").Array() {
 		tagKey := gjson.Get(tag.Raw, "TagKey").String()
-		if tagKey == PolicyTemplateTagKey {
+		if tagKey == policyTemplateTagKey {
 			policyTemplateID = tagKey
 			break
 		}
@@ -2091,7 +2120,7 @@ func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.C
 	if policyTemplateID != "" {
 		var removeTagsPayload RemoveTagsJSON
 		keyID := gjson.Get(keyJSON, "id").String()
-		tagKey := PolicyTemplateTagKey
+		tagKey := policyTemplateTagKey
 		removeTagsPayload.Tags = append(removeTagsPayload.Tags, &tagKey)
 		payloadJSON, err := json.Marshal(removeTagsPayload)
 		if err != nil {
