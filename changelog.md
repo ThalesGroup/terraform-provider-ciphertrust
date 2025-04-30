@@ -1,3 +1,22 @@
+# 0.11.1-beta
+## Updated Resources
+    ciphertrust_aws_custom_keystore
+        Enabled connection of the key store during terraform create phase.
+        Fixed incorrect 'connection_state' value after updating 'connect_disconnect_keystore'.
+
+    ciphertrust_aws_xks_key
+        Addressed errors occuring when updating an unlinked key'.
+
+## Updated Data Sources
+    ciphertrust_aws_custom_keystore
+        Fixed 'connected' state showing incorrectly in output after updating 'connect_disconnect_keystore'.    
+
+# 0.11.0-beta
+## No code changes
+
+# 0.10.10-beta
+## No code changes
+
 # 0.10.9-beta
 ## Updated Resources
     Fixes an ldap user creating a ciphertrust_cm_key resource.

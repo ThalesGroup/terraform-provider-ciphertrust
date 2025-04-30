@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source = "ThalesGroup/ciphertrust"
-      version = "0.10.9-beta"
+      version = ".10.10-beta"
     }
 
     aws = {
