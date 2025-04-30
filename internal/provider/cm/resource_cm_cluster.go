@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -121,7 +120,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 
 	// Retrieve values from plan
 	var plan CMClusterTFSDK
-	regexURL := regexp.MustCompile(`https://([a-zA-Z0-9.\-]+)`)
+	//regexURL := regexp.MustCompile(`https://([a-zA-Z0-9.\-]+)`)
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -146,15 +145,15 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 				//This means we need to create a new cluster with the primary node
 				var newClusterPayload NewCMClusterNodeJSON
 				if node.Host.ValueString() != "" && node.Host.ValueString() != types.StringNull().ValueString() {
-					url := regexURL.FindStringSubmatch(node.Host.ValueString())
-					newClusterPayload.LocalNodeHost = url[1]
+					//url := regexURL.FindStringSubmatch(node.Host.ValueString())
+					newClusterPayload.LocalNodeHost = node.Host.ValueString()
 				}
 				if node.Port.ValueInt64() != types.Int64Null().ValueInt64() {
 					newClusterPayload.LocalNodePort = node.Port.ValueInt64()
 				}
 				if node.PublicAddress.ValueString() != "" && node.PublicAddress.ValueString() != types.StringNull().ValueString() {
-					url := regexURL.FindStringSubmatch(node.PublicAddress.ValueString())
-					newClusterPayload.PublicAddress = url[1]
+					//url := regexURL.FindStringSubmatch(node.PublicAddress.ValueString())
+					newClusterPayload.PublicAddress = node.PublicAddress.ValueString()
 				}
 
 				payloadJSON, err := json.Marshal(newClusterPayload)
@@ -203,11 +202,11 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 
 			var payloadCSR NewCSRJSON
 
-			urlLocalNode := regexURL.FindStringSubmatch(node.Host.ValueString())
-			payloadCSR.LocalNodeHost = urlLocalNode[1]
+			//urlLocalNode := regexURL.FindStringSubmatch(node.Host.ValueString())
+			payloadCSR.LocalNodeHost = node.Host.ValueString()
 
-			urlLocalNodePubAddress := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
-			payloadCSR.PublicAddress = urlLocalNodePubAddress[1]
+			//urlLocalNodePubAddress := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
+			payloadCSR.PublicAddress = r.client.CipherTrustURL
 
 			payloadCSRJSON, err := json.Marshal(payloadCSR)
 			if err != nil {
@@ -231,11 +230,11 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			var payloadSignCSR SignRequestJSON
 			payloadSignCSR.CSR = gjson.Get(responseCSR, "csr").String()
 
-			urlNewNode := regexURL.FindStringSubmatch(node.Host.ValueString())
-			payloadSignCSR.NewNodeHost = urlNewNode[1]
+			//urlNewNode := regexURL.FindStringSubmatch(node.Host.ValueString())
+			payloadSignCSR.NewNodeHost = node.Host.ValueString()
 
-			urlNewNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
-			payloadSignCSR.PublicAddress = urlNewNodePub[1]
+			//urlNewNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
+			payloadSignCSR.PublicAddress = r.client.CipherTrustURL
 
 			payloadSignCSR.SharedHSMPartition = false
 			payloadSignCSRJSON, err := json.Marshal(payloadSignCSR)
@@ -261,10 +260,10 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			payloadJoinNode.CAChain = gjson.Get(responseSignCSR, "cachain").String()
 			payloadJoinNode.Cert = gjson.Get(responseSignCSR, "cert").String()
 			payloadJoinNode.MKEKBlob = gjson.Get(responseSignCSR, "mkek_blob").String()
-			urlJoinNode := regexURL.FindStringSubmatch(node.Host.ValueString())
-			urlMemberNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
-			payloadJoinNode.LocalNodeHost = urlJoinNode[1]
-			payloadJoinNode.MemberNodeHost = urlMemberNodePub[1]
+			//urlJoinNode := regexURL.FindStringSubmatch(node.Host.ValueString())
+			//urlMemberNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
+			payloadJoinNode.LocalNodeHost = node.Host.ValueString()
+			payloadJoinNode.MemberNodeHost = r.client.CipherTrustURL
 
 			if node.Port.ValueInt64() != types.Int64Null().ValueInt64() {
 				payloadJoinNode.LocalNodePort = node.Port.ValueInt64()
