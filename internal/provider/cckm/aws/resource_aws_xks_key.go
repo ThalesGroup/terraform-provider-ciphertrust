@@ -378,9 +378,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						},
 						"key_source": schema.StringAttribute{
 							Required:    true,
-							Description: "Key source from where the key will be uploaded. Currently, the only option is 'ciphertrust'.",
+							Description: "Key source from where the key will be uploaded. Currently, the only option is 'local'.",
 							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"ciphertrust"}...),
+								stringvalidator.OneOf([]string{"local"}...),
 							},
 						},
 						"disable_encrypt": schema.BoolAttribute{
@@ -448,7 +448,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 		AwsParams:                        *awsParams,
 		XKSKeyLocalHostedInputParamsJSON: *localHostedParamsJSON,
 	}
-	keyPolicy := getKeyPolicy(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
+	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -607,9 +607,11 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+	if gjson.Get(response, "linked_state").Bool() {
+		updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
@@ -716,42 +718,45 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Delete][response:"+response)
 }
 
-func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyState(ctx, response, &plan.AWSKeyCommonTFSDK, diags)
-	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
-	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
-	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
-	plan.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
-	plan.KeySourceContainerID = types.StringValue(gjson.Get(response, "key_source_container_id").String())
-	plan.KeySourceContainerName = types.StringValue(gjson.Get(response, "key_source_container_name").String())
-	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
-	if plan.Linked.ValueBool() {
-		plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
-		setAliases(response, &plan.Alias, diags)
-		setKeyTags(ctx, response, &plan.Tags, diags)
+func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
+	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
+	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
+	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	state.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
+	state.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	state.KeySourceContainerID = types.StringValue(gjson.Get(response, "key_source_container_id").String())
+	state.KeySourceContainerName = types.StringValue(gjson.Get(response, "key_source_container_name").String())
+	state.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
+	if state.Linked.ValueBool() {
+		setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	} else {
-		if len(plan.Alias.Elements()) == 0 {
+		var d diag.Diagnostics
+		state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+		labels := make(map[string]string)
+		state.Labels, d = types.MapValueFrom(ctx, types.StringType, labels)
+		if d.HasError() {
+			diags.Append(d...)
+		}
+		state.PolicyTemplateTag = types.MapNull(types.StringType)
+		policy := gjson.Get(response, "aws_param.Policy").String()
+		state.Policy = types.StringValue(policy)
+		if len(state.Alias.Elements()) == 0 {
 			var aliases []attr.Value
-			var d diag.Diagnostics
-			plan.Alias, d = types.SetValue(types.StringType, aliases)
+			state.Alias, d = types.SetValue(types.StringType, aliases)
 			if d.HasError() {
 				diags.Append(d...)
 			}
 		}
-		if len(plan.Tags.Elements()) == 0 {
+		if len(state.Tags.Elements()) == 0 {
 			tags := make(map[string]string)
 			var d diag.Diagnostics
-			plan.Tags, d = types.MapValueFrom(ctx, types.StringType, tags)
+			state.Tags, d = types.MapValueFrom(ctx, types.StringType, tags)
 			if d.HasError() {
 				diags.Append(d...)
 			}
 		}
 	}
-	plan.Region = types.StringValue(gjson.Get(response, "region").String())
-}
-
-func (r *resourceAWSXKSKey) setXKSKeyPolicyState(ctx context.Context, response string, plan *AWSXKSKeyTFSDK, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
-
+	state.Region = types.StringValue(gjson.Get(response, "region").String())
 }
 
 func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
@@ -842,7 +847,7 @@ func getXKSKeyCommonAWSParams(ctx context.Context, plan *AWSXKSKeyTFSDK, diags *
 	if plan.Description.ValueString() != "" {
 		awsParams.Description = plan.Description.ValueStringPointer()
 	}
-	keyPolicy := getKeyPolicy(ctx, &plan.AWSKeyCommonTFSDK, diags)
+	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return nil
 	}

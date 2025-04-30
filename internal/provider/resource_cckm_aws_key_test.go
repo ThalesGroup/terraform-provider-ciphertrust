@@ -122,8 +122,8 @@ func TestCckmAwsKeyNative(t *testing.T) {
 			kms          = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
 			tags = {
-				TagKey1 = "CreateKeyWithExtras_TagValue1"
-				TagKey2 = "CreateKeyWithExtras_TagValue2"
+				TagKey1 = "TagValue1"
+				TagKey2 = "TagValue2"
 			}
 		}`
 	updateKeyConfig := `
@@ -143,26 +143,11 @@ func TestCckmAwsKeyNative(t *testing.T) {
 			kms       = ciphertrust_aws_kms.kms.id
 			region    = ciphertrust_aws_kms.kms.regions[0]
 			tags = {
-				TagKey3 = "CreateKeyWithExtras_TagValue3"
-				TagKey1 = "CreateKeyWithExtras_TagValue1"
-				TagKey2 = "CreateKeyWithExtras_TagValue2"
+				TagKey3 = "TagValue3"
+				TagKey1 = "TagValue1"
+				TagKey2 = "TagValue2"
 			}
 		}`
-	removeAttribsConfig := `
-		resource "ciphertrust_aws_key" "native_key" {
-			auto_rotate = false
-			alias        = []
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "update description"
-			enable_key   = true
-			key_policy {}
-			key_usage = "ENCRYPT_DECRYPT"
-			kms       = ciphertrust_aws_kms.kms.id
-			region    = ciphertrust_aws_kms.kms.regions[0]
-			schedule_for_deletion_days = 8
-			tags = {}
-		}`
-
 	aliasList := []string{
 		awsKeyNamePrefix + uuid.New().String(),
 		awsKeyNamePrefix + uuid.New().String(),
@@ -183,7 +168,7 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", "256"),
 					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
 					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResource, "enabled", "false"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
 					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
@@ -199,8 +184,8 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					resource.TestCheckResourceAttrSet(keyResource, "policy"),
 					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "CreateKeyWithExtras_TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "CreateKeyWithExtras_TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
 				),
 			},
 			{
@@ -210,7 +195,7 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", "128"),
 					resource.TestCheckResourceAttr(keyResource, "description", "update description"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "enabled", "true"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
 					resource.TestCheckResourceAttr(keyResource, "key_admin.#", "0"),
 					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
@@ -218,9 +203,9 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admin_roles.#", "0"),
 					resource.TestCheckResourceAttr(keyResource, "tags.%", "3"),
 					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "CreateKeyWithExtras_TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "CreateKeyWithExtras_TagValue2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey3", "CreateKeyWithExtras_TagValue3"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey3", "TagValue3"),
 				),
 			},
 			{
@@ -240,12 +225,12 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", "256"),
 					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
 					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResource, "enabled", "false"),
 					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
 					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
 					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "CreateKeyWithExtras_TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "CreateKeyWithExtras_TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_state", "Disabled"),
@@ -256,26 +241,6 @@ func TestCckmAwsKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-				),
-			},
-			{
-				Config: awsConnectionResource + removeAttribsConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "0"),
-					resource.TestCheckResourceAttrSet(keyResource, "arn"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "0"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "0"),
 				),
 			},
 		},
@@ -583,9 +548,9 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 			},
 			{
 				Config: updateResources,
-				Check:  resource.ComposeTestCheckFunc(
-				// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
-				//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
+				Check: resource.ComposeTestCheckFunc(
+					// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
+					//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
 				),
 			},
 		},

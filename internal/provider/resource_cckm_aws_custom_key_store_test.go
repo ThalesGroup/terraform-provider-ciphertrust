@@ -36,7 +36,6 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 			region  = ciphertrust_aws_kms.kms.regions[0]
 			kms     = ciphertrust_aws_kms.kms.name
 			linked_state = false
-			connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
 			enable_success_audit_event = %t
 			local_hosted_params {
 				blocked = false
@@ -68,7 +67,6 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 			region  = ciphertrust_aws_kms.kms.regions[0]
 			kms     = ciphertrust_aws_kms.kms.name
 			linked_state = false
-			connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
 			enable_success_audit_event = %t
 			local_hosted_params {
 				blocked = false

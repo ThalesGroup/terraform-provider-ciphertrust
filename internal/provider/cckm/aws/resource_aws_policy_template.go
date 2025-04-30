@@ -355,14 +355,13 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, 
 	if len(keyUsersRoles) != 0 {
 		state.KeyUsersRoles = stringSliceJSONToSetValue(keyUsersRoles, diags)
 	}
-	equivalent := getStateKeyPolicy(ctx, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
+	equivalent := getPoliciesAreEqual(ctx, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
 	if !equivalent {
 		state.Policy = types.StringValue(gjson.Get(response, "policy").String())
 	}
 }
 
-func getStateKeyPolicy(ctx context.Context, policy string /*response string,*/, planPolicy string, diags *diag.Diagnostics) bool {
-	//	keyPolicy := strings.TrimSpace(gjson.Get(response, "policy").String())
+func getPoliciesAreEqual(ctx context.Context, policy string, planPolicy string, diags *diag.Diagnostics) bool {
 	p, err := normalizePolicy(policy)
 	if err == nil {
 		policy = p
@@ -380,10 +379,7 @@ func getStateKeyPolicy(ctx context.Context, policy string /*response string,*/, 
 		diags.AddError(details, "")
 		return false
 	}
-	if !equivalent {
-		return false
-	}
-	return true
+	return equivalent
 }
 
 func normalizePolicy(jsonString interface{}) (string, error) {

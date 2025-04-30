@@ -748,11 +748,11 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 }
 
 func updateAwsKeyCommon(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	updateDescription(ctx, id, client, plan, keyJSON, diags)
+	enableDisableKey(ctx, id, client, plan, keyJSON, diags)
 	if diags.HasError() {
 		return
 	}
-	enableDisableKey(ctx, id, client, plan, keyJSON, diags)
+	updateDescription(ctx, id, client, plan, keyJSON, diags)
 	if diags.HasError() {
 		return
 	}
@@ -856,67 +856,70 @@ func (r *resourceAWSKey) createKey(ctx context.Context, id string, plan *AWSKeyT
 	return response
 }
 
-func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) {
+func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, "[resource_aws_key.go -> setKeyState][response:"+response)
-	setCommonKeyState(ctx, response, &plan.AWSKeyCommonTFSDK, diags)
-	setAliases(response, &plan.Alias, diags)
-	setKeyTags(ctx, response, &plan.Tags, diags)
-	plan.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
-	plan.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
-	plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
-	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
-	if plan.KMS.ValueString() == "" {
-		plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
+	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
+	setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
+	state.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
+	state.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
+	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
+	if state.KMS.ValueString() == "" {
+		state.KMS = types.StringValue(gjson.Get(response, "kms").String())
 	}
-	plan.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
-	plan.MultiRegionKeyType = types.StringValue(gjson.Get(response, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String())
-	setMultiRegionConfiguration(ctx, response, &plan.MultiRegionPrimaryKey, &plan.MultiRegionReplicaKeys, diags)
-	plan.NextRotationDate = types.StringValue(gjson.Get(response, "aws_param.NextRotationDate").String())
-	plan.ReplicaPolicy = types.StringValue(gjson.Get(response, "replica_policy").String())
+	state.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
+	state.MultiRegionKeyType = types.StringValue(gjson.Get(response, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String())
+	setMultiRegionConfiguration(ctx, response, &state.MultiRegionPrimaryKey, &state.MultiRegionReplicaKeys, diags)
+	state.NextRotationDate = types.StringValue(gjson.Get(response, "aws_param.NextRotationDate").String())
+	state.ReplicaPolicy = types.StringValue(gjson.Get(response, "replica_policy").String())
 }
 
-func setCommonKeyState(ctx context.Context, response string, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
-	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
-	plan.ARN = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
-	plan.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
-	plan.AWSKeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
-	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	plan.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
-	plan.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
-	plan.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	plan.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	plan.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	plan.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	plan.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
-	plan.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
-	plan.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
-	plan.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	plan.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
-	plan.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
-	plan.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
-	plan.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
-	plan.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
-	plan.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
-	plan.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
-	setKeyLabels(ctx, response, plan.KeyID.ValueString(), &plan.Labels, diags)
-	plan.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
-	plan.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
-	plan.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
-	plan.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+func setCommonKeyState(ctx context.Context, response string, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	state.KeyID = types.StringValue(gjson.Get(response, "id").String())
+	state.ARN = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	state.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	state.AWSKeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
+	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	state.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	state.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	state.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	state.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	state.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
+	state.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
+	state.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
+	state.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
+	state.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
+	state.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
+	state.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
+	state.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
+	state.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
+	state.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
+	state.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
+	state.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	state.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	state.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
+	state.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_to").String())
+	state.RotationStatus = types.StringValue(gjson.Get(response, "rotation_status").String())
+	state.RotatedTo = types.StringValue(gjson.Get(response, "rotated_to").String())
+	state.SyncedAt = types.StringValue(gjson.Get(response, "synced_at").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	state.ValidTo = types.StringValue(gjson.Get(response, "aws_param.ValidTo").String())
+}
+
+func setCommonKeyStateEx(ctx context.Context, response string, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	setAliases(response, &state.Alias, diags)
+	setKeyLabels(ctx, response, state.KeyID.ValueString(), &state.Labels, diags)
+	setKeyTags(ctx, response, &state.Tags, diags)
+	state.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	state.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 	policy := gjson.Get(response, "aws_param.Policy").String()
-	equivalent := getStateKeyPolicy(ctx, policy, plan.Policy.ValueString(), diags)
-	if !equivalent {
-		plan.Policy = types.StringValue(policy)
+	if !getPoliciesAreEqual(ctx, policy, state.Policy.ValueString(), diags) {
+		state.Policy = types.StringValue(policy)
 	}
-	setPolicyTemplateTag(ctx, response, &plan.PolicyTemplateTag, diags)
-	plan.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
-	plan.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_to").String())
-	plan.RotationStatus = types.StringValue(gjson.Get(response, "rotation_status").String())
-	plan.RotatedTo = types.StringValue(gjson.Get(response, "rotated_to").String())
-	plan.SyncedAt = types.StringValue(gjson.Get(response, "synced_at").String())
-	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	plan.ValidTo = types.StringValue(gjson.Get(response, "aws_param.ValidTo").String())
+	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
 }
 
 func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
@@ -1154,7 +1157,7 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 	if diags.HasError() {
 		return ""
 	}
-	keyPolicy := getKeyPolicy(ctx, &plan.AWSKeyCommonTFSDK, diags)
+	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return ""
 	}
@@ -1586,21 +1589,15 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 func updateKeyPolicy(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> updateKeyPolicy]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> updateKeyPolicy]["+id+"]")
-	statePolicy := getKeyPolicy(ctx, state, diags)
+	statePolicy := getKeyPolicyPayloadJSON(ctx, state, diags)
 	if diags.HasError() {
 		return
 	}
-	planPolicyPayload := getKeyPolicy(ctx, plan, diags)
+	planPolicyPayload := getKeyPolicyPayloadJSON(ctx, plan, diags)
 	if diags.HasError() {
 		return
 	}
-	if planPolicyPayload.ExternalAccounts != statePolicy.ExternalAccounts ||
-		planPolicyPayload.KeyAdmins != statePolicy.KeyAdmins ||
-		planPolicyPayload.KeyAdminsRoles != statePolicy.KeyAdminsRoles ||
-		planPolicyPayload.KeyUsers != statePolicy.KeyUsers ||
-		planPolicyPayload.KeyUsersRoles != statePolicy.KeyUsersRoles ||
-		planPolicyPayload.PolicyTemplate != statePolicy.PolicyTemplate ||
-		planPolicyPayload.Policy != statePolicy.Policy {
+	if keyPolicyHasChanged(planPolicyPayload, statePolicy) {
 		keyID := plan.KeyID.ValueString()
 		payloadJSON, err := json.Marshal(planPolicyPayload)
 		if err != nil {
@@ -1712,7 +1709,7 @@ func (r *resourceAWSKey) getCommonAWSParams(ctx context.Context, plan *AWSKeyTFS
 func (r *resourceAWSKey) getCommonAWSKeyCreateParams(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) *CommonAWSKeyCreatePayloadJSON {
 	var keyCreateParams CommonAWSKeyCreatePayloadJSON
 	keyCreateParams.Region = plan.Region.ValueString()
-	keyPolicyPlan := getKeyPolicy(ctx, plan, diags)
+	keyPolicyPlan := getKeyPolicyPayloadJSON(ctx, plan, diags)
 	if diags.HasError() {
 		return nil
 	}
@@ -1747,7 +1744,7 @@ func getTagsParam(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diag
 	return awsTags
 }
 
-func getKeyPolicy(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) *KeyPolicyPayloadJSON {
+func getKeyPolicyPayloadJSON(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) *KeyPolicyPayloadJSON {
 	var keyPolicy KeyPolicyPayloadJSON
 	if !plan.KeyPolicy.IsNull() && len(plan.KeyPolicy.Elements()) != 0 {
 		for _, v := range plan.KeyPolicy.Elements() {
@@ -1796,8 +1793,13 @@ func getKeyPolicy(ctx context.Context, plan *AWSKeyCommonTFSDK, diags *diag.Diag
 				}
 				keyPolicy.KeyUsersRoles = &keyUsersRoles
 			}
-			if !kp.PolicyTemplate.IsNull() && len(kp.PolicyTemplate.String()) != 0 {
+			if !kp.PolicyTemplate.IsNull() && len(kp.PolicyTemplate.ValueString()) != 0 {
 				keyPolicy.PolicyTemplate = kp.PolicyTemplate.ValueStringPointer()
+			}
+			if !kp.Policy.IsNull() && len(kp.Policy.ValueString()) != 0 {
+				policy := kp.Policy.ValueString()
+				policyBytes := json.RawMessage([]byte(policy))
+				keyPolicy.Policy = &policyBytes
 			}
 		}
 	}
@@ -2155,4 +2157,66 @@ func decodeAwsKeyResourceID(resourceID string) (region string, kid string, err e
 		err = fmt.Errorf("%s is not a valid aws key resource id", resourceID)
 	}
 	return
+}
+
+func keyPolicyHasChanged(a *KeyPolicyPayloadJSON, b *KeyPolicyPayloadJSON) bool {
+	if !slicesAreEqual(a.ExternalAccounts, b.ExternalAccounts) ||
+		!slicesAreEqual(a.KeyAdmins, b.KeyAdmins) ||
+		!slicesAreEqual(a.KeyAdminsRoles, b.KeyAdminsRoles) ||
+		!slicesAreEqual(a.KeyUsers, b.KeyUsers) ||
+		!slicesAreEqual(a.KeyUsersRoles, b.KeyUsersRoles) ||
+		!stringsEqual(a.PolicyTemplate, b.PolicyTemplate) ||
+		!bytesAreEqual(a.Policy, b.Policy) {
+		return true
+	}
+	return false
+}
+
+func slicesAreEqual(a *[]string, b *[]string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if (a == nil && b != nil) || (a != nil && b == nil) {
+		return false
+	}
+	for _, str := range *a {
+		if !stringInSlice(str, *b) {
+			return false
+		}
+	}
+	for _, str := range *b {
+		if !stringInSlice(str, *a) {
+			return false
+		}
+	}
+	return true
+}
+
+func stringInSlice(a string, slist []string) bool {
+	for _, b := range slist {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+func stringsEqual(a *string, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if (a == nil && b != nil) || (a != nil && b == nil) || *a != *b {
+		return false
+	}
+	return true
+}
+
+func bytesAreEqual(a *json.RawMessage, b *json.RawMessage) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if (a == nil && b != nil) || (a != nil && b == nil) || string(*a) != string(*b) {
+		return false
+	}
+	return true
 }
