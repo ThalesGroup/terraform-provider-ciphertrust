@@ -99,8 +99,6 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	plan.Value = types.StringValue(gjson.Get(response, "value").String())
-
 	tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)

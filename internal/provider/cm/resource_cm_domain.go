@@ -77,7 +77,6 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"meta_data": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Computed:    true,
 				Description: "Optional end-user or service data stored with the domain. Should be JSON-serializable.",
 			},
 			"parent_ca_id": schema.StringAttribute{
@@ -177,6 +176,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
 	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
 	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	tflog.Debug(ctx, "[resource_cm_domain.go -> Create Output]["+response+"]")
 
@@ -219,6 +219,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
 	state.Account = types.StringValue(gjson.Get(response, "account ").String())
+	state.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -287,6 +288,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
 	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
 	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
