@@ -67,6 +67,7 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"id": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"alias": schema.SetAttribute{
 				Optional:    true,

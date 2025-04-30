@@ -402,15 +402,15 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 						},
 						"custom_key_store_id": schema.StringAttribute{
-							Optional:    true,
+							Required:    true,
 							Description: "ID of the custom keystore where XKS key is to be created.",
 						},
 						"source_key_id": schema.StringAttribute{
-							Optional:    true,
+							Required:    true,
 							Description: "ID of the source key for AWS XKS key.",
 						},
 						"source_key_tier": schema.StringAttribute{
-							Optional:    true,
+							Required:    true,
 							Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
 						},
 						"linked": schema.BoolAttribute{
@@ -731,6 +731,7 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 		setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	} else {
 		var d diag.Diagnostics
+		state.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 		state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 		labels := make(map[string]string)
 		state.Labels, d = types.MapValueFrom(ctx, types.StringType, labels)

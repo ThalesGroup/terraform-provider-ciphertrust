@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmAwsKeyDataSource(t *testing.T) {
+func TestCckmAwsDataSourceKey(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
@@ -38,7 +38,7 @@ func TestCckmAwsKeyDataSource(t *testing.T) {
 		data "ciphertrust_aws_key" "by_id" {
 			id = ciphertrust_aws_key.aws_key.id
 		}
-		data "ciphertrust_aws_key" "by_cipertrust_key_id" {
+		data "ciphertrust_aws_key" "by_ciphertrust_key_id" {
 			key_id = ciphertrust_aws_key.aws_key.key_id
 		}
 		data "ciphertrust_aws_key" "by_key_id_and_region" {
@@ -69,7 +69,7 @@ func TestCckmAwsKeyDataSource(t *testing.T) {
 					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_alias_ex2", "key_id"),
 					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_aws_key_id", "key_id"),
 					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_id", "key_id"),
-					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_cipertrust_key_id", "key_id"),
+					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_ciphertrust_key_id", "key_id"),
 					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_key_id_and_region", "key_id"),
 					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_key.by_key_id_region_and_alias", "key_id"),
 				),

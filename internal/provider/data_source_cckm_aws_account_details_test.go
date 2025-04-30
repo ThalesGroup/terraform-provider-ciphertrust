@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmAwsAccountDetailsDataSource(t *testing.T) {
+func TestCckmAwsDataSourceAccountDetails(t *testing.T) {
 	accountDetailsDataConfig := `
 		resource "ciphertrust_aws_connection" "aws_connection" {
 		  name = "tf-test-%s"
