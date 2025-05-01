@@ -758,31 +758,36 @@ type CMPrometheusMetricsConfigJSON struct {
 type CCKMRotationAwsParamsJSON struct {
 	RetainAlias bool `json:"retain_alias"`
 }
-type CCKMRotationParamsJSON struct {
+type CCKMKeyRotationParamsJSON struct {
 	CloudName                 string  `json:"cloud_name"`
 	Expiration                *string `json:"expiration"`
 	ExpireIn                  *string `json:"expire_in"`
 	CCKMRotationAwsParamsJSON `json:"aws_param"`
 }
 
-type CCKMSyncrhonizationParamsJSON struct {
+type CCKMSynchronizationParamsJSON struct {
 	CloudName      string   `json:"cloud_name"`
 	Kms            []string `json:"kms"`
 	SynchronizeAll *bool    `json:"synchronize_all"`
 }
 
+type CCKMXksRotateCredentialsParamsJSON struct {
+	CloudName string `json:"cloud_name"`
+}
+
 type CreateJobConfigParamsJSON struct {
-	Name                      string                         `json:"name"`
-	Description               string                         `json:"description"`
-	Operation                 string                         `json:"operation"`
-	RunAt                     string                         `json:"run_at"`
-	RunOn                     string                         `json:"run_on"`
-	Disabled                  bool                           `json:"disabled"`
-	StartDate                 time.Time                      `json:"start_date"`
-	EndDate                   time.Time                      `json:"end_date"`
-	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
-	CCKMRotationParams        *CCKMRotationParamsJSON        `json:"cckm_key_rotation_params"`
-	CCKMSynchronizationParams *CCKMSyncrhonizationParamsJSON `json:"cckm_synchronization_params"`
+	Name                           string                              `json:"name"`
+	Description                    string                              `json:"description"`
+	Operation                      string                              `json:"operation"`
+	RunAt                          string                              `json:"run_at"`
+	RunOn                          string                              `json:"run_on"`
+	Disabled                       bool                                `json:"disabled"`
+	StartDate                      time.Time                           `json:"start_date"`
+	EndDate                        time.Time                           `json:"end_date"`
+	DatabaseBackupParams           *DatabaseBackupParamsJSON           `json:"database_backup_params"`
+	CCKMKeyRotationParams          *CCKMKeyRotationParamsJSON          `json:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams      *CCKMSynchronizationParamsJSON      `json:"cckm_synchronization_params"`
+	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsJSON `json:"cckm_xks_credential_rotation_params"`
 }
 
 type UpdateJobConfigParamsJSON struct {
@@ -795,8 +800,8 @@ type UpdateJobConfigParamsJSON struct {
 	StartDate                 time.Time                      `json:"start_date"`
 	EndDate                   time.Time                      `json:"end_date"`
 	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
-	CCKMRotationParams        *CCKMRotationParamsJSON        `json:"cckm_key_rotation_params"`
-	CCKMSyncrhonizationParams *CCKMSyncrhonizationParamsJSON `json:"cckm_synchronization_params"`
+	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
 }
 type DatabaseBackupParamsJSON struct {
 	TiedToHSM      bool                `json:"tiedToHSM,"`
@@ -813,25 +818,36 @@ type BackupFilterJSON struct {
 	ResourceQuery interface{} `json:"resourceQuery"`
 }
 
+type CreateJobConfigParamsTFSDKCommon struct {
+	ID                             types.String                         `tfsdk:"id"`
+	URI                            types.String                         `tfsdk:"uri"`
+	Account                        types.String                         `tfsdk:"account"`
+	Application                    types.String                         `tfsdk:"application"`
+	DevAccount                     types.String                         `tfsdk:"dev_account"`
+	CreatedAt                      types.String                         `tfsdk:"created_at"`
+	UpdatedAt                      types.String                         `tfsdk:"updated_at"`
+	Name                           types.String                         `tfsdk:"name"`
+	Description                    types.String                         `tfsdk:"description"`
+	Operation                      types.String                         `tfsdk:"operation"`
+	RunAt                          types.String                         `tfsdk:"run_at"`
+	RunOn                          types.String                         `tfsdk:"run_on"`
+	Disabled                       types.Bool                           `tfsdk:"disabled"`
+	StartDate                      types.String                         `tfsdk:"start_date"`
+	EndDate                        types.String                         `tfsdk:"end_date"`
+	DatabaseBackupParams           *DatabaseBackupParamsTFSDK           `tfsdk:"database_backup_params"`
+	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsTFSDK `tfsdk:"cckm_xks_credential_rotation_params"`
+}
+
 type CreateJobConfigParamsTFSDK struct {
-	ID                        types.String               `tfsdk:"id"`
-	URI                       types.String               `tfsdk:"uri"`
-	Account                   types.String               `tfsdk:"account"`
-	Application               types.String               `tfsdk:"application"`
-	DevAccount                types.String               `tfsdk:"dev_account"`
-	CreatedAt                 types.String               `tfsdk:"created_at"`
-	UpdatedAt                 types.String               `tfsdk:"updated_at"`
-	Name                      types.String               `tfsdk:"name"`
-	Description               types.String               `tfsdk:"description"`
-	Operation                 types.String               `tfsdk:"operation"`
-	RunAt                     types.String               `tfsdk:"run_at"`
-	RunOn                     types.String               `tfsdk:"run_on"`
-	Disabled                  types.Bool                 `tfsdk:"disabled"`
-	StartDate                 types.String               `tfsdk:"start_date"`
-	EndDate                   types.String               `tfsdk:"end_date"`
-	DatabaseBackupParams      *DatabaseBackupParamsTFSDK `tfsdk:"database_backup_params"`
-	CCKMRotationParams        types.List                 `tfsdk:"cckm_key_rotation_params"`
-	CCKMSynchronizationParams types.List                 `tfsdk:"cckm_synchronization_params"`
+	CreateJobConfigParamsTFSDKCommon
+	CCKMKeyRotationParams     types.List `tfsdk:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams types.List `tfsdk:"cckm_synchronization_params"`
+}
+
+type JobConfigParamsTFSDK struct {
+	CreateJobConfigParamsTFSDKCommon
+	CCKMKeyRotationParams     *CCKMKeyRotationParamsTFSDK     `tfsdk:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK `tfsdk:"cckm_synchronization_params"`
 }
 
 type DatabaseBackupParamsTFSDK struct {
@@ -851,22 +867,25 @@ type BackupFilterTFSDK struct {
 }
 
 type CreateJobConfigParamsListJSON struct {
-	ID                   string                    `json:"id"`
-	URI                  string                    `json:"uri"`
-	Account              string                    `json:"account"`
-	Application          string                    `json:"application"`
-	DevAccount           string                    `json:"devAccount"`
-	CreatedAt            string                    `json:"createdAt"`
-	UpdatedAt            string                    `json:"updatedAt"`
-	Name                 string                    `json:"name"`
-	Description          string                    `json:"description"`
-	Operation            string                    `json:"operation"`
-	RunAt                string                    `json:"run_at"`
-	RunOn                string                    `json:"run_on"`
-	Disabled             bool                      `json:"disabled"`
-	StartDate            time.Time                 `json:"start_date"`
-	EndDate              time.Time                 `json:"end_date"`
-	DatabaseBackupParams *DatabaseBackupParamsJSON `json:"job_config_params"`
+	ID                             string                              `json:"id"`
+	URI                            string                              `json:"uri"`
+	Account                        string                              `json:"account"`
+	Application                    string                              `json:"application"`
+	DevAccount                     string                              `json:"devAccount"`
+	CreatedAt                      string                              `json:"createdAt"`
+	UpdatedAt                      string                              `json:"updatedAt"`
+	Name                           string                              `json:"name"`
+	Description                    string                              `json:"description"`
+	Operation                      string                              `json:"operation"`
+	RunAt                          string                              `json:"run_at"`
+	RunOn                          string                              `json:"run_on"`
+	Disabled                       bool                                `json:"disabled"`
+	StartDate                      time.Time                           `json:"start_date"`
+	EndDate                        time.Time                           `json:"end_date"`
+	DatabaseBackupParams           *DatabaseBackupParamsJSON           `json:"job_config_params"`
+	CCKMKeyRotationParams          *CCKMKeyRotationParamsJSON          `json:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams      *CCKMSynchronizationParamsJSON      `json:"cckm_synchronization_params"`
+	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsJSON `json:"cckm_xks_credential_rotation_params"`
 }
 
 type CMPropertyTFSDK struct {
@@ -1072,15 +1091,19 @@ type CMLogForwardersJSON struct {
 	UpdatedAt           string                     `json:"updatedAt"`
 }
 
-type CCKMRotationParamsTFSDK struct {
+type CCKMKeyRotationParamsTFSDK struct {
 	RetainAlias types.Bool   `tfsdk:"aws_retain_alias"`
 	CloudName   types.String `tfsdk:"cloud_name"`
 	Expiration  types.String `tfsdk:"expiration"`
 	ExpireIn    types.String `tfsdk:"expire_in"`
 }
 
-type CCKMSyncParamsTFSDK struct {
+type CCKMSynchronizationParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 	Kms       types.Set    `tfsdk:"kms"`
 	SyncAll   types.Bool   `tfsdk:"synchronize_all"`
+}
+
+type CCKMXksRotateCredentialsParamsTFSDK struct {
+	CloudName types.String `tfsdk:"cloud_name"`
 }

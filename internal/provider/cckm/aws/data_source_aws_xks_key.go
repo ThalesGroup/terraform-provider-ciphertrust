@@ -348,7 +348,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyDataStoreState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
 	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
-	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
 	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
 	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())

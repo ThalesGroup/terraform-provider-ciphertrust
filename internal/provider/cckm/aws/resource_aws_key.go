@@ -143,7 +143,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"customer_master_key_spec": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ","),
+				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", "),
 				Validators:  []validator.String{stringvalidator.OneOf(awsKeySpecs...)},
 			},
 			"description": schema.StringAttribute{

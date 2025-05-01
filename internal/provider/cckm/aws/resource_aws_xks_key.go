@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"regexp"
 	"strings"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -95,7 +95,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"customer_master_key_spec": schema.StringAttribute{
 				Computed:    true,
-				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ","),
+				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", "),
 				Validators:  []validator.String{stringvalidator.OneOf(awsKeySpecs...)},
 			},
 			"description": schema.StringAttribute{
@@ -502,7 +502,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	if !plan.EnableKey.ValueBool() {
+	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
 		enableDisableKey(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &diags)
 		for _, d := range diags {
@@ -546,6 +546,7 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	description := state.Description
 	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS XKS key, failed to set resource state."
@@ -553,6 +554,9 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
+	}
+	if !gjson.Get(response, "linked_state").Bool() {
+		state.Description = description
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -612,16 +616,6 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-	if err != nil {
-		msg := "Error updating AWS XKS key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	if gjson.Get(response, "linked_state").Bool() {
 		updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
@@ -646,6 +640,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	description := plan.Description
 	r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS XKS key, failed to set resource state."
@@ -653,6 +648,13 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
+	}
+	if !gjson.Get(response, "linked_state").Bool() {
+		if !description.IsUnknown() {
+			plan.Description = description
+		} else {
+			plan.Description = types.StringValue("")
+		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	if resp.Diagnostics.HasError() {
@@ -721,7 +723,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
-	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
 	state.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
 	state.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
 	state.KeySourceContainerID = types.StringValue(gjson.Get(response, "key_source_container_id").String())

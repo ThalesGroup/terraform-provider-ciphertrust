@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmAwsXKSKeyUnlinkedCMSourceKeyTier(t *testing.T) {
+func TestCckmAwsXKSUnlinkedKey(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
@@ -47,7 +47,6 @@ func TestCckmAwsXKSKeyUnlinkedCMSourceKeyTier(t *testing.T) {
 				custom_key_store_type = "EXTERNAL_KEY_STORE"
 			}
 		}`
-
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
 	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
@@ -82,7 +81,16 @@ func TestCckmAwsXKSKeyUnlinkedCMSourceKeyTier(t *testing.T) {
 	enableRotationConfigStr := fmt.Sprintf(enableRotationConfig, enableRotationName)
 
 	createXKSKeyConfig := `
-		resource "ciphertrust_aws_xks_key" "unlinked_cm_source" {
+		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_min_params" {
+			local_hosted_params {
+				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
+				blocked = false
+				linked  = false
+				source_key_id   = ciphertrust_cm_key.cm_aes_key.id
+				source_key_tier = "local"
+			}
+		}
+		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_max_params" {
 			alias        = [local.alias, "%s", "%s"]
 			description = "create description"
 			enable_key = %t
@@ -112,7 +120,26 @@ func TestCckmAwsXKSKeyUnlinkedCMSourceKeyTier(t *testing.T) {
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + createXKSKeyConfigStr
 
 	updateXKSKeyConfig := `
-		resource "ciphertrust_aws_xks_key" "unlinked_cm_source" {
+		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_min_params" {
+			alias        = [local.alias]
+			description = "update description"
+			enable_key  = false
+			key_policy {
+				policy = ciphertrust_aws_policy_template.template_with_users_and_roles.policy
+			}
+			local_hosted_params {
+				blocked = true
+				linked  = false
+				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
+				source_key_id = ciphertrust_cm_key.cm_aes_key.id
+				source_key_tier = "local"
+			}
+			tags = {
+				TagKey1 = "TagValue1"
+				TagKey2 = "TagValue2"
+			}
+		}
+		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_max_params" {
 			alias        = [local.alias]
 			description = "update description"
 			enable_key  = %t
@@ -134,37 +161,80 @@ func TestCckmAwsXKSKeyUnlinkedCMSourceKeyTier(t *testing.T) {
 	updateXKSKeyConfigStr := fmt.Sprintf(updateXKSKeyConfig, true)
 	updateConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + updateXKSKeyConfigStr
 
-	keyResource := "ciphertrust_aws_xks_key.unlinked_cm_source"
+	keyResourceMaxParams := "ciphertrust_aws_xks_key.unlinked_cm_source_max_params"
+	keyResourceMinParams := "ciphertrust_aws_xks_key.unlinked_cm_source_min_params"
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "3"),
-					resource.TestCheckResourceAttr(keyResource, "blocked", "true"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "alias.#", "3"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "true"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "false"),
 					// Not updated for unlinked key
-					resource.TestCheckResourceAttr(keyResource, "labels.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.#", "0"),
 					// Not updated for unlinked key
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "description", "create description"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.%", "1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.TagKey1", "TagValue1"),
+
+					resource.TestCheckResourceAttr(keyResourceMinParams, "alias.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "description", ""),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.%", "0"),
 				),
 			},
 			{
 				Config: updateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "blocked", "false"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResource, "labels.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResource, "description", "update description"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "false"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "description", "update description"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.TagKey2", "TagValue2"),
+
+					resource.TestCheckResourceAttr(keyResourceMinParams, "alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "true"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "description", "update description"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.TagKey2", "TagValue2"),
+				),
+			},
+			{
+				Config: createConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "alias.#", "3"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "true"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "false"),
+					// Not updated for unlinked key
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.#", "0"),
+					// Not updated for unlinked key
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "description", "create description"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.%", "1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "tags.TagKey1", "TagValue1"),
+
+					resource.TestCheckResourceAttr(keyResourceMinParams, "alias.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "description", ""),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.%", "0"),
 				),
 			},
 		},

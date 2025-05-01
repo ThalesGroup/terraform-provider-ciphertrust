@@ -424,7 +424,7 @@ func setCommonKeyDataStoreState(ctx context.Context, response string, state *AWS
 	state.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
 	state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 	state.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	state.ExpirationModel = types.StringValue(gjson.Get(response, "").String())
+	state.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
 	state.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
 	state.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
 	state.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)

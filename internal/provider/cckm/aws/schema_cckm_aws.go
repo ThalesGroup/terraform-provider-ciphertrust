@@ -53,6 +53,7 @@ type AWSCustomKeyStoreTFSDK struct {
 	ConnectDisconnectKeystore types.String   `tfsdk:"connect_disconnect_keystore"`
 	AWSParams                 types.List     `tfsdk:"aws_param"`
 	LocalHostedParams         types.List     `tfsdk:"local_hosted_params"`
+	EnableCredentialRotation  types.List     `tfsdk:"enable_credential_rotation"`
 	Timeouts                  timeouts.Value `tfsdk:"timeouts"`
 }
 
@@ -559,4 +560,8 @@ type AWSXKSKeyDataSourceTFSDK struct {
 	AWSXKSKeyID         types.String `tfsdk:"aws_xks_key_id"`
 	AWSCustomKeyStoreID types.String `tfsdk:"aws_custom_key_store_id"`
 	SourceKeyTier       types.String `tfsdk:"source_key_tier"`
+}
+
+type AWSEnableXksCredentialRotationJobPayloadJSON struct {
+	JobConfigID string `json:"job_config_id"`
 }

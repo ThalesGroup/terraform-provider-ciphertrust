@@ -39,7 +39,7 @@ func TestCckmSchedulers(t *testing.T) {
 				enable_rotation {
 					disable_encrypt = true
 					job_config_id   = ciphertrust_scheduler.rotation_max_params.id
-					key_source      = "ciphertrust"	
+					key_source      = "ciphertrust"
 				}
 			}`
 		updateSchedulerParams := `
@@ -189,7 +189,7 @@ func TestCckmSchedulers(t *testing.T) {
 			resource "ciphertrust_scheduler" "sync_all_params" {
 				cckm_synchronization_params {
 					cloud_name = "aws"
-                    kms        = [ciphertrust_aws_kms.kms.id]
+	               kms        = [ciphertrust_aws_kms.kms.id]
 				}
 				name       = "%s"
 				operation  = "cckm_synchronization"
@@ -244,6 +244,33 @@ func TestCckmSchedulers(t *testing.T) {
 						resource.TestCheckResourceAttr(syncAllParamsResource, "cckm_synchronization_params.0.kms.#", "0"),
 						resource.TestCheckResourceAttr(syncAllParamsResource, "cckm_synchronization_params.0.cloud_name", "aws"),
 						resource.TestCheckResourceAttr(syncAllParamsResource, "cckm_synchronization_params.0.synchronize_all", "true"),
+					),
+				},
+			},
+		})
+	})
+
+	t.Run("XKSCredentialRotation", func(t *testing.T) {
+		schedulerConfig := `
+			resource "ciphertrust_scheduler" "xks_credential_rotation" {
+				cckm_xks_credential_rotation_params = {
+					cloud_name = "aws"
+				}
+				name       = "%s"
+				operation  = "cckm_xks_credential_rotation"
+				run_at     = "0 9 * * fri"
+			}`
+		schedulerName := "tf-xks-cred-rotation" + uuid.New().String()[:8]
+		schedulerConfigStr := fmt.Sprintf(schedulerConfig, schedulerName)
+		schedulerResourceName := "ciphertrust_scheduler.xks_credential_rotation"
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: schedulerConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(schedulerResourceName, "id"),
+						resource.TestCheckResourceAttr(schedulerResourceName, "cckm_xks_credential_rotation_params.cloud_name", "aws"),
 					),
 				},
 			},

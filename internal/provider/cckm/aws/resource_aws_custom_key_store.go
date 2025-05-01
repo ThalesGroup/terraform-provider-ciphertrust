@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -233,6 +234,20 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					},
 				},
 			},
+			"enable_credential_rotation": schema.ListNestedBlock{
+				Description: "Enable the custom key store for scheduled credential rotation job.",
+				Validators: []validator.List{
+					listvalidator.SizeAtMost(1),
+				},
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"job_config_id": schema.StringAttribute{
+							Required:    true,
+							Description: "ID of the scheduler configuration job that will schedule the xks credential rotation.",
+						},
+					},
+				},
+			},
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
 				Create: true,
 				Update: true,
@@ -250,8 +265,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
 	var plan AWSCustomKeyStoreTFSDK
 	var payload AWSCustomKeyStoreJSON
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -378,6 +392,14 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	if len(plan.EnableCredentialRotation.Elements()) != 0 {
+		var diags diag.Diagnostics
+		r.enableCredentialRotation(ctx, id, &plan, &diags)
+		for _, d := range diags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+	}
 
 	var warningDiags diag.Diagnostics
 	r.setCustomKeyStoreState(ctx, response, &plan, nil, &warningDiags)
@@ -1059,4 +1081,79 @@ func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id s
 		return "", err
 	}
 	return response, nil
+}
+
+func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
+	planParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
+	if !plan.EnableCredentialRotation.IsUnknown() {
+		diags.Append(plan.EnableCredentialRotation.ElementsAs(ctx, &planParams, false)...)
+		if diags.HasError() {
+			return
+		}
+	}
+	stateParams := make([]AWSKeyEnableRotationTFSDK, 0, len(state.EnableRotation.Elements()))
+	diags.Append(state.EnableRotation.ElementsAs(ctx, &stateParams, false)...)
+	if diags.HasError() {
+		return
+	}
+	if len(planParams) == 0 && len(stateParams) != 0 {
+		r.disableCredentialRotation(ctx, id, plan, diags)
+		if diags.HasError() {
+			return
+		}
+	}
+	if !reflect.DeepEqual(planParams, stateParams) {
+		r.enableCredentialRotation(ctx, id, plan, diags)
+		if diags.HasError() {
+			return
+		}
+	}
+}
+
+func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
+	rotationParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
+	if !plan.EnableCredentialRotation.IsUnknown() {
+		diags.Append(plan.EnableCredentialRotation.ElementsAs(ctx, &rotationParams, false)...)
+		if diags.HasError() {
+			return
+		}
+	}
+	for _, params := range rotationParams {
+		payload := AWSEnableXksCredentialRotationJobPayloadJSON{
+			JobConfigID: params.JobConfigID.ValueString(),
+		}
+		keyStoreID := plan.ID.ValueString()
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			msg := "Failed to enable credential rotation for AWS key store, invalid data input."
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return
+		}
+		response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/enable-credential-rotation-job", payloadJSON)
+		if err != nil {
+			msg := "Failed to enable credential rotation for AWS key store."
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID, "payload": payload})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return
+		}
+		tflog.Trace(ctx, "[resource_aws_key.go -> enableCredentialRotation][response:"+response)
+	}
+}
+
+func (r *resourceAWSCustomKeyStore) disableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
+	keyStoreID := plan.ID.ValueString()
+	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/disable-credential-rotation-job\n\nDisable custom key store for credentials rotation job. - post")
+	if err != nil {
+		msg := "Error updating AWS key, failed to disable credential rotation job for AWS key store."
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+		diags.AddError(details, "")
+		tflog.Error(ctx, details)
+		return
+	}
+	tflog.Trace(ctx, "[resource_aws_key.go -> disableCredentialRotation][response:"+response)
 }
