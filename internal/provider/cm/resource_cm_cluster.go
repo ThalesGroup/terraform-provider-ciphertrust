@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -120,7 +121,11 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 
 	// Retrieve values from plan
 	var plan CMClusterTFSDK
-	//regexURL := regexp.MustCompile(`https://([a-zA-Z0-9.\-]+)`)
+	//var memberNodePublicIP string
+	var memberNodeHost string
+	var memberNodePort int64
+
+	regexURL := regexp.MustCompile(`https://([a-zA-Z0-9.\-]+)`)
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -130,6 +135,9 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 
 	for _, node := range plan.Nodes {
 		if node.Original.ValueBool() {
+			memberNodeHost = node.Host.ValueString()
+			//memberNodePublicIP = node.PublicAddress.ValueString()
+			memberNodePort = node.Port.ValueInt64()
 			//Let's check if the cluster already exists for the primary node
 			response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_CLUSTER_INFO)
 			if err != nil {
@@ -185,7 +193,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			//Steps are -
 			//1. Create CSR on the node that wants to join the cluster
 			//For this step we need to create a client object for the joining node
-			node_address := node.Host.ValueString()
+			node_address := "https://" + node.PublicAddress.ValueString()
 			node_username := node.Creds.Username.ValueString()
 			node_password := node.Creds.Password.ValueString()
 			node_domain := node.Creds.Domain.ValueString()
@@ -205,8 +213,8 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			//urlLocalNode := regexURL.FindStringSubmatch(node.Host.ValueString())
 			payloadCSR.LocalNodeHost = node.Host.ValueString()
 
-			//urlLocalNodePubAddress := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
-			payloadCSR.PublicAddress = r.client.CipherTrustURL
+			urlLocalNodePubAddress := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
+			payloadCSR.PublicAddress = urlLocalNodePubAddress[1]
 
 			payloadCSRJSON, err := json.Marshal(payloadCSR)
 			if err != nil {
@@ -233,11 +241,13 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			//urlNewNode := regexURL.FindStringSubmatch(node.Host.ValueString())
 			payloadSignCSR.NewNodeHost = node.Host.ValueString()
 
-			//urlNewNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
-			payloadSignCSR.PublicAddress = r.client.CipherTrustURL
+			urlNewNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
+			payloadSignCSR.PublicAddress = urlNewNodePub[1]
 
 			payloadSignCSR.SharedHSMPartition = false
 			payloadSignCSRJSON, err := json.Marshal(payloadSignCSR)
+			tflog.Info(ctx, "Payload Sign CSR: "+string(payloadSignCSRJSON))
+
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cluster.go -> Create]["+id+"]")
 				resp.Diagnostics.AddError(
@@ -263,7 +273,9 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			//urlJoinNode := regexURL.FindStringSubmatch(node.Host.ValueString())
 			//urlMemberNodePub := regexURL.FindStringSubmatch(r.client.CipherTrustURL)
 			payloadJoinNode.LocalNodeHost = node.Host.ValueString()
-			payloadJoinNode.MemberNodeHost = r.client.CipherTrustURL
+			payloadJoinNode.MemberNodeHost = memberNodeHost
+			payloadJoinNode.LocalNodePublicAddress = node.PublicAddress.ValueString()
+			payloadJoinNode.MemberNodePort = memberNodePort
 
 			if node.Port.ValueInt64() != types.Int64Null().ValueInt64() {
 				payloadJoinNode.LocalNodePort = node.Port.ValueInt64()
@@ -282,7 +294,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cluster.go -> Create]["+id+"]")
 				resp.Diagnostics.AddError(
-					"Error signing CSR on the existing node: ", err.Error(),
+					"Error joining node: ", err.Error()+string(payloadJoinNodeJSON),
 				)
 				return
 			}
