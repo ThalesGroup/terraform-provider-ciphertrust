@@ -1233,9 +1233,6 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 	payload.Labels = labelsPayload
 
-	b, _ := json.MarshalIndent(payload, "", "\t")
-	tflog.Info(ctx, fmt.Sprintf("SARAH Update CM Key payload %s", b))
-
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")

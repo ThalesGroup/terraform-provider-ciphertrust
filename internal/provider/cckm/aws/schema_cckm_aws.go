@@ -58,9 +58,10 @@ type AWSCustomKeyStoreTFSDK struct {
 }
 
 type AWSKeyEnableRotationTFSDK struct {
-	JobConfigID              types.String `tfsdk:"job_config_id"`
-	AutoRotateDisableEncrypt types.Bool   `tfsdk:"disable_encrypt"`
-	AutoRotateKeySource      types.String `tfsdk:"key_source"`
+	JobConfigID                           types.String `tfsdk:"job_config_id"`
+	AutoRotateDisableEncrypt              types.Bool   `tfsdk:"disable_encrypt"`
+	AutoRotateKeySource                   types.String `tfsdk:"key_source"`
+	AutoRotateDisableEncryptOnAllAccounts types.Bool   `tfsdk:"disable_encrypt_on_all_accounts"`
 }
 
 type AWSKeyImportKeyMaterialTFSDK struct {
@@ -323,9 +324,10 @@ type AWSKeyImportKeyPayloadJSON struct {
 }
 
 type AWSEnableKeyRotationJobPayloadJSON struct {
-	JobConfigID              string  `json:"job_config_id"`
-	AutoRotateDisableEncrypt bool    `json:"auto_rotate_disable_encrypt"`
-	AutoRotateKeySource      *string `json:"auto_rotate_key_source"`
+	JobConfigID                           string  `json:"job_config_id"`
+	AutoRotateDisableEncrypt              bool    `json:"auto_rotate_disable_encrypt"`
+	AutoRotateKeySource                   *string `json:"auto_rotate_key_source"`
+	AutoRotateDisableEncryptOnAllAccounts bool    `json:"auto_rotate_disable_encrypt_on_all_accounts"`
 }
 
 type AWSKeyJSON struct {

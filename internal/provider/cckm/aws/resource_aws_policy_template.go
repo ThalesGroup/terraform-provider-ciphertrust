@@ -78,7 +78,7 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"is_verified": schema.BoolAttribute{
 				Computed:    true,
-				Description: "If tre, the policy template has been applied.",
+				Description: "If true, the policy template has been applied.",
 			},
 			"external_accounts": schema.SetAttribute{
 				Optional:    true,

@@ -523,7 +523,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"enable_rotation": schema.ListNestedBlock{
-				Description: "Enable the key for scheduled rotation job.",
+				Description: "Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -543,6 +543,10 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,
 							Description: "Disable encryption on the old key.",
+						},
+						"disable_encrypt_on_all_accounts": schema.BoolAttribute{
+							Optional:    true,
+							Description: "Disable encryption permissions on the old key for all the accounts",
 						},
 					},
 				},
@@ -789,6 +793,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		details := apiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
+		return
 	}
 	removeKeyPolicyTemplateTag(ctx, id, r.client, response, &resp.Diagnostics)
 	payload := ScheduleForDeletionJSON{
@@ -1008,8 +1013,9 @@ func enableKeyRotationJob(ctx context.Context, id string, client *common.Client,
 	}
 	for _, params := range rotationParams {
 		payload := AWSEnableKeyRotationJobPayloadJSON{
-			JobConfigID:              params.JobConfigID.ValueString(),
-			AutoRotateDisableEncrypt: params.AutoRotateDisableEncrypt.ValueBool(),
+			JobConfigID:                           params.JobConfigID.ValueString(),
+			AutoRotateDisableEncrypt:              params.AutoRotateDisableEncrypt.ValueBool(),
+			AutoRotateDisableEncryptOnAllAccounts: params.AutoRotateDisableEncryptOnAllAccounts.ValueBool(),
 		}
 		if params.AutoRotateKeySource.ValueString() != "" {
 			payload.AutoRotateKeySource = params.AutoRotateKeySource.ValueStringPointer()
