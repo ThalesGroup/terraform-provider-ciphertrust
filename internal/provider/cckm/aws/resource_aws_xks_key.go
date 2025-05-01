@@ -79,7 +79,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Input parameter. Alias assigned to the the XKS key.",
+				Description: "Input parameter. Alias assigned to the XKS key.",
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(
 						stringvalidator.RegexMatches(

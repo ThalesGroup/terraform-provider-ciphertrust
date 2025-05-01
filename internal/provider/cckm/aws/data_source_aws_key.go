@@ -360,7 +360,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	d.setKeyDataStoreState(ctx, response, &state, &resp.Diagnostics)
+	d.setKeyDataSourceState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -395,8 +395,8 @@ func listAwsKeys(ctx context.Context, id string, client *common.Client, filters 
 	return keyJSON
 }
 
-func (d *dataSourceAWSKey) setKeyDataStoreState(ctx context.Context, response string, state *AWSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyDataStoreState(ctx, response, &state.AWSKeyDataSourceCommonTFSDK, diags)
+func (d *dataSourceAWSKey) setKeyDataSourceState(ctx context.Context, response string, state *AWSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
+	setCommonKeyDataSourceState(ctx, response, &state.AWSKeyDataSourceCommonTFSDK, diags)
 	setAliases(response, &state.Alias, diags)
 	setKeyTags(ctx, response, &state.Tags, diags)
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
@@ -413,7 +413,7 @@ func (d *dataSourceAWSKey) setKeyDataStoreState(ctx context.Context, response st
 	state.ReplicaPolicy = types.StringValue(gjson.Get(response, "replica_policy").String())
 }
 
-func setCommonKeyDataStoreState(ctx context.Context, response string, state *AWSKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
+func setCommonKeyDataSourceState(ctx context.Context, response string, state *AWSKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
 	state.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	state.ARN = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
 	state.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())

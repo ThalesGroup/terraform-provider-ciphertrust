@@ -57,7 +57,7 @@ const (
 	longAwsKeyOpSleep    = 20
 	shortAwsKeyOpSleep   = 5
 	awsValidToRegEx      = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
-	awsValidToFormatMsg  = "must conform to the following example 2024-07-03T14:24:00Z"
+	awsValidToFormatMsg  = "must conform to the following example 2027-07-03T14:24:00Z"
 	refreshTokenSeconds  = 20
 )
 
@@ -445,7 +445,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						},
 						"valid_to": schema.StringAttribute{
 							Optional:    true,
-							Description: "Date the key material of the replicated key expires. Only applies to external keys. Set as UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z.",
+							Description: "Date the key material of the replicated key expires. Only applies to external keys. Set as UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
 									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,
@@ -480,7 +480,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						},
 						"valid_to": schema.StringAttribute{
 							Optional:    true,
-							Description: "Date of key expiry in UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z. Only valid if 'key_expiration' is true.",
+							Description: "Date of key expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. Only valid if 'key_expiration' is true.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
 									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,
@@ -512,7 +512,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						},
 						"valid_to": schema.StringAttribute{
 							Optional:    true,
-							Description: "Date of key material expiry in UTC time in RFC3339 format. For example, 2024-07-03T14:24:00Z.",
+							Description: "Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z.",
 							Validators: []validator.String{
 								stringvalidator.RegexMatches(
 									regexp.MustCompile(awsValidToRegEx), awsValidToFormatMsg,

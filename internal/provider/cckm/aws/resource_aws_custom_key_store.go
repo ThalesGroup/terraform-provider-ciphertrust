@@ -243,7 +243,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					Attributes: map[string]schema.Attribute{
 						"job_config_id": schema.StringAttribute{
 							Required:    true,
-							Description: "ID of the scheduler configuration job that will schedule the xks credential rotation.",
+							Description: "ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.",
 						},
 					},
 				},

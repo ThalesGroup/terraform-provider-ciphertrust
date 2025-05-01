@@ -68,7 +68,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				},
 			},
 			"uri": schema.StringAttribute{
-				Description: "A human readable unique identifier of the resource",
+				Description: "A human-readable unique identifier of the resource",
 				Computed:    true,
 			},
 			"account": schema.StringAttribute{
