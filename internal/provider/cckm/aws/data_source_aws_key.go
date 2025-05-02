@@ -48,10 +48,6 @@ type dataSourceAWSKey struct {
 	client *common.Client
 }
 
-type AWSKey struct {
-	AWSKeyDataSourceTFSDK
-}
-
 func (d *dataSourceAWSKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_key"
 }
@@ -65,7 +61,8 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 				Description: "AWS region to which the key belongs.",
 			},
 			"id": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Terraform AWS Key resource ID.",
 			},
 			"alias": schema.SetAttribute{
 				Optional:    true,

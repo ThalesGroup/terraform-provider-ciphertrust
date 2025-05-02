@@ -567,3 +567,21 @@ type AWSXKSKeyDataSourceTFSDK struct {
 type AWSEnableXksCredentialRotationJobPayloadJSON struct {
 	JobConfigID string `json:"job_config_id"`
 }
+
+type AWSKmsDataSourceTFSDK struct {
+	AwsConnection types.String `tfsdk:"aws_connection"`
+	KmsName       types.String `tfsdk:"kms_name"`
+	KmsID         types.String `tfsdk:"kms_id"`
+	Regions       types.List   `tfsdk:"regions"`
+}
+
+type AWSKmsDataSourceInputParamsTFSDK struct {
+	AwsConnection types.String `tfsdk:"aws_connection"`
+	KmsName       types.String `tfsdk:"kms_name"`
+	KmsID         types.String `tfsdk:"kms_id"`
+}
+
+type AWSKmsDataSourceModel struct {
+	AWSKmsDataSourceInputParamsTFSDK
+	KmsList []AWSKmsDataSourceTFSDK `tfsdk:"kms"`
+}

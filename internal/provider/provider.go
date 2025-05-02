@@ -384,6 +384,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		cckm.NewDataSourceAWSKeys,
 		cckm.NewDataSourceAWSCustomKeyStore,
 		cckm.NewDataSourceAWSXKSKeys,
+		cckm.NewDataSourceAWSKms,
 	}
 }
 

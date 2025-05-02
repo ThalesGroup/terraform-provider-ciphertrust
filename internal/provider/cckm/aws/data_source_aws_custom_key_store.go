@@ -52,6 +52,7 @@ type datasourceAWSCustomKeyStoreDataSource struct {
 func (d *datasourceAWSCustomKeyStoreDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_custom_keystore"
 }
+
 func (d *datasourceAWSCustomKeyStoreDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
