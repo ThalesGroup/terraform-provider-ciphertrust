@@ -38,6 +38,7 @@ data "ciphertrust_aws_custom_keystore" "by_resource_id" {
 - `id` (String) The ID of this resource.
 - `kms` (String) Name or ID of the AWS Account container in which to create the key store.
 - `kms_id` (String)
+- `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked_state` (Boolean) Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.
 - `local_hosted_params` (Block List) Parameters related to AWS interaction with a custom key store. (see [below for nested schema](#nestedblock--local_hosted_params))
 - `name` (String) Unique name for the custom key store.
