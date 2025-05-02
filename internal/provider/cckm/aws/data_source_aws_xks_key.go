@@ -89,6 +89,10 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 				Description: "The Amazon Resource Name (ARN) of the key.",
 			},
 			// Read only parameters
+			"custom_key_store_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Custom keystore ID in AWS..",
+			},
 			"customer_master_key_spec": schema.StringAttribute{
 				Computed:    true,
 				Description: "Key specification",
@@ -275,6 +279,9 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 				Computed:    true,
 				Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
 			},
+			"kms_id": schema.StringAttribute{
+				Computed: true,
+			},
 		},
 	}
 }
@@ -339,9 +346,8 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	kid := gjson.Get(response, "aws_param.KeyID").String()
-	region := gjson.Get(response, "region").String()
-	state.ID = types.StringValue(encodeAWSKeyTerraformResourceID(region, kid))
+	kid := gjson.Get(response, "id").String()
+	state.ID = types.StringValue(kid)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -351,6 +357,9 @@ func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response strin
 	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
 	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
 	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
+	plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
+	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
+	plan.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
 	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
 	if plan.Linked.ValueBool() {
 		plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())

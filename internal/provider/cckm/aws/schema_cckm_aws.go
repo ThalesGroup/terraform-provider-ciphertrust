@@ -562,6 +562,8 @@ type AWSKeyDataSourceCommonTFSDK struct {
 type AWSXKSKeyDataSourceTFSDK struct {
 	AWSKeyDataSourceCommonTFSDK
 	KMS                 types.String `tfsdk:"kms"`
+	KMSID               types.String `tfsdk:"kms_id"`
+	CustomKeyStoreID    types.String `tfsdk:"custom_key_store_id"`
 	Linked              types.Bool   `tfsdk:"linked"`
 	Blocked             types.Bool   `tfsdk:"blocked"`
 	AWSXKSKeyID         types.String `tfsdk:"aws_xks_key_id"`
