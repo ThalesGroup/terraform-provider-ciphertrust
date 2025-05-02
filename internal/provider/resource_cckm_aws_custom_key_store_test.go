@@ -122,7 +122,6 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 			{
 				Config: awsConnectionResource + schedulerConfigStr + createKeyStoreConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(keyStoreResourceName),
 					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "false"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "name", keyStoreName),
@@ -145,7 +144,7 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 				),
 			},
 			{
-				Config: awsConnectionResource + updateKeyStoreConfigStrEx2,
+				Config: awsConnectionResource + schedulerConfigStr + updateKeyStoreConfigStrEx2,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "false"),
