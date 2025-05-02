@@ -18,3 +18,14 @@ data "ciphertrust_aws_key" "by_alias_and_region" {
   alias  = ["key-name"]
   region = "region"
 }
+
+# Retrieve details using the AWS key ID
+data "ciphertrust_aws_key" "by_aws_key_id" {
+  aws_key_id = "c3c1fa33-d8a9-48ca-8e91-98504798a605"
+}
+
+# Retrieve details using the AWS key ID and a region
+data "ciphertrust_aws_key" "by_aws_key_id_and_region" {
+  aws_key_id = "a44b00d1-2719-48c4-90a1-491fd67de30d"
+  region = "ap-northeast-1"
+}
