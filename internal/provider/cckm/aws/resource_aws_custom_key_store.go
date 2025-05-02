@@ -115,6 +115,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Optional: true,
 			},
+			"labels": schema.MapAttribute{
+				ElementType: types.StringType,
+				Computed:    true,
+				Description: "A list of key:value pairs associated with the key.",
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"aws_param": schema.ListNestedBlock{
@@ -987,6 +992,14 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 		return
 	}
 
+	keyStoreID := gjson.Get(response, "id").String()
+	var labels types.Map
+	setKeyStoreLabels(ctx, response, keyStoreID, &labels, diags)
+	if diags.HasError() {
+		return
+	}
+	plan.Labels = labels
+
 	var _LocalHostedParamsJSONResponse LocalHostedParamsJSONResponse
 	if err := json.Unmarshal([]byte(gjson.Get(response, "local_hosted_params").String()), &_LocalHostedParamsJSONResponse); err != nil {
 		diags.AddError(
@@ -1086,14 +1099,14 @@ func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id s
 func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
-	planParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
+	planParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
 	if !plan.EnableCredentialRotation.IsUnknown() {
 		diags.Append(plan.EnableCredentialRotation.ElementsAs(ctx, &planParams, false)...)
 		if diags.HasError() {
 			return
 		}
 	}
-	stateParams := make([]AWSKeyEnableRotationTFSDK, 0, len(state.EnableRotation.Elements()))
+	stateParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(state.EnableRotation.Elements()))
 	diags.Append(state.EnableRotation.ElementsAs(ctx, &stateParams, false)...)
 	if diags.HasError() {
 		return
@@ -1113,7 +1126,7 @@ func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.
 }
 
 func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
-	rotationParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
+	rotationParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
 	if !plan.EnableCredentialRotation.IsUnknown() {
 		diags.Append(plan.EnableCredentialRotation.ElementsAs(ctx, &rotationParams, false)...)
 		if diags.HasError() {
@@ -1156,4 +1169,24 @@ func (r *resourceAWSCustomKeyStore) disableCredentialRotation(ctx context.Contex
 		return
 	}
 	tflog.Trace(ctx, "[resource_aws_key.go -> disableCredentialRotation][response:"+response)
+}
+
+func setKeyStoreLabels(ctx context.Context, response string, keyStoreID string, stateLabels *types.Map, diags *diag.Diagnostics) {
+	labels := make(map[string]string)
+	if gjson.Get(response, "labels").Exists() {
+		labelsJSON := gjson.Get(response, "labels").Raw
+		if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
+			msg := "Error setting state for custom keystore labels, invalid data input."
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return
+		}
+	}
+	labelMap, d := types.MapValueFrom(ctx, types.StringType, labels)
+	if d.HasError() {
+		diags.Append(d...)
+		return
+	}
+	*stateLabels = labelMap
 }

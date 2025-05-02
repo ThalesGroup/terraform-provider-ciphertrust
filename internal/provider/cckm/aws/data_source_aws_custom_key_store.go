@@ -106,6 +106,11 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(ctx context.Context, _ da
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Computed: true,
 			},
+			"labels": schema.MapAttribute{
+				ElementType: types.StringType,
+				Computed:    true,
+				Description: "A list of key:value pairs associated with the key.",
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"aws_param": schema.ListNestedBlock{
@@ -227,7 +232,7 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Read(ctx context.Context, req da
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
-	var state AWSCustomKeyStoreTFSDK
+	var state AWSCustomKeyStoreCommonTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -250,14 +255,14 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Read(ctx context.Context, req da
 		)
 		return
 	}
-	d.setCustomKeyStoreState(response, &state, &resp.Diagnostics)
+	d.setCustomKeyStoreState(ctx, response, &state, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 }
 
-func (d *datasourceAWSCustomKeyStoreDataSource) setCustomKeyStoreState(response string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
+func (d *datasourceAWSCustomKeyStoreDataSource) setCustomKeyStoreState(ctx context.Context, response string, plan *AWSCustomKeyStoreCommonTFSDK, diags *diag.Diagnostics) {
 	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	plan.CredentialVersion = types.StringValue(gjson.Get(response, "credential_version").String())
 	plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
@@ -321,6 +326,14 @@ func (d *datasourceAWSCustomKeyStoreDataSource) setCustomKeyStoreState(response 
 	if diags.HasError() {
 		return
 	}
+
+	keyStoreID := gjson.Get(response, "id").String()
+	var labels types.Map
+	setKeyStoreLabels(ctx, response, keyStoreID, &labels, diags)
+	if diags.HasError() {
+		return
+	}
+	plan.Labels = labels
 
 	var _LocalHostedParamsJSONResponse LocalHostedParamsJSONResponse
 	if err := json.Unmarshal([]byte(gjson.Get(response, "local_hosted_params").String()), &_LocalHostedParamsJSONResponse); err != nil {

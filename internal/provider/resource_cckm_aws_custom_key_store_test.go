@@ -22,6 +22,16 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 	if len(awsKeyRoles) != 2 {
 		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
 	}
+	schedulerConfig := `
+		resource "ciphertrust_scheduler" "credential_rotation" {
+			cckm_xks_credential_rotation_params = {
+				cloud_name       = "aws"
+			}
+			name       = "%s"
+			operation  = "cckm_xks_credential_rotation"
+			run_at     = "0 9 * * sat"
+		}`
+	schedulerConfigStr := fmt.Sprintf(schedulerConfig, "tf-"+uuid.NewString()[:8])
 	createKeyStoreConfig := `
 		resource "ciphertrust_cm_key" "cm_aes_key" {
 			name         = "%s"
@@ -51,6 +61,9 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 				custom_key_store_type = "EXTERNAL_KEY_STORE"
 				key_store_password = "%s"
 				xks_proxy_vpc_endpoint_service_name = "%s"
+			}
+			enable_credential_rotation {
+				job_config_id = ciphertrust_scheduler.credential_rotation.id
 			}
 		}`
 	updateKeyStoreConfig := `
@@ -107,14 +120,17 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: awsConnectionResource + createKeyStoreConfigStr,
+				Config: awsConnectionResource + schedulerConfigStr + createKeyStoreConfigStr,
 				Check: resource.ComposeTestCheckFunc(
+					testAccListResourceAttributes(keyStoreResourceName),
 					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "false"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "name", keyStoreName),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.0.xks_proxy_uri_endpoint", proxyURIEndpoint),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.0.key_store_password", "thequickbrownfox"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.0.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
+					// Credential rotation can't be enabled for unlinked key stores
+					resource.TestCheckResourceAttr(keyStoreResourceName, "labels.%", "0"),
 				),
 			},
 			{

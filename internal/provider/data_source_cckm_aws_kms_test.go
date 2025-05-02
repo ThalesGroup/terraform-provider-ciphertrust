@@ -58,21 +58,18 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 			{
 				Config: awsConnectionResource + kmsTwoConfigStr + allKms,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(dsAllKmsResource),
 					resource.TestCheckResourceAttr(dsAllKmsResource, "kms.#", "2"),
 				),
 			},
 			{
 				Config: awsConnectionResource + kmsTwoConfigStr + byConnection,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(dsByConnection),
 					resource.TestCheckResourceAttr(dsByConnection, "kms.#", "2"),
 				),
 			},
 			{
 				Config: awsConnectionResource + kmsTwoConfigStr + byName,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(dsByName),
 					resource.TestCheckResourceAttr(dsByName, "kms.#", "1"),
 					resource.TestCheckResourceAttrPair(dsByName, "kms.0.regions.#", kmsTwoResourceName, "regions.#"),
 					resource.TestCheckResourceAttrPair(kmsTwoResourceName, "id", dsByName, "kms.0.kms_id"),
@@ -81,7 +78,6 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 			{
 				Config: awsConnectionResource + kmsTwoConfigStr + byID,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(dsByID),
 					resource.TestCheckResourceAttr(dsByID, "kms.#", "1"),
 					resource.TestCheckResourceAttrPair(dsByID, "kms.0.regions.#", kmsOneResourceName, "regions.#"),
 					resource.TestCheckResourceAttrPair(kmsOneResourceName, "id", dsByID, "kms.0.kms_id"),
