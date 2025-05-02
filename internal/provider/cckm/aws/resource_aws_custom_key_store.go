@@ -1149,7 +1149,7 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 		response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/enable-credential-rotation-job", payloadJSON)
 		if err != nil {
 			msg := "Failed to enable credential rotation for AWS key store."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID, "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return

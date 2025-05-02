@@ -162,7 +162,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS KMS"
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -252,7 +252,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	response, err := r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS KMS."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return

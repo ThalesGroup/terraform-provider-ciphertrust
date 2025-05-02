@@ -481,7 +481,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS_KEY, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS XKS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -703,7 +703,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
 			msg := "Error deleting AWS XKS key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 		}
@@ -806,7 +806,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				msg := "Error linking AWS XKS key, invalid data input."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return
@@ -814,7 +814,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/link", payloadJSON)
 			if err != nil {
 				msg := "Error linking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return

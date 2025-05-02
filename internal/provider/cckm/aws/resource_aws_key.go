@@ -810,7 +810,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 	if err != nil {
 		msg := "Error deleting AWS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		if strings.Contains(err.Error(), "is pending deletion") {
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
@@ -852,7 +852,7 @@ func (r *resourceAWSKey) createKey(ctx context.Context, id string, plan *AWSKeyT
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""
@@ -953,7 +953,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
 			if err != nil {
 				msg := "Error enabling auto-rotation for AWS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				diags.AddError(details, "")
 				tflog.Error(ctx, details)
 				return
@@ -1032,7 +1032,7 @@ func enableKeyRotationJob(ctx context.Context, id string, client *common.Client,
 		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-rotation-job", payloadJSON)
 		if err != nil {
 			msg := "Failed to enable key rotation for AWS key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return
@@ -1094,7 +1094,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to import key material."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""
@@ -1147,7 +1147,7 @@ func (r *resourceAWSKey) uploadKey(ctx context.Context, id string, plan *AWSKeyT
 	response, err := r.client.PostDataV2(ctx, id, "api/v1/cckm/aws/upload-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to upload key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""
@@ -1196,7 +1196,7 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+primaryKeyID+"/replicate-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key, failed to replicate key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""
@@ -1277,7 +1277,7 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, pri
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+primaryKeyID+"/update-primary-region", payloadJSON)
 	if err != nil {
 		msg := "Error updating primary region."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "primary key_id": primaryKeyID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "primary key_id": primaryKeyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return
@@ -1366,7 +1366,7 @@ func addAliases(ctx context.Context, client *common.Client, id string, plan *AWS
 		response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
 		if err != nil {
 			msg := "Error creating AWS key, failed to add alias."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return ""
@@ -1421,7 +1421,7 @@ func updateAliases(ctx context.Context, id string, client *common.Client, plan *
 			response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-alias", payloadJSON)
 			if err != nil {
 				msg := "Error updating AWS key, failed to add alias."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return
@@ -1458,7 +1458,7 @@ func updateAliases(ctx context.Context, id string, client *common.Client, plan *
 			response, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/delete-alias", payloadJSON)
 			if err != nil {
 				msg := "Error updating AWS key, failed to remove alias."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return
@@ -1499,7 +1499,7 @@ func updateDescription(ctx context.Context, id string, client *common.Client, pl
 	response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/update-description", payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS key, failed to update description."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return
@@ -1548,7 +1548,7 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove tags."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": removeTagsPayload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return
@@ -1583,7 +1583,7 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/add-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to add tags."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": addTagsPayload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return
@@ -2033,7 +2033,7 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 		response, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 		if err != nil {
 			msg := "Error creating CipherTrust key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return ""
@@ -2141,7 +2141,7 @@ func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.C
 		_, err = client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/remove-tags", payloadJSON)
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove policy template tag."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "payload": removeTagsPayload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Warn(ctx, details)
 			diags.AddWarning(details, "")
 		}

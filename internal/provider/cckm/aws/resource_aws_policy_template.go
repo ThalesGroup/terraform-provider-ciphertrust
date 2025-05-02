@@ -163,7 +163,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -242,7 +242,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	response, err := r.client.UpdateDataV2(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID, "payload": payload})
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return

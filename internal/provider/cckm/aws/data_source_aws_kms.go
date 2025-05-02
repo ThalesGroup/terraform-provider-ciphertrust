@@ -119,7 +119,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
 		if err != nil {
 			msg := "Error reading AWS account details."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "payload": payload})
+			details := apiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
