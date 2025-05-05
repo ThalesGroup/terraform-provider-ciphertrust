@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	cckm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
+
 	"github.com/google/uuid"
 
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
@@ -27,6 +29,10 @@ import (
 // Ensure the implementation satisfies the expected interfaces.
 var (
 	_ provider.Provider = &ciphertrustProvider{}
+)
+
+const (
+	defaultAwsOperationTimeout = 80
 )
 
 // New is a helper function to simplify provider server and testing implementation.
@@ -55,10 +61,11 @@ type ciphertrustProviderModel struct {
 	InsecureSkipVerify   types.Bool   `tfsdk:"no_ssl_verify"`
 	RestOperationTimeout types.Int64  `tfsdk:"rest_api_timeout"`
 	Address              types.String `tfsdk:"address"`
+	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
 }
 
 const (
-	providerDescWithDefault         = "%s can be set in the provider block or in ~/.ciphertrust/config. Default is %s."
+	providerDescWithDefault         = "%s can be set in the provider block or in ~/.ciphertrust/config. Default is %v."
 	providerDescNoDefaultWithEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config"
 	defaultRestAPITimeout           = "60"
 	//providerDescWithDefaultAndEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %s."
@@ -107,6 +114,10 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "CipherTrust rest api timeout in seconds. " + fmt.Sprintf(providerDescWithDefault, "rest_api_timeout", defaultRestAPITimeout),
 			},
+			"aws_operation_timeout": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "aws_operation_timeout", defaultAwsOperationTimeout),
+			},
 		},
 	}
 }
@@ -126,6 +137,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var auth_domain string
 	var no_ssl_verify bool
 	var rest_api_timeout int64
+	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -173,6 +185,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			no_ssl_verify, _ = strconv.ParseBool(value)
 		case "rest_api_timeout":
 			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
+		case "aws_operation_timeout":
+			aws_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
 		}
 	}
 
@@ -241,6 +255,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	if !config.RestOperationTimeout.IsNull() {
 		rest_api_timeout = config.RestOperationTimeout.ValueInt64()
+	}
+
+	if !config.AwsOperationTimeout.IsNull() {
+		aws_operation_timeout = config.AwsOperationTimeout.ValueInt64()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -317,7 +335,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			)
 			return
 		}
-
+		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
@@ -331,7 +349,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			)
 			return
 		}
-
+		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	}
@@ -362,6 +380,11 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		connections.NewDataSourceAzureConnection,
 		cm.NewDataSourceScheduler,
 		connections.NewDataSourceAWSConnection,
+		cckm.NewDataSourceAWSAccountDetails,
+		cckm.NewDataSourceAWSKeys,
+		cckm.NewDataSourceAWSCustomKeyStore,
+		cckm.NewDataSourceAWSXKSKeys,
+		cckm.NewDataSourceAWSKms,
 	}
 }
 
@@ -411,5 +434,10 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMProperty,
 		cm.NewResourceCMProxy,
 		cm.NewResourceCMSyslog,
+		cckm.NewResourceCCKMAWSKMS,
+		cckm.NewResourceAWSKey,
+		cckm.NewResourceAWSPolicyTemplate,
+		cckm.NewResourceAWSCustomKeyStore,
+		cckm.NewResourceAWSXKSKey,
 	}
 }

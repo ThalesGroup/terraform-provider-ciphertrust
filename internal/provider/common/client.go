@@ -14,18 +14,24 @@ import (
 // Default CipherTrust Manager URL
 const CipherTrustURL string = "https://10.10.10.10"
 
+type CCKMProviderConfig struct {
+	AwsOperationTimeout int64
+}
+
 // Client
 type Client struct {
 	CipherTrustURL string
 	HTTPClient     *http.Client
 	Token          string
 	AuthData       AuthStruct
+	CCKMConfig     CCKMProviderConfig
 }
 
 // Bootstrap Client for CipherTrust Manager
 type CMClientBootstrap struct {
 	CipherTrustURL string
 	HTTPClient     *http.Client
+	CCKMConfig     CCKMProviderConfig
 }
 
 // AuthStruct

@@ -21,7 +21,7 @@ data "ciphertrust_cm_users_list" "users_list" {
 resource "ciphertrust_cm_key" "cte_key" {
   name="terraform"
   algorithm="aes"
-  size=256
+  key_size=256
   usage_mask=76
   undeletable=false
   unexportable=false
@@ -57,7 +57,7 @@ resource "ciphertrust_cm_key" "cte_key" {
 resource "ciphertrust_cm_key" "cte_key" {
   name="terraform_upd"
   algorithm="aes"
-  size=256
+  key_size=256
   usage_mask=13
   description="updated via terraform"
 }

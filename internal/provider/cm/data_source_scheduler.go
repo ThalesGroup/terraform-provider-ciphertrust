@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"strings"
 	"time"
 
@@ -29,8 +31,8 @@ type dataSourceScheduler struct {
 }
 
 type DataSourceModelScheduler struct {
-	Filters   types.Map                    `tfsdk:"filters"`
-	Scheduler []CreateJobConfigParamsTFSDK `tfsdk:"scheduler"`
+	Filters   types.Map              `tfsdk:"filters"`
+	Scheduler []JobConfigParamsTFSDK `tfsdk:"scheduler"`
 }
 
 func (d *dataSourceScheduler) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -75,7 +77,6 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 						"end_date": schema.StringAttribute{
 							Computed: true,
 						},
-
 						"database_backup_params": schema.SingleNestedAttribute{
 							Computed: true,
 							Attributes: map[string]schema.Attribute{
@@ -115,12 +116,51 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 								},
 							},
 						},
+						"cckm_key_rotation_params": schema.SingleNestedAttribute{
+							Computed: true,
+							Attributes: map[string]schema.Attribute{
+								"aws_retain_alias": schema.BoolAttribute{
+									Computed: true,
+								},
+								"cloud_name": schema.StringAttribute{
+									Computed: true,
+								},
+								"expiration": schema.StringAttribute{
+									Computed: true,
+								},
+								"expire_in": schema.StringAttribute{
+									Computed: true,
+								},
+							},
+						},
+						"cckm_synchronization_params": schema.SingleNestedAttribute{
+							Computed: true,
+							Attributes: map[string]schema.Attribute{
+								"cloud_name": schema.StringAttribute{
+									Computed: true,
+								},
+								"kms": schema.SetAttribute{
+									ElementType: types.StringType,
+									Computed:    true,
+								},
+								"synchronize_all": schema.BoolAttribute{
+									Computed: true,
+								}},
+						},
 						"uri":         schema.StringAttribute{Computed: true},
 						"account":     schema.StringAttribute{Computed: true},
 						"created_at":  schema.StringAttribute{Computed: true},
 						"updated_at":  schema.StringAttribute{Computed: true},
 						"application": schema.StringAttribute{Computed: true},
 						"dev_account": schema.StringAttribute{Computed: true},
+						"cckm_xks_credential_rotation_params": schema.SingleNestedAttribute{
+							Computed: true,
+							Attributes: map[string]schema.Attribute{
+								"cloud_name": schema.StringAttribute{
+									Computed: true,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -161,28 +201,42 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
+	xxx := JobConfigParamsTFSDK{
+		CreateJobConfigParamsTFSDKCommon: CreateJobConfigParamsTFSDKCommon{},
+		CCKMKeyRotationParams:            nil,
+		CCKMSynchronizationParams:        nil,
+	}
+	_ = xxx
 	for _, jobs := range schedulerJobConfigs {
-		schedulerJobs := CreateJobConfigParamsTFSDK{
-			ID:          types.StringValue(jobs.ID),
-			URI:         types.StringValue(jobs.URI),
-			Account:     types.StringValue(jobs.Account),
-			Application: types.StringValue(jobs.Application),
-			DevAccount:  types.StringValue(jobs.DevAccount),
-			CreatedAt:   types.StringValue(jobs.CreatedAt),
-			UpdatedAt:   types.StringValue(jobs.UpdatedAt),
-			Name:        types.StringValue(jobs.Name),
-			Description: types.StringValue(jobs.Description),
-			Operation:   types.StringValue(jobs.Operation),
-			RunAt:       types.StringValue(jobs.RunAt),
-			RunOn:       types.StringValue(jobs.RunOn),
-			Disabled:    types.BoolValue(jobs.Disabled),
-			StartDate:   types.StringValue(jobs.StartDate.Format(time.RFC3339)),
-			EndDate:     types.StringValue(jobs.EndDate.Format(time.RFC3339)),
+		schedulerJobs := JobConfigParamsTFSDK{
+			CreateJobConfigParamsTFSDKCommon: CreateJobConfigParamsTFSDKCommon{
+				ID:          types.StringValue(jobs.ID),
+				URI:         types.StringValue(jobs.URI),
+				Account:     types.StringValue(jobs.Account),
+				Application: types.StringValue(jobs.Application),
+				DevAccount:  types.StringValue(jobs.DevAccount),
+				CreatedAt:   types.StringValue(jobs.CreatedAt),
+				UpdatedAt:   types.StringValue(jobs.UpdatedAt),
+				Name:        types.StringValue(jobs.Name),
+				Description: types.StringValue(jobs.Description),
+				Operation:   types.StringValue(jobs.Operation),
+				RunAt:       types.StringValue(jobs.RunAt),
+				RunOn:       types.StringValue(jobs.RunOn),
+				Disabled:    types.BoolValue(jobs.Disabled),
+				StartDate:   types.StringValue(jobs.StartDate.Format(time.RFC3339)),
+				EndDate:     types.StringValue(jobs.EndDate.Format(time.RFC3339)),
+			},
 		}
 
 		switch jobs.Operation {
 		case "database_backup":
 			getDataBaseBackupParams(jobs, &schedulerJobs)
+		case "cckm_key_rotation":
+			getCCKMKeyRotationParams(jobs, &schedulerJobs)
+		case "cckm_synchronization":
+			getCCKMSynchronizationParams(jobs, &schedulerJobs, &resp.Diagnostics)
+		case "cckm_xks_credential_rotation":
+			getCCKMCredentialRotationParams(jobs, &schedulerJobs)
 		}
 		state.Scheduler = append(state.Scheduler, schedulerJobs)
 	}
@@ -213,7 +267,7 @@ func (d *dataSourceScheduler) Configure(ctx context.Context, req datasource.Conf
 	d.client = client
 }
 
-func getDataBaseBackupParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *CreateJobConfigParamsTFSDK) {
+func getDataBaseBackupParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *JobConfigParamsTFSDK) {
 	if jobs.DatabaseBackupParams != nil {
 		schedulerJobs.DatabaseBackupParams = &DatabaseBackupParamsTFSDK{
 			BackupKey:      types.StringValue(jobs.DatabaseBackupParams.BackupKey),
@@ -253,6 +307,52 @@ func getDataBaseBackupParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *
 				}
 				return filters
 			}(),
+		}
+	}
+}
+
+func getCCKMKeyRotationParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *JobConfigParamsTFSDK) {
+	if jobs.CCKMKeyRotationParams != nil {
+		keyRotationParams := &CCKMKeyRotationParamsTFSDK{
+			RetainAlias: types.BoolValue(jobs.CCKMKeyRotationParams.RetainAlias),
+			CloudName:   types.StringValue(jobs.CCKMKeyRotationParams.CloudName),
+		}
+		if jobs.CCKMKeyRotationParams.Expiration != nil {
+			keyRotationParams.Expiration = types.StringValue(*jobs.CCKMKeyRotationParams.Expiration)
+		}
+		if jobs.CCKMKeyRotationParams.ExpireIn != nil {
+			keyRotationParams.ExpireIn = types.StringValue(*jobs.CCKMKeyRotationParams.ExpireIn)
+		}
+		schedulerJobs.CCKMKeyRotationParams = keyRotationParams
+	}
+}
+
+func getCCKMSynchronizationParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *JobConfigParamsTFSDK, diags *diag.Diagnostics) {
+	if jobs.CCKMSynchronizationParams != nil {
+		synchronizationParams := &CCKMSynchronizationParamsTFSDK{
+			CloudName: types.StringValue(jobs.CCKMSynchronizationParams.CloudName),
+		}
+		if jobs.CCKMSynchronizationParams.SynchronizeAll != nil {
+			synchronizationParams.SyncAll = types.BoolValue(*jobs.CCKMSynchronizationParams.SynchronizeAll)
+		}
+		var kmsValues []attr.Value
+		for _, kms := range jobs.CCKMSynchronizationParams.Kms {
+			kmsValues = append(kmsValues, types.StringValue(kms))
+		}
+		kmses, d := types.SetValue(types.StringType, kmsValues)
+		if d.HasError() {
+			diags.Append(d...)
+			return
+		}
+		synchronizationParams.Kms = kmses
+		schedulerJobs.CCKMSynchronizationParams = synchronizationParams
+	}
+}
+
+func getCCKMCredentialRotationParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *JobConfigParamsTFSDK) {
+	if jobs.CCKMXksRotateCredentialsParams != nil {
+		schedulerJobs.CCKMXksRotateCredentialsParams = &CCKMXksRotateCredentialsParamsTFSDK{
+			CloudName: types.StringValue(jobs.CCKMXksRotateCredentialsParams.CloudName),
 		}
 	}
 }

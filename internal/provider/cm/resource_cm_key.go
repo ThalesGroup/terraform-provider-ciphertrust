@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -69,7 +71,8 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"hmac-sha512",
 						"seed",
 						"aria",
-						"opaque"}...),
+						"opaque",
+						"AES", "EC", "RSA"}...),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
@@ -375,7 +378,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"RSA-PSS"}...),
 				},
 			},
-			"size": schema.Int64Attribute{
+			"key_size": schema.Int64Attribute{
 				Optional:    true,
 				Description: "Bit length for the key.",
 			},
@@ -521,6 +524,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						},
 					},
 				},
+			},
+			"remove_from_state_on_destroy": schema.BoolAttribute{
+				Optional:    true,
+				Description: "This parameter only applies to keys that are 'undeleteable'. If this parameter is true the key will be removed from terraform state during the terraform destroy process. It can not be deleted from CipherTrust Manager while 'undeleteable' is true. Default is 'false'.",
 			},
 			"wrap_hkdf": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -1047,7 +1054,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostData(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON, "id")
+	response, err := r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -1057,7 +1064,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	plan.ID = types.StringValue(response)
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -1270,10 +1277,16 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting CipherTrust Key",
-			"Could not delete key, unexpected error: "+err.Error(),
-		)
+		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
+			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
+				"key id: "+state.ID.ValueString(),
+			)
+		} else {
+			resp.Diagnostics.AddError(
+				"Error Deleting CipherTrust Key",
+				"Could not delete key, unexpected error: "+err.Error(),
+			)
+		}
 		return
 	}
 }

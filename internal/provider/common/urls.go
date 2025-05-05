@@ -36,6 +36,8 @@ const (
 	URL_AWS_CONNECTION        = "api/v1/connectionmgmt/services/aws/connections"
 	URL_AWS_KMS               = "api/v1/cckm/aws/kms"
 	URL_AWS_XKS               = "api/v1/cckm/aws/custom-key-stores"
+	URL_AWS_XKS_KEY           = "api/v1/cckm/aws/create-hyok-key"
+	URL_AWS_POLICY_TEMPLATES  = "api/v1/cckm/aws/templates"
 	URL_HSM_SETUP             = "api/v1/system/hsm/setup"
 	URL_HSM_Server            = "api/v1/system/hsm/servers"
 	URL_AWS_KEY               = "api/v1/cckm/aws/keys"

@@ -51,3 +51,14 @@ func (c *Client) SignIn(ctx context.Context, uuid string) (*AuthResponse, error)
 	tflog.Trace(ctx, MSG_METHOD_END+"[auth.go -> SignIn]["+uuid+"]")
 	return &ar, nil
 }
+
+func (c *Client) RefreshToken(ctx context.Context, uuid string) error {
+	tflog.Trace(ctx, MSG_METHOD_START+"[auth.go -> RefreshToken]["+uuid+"]")
+	ar, err := c.SignIn(ctx, uuid)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> RefreshToken]["+uuid+"]")
+		return err
+	}
+	c.Token = ar.Token
+	return nil
+}
