@@ -301,7 +301,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"kms_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "ID of the kms",
+				Description: "ID of the KMS",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -867,10 +867,6 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, state
 	setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	state.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
-	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
-	if state.KMS.ValueString() == "" {
-		state.KMS = types.StringValue(gjson.Get(response, "kms").String())
-	}
 	state.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
 	state.MultiRegionKeyType = types.StringValue(gjson.Get(response, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String())
 	setMultiRegionConfiguration(ctx, response, &state.MultiRegionPrimaryKey, &state.MultiRegionReplicaKeys, diags)
@@ -900,6 +896,10 @@ func setCommonKeyState(ctx context.Context, response string, state *AWSKeyCommon
 	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
 	state.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
 	state.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
+	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
+	if state.KMS.ValueString() == "" {
+		state.KMS = types.StringValue(gjson.Get(response, "kms").String())
+	}
 	state.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
 	state.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	state.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
@@ -1004,6 +1004,8 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 }
 
 func enableKeyRotationJob(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableKeyRotationJob]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableKeyRotationJob]["+id+"]")
 	rotationParams := make([]AWSKeyEnableRotationTFSDK, 0, len(plan.EnableRotation.Elements()))
 	if !plan.EnableRotation.IsUnknown() {
 		diags.Append(plan.EnableRotation.ElementsAs(ctx, &rotationParams, false)...)
@@ -1042,6 +1044,8 @@ func enableKeyRotationJob(ctx context.Context, id string, client *common.Client,
 }
 
 func disableKeyRotationJob(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> disableKeyRotationJob]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> disableKeyRotationJob]["+id+"]")
 	keyID := plan.KeyID.ValueString()
 	response, err := client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-rotation-job")
 	if err != nil {
@@ -2018,9 +2022,10 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 	var response string
 	if importMaterialPlan.SourceKeyTier.ValueString() == "local" {
 		payload := cm.CMKeyJSON{
-			Name:      importMaterialPlan.SourceKeyName.ValueString(),
-			Algorithm: "AES",
-			Size:      256,
+			Name:              importMaterialPlan.SourceKeyName.ValueString(),
+			Algorithm:         "AES",
+			Size:              256,
+			AssignSelfAsOwner: true,
 		}
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
@@ -2095,7 +2100,7 @@ func (r *resourceAWSKey) getKeyByTerraformID(ctx context.Context, id string, ter
 	}
 	total := gjson.Get(response, "total").Int()
 	if total == 0 {
-		msg := "Failed read AWS key."
+		msg := "Failed to read AWS key."
 		details := apiError(msg, map[string]interface{}{"kid": kid, "region": region})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")

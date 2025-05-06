@@ -242,6 +242,14 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				ElementType: types.StringType,
 				Description: "Key users - roles.",
 			},
+			"kms": schema.StringAttribute{
+				Computed:    true,
+				Description: "Name or of the KMS.",
+			},
+			"kms_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "ID of the KMS",
+			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
@@ -366,7 +374,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 			},
 			"enable_rotation": schema.ListNestedBlock{
-				Description: "Enable the key for scheduled rotation job.",
+				Description: "Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -386,6 +394,10 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,
 							Description: "Disable encryption on the old key.",
+						},
+						"disable_encrypt_on_all_accounts": schema.BoolAttribute{
+							Optional:    true,
+							Description: "Disable encryption permissions on the old key for all the accounts",
 						},
 					},
 				},
