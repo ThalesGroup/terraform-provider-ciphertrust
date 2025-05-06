@@ -125,6 +125,8 @@ type AWSKeyCommonTFSDK struct {
 	EnableKey                      types.Bool   `tfsdk:"enable_key"`
 	EnableRotation                 types.List   `tfsdk:"enable_rotation"`
 	KeyUsage                       types.String `tfsdk:"key_usage"`
+	KMS                            types.String `tfsdk:"kms"`
+	KMSID                          types.String `tfsdk:"kms_id"`
 	Origin                         types.String `tfsdk:"origin"`
 	ScheduleForDeletionDays        types.Int64  `tfsdk:"schedule_for_deletion_days"`
 	Tags                           types.Map    `tfsdk:"tags"`
@@ -169,8 +171,6 @@ type AWSKeyTFSDK struct {
 	AutoRotate               types.Bool   `tfsdk:"auto_rotate"`
 	AutoRotationPeriodInDays types.Int64  `tfsdk:"auto_rotation_period_in_days"`
 	ImportKeyMaterial        types.List   `tfsdk:"import_key_material"`
-	KMS                      types.String `tfsdk:"kms"`
-	KMSID                    types.String `tfsdk:"kms_id"`
 	MultiRegion              types.Bool   `tfsdk:"multi_region"`
 	MultiRegionKeyType       types.String `tfsdk:"multi_region_key_type"`
 	MultiRegionPrimaryKey    types.Map    `tfsdk:"multi_region_primary_key"`

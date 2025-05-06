@@ -370,7 +370,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 func listAwsKeys(ctx context.Context, id string, client *common.Client, filters url.Values, diags *diag.Diagnostics) string {
 	response, err := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 	if err != nil {
-		msg := "Failed to list AWS key."
+		msg := "Error listing AWS keys on CipherTrust Manager."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
@@ -378,9 +378,12 @@ func listAwsKeys(ctx context.Context, id string, client *common.Client, filters 
 	}
 	total := gjson.Get(response, "total").Int()
 	if total != 1 {
-		msg := "Failed list key, error listing single key."
+		msg := "Failed to list a single AWS key."
 		tflog.Error(ctx, msg)
-		details := apiError(msg, map[string]interface{}{"filters": fmt.Sprintf("%v", filters), "Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int())})
+		details := apiError(msg, map[string]interface{}{
+			"filters":               fmt.Sprintf("%v", filters),
+			"Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int()),
+		})
 		diags.AddError(details, "")
 		return ""
 	}
