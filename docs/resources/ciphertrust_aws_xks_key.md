@@ -199,7 +199,7 @@ output "xks_linked_key_with_cm_as_source_1" {
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
 - `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
 - `enable_key` (Boolean) Enable or disable the key. Default is true.
-- `enable_rotation` (Block List) Enable the key for scheduled rotation job. (see [below for nested schema](#nestedblock--enable_rotation))
+- `enable_rotation` (Block List) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
 - `key_policy` (Block List) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
 - `local_hosted_params` (Block List) Parameters for a AWS XKS key. (see [below for nested schema](#nestedblock--local_hosted_params))
 - `origin` (String) Source of the key material for the customer managed key.  Options: AWS_KMS, EXTERNAL, EXTERNAL_KEY_STORE, AWS_CLOUDHSM. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations. Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.
@@ -238,6 +238,8 @@ output "xks_linked_key_with_cm_as_source_1" {
 - `key_usage` (String) Specifies the intended use of the key. RSA key options: ENCRYPT_DECRYPT, SIGN_VERIFY. Default is ENCRYPT_DECRYPT. EC key options: SIGN_VERIFY. Default is SIGN_VERIFY. Symmetric key options: ENCRYPT_DECRYPT. Default is ENCRYPT_DECRYPT.
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
+- `kms` (String) Name or of the KMS.
+- `kms_id` (String) ID of the KMS
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `local_key_id` (String) CipherTrust key identifier of the external key.
@@ -264,6 +266,7 @@ Required:
 Optional:
 
 - `disable_encrypt` (Boolean) Disable encryption on the old key.
+- `disable_encrypt_on_all_accounts` (Boolean) Disable encryption permissions on the old key for all the accounts
 
 
 <a id="nestedblock--key_policy"></a>
