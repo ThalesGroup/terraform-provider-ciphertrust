@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-type AWSParamTFSDK struct {
+type AWSCustomKeyStoreParamTFSDK struct {
 	CloudHSMClusterID              types.String `tfsdk:"cloud_hsm_cluster_id"`
 	ConnectionState                types.String `tfsdk:"connection_state"`
 	CustomKeystoreID               types.String `tfsdk:"custom_key_store_id"`

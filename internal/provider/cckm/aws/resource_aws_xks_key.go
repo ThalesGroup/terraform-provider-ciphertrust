@@ -500,6 +500,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.KeyID = plan.ID
+	keyID := gjson.Get(response, "id").String()
 	if gjson.Get(response, "linked_state").Bool() && len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
 		response = addAliases(ctx, r.client, id, &plan.AWSKeyCommonTFSDK, response, &diags)
@@ -516,13 +517,11 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	}
 	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
-		enableDisableKey(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &diags)
+		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	keyID := gjson.Get(response, "id").String()
-	plan.ID = types.StringValue(keyID)
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
@@ -624,6 +623,14 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	if gjson.Get(response, "linked_state").Bool() {
+		keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
+		planEnableKey := plan.EnableKey.ValueBool()
+		if !keyEnabled && planEnableKey {
+			enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
 		updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
@@ -642,6 +649,12 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
+		}
+		if keyEnabled && !planEnableKey {
+			disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
@@ -733,7 +746,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
+	setCommonKeyState(response, &state.AWSKeyCommonTFSDK, diags)
 	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
 	state.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
