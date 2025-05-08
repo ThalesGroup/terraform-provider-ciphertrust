@@ -53,12 +53,14 @@ var (
 )
 
 const (
-	policyTemplateTagKey = "cckm_policy_template_id"
-	longAwsKeyOpSleep    = 20
-	shortAwsKeyOpSleep   = 5
-	awsValidToRegEx      = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
-	awsValidToFormatMsg  = "must conform to the following example 2027-07-03T14:24:00Z"
-	refreshTokenSeconds  = 20
+	policyTemplateTagKey      = "cckm_policy_template_id"
+	longAwsKeyOpSleep         = 20
+	shortAwsKeyOpSleep        = 5
+	awsValidToRegEx           = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
+	awsValidToFormatMsg       = "must conform to the following example 2027-07-03T14:24:00Z"
+	refreshTokenSeconds       = 20
+	cckmSyncAutoRotationDelay = 5
+	disabledKeyException      = "DisabledException"
 )
 
 func NewResourceAWSKey() resource.Resource {
@@ -143,7 +145,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"customer_master_key_spec": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", "),
+				Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", ") + ". Default is SYMMETRIC_DEFAULT.",
 				Validators:  []validator.String{stringvalidator.OneOf(awsKeySpecs...)},
 			},
 			"description": schema.StringAttribute{
@@ -603,7 +605,8 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	}
 	if !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
-		enableDisableKey(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &diags)
+		keyID := gjson.Get(response, "id").String()
+		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
@@ -688,6 +691,14 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
+	planEnableKey := plan.EnableKey.ValueBool()
+	if !keyEnabled && planEnableKey {
+		enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -728,6 +739,12 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 			resp.Diagnostics.AddWarning("'primary_region' specifies the current primary region", "")
 		}
 	}
+	if keyEnabled && !planEnableKey {
+		disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS key, failed to read key."
@@ -752,10 +769,6 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 }
 
 func updateAwsKeyCommon(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, state *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	enableDisableKey(ctx, id, client, plan, keyJSON, diags)
-	if diags.HasError() {
-		return
-	}
 	updateDescription(ctx, id, client, plan, keyJSON, diags)
 	if diags.HasError() {
 		return
@@ -863,7 +876,7 @@ func (r *resourceAWSKey) createKey(ctx context.Context, id string, plan *AWSKeyT
 
 func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, "[resource_aws_key.go -> setKeyState][response:"+response)
-	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
+	setCommonKeyState(response, &state.AWSKeyCommonTFSDK, diags)
 	setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	state.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
@@ -874,7 +887,7 @@ func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, state
 	state.ReplicaPolicy = types.StringValue(gjson.Get(response, "replica_policy").String())
 }
 
-func setCommonKeyState(ctx context.Context, response string, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+func setCommonKeyState(response string, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
 	state.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	state.ARN = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
 	state.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
@@ -930,54 +943,34 @@ func setCommonKeyStateEx(ctx context.Context, response string, state *AWSKeyComm
 func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
-	planEnabled := plan.AutoRotate.ValueBool()
+	var (
+		err      error
+		response string
+	)
+	planAutoRotateEnabled := plan.AutoRotate.ValueBool()
 	planDays := plan.AutoRotationPeriodInDays.ValueInt64()
-	keyEnabled := gjson.Get(keyJSON, "aws_param.KeyRotationEnabled").Bool()
+	keyAutoRotateEnabled := gjson.Get(keyJSON, "aws_param.KeyRotationEnabled").Bool()
 	keyDays := gjson.Get(keyJSON, "aws_param.RotationPeriodInDays").Int()
 	keyID := plan.KeyID.ValueString()
 	updated := false
-	if planEnabled {
-		if keyEnabled != planEnabled || planDays != keyDays {
-			updated = true
-			payload := EnableAutoRotationPayloadJSON{
-				RotationPeriodInDays: &planDays,
-			}
-			payloadJSON, err := json.Marshal(payload)
-			if err != nil {
-				msg := "Error enabling auto-rotation for AWS key, invalid data input."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
-			if err != nil {
-				msg := "Error enabling auto-rotation for AWS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				diags.AddError(details, "")
-				tflog.Error(ctx, details)
+	if planAutoRotateEnabled {
+		if keyAutoRotateEnabled != planAutoRotateEnabled || planDays != keyDays {
+			updated = r.enableAutoRotation(ctx, id, plan, keyJSON, diags)
+			if diags.HasError() {
 				return
 			}
 		}
-	} else if keyEnabled != planEnabled {
-		var err error
-		updated = true
-		_, err = r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
-		if err != nil {
-			msg := "Error disabling auto-rotation for AWS key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			diags.AddError(details, "")
-			tflog.Error(ctx, details)
+	} else if keyAutoRotateEnabled != planAutoRotateEnabled {
+		updated = r.disableAutoRotation(ctx, id, plan, keyJSON, diags)
+		if diags.HasError() {
 			return
 		}
 	}
 	if updated {
-		var (
-			response string
-			err      error
-		)
-		numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
-		for retry := 0; retry < numRetries; retry++ {
+		keyAutoRotateEnabled = gjson.Get(response, "aws_param.KeyRotationEnabled").Bool()
+		keyDays = gjson.Get(response, "aws_param.RotationPeriodInDays").Int()
+		if keyAutoRotateEnabled != planAutoRotateEnabled || keyDays != planDays {
+			time.Sleep(time.Duration(cckmSyncAutoRotationDelay+2) * time.Second)
 			response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 			if err != nil {
 				msg := "Error enabling/disabling auto-rotation for AWS key, error reading key."
@@ -986,21 +979,101 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 				diags.AddError(details, "")
 				return
 			}
-			keyEnabled = gjson.Get(response, "aws_param.KeyRotationEnabled").Bool()
+			keyAutoRotateEnabled = gjson.Get(response, "aws_param.KeyRotationEnabled").Bool()
 			keyDays = gjson.Get(response, "aws_param.RotationPeriodInDays").Int()
-			if keyEnabled == planEnabled && keyDays == planDays {
-				break
-			}
-			time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
 		}
 		tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableAutoRotation][response:"+response)
 	}
-	if keyEnabled != planEnabled || keyDays != planDays {
+	if keyAutoRotateEnabled != planAutoRotateEnabled || keyDays != planDays {
 		msg := "Failed to confirm auto-rotation is configured."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		tflog.Warn(ctx, details)
+		diags.AddWarning(details, "")
+	}
+}
+
+func (r *resourceAWSKey) enableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) bool {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableAutoRotation]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableAutoRotation]["+id+"]")
+	planDays := plan.AutoRotationPeriodInDays.ValueInt64()
+	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
+	keyID := plan.KeyID.ValueString()
+	payload := EnableAutoRotationPayloadJSON{
+		RotationPeriodInDays: &planDays,
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		msg := "Error enabling auto-rotation for AWS key, invalid data input."
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
+		return false
 	}
+	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
+	if err != nil {
+		if strings.Contains(err.Error(), disabledKeyException) && keyEnabled {
+			numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
+			tStart := time.Now()
+			for retry := 0; retry < numRetries && err != nil; retry++ {
+				time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
+				if time.Since(tStart).Seconds() > refreshTokenSeconds {
+					if err = r.client.RefreshToken(ctx, id); err != nil {
+						msg := "Error disabling auto-rotation for AWS key. Error refreshing authentication token."
+						details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+						tflog.Error(ctx, details)
+						diags.AddError(details, "")
+						return false
+					}
+				}
+				_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
+			}
+		}
+		if err != nil {
+			msg := "Error enabling auto-rotation for AWS key."
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			diags.AddError(details, "")
+			tflog.Error(ctx, details)
+			return false
+		}
+	}
+	tflog.Trace(ctx, "[resource_aws_key.go -> enableAutoRotation][response:"+response)
+	return true
+}
+
+func (r *resourceAWSKey) disableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) bool {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> disableAutoRotation]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> disableAutoRotation]["+id+"]")
+	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
+	keyID := plan.KeyID.ValueString()
+	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
+	if err != nil {
+		if strings.Contains(err.Error(), disabledKeyException) && keyEnabled {
+			numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
+			tStart := time.Now()
+			for retry := 0; retry < numRetries && err != nil; retry++ {
+				time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
+				if time.Since(tStart).Seconds() > refreshTokenSeconds {
+					if err = r.client.RefreshToken(ctx, id); err != nil {
+						msg := "Error disabling auto-rotation for AWS key. Error refreshing authentication token."
+						details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+						tflog.Error(ctx, details)
+						diags.AddError(details, "")
+						return false
+					}
+				}
+				response, err = r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
+			}
+		}
+		if err != nil {
+			msg := "Error disabling auto-rotation for AWS key."
+			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			diags.AddError(details, "")
+			tflog.Error(ctx, details)
+			return false
+		}
+	}
+	tflog.Trace(ctx, "[resource_aws_key.go -> disableAutoRotation][response:"+response)
+	return true
 }
 
 func enableKeyRotationJob(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
@@ -1068,7 +1141,8 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 			return ""
 		}
 	}
-	sourceKeyJSON := r.createKeyMaterial(ctx, id, &importMaterialPlan, diags)
+	customerMasterKeySpec := plan.CustomerMasterKeySpec.ValueString()
+	sourceKeyJSON := r.createKeyMaterial(ctx, id, &importMaterialPlan, customerMasterKeySpec, diags)
 	sourceKeyID := gjson.Get(sourceKeyJSON, "id").String()
 	if diags.HasError() {
 		return ""
@@ -1215,8 +1289,8 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 			if err = r.client.RefreshToken(ctx, id); err != nil {
 				msg := "Error creating AWS key. Error refreshing authentication token."
 				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": replicaKeyID})
-				tflog.Warn(ctx, details)
-				diags.AddWarning(details, "")
+				tflog.Error(ctx, details)
+				diags.AddError(details, "")
 				return ""
 			}
 		}
@@ -1311,37 +1385,32 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, pri
 	tflog.Trace(ctx, "[resource_aws_key.go -> updatePrimaryRegion][response:"+response)
 }
 
-func enableDisableKey(ctx context.Context, id string, client *common.Client, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableKey]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableKey]["+id+"]")
-	planEnable := plan.EnableKey.ValueBool()
-	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
-	keyID := plan.KeyID.ValueString()
-	if keyEnabled != planEnable {
-		var (
-			response string
-			err      error
-		)
-		if planEnable {
-			response, err = client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable")
-			if err != nil {
-				msg := "Error enabling AWS key"
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-			}
-			tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableKey][response:"+response)
-		} else {
-			response, err = client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable")
-			if err != nil {
-				msg := "Error disabling AWS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-			}
-		}
-		tflog.Trace(ctx, "[resource_aws_key.go -> enableDisableKey][response:"+response)
+func enableKey(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableKey]["+id+"]")
+	response, err := client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable")
+	if err != nil {
+		msg := "Error enabling AWS key"
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
 	}
+	tflog.Trace(ctx, "[resource_aws_key.go -> enableKey][response:"+response)
+}
+
+func disableKey(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> disableKey]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> disableKey]["+id+"]")
+	response, err := client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable")
+	if err != nil {
+		msg := "Error disabling AWS key"
+		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
+	}
+	tflog.Trace(ctx, "[resource_aws_key.go -> disableKey][response:"+response)
 }
 
 func addAliases(ctx context.Context, client *common.Client, id string, plan *AWSKeyCommonTFSDK, keyJSON string, diags *diag.Diagnostics) string {
@@ -2016,16 +2085,44 @@ func (r *resourceAWSKey) getPrimaryKey(ctx context.Context, id string, keyID str
 	return response
 }
 
-func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, importMaterialPlan *AWSKeyImportKeyMaterialTFSDK, diags *diag.Diagnostics) string {
+func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, importMaterialPlan *AWSKeyImportKeyMaterialTFSDK, customerMasterKeySpec string, diags *diag.Diagnostics) string {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createKeyMaterial]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createKeyMaterial]["+id+"]")
 	var response string
 	if importMaterialPlan.SourceKeyTier.ValueString() == "local" {
 		payload := cm.CMKeyJSON{
 			Name:              importMaterialPlan.SourceKeyName.ValueString(),
-			Algorithm:         "AES",
-			Size:              256,
 			AssignSelfAsOwner: true,
+		}
+		switch customerMasterKeySpec {
+		case "SYMMETRIC_DEFAULT":
+		case "":
+			payload.Algorithm = "aes"
+			payload.Size = 256
+		case "RSA_2048":
+			payload.Algorithm = "rsa"
+			payload.Size = 2048
+		case "RSA_3072":
+			payload.Algorithm = "rsa"
+			payload.Size = 3072
+		case "RSA_4096":
+			payload.Algorithm = "rsa"
+			payload.Size = 4096
+		case "ECC_NIST_P384":
+			payload.Algorithm = "ec"
+			payload.Curveid = "secp384r1"
+		case "ECC_NIST_P521":
+			payload.Algorithm = "ec"
+			payload.Curveid = "secp521r1"
+		case "ECC_SECG_P256K1":
+			payload.Algorithm = "ec"
+			payload.Curveid = "secp256k1"
+		default:
+			msg := "Invalid 'customer_master_key_spec' for import key material from 'source_key_tier' of 'local'."
+			details := apiError(msg, map[string]interface{}{"customer_master_key_spec": customerMasterKeySpec})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return ""
 		}
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
@@ -2038,7 +2135,10 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 		response, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 		if err != nil {
 			msg := "Error creating CipherTrust key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			details := apiError(msg, map[string]interface{}{
+				"error":     err.Error(),
+				"algorithm": payload.Algorithm,
+			})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return ""

@@ -320,7 +320,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		payload.LinkedState = plan.LinkedState.ValueBool()
 	}
 	var awsParamJSON AWSParamJSON
-	var planAWSParamTFSDK AWSParamTFSDK
+	var planAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
 	for _, v := range plan.AWSParams.Elements() {
 		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
 		if resp.Diagnostics.HasError() {
@@ -578,14 +578,14 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	}
 
 	var awsParamJSON AWSParamJSON
-	var planAWSParamTFSDK AWSParamTFSDK
+	var planAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
 	for _, v := range plan.AWSParams.Elements() {
 		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
-	var stateAWSParamTFSDK AWSParamTFSDK
+	var stateAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
 	for _, v := range state.AWSParams.Elements() {
 		resp.Diagnostics.Append(tfsdk.ValueAs(ctx, v, &stateAWSParamTFSDK)...)
 		if resp.Diagnostics.HasError() {
@@ -888,7 +888,7 @@ func (d *resourceAWSCustomKeyStore) Configure(_ context.Context, req resource.Co
 
 func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, response string, plan *AWSCustomKeyStoreTFSDK, state *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
 	var (
-		planAWSParamTFSDK          AWSParamTFSDK
+		planAWSParamTFSDK          AWSCustomKeyStoreParamTFSDK
 		planLocalHostedParamsTFSDK LocalHostedParamsTFSDK
 	)
 	if plan != nil {
@@ -907,7 +907,7 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	}
 
 	var (
-		stateAWSParamTFSDK          AWSParamTFSDK
+		stateAWSParamTFSDK          AWSCustomKeyStoreParamTFSDK
 		stateLocalHostedParamsTFSDK LocalHostedParamsTFSDK
 	)
 	if state != nil {

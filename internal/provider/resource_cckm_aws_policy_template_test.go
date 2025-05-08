@@ -172,7 +172,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_users_roles.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...)),
+					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
 			},
 			{
@@ -184,7 +184,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceNameEx1, "key_users_roles.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx1, "policy", append(keyUsers, keyRoles...)),
+					testCheckAttributeContains(resourceNameEx1, "policy", append(keyUsers, keyRoles...), true),
 
 					resource.TestCheckResourceAttrSet(resourceNameEx4, "id"),
 					resource.TestCheckResourceAttrSet(resourceNameEx4, "policy"),
@@ -227,7 +227,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_users_roles.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins.#", "2"),
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...)),
+					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
 			},
 		},
