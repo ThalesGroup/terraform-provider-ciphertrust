@@ -2117,6 +2117,12 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 		case "ECC_SECG_P256K1":
 			payload.Algorithm = "ec"
 			payload.Curveid = "secp256k1"
+		case "HMAC_256":
+			payload.Algorithm = "hmac-sha256"
+		case "HMAC_384":
+			payload.Algorithm = "hmac-sha384"
+		case "HMAC_512":
+			payload.Algorithm = "hmac-sha512"
 		default:
 			msg := "Invalid 'customer_master_key_spec' for import key material from 'source_key_tier' of 'local'."
 			details := apiError(msg, map[string]interface{}{"customer_master_key_spec": customerMasterKeySpec})
