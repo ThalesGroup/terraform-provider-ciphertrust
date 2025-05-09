@@ -363,12 +363,16 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, 
 
 func getPoliciesAreEqual(ctx context.Context, policy string, planPolicy string, diags *diag.Diagnostics) bool {
 	p, err := normalizePolicy(policy)
-	if err == nil {
+	if err != nil {
+		tflog.Error(ctx, err.Error())
+	} else {
 		policy = p
 	}
 	planPolicy = strings.TrimSpace(planPolicy)
 	p, err = normalizePolicy(planPolicy)
-	if err == nil {
+	if err != nil {
+		tflog.Error(ctx, err.Error())
+	} else {
 		planPolicy = p
 	}
 	equivalent, err := policyBytesEqual([]byte(policy), []byte(planPolicy))
@@ -384,10 +388,16 @@ func getPoliciesAreEqual(ctx context.Context, policy string, planPolicy string, 
 
 func normalizePolicy(jsonString interface{}) (string, error) {
 	var j interface{}
-	if jsonString == nil || jsonString.(string) == "" {
+	if jsonString == nil {
 		return "", nil
 	}
-	s := jsonString.(string)
+	s, ok := jsonString.(string)
+	if !ok {
+		return "", fmt.Errorf("error normalizing AWS key policy, invalid string data input")
+	}
+	if s == "" {
+		return "", nil
+	}
 	err := json.Unmarshal([]byte(s), &j)
 	if err != nil {
 		return s, err

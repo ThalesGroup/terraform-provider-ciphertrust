@@ -97,7 +97,7 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	}
 	id := state.Connection.ValueString()
 	var payload AccountDetailsInputModelJSON
-	payload.AwsConnection = state.Connection.ValueString()
+	payload.AWSConnection = state.Connection.ValueString()
 	if !state.AssumeRoleExternalID.IsNull() {
 		payload.AssumeRoleArn = state.AssumeRoleArn.ValueString()
 	}
