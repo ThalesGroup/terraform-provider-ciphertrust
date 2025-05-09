@@ -387,7 +387,7 @@ type KMSModelJSON struct {
 }
 
 type AccountDetailsInputModelJSON struct {
-	AwsConnection        string `json:"connection"`
+	AWSConnection        string `json:"connection"`
 	AssumeRoleArn        string `json:"assume_role_arn"`
 	AssumeRoleExternalID string `json:"assume_role_external_id"`
 }
@@ -403,7 +403,7 @@ type AddTagPayloadJSON struct {
 }
 
 type CreateReplicaKeyPayloadJSON struct {
-	AwsParams        CommonAWSParamsJSON `json:"aws_param"`
+	AWSParams        AWSKeyParamJSON     `json:"aws_param"`
 	ReplicaRegion    *string             `json:"replica_region"`
 	Tags             []AddTagPayloadJSON `json:"tags"`
 	KmsID            string              `json:"kms"`
@@ -477,7 +477,7 @@ type XKSKeyCommonAWSParamsJSON struct {
 }
 
 type LinkXKSKeyAWSParamsJSON struct {
-	AwsParams                      XKSKeyCommonAWSParamsJSON `json:"aws_param"`
+	AWSParams                      XKSKeyCommonAWSParamsJSON `json:"aws_param"`
 	BypassPolicyLockoutSafetyCheck *bool                     `json:"BypassPolicyLockoutSafetyCheck"`
 }
 
@@ -490,7 +490,7 @@ type XKSKeyLocalHostedInputParamsJSON struct {
 }
 
 type CreateXKSKeyInputPayloadJSON struct {
-	AwsParams                        XKSKeyCommonAWSParamsJSON `json:"aws_param"`
+	AWSParams                        XKSKeyCommonAWSParamsJSON `json:"aws_param"`
 	KeyUsers                         *[]string                 `json:"key_users"`
 	KeyAdmins                        *[]string                 `json:"key_admins"`
 	KeyUsersRoles                    *[]string                 `json:"key_users_roles"`
@@ -580,14 +580,14 @@ type AWSEnableXksCredentialRotationJobTFSDK struct {
 }
 
 type AWSKmsDataSourceTFSDK struct {
-	AwsConnection types.String `tfsdk:"aws_connection"`
+	AWSConnection types.String `tfsdk:"aws_connection"`
 	KmsName       types.String `tfsdk:"kms_name"`
 	KmsID         types.String `tfsdk:"kms_id"`
 	Regions       types.List   `tfsdk:"regions"`
 }
 
 type AWSKmsDataSourceInputParamsTFSDK struct {
-	AwsConnection types.String `tfsdk:"aws_connection"`
+	AWSConnection types.String `tfsdk:"aws_connection"`
 	KmsName       types.String `tfsdk:"kms_name"`
 	KmsID         types.String `tfsdk:"kms_id"`
 }

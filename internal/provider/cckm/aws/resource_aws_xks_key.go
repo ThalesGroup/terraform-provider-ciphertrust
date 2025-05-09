@@ -457,7 +457,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 	payload := CreateXKSKeyInputPayloadJSON{
-		AwsParams:                        *awsParams,
+		AWSParams:                        *awsParams,
 		XKSKeyLocalHostedInputParamsJSON: *localHostedParamsJSON,
 	}
 	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
@@ -503,7 +503,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	keyID := gjson.Get(response, "id").String()
 	if gjson.Get(response, "linked_state").Bool() && len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
-		response = addAliases(ctx, r.client, id, &plan.AWSKeyCommonTFSDK, response, &diags)
+		addAliases(ctx, r.client, id, &plan.AWSKeyCommonTFSDK, response, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
@@ -823,7 +823,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 				return
 			}
 			payload := LinkXKSKeyAWSParamsJSON{
-				AwsParams: *awsParams,
+				AWSParams: *awsParams,
 			}
 			if plan.BypassPolicyLockoutSafetyCheck.ValueBool() != types.BoolNull().ValueBool() {
 				payload.BypassPolicyLockoutSafetyCheck = plan.BypassPolicyLockoutSafetyCheck.ValueBoolPointer()
