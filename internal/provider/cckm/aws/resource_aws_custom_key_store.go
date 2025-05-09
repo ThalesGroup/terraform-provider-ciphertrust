@@ -451,7 +451,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				}
 
 				if err == nil {
-					response, err = r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+					response, err = r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries)
 					if err != nil {
 						resp.Diagnostics.AddWarning(
 							"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -487,7 +487,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				)
 			}
 			if err == nil {
-				response, err = r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+				response, err = r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries)
 				if err != nil {
 					resp.Diagnostics.AddWarning(
 						"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -780,7 +780,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				return
 			}
 
-			response, err := r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			response, err := r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries)
 			if err != nil {
 				resp.Diagnostics.AddError(
 					"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -810,7 +810,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				)
 				return
 			}
-			response, err := r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries, time.Duration(operationRetryDelay)*time.Second)
+			response, err := r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries)
 			if err != nil {
 				resp.Diagnostics.AddError(
 					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -819,6 +819,20 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 				return
 			}
 			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+		}
+	}
+	response, err := r.customKeyStoreById(ctx, id, &state)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error getting AWS Custom Key Store on CipherTrust Manager: ",
+			"Could not get AWS Custom Key Store, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	linkedState := gjson.Get(response, "local_hosted_params.linked_state").Bool()
+	if linkedState {
+		if r.enableDisableCredentialRotation(ctx, id, &plan, &state, &resp.Diagnostics) {
+			toBeUpdatedOps = true
 		}
 	}
 	if !(toBeUpdated || toBeUpdatedOps) {
@@ -1054,12 +1068,12 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	}
 }
 
-func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id string, wantState string, operation func() (string, error), maxRetries int, retryDelay time.Duration) (string, error) {
+func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id string, wantState string, operation func() (string, error), maxRetries int) (string, error) {
 	var (
 		response string
 		err      error
 	)
-
+	retryDelay := time.Duration(operationRetryDelay) * time.Second
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if attempt < maxRetries {
 			time.Sleep(retryDelay)
@@ -1096,33 +1110,37 @@ func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id s
 	return response, nil
 }
 
-func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, state *AWSKeyCommonTFSDK, diags *diag.Diagnostics) {
+func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, state *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) bool {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
 	planParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(plan.EnableCredentialRotation.Elements()))
 	if !plan.EnableCredentialRotation.IsUnknown() {
 		diags.Append(plan.EnableCredentialRotation.ElementsAs(ctx, &planParams, false)...)
 		if diags.HasError() {
-			return
+			return false
 		}
 	}
-	stateParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(state.EnableRotation.Elements()))
-	diags.Append(state.EnableRotation.ElementsAs(ctx, &stateParams, false)...)
+	stateParams := make([]AWSEnableXksCredentialRotationJobTFSDK, 0, len(state.EnableCredentialRotation.Elements()))
+	diags.Append(state.EnableCredentialRotation.ElementsAs(ctx, &stateParams, false)...)
 	if diags.HasError() {
-		return
+		return false
 	}
+	updated := false
 	if len(planParams) == 0 && len(stateParams) != 0 {
 		r.disableCredentialRotation(ctx, id, plan, diags)
 		if diags.HasError() {
-			return
+			return false
 		}
+		updated = true
 	}
 	if !reflect.DeepEqual(planParams, stateParams) {
 		r.enableCredentialRotation(ctx, id, plan, diags)
 		if diags.HasError() {
-			return
+			return false
 		}
+		updated = true
 	}
+	return updated
 }
 
 func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
