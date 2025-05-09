@@ -473,138 +473,210 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
 	}
 
-	createConfig := `
-		resource "ciphertrust_aws_key" "multi_region_key" {
-			alias                    = ["%s", "%s"]
-			customer_master_key_spec = "RSA_2048"
-			key_usage                = "SIGN_VERIFY"
-			kms                      = ciphertrust_aws_kms.kms.id
-			region                   = ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				CreateTagKey1 = "CreateTagValue1"
-				CreateTagKey2 = "CreateTagValue2"
+	t.Run("Native", func(t *testing.T) {
+		createConfig := `
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				alias                    = ["%s", "%s"]
+				customer_master_key_spec = "RSA_2048"
+				key_usage                = "SIGN_VERIFY"
+				kms                      = ciphertrust_aws_kms.kms.id
+				region                   = ciphertrust_aws_kms.kms.regions[0]
+				tags = {
+					CreateTagKey1 = "CreateTagValue1"
+					CreateTagKey2 = "CreateTagValue2"
+				}
+				multi_region = true
 			}
-			multi_region = true
-		}
-		resource "ciphertrust_aws_key" "replica_1"{
-			depends_on = [
-				ciphertrust_aws_key.multi_region_key,
-			]
-			alias = ["%s"]
-			key_policy {
-				key_admins        = ["%s"]
-				key_users         = ["%s"]
-				key_admins_roles  = ["%s"]
-				key_users_roles   = ["%s"]
+			resource "ciphertrust_aws_key" "replica"{
+				depends_on = [
+					ciphertrust_aws_key.multi_region_key,
+				]
+				alias = ["%s"]
+				key_policy {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region 					= ciphertrust_aws_kms.kms.regions[1]
+				description 			= "replica one"
+				origin					= "AWS_KMS"
+				tags = {
+					RegionOneTagKey = "RegionOneTagValue"
+				}
+				replicate_key {
+					key_id 				= ciphertrust_aws_key.multi_region_key.key_id
+					make_primary 		= true
+				}
+			}`
+		updateConfig := `
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				alias                    = ["%s", "%s"]
+				customer_master_key_spec = "RSA_2048"
+				key_usage                = "SIGN_VERIFY"
+				kms                      = ciphertrust_aws_kms.kms.id
+				region                   = ciphertrust_aws_kms.kms.regions[0]
+				tags = {
+					CreateTagKey1 = "CreateTagValue1"
+					CreateTagKey2 = "CreateTagValue2"
+				}
+				multi_region = true
 			}
-			region 					= ciphertrust_aws_kms.kms.regions[1]
-			description 			= "replica one"
-			origin					= "AWS_KMS"
-			tags = {
-				RegionOneTagKey = "RegionOneTagValue"
-			}
-			replicate_key {
-				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-				make_primary 		= true
-			}
-		}`
+			resource "ciphertrust_aws_key" "replica"{
+				alias = ["%s"]
+				key_policy {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region 					= ciphertrust_aws_kms.kms.regions[1]
+				description 			= "replica one"
+				origin					= "AWS_KMS"
+				primary_region			= ciphertrust_aws_kms.kms.regions[0]
+				tags = {
+					RegionOneTagKey = "RegionOneTagValue"
+				}
+				replicate_key {
+					key_id 				= ciphertrust_aws_key.multi_region_key.key_id
+				}
+			}`
+		aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
+		aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
+		replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
+		keyResource := "ciphertrust_aws_key.multi_region_key"
+		replicaResource1 := "ciphertrust_aws_key.replica"
+		createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
+			replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+		updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
+			replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createResources,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(keyResource, "alias.#", "2"),
+						resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "RSA_2048"),
+						resource.TestCheckResourceAttrSet(keyResource, "id"),
+						resource.TestCheckResourceAttr(keyResource, "multi_region", "true"),
+						resource.TestCheckResourceAttr(keyResource, "multi_region_replica_keys.#", "0"),
+						resource.TestCheckResourceAttrSet(keyResource, "policy"),
+						resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
+						resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey1", "CreateTagValue1"),
+						resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey2", "CreateTagValue2"),
 
-	updateConfig := `
-		resource "ciphertrust_aws_key" "multi_region_key" {
-			alias                    = ["%s", "%s"]
-			customer_master_key_spec = "RSA_2048"
-			key_usage                = "SIGN_VERIFY"
-			kms                      = ciphertrust_aws_kms.kms.id
-			region                   = ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				CreateTagKey1 = "CreateTagValue1"
-				CreateTagKey2 = "CreateTagValue2"
-			}
-			multi_region = true
-		}
-		resource "ciphertrust_aws_key" "replica_1"{
-			depends_on = [
-				ciphertrust_aws_key.multi_region_key,
-			]
-			alias = ["%s"]
-			key_policy {
-				key_admins        = ["%s"]
-				key_users         = ["%s"]
-				key_admins_roles  = ["%s"]
-				key_users_roles   = ["%s"]
-			}
-			region 					= ciphertrust_aws_kms.kms.regions[1]
-			description 			= "replica one"
-			origin					= "AWS_KMS"
-			primary_region			= ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				RegionOneTagKey = "RegionOneTagValue"
-			}
-			replicate_key {
-				key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-			}
-		}`
-
-	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
-	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
-	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
-	keyResource := "ciphertrust_aws_key.multi_region_key"
-	replicaResource1 := "ciphertrust_aws_key.replica_1"
-	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: createResources,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "2"),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "RSA_2048"),
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region", "true"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region_replica_keys.#", "0"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey1", "CreateTagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey2", "CreateTagValue2"),
-
-					resource.TestCheckResourceAttr(replicaResource1, "alias.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "alias.0", replicaAlias),
-					resource.TestCheckResourceAttr(replicaResource1, "description", "replica one"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region", "true"),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region_replica_keys.#", "1"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.%", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.RegionOneTagKey", "RegionOneTagValue"),
-					// Sometimes - this is true
-					//resource.TestCheckResourceAttr(replicaResource1, "multi_region_key_type", "PRIMARY"),
-				),
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						replicaResource1,
-						tfjsonpath.New("policy"),
-						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
+						resource.TestCheckResourceAttr(replicaResource1, "alias.#", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "alias.0", replicaAlias),
+						resource.TestCheckResourceAttr(replicaResource1, "description", "replica one"),
+						resource.TestCheckResourceAttrSet(replicaResource1, "id"),
+						resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
+						resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
+						resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
+						resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+						resource.TestCheckResourceAttr(replicaResource1, "multi_region", "true"),
+						resource.TestCheckResourceAttr(replicaResource1, "multi_region_replica_keys.#", "1"),
+						resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
+						resource.TestCheckResourceAttr(replicaResource1, "tags.%", "1"),
+						resource.TestCheckResourceAttr(replicaResource1, "tags.RegionOneTagKey", "RegionOneTagValue"),
+						// Sometimes - this is true
+						//resource.TestCheckResourceAttr(replicaResource1, "multi_region_key_type", "PRIMARY"),
+					),
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue(
+							replicaResource1,
+							tfjsonpath.New("policy"),
+							knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
+					},
 				},
-			},
-			{
-				Config: updateResources,
-				Check: resource.ComposeTestCheckFunc(
+				{
+					Config: updateResources,
+					Check:  resource.ComposeTestCheckFunc(
 					// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
 					//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
-				),
+					),
+				},
 			},
-		},
+		})
+	})
+	t.Run("LocalKey", func(t *testing.T) {
+		createConfig := `
+			resource "ciphertrust_cm_key" "cm_key" {
+				name      = local.cmKeyName
+				algorithm = "RSA"
+				key_size  = 2048
+			}
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				alias                    = [local.alias]
+				customer_master_key_spec = "RSA_2048"
+				kms                      = ciphertrust_aws_kms.kms.id
+				region  = ciphertrust_aws_kms.kms.regions[0]
+				upload_key {
+					source_key_identifier = ciphertrust_cm_key.cm_key.id
+					source_key_tier		  = "local"
+				}
+				multi_region = true
+			}`
+		replicateConfig := `
+			resource "ciphertrust_cm_key" "cm_key" {
+				name      = local.cmKeyName
+				algorithm = "RSA"
+				key_size  = 2048
+			}
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				alias                    = [local.alias]
+				customer_master_key_spec = "RSA_2048"
+				kms                      = ciphertrust_aws_kms.kms.id
+				region  = ciphertrust_aws_kms.kms.regions[0]
+				upload_key {
+					source_key_identifier = ciphertrust_cm_key.cm_key.id
+					source_key_tier		  = "local"
+				}
+				multi_region = true
+			}
+			resource "ciphertrust_aws_key" "replica"{
+				alias                    = [local.alias]
+				region 					= ciphertrust_aws_kms.kms.regions[1]
+				replicate_key {
+					key_expiration        = true
+					key_id 				= ciphertrust_aws_key.multi_region_key.key_id
+					import_key_material = true
+					valid_to              = "%s"
+				}
+			}`
+		cmKeyResource := "ciphertrust_cm_key.cm_key"
+		awsKeyResource := "ciphertrust_aws_key.multi_region_key"
+		replicaResource := "ciphertrust_aws_key.replica"
+		createConfigStr := awsConnectionResource + createConfig
+		validTo := time.Now().UTC().AddDate(0, 0, 1).Format(time.RFC3339)
+		replicateConfigStr := awsConnectionResource + fmt.Sprintf(replicateConfig, validTo)
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_id", cmKeyResource, "id"),
+						resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_name", cmKeyResource, "name"),
+						resource.TestCheckResourceAttr(awsKeyResource, "origin", "EXTERNAL"),
+					),
+				},
+				{
+					Config: replicateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrPair(replicaResource, "local_key_id", cmKeyResource, "id"),
+						resource.TestCheckResourceAttrPair(replicaResource, "local_key_name", cmKeyResource, "name"),
+						resource.TestCheckResourceAttr(replicaResource, "origin", "EXTERNAL"),
+						resource.TestCheckResourceAttr(replicaResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
+						testCheckAttributeContains(replicaResource, "valid_to", []string{validTo}, true),
+					),
+				},
+			},
+		})
 	})
 }
 
