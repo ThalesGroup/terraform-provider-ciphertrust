@@ -32,9 +32,8 @@ var (
 )
 
 const (
-	StateConnectKeystore    = "CONNECT_KEYSTORE"
-	StateDisconnectKeystore = "DISCONNECT_KEYSTORE"
-
+	StateConnectKeystore          = "CONNECT_KEYSTORE"
+	StateDisconnectKeystore       = "DISCONNECT_KEYSTORE"
 	CustomKeystoreTypeAWSCloudHSM = "AWS_CLOUDHSM"
 	StateConnected                = "CONNECTED"
 	StateDisConnected             = "DISCONNECTED"
@@ -114,6 +113,10 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...),
+				},
+				Description: "Indicates whether to connect or disconnect the custom key store.",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -831,8 +834,20 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	}
 	linkedState := gjson.Get(response, "local_hosted_params.linked_state").Bool()
 	if linkedState {
-		if r.enableDisableCredentialRotation(ctx, id, &plan, &state, &resp.Diagnostics) {
-			toBeUpdatedOps = true
+		var dg diag.Diagnostics
+		updated := r.enableDisableCredentialRotation(ctx, id, &plan, &state, &dg)
+		if dg.HasError() {
+			resp.Diagnostics.Append(dg...)
+		} else if updated {
+			response, err := r.customKeyStoreById(ctx, id, &state)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error getting AWS Custom Key Store on CipherTrust Manager: ",
+					"Could not get AWS Custom Key Store, unexpected error: "+err.Error(),
+				)
+				return
+			}
+			r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
 		}
 	}
 	if !(toBeUpdated || toBeUpdatedOps) {
@@ -1158,7 +1173,7 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 		keyStoreID := plan.ID.ValueString()
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			msg := "Failed to enable credential rotation for AWS key store, invalid data input."
+			msg := "Failed to enable credential rotation for custom key store, invalid data input."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
@@ -1172,21 +1187,21 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Trace(ctx, "[resource_aws_key.go -> enableCredentialRotation][response:"+response)
+		tflog.Trace(ctx, "[resource_aws_custom_key_store.go -> enableCredentialRotation][response:"+response)
 	}
 }
 
 func (r *resourceAWSCustomKeyStore) disableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, diags *diag.Diagnostics) {
 	keyStoreID := plan.ID.ValueString()
-	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/disable-credential-rotation-job\n\nDisable custom key store for credentials rotation job. - post")
+	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/disable-credential-rotation-job")
 	if err != nil {
-		msg := "Error updating AWS key, failed to disable credential rotation job for AWS key store."
+		msg := "Error updating custom key store, failed to disable credential rotation job for AWS key store."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 		diags.AddError(details, "")
 		tflog.Error(ctx, details)
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_key.go -> disableCredentialRotation][response:"+response)
+	tflog.Trace(ctx, "[resource_aws_custom_key_store -> disableCredentialRotation][response:"+response)
 }
 
 func setKeyStoreLabels(ctx context.Context, response string, keyStoreID string, stateLabels *types.Map, diags *diag.Diagnostics) {
