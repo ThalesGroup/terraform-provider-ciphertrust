@@ -332,7 +332,6 @@ func TestCckmAwsKeyNative(t *testing.T) {
 			{
 				Config: awsConnectionResource + updateKeyConfig2,
 				Check: resource.ComposeTestCheckFunc(
-					testAccListResourceAttributes(keyResource),
 					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", "0"),
@@ -638,9 +637,9 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 				},
 				{
 					Config: updateResources,
-					Check:  resource.ComposeTestCheckFunc(
-					// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
-					//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
+					Check: resource.ComposeTestCheckFunc(
+						// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
+						//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
 					),
 				},
 			},
