@@ -162,14 +162,13 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Description: "Enable or disable the key. Default is true.",
 			},
 			"key_usage": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Specifies the intended use of the key. RSA key options: ENCRYPT_DECRYPT, SIGN_VERIFY. Default is ENCRYPT_DECRYPT. EC key options: SIGN_VERIFY. Default is SIGN_VERIFY. Symmetric key options: ENCRYPT_DECRYPT. Default is ENCRYPT_DECRYPT.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"ENCRYPT_DECRYPT",
-						"SIGN_VERIFY",
-						"GENERATE_VERIFY_MAC"}...),
-				},
+				Optional: true,
+				Computed: true,
+				Description: "Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC." +
+					"Default for RSA keys is ENCRYPT_DECRYPT," +
+					"default for EC keys is SIGN_VERIFY, " +
+					"default for symmetric keys is ENCRYPT_DECRYPT and " +
+					"default for HMAC keys is GENERATE_VERIFY_MAC.",
 			},
 			"kms": schema.StringAttribute{
 				Optional:    true,
@@ -581,6 +580,11 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	kid := gjson.Get(response, "aws_param.KeyID").String()
+	region := gjson.Get(response, "region").String()
+	plan.ID = types.StringValue(encodeAWSKeyTerraformResourceID(region, kid))
+
 	// Don't return errors after this
 	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	if len(plan.Alias.Elements()) > 1 {
@@ -612,9 +616,6 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	kid := gjson.Get(response, "aws_param.KeyID").String()
-	region := gjson.Get(response, "region").String()
-	plan.ID = types.StringValue(encodeAWSKeyTerraformResourceID(region, kid))
 	keyID := plan.KeyID.ValueString()
 	var err error
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
@@ -1139,11 +1140,15 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 			return ""
 		}
 	}
+	if plan.Origin.ValueString() == "" {
+		plan.Origin = types.StringValue("EXTERNAL")
+	}
 	customerMasterKeySpec := plan.CustomerMasterKeySpec.ValueString()
 	response := r.createKey(ctx, id, plan, diags)
 	if diags.HasError() {
 		return ""
 	}
+	awsKeyResponse := response
 	// Don't return errors after this
 	keyID := gjson.Get(response, "id").String()
 	var dg diag.Diagnostics
@@ -1152,12 +1157,9 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 		for _, d := range dg {
 			diags.AddWarning(d.Summary(), d.Detail())
 		}
-		return ""
+		return awsKeyResponse
 	}
 	sourceKeyID := gjson.Get(sourceKeyJSON, "id").String()
-	if plan.Origin.ValueString() == "" {
-		plan.Origin = types.StringValue("EXTERNAL")
-	}
 	payload := AWSKeyImportKeyPayloadJSON{
 		SourceKeyID:   sourceKeyID,
 		SourceKeyTier: importMaterialPlan.SourceKeyTier.ValueString(),
@@ -1170,7 +1172,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddWarning(details, "")
-		return ""
+		return awsKeyResponse
 	}
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
 	if err != nil {
@@ -1178,7 +1180,7 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddWarning(details, "")
-		return ""
+		return awsKeyResponse
 	}
 	tflog.Trace(ctx, "[resource_aws_key.go -> importKeyMaterial][response:"+response)
 	return response
@@ -1920,6 +1922,8 @@ func (r *resourceAWSKey) getCommonAWSParams(ctx context.Context, plan *AWSKeyTFS
 			awsParams.KeyUsage = "ENCRYPT_DECRYPT"
 		} else if strings.HasPrefix(awsParams.CustomerMasterKeySpec, "HMAC") {
 			awsParams.KeyUsage = "GENERATE_VERIFY_MAC"
+		} else if awsParams.CustomerMasterKeySpec == "SYMMETRIC_DEFAULT" {
+			awsParams.KeyUsage = "ENCRYPT_DECRYPT"
 		}
 	}
 	if plan.MultiRegion.ValueBool() != types.BoolNull().ValueBool() {
