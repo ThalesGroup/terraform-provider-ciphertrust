@@ -30,9 +30,9 @@ data "ciphertrust_aws_kms" "by_kms_name" {
 # Create a key using details returned from the datasource
 resource "ciphertrust_aws_key" "aws_key_by_kms_name" {
   customer_master_key_spec = "RSA_2048"
-  kms                      = data.ciphertrust_aws_kms.by_kms_name.kms[0].kms_id
+  kms                      = "8b5ee431-eda1-49a8-b587-2b3f50524133"
   key_usage                = "ENCRYPT_DECRYPT"
-  region                   = data.ciphertrust_aws_kms.by_kms_name.kms[0].regions[0]
+  region                   = "us-east-1"
 }
 ```
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -22,30 +22,29 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
 var (
-	_ resource.Resource              = &resourceAWSXKSKey{}
-	_ resource.ResourceWithConfigure = &resourceAWSXKSKey{}
+	_ resource.Resource              = &resourceAWSCloudHSMKey{}
+	_ resource.ResourceWithConfigure = &resourceAWSCloudHSMKey{}
 )
 
-func NewResourceAWSXKSKey() resource.Resource {
-	return &resourceAWSXKSKey{}
+func NewResourceAWSCloudHSMKey() resource.Resource {
+	return &resourceAWSCloudHSMKey{}
 }
 
-type resourceAWSXKSKey struct {
+type resourceAWSCloudHSMKey struct {
 	client *common.Client
 }
 
-func (r *resourceAWSXKSKey) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_aws_xks_key"
+func (r *resourceAWSCloudHSMKey) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_cloudhsm_key"
 }
 
-func (r *resourceAWSXKSKey) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *resourceAWSCloudHSMKey) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -60,26 +59,26 @@ func (r *resourceAWSXKSKey) Configure(_ context.Context, req resource.ConfigureR
 	r.client = client
 }
 
-func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create an AWS XKS key.",
+		Description: "Use this resource to create an AWS CloudHSM key.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
-				Description: "XKS key ID.",
+				Description: "CloudHSM key ID.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"region": schema.StringAttribute{
 				Computed:    true,
-				Description: "AWS region in which the XKS key resides.",
+				Description: "AWS region in which the CloudHSM key resides.",
 			},
 			"alias": schema.SetAttribute{
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Input parameter. Alias assigned to the XKS key.",
+				Description: "Input parameter. Alias assigned to the CloudHSM key.",
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(
 						stringvalidator.RegexMatches(
@@ -148,7 +147,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"tags": schema.MapAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "A list of tags assigned to the XKS key.",
+				Description: "A list of tags assigned to the CloudHSM key.",
 				ElementType: types.StringType,
 			},
 			//Read-Only Params
@@ -309,20 +308,16 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "ID of the source container of the key.",
 			},
 			"custom_key_store_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "Custom keystore ID in AWS.",
+				Required:    true,
+				Description: "CipherTrust ID of the CloudHSM keystore where key is to be created.",
 			},
 			"linked": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
+				Description: "Parameter to indicate if AWS CloudHSM key is linked with AWS.",
 			},
 			"blocked": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
-			},
-			"aws_xks_key_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "XKS key ID in AWS.",
+				Description: "Parameter to indicate if AWS CloudHSM key is blocked for any data plane operation.",
 			},
 			"aws_custom_key_store_id": schema.StringAttribute{
 				Computed:    true,
@@ -402,46 +397,16 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					},
 				},
 			},
-			"local_hosted_params": schema.ListNestedBlock{
-				Description: "Parameters for a AWS XKS key.",
-				Validators: []validator.List{
-					listvalidator.SizeAtMost(1),
-				},
-				NestedObject: schema.NestedBlockObject{
-					Attributes: map[string]schema.Attribute{
-						"blocked": schema.BoolAttribute{
-							Required:    true,
-							Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
-						},
-						"custom_key_store_id": schema.StringAttribute{
-							Required:    true,
-							Description: "ID of the custom keystore where XKS key is to be created.",
-						},
-						"source_key_id": schema.StringAttribute{
-							Required:    true,
-							Description: "ID of the source key for AWS XKS key.",
-						},
-						"source_key_tier": schema.StringAttribute{
-							Required:    true,
-							Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
-						},
-						"linked": schema.BoolAttribute{
-							Required:    true,
-							Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
-						},
-					},
-				},
-			},
 		},
 	}
 }
 
-func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Create]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> Create]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
 	var (
-		plan     AWSXKSKeyTFSDK
+		plan     AWSCloudHSMKeyTFSDK
 		response string
 	)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -452,13 +417,8 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	localHostedParamsJSON := r.getLocalHostedParams(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	payload := CreateXKSKeyInputPayloadJSON{
-		AWSParams:                        *awsParams,
-		XKSKeyLocalHostedInputParamsJSON: *localHostedParamsJSON,
+	payload := CreateCloudHSMKeyInputPayloadJSON{
+		AWSParams: *awsParams,
 	}
 	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -484,15 +444,16 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		msg := "Error creating AWS XKS key, invalid data input."
+		msg := "Error creating AWS CloudHSM key, invalid data input."
 		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS_KEY, payloadJSON)
+	customKeyStoreID := plan.CustomKeyStoreID.ValueString()
+	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+customKeyStoreID+"/create-aws-key", payloadJSON)
 	if err != nil {
-		msg := "Error creating AWS XKS key."
+		msg := "Error creating AWS CloudHSM key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
@@ -524,26 +485,31 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error reading AWS XKS key."
+		msg := "Error reading AWS CloudHSM key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	plannedAlias := plan.Alias
 	var diags diag.Diagnostics
-	r.setXKSKeyState(ctx, response, &plan, &diags)
+	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &diags)
+	if !reflect.DeepEqual(plan.Alias, plannedAlias) {
+		// Alias not always coming back in Create response, it is set in AWS
+		plan.Alias = plannedAlias
+	}
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Create][response:"+response)
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+response)
 }
 
-func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> Read]["+id+"]")
-	var state AWSXKSKeyTFSDK
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Read]["+id+"]")
+	var state AWSCloudHSMKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -551,16 +517,16 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	keyID := state.ID.ValueString()
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error reading AWS XKS key."
+		msg := "Error reading AWS CloudHSM key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	description := state.Description
-	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
+	setCommonKeyStoreKeyState(ctx, response, &state.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		msg := "Error reading AWS XKS key, failed to set resource state."
+		msg := "Error reading AWS CloudHSM key, failed to set resource state."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
@@ -573,16 +539,16 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Read][response:"+response)
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Read][response:"+response)
 }
 
-func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> Update]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Update]["+id+"]")
 	var (
-		plan  AWSXKSKeyTFSDK
-		state AWSXKSKeyTFSDK
+		plan  AWSCloudHSMKeyTFSDK
+		state AWSCloudHSMKeyTFSDK
 	)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -596,29 +562,15 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	plan.KeyID = types.StringValue(keyID)
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error updating AWS XKS key. Failed to read key."
+		msg := "Error updating AWS CloudHSM key. Failed to read key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	if len(plan.LocalHostParams.Elements()) != 0 {
-		localHostedParamsJSON := r.getLocalHostedParams(ctx, &plan, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		r.blockUnblockXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		r.linkUnlinkXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error updating AWS XKS key. Failed to read key."
+		msg := "Error updating AWS CloudHSM key. Failed to read key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
@@ -661,16 +613,16 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
-		msg := "Error reading AWS XKS key."
+		msg := "Error reading AWS CloudHSM key."
 		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	description := plan.Description
-	r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
+	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		msg := "Error updating AWS XKS key, failed to set resource state."
+		msg := "Error updating AWS CloudHSM key, failed to set resource state."
 		details := apiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
@@ -687,14 +639,14 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Update][response:"+response)
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Update][response:"+response)
 }
 
-func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Delete]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> Delete]["+id+"]")
-	var state AWSXKSKeyTFSDK
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Delete]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Delete]["+id+"]")
+	var state AWSCloudHSMKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -710,7 +662,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 	if gjson.Get(response, "linked_state").Bool() {
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		if keyState == "PendingDeletion" {
-			msg := "AWS XKS key is already pending deletion, it will be removed from state."
+			msg := "AWS CloudHSM key is already pending deletion, it will be removed from state."
 			details := apiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
@@ -721,7 +673,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		}
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			msg := "Error deleting AWS XKS key, invalid data input."
+			msg := "Error deleting AWS CloudHSM key, invalid data input."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
@@ -729,7 +681,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		}
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
-			msg := "Error deleting AWS XKS key."
+			msg := "Error deleting AWS CloudHSM key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
@@ -737,177 +689,12 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 	} else {
 		_, err := r.client.DeleteByURL(ctx, keyID, common.URL_AWS_KEY+"/"+keyID)
 		if err != nil {
-			msg := "Error deleting AWS XKS Key."
+			msg := "Error deleting AWS CloudHSM Key."
 			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
 	}
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Delete][response:"+response)
-}
-
-func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
-	state.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
-	setCommonKeyStoreKeyState(ctx, response, &state.AWSKeyStoreKeyCommonTFSDK, diags)
-}
-
-func setCommonKeyStoreKeyState(ctx context.Context, response string, state *AWSKeyStoreKeyCommonTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyState(response, &state.AWSKeyCommonTFSDK, diags)
-	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
-	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
-	state.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
-	state.KeySourceContainerID = types.StringValue(gjson.Get(response, "key_source_container_id").String())
-	state.KeySourceContainerName = types.StringValue(gjson.Get(response, "key_source_container_name").String())
-	state.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
-	if state.Linked.ValueBool() {
-		setCommonKeyStateEx(ctx, response, &state.AWSKeyCommonTFSDK, diags)
-	} else {
-		var d diag.Diagnostics
-		state.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
-		state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-		labels := make(map[string]string)
-		state.Labels, d = types.MapValueFrom(ctx, types.StringType, labels)
-		if d.HasError() {
-			diags.Append(d...)
-		}
-		state.PolicyTemplateTag = types.MapNull(types.StringType)
-		policy := gjson.Get(response, "aws_param.Policy").String()
-		state.Policy = types.StringValue(policy)
-		if len(state.Alias.Elements()) == 0 {
-			var aliases []attr.Value
-			state.Alias, d = types.SetValue(types.StringType, aliases)
-			if d.HasError() {
-				diags.Append(d...)
-			}
-		}
-		if len(state.Tags.Elements()) == 0 {
-			tags := make(map[string]string)
-			var d diag.Diagnostics
-			state.Tags, d = types.MapValueFrom(ctx, types.StringType, tags)
-			if d.HasError() {
-				diags.Append(d...)
-			}
-		}
-	}
-	state.Region = types.StringValue(gjson.Get(response, "region").String())
-}
-
-func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
-	keyID := plan.ID.ValueString()
-	planBlocked := localHostedParamsJSON.Blocked
-	keyBlocked := gjson.Get(keyJSON, "blocked").Bool()
-	if keyBlocked != planBlocked {
-		if planBlocked {
-			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/block")
-			if err != nil {
-				msg := "Error blocking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				diags.AddError(details, "")
-				tflog.Error(ctx, details)
-			}
-		} else {
-			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/unblock")
-			if err != nil {
-				msg := "Error unblocking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				diags.AddError(details, "")
-				tflog.Error(ctx, details)
-			}
-		}
-	}
-}
-
-func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
-	keyID := gjson.Get(keyJSON, "id").String()
-	planLinked := localHostedParamsJSON.LinkedState
-	keyLinked := gjson.Get(keyJSON, "linked_state").Bool()
-	if keyLinked != planLinked {
-		if planLinked {
-			awsParams := getKeyStoreCommonAWSParams(ctx, &plan.AWSKeyStoreKeyCommonTFSDK, diags)
-			if diags.HasError() {
-				return
-			}
-			payload := LinkXKSKeyAWSParamsJSON{
-				AWSParams: *awsParams,
-			}
-			if plan.BypassPolicyLockoutSafetyCheck.ValueBool() != types.BoolNull().ValueBool() {
-				payload.BypassPolicyLockoutSafetyCheck = plan.BypassPolicyLockoutSafetyCheck.ValueBoolPointer()
-			}
-			payloadJSON, err := json.Marshal(payload)
-			if err != nil {
-				msg := "Error linking AWS XKS key, invalid data input."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/link", payloadJSON)
-			if err != nil {
-				msg := "Error linking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-		} else {
-			msg := "Changing an AWS XKS key resource from linked to unlinked state is not supported."
-			diags.AddError(msg, "")
-		}
-	}
-}
-
-func (r *resourceAWSXKSKey) getLocalHostedParams(ctx context.Context, plan *AWSXKSKeyTFSDK, diags *diag.Diagnostics) *XKSKeyLocalHostedInputParamsJSON {
-	var localHostedInputParams XKSKeyLocalHostedInputParamsJSON
-	if !plan.LocalHostParams.IsNull() && len(plan.LocalHostParams.Elements()) != 0 {
-		for _, v := range plan.LocalHostParams.Elements() {
-			var planLocalHostedParams XKSKeyLocalHostedParamsTFSDK
-			diags.Append(tfsdk.ValueAs(ctx, v, &planLocalHostedParams)...)
-			if diags.HasError() {
-				return nil
-			}
-			localHostedInputParams.Blocked = planLocalHostedParams.Blocked.ValueBool()
-			localHostedInputParams.SourceKeyTier = planLocalHostedParams.SourceKeyTier.ValueString()
-			localHostedInputParams.SourceKeyIdentifier = planLocalHostedParams.SourceKeyID.ValueString()
-			localHostedInputParams.CustomKeyStoreID = planLocalHostedParams.CustomKeyStoreID.ValueString()
-			localHostedInputParams.LinkedState = planLocalHostedParams.Linked.ValueBool()
-		}
-	}
-	return &localHostedInputParams
-}
-
-func getKeyStoreCommonAWSParams(ctx context.Context, plan *AWSKeyStoreKeyCommonTFSDK, diags *diag.Diagnostics) *XKSKeyCommonAWSParamsJSON {
-	var awsParams XKSKeyCommonAWSParamsJSON
-	if plan.Description.ValueString() != "" {
-		awsParams.Description = plan.Description.ValueStringPointer()
-	}
-	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, diags)
-	if diags.HasError() {
-		return nil
-	}
-	if keyPolicy.Policy != nil {
-		awsParams.Policy = keyPolicy.Policy
-	}
-	if len(plan.Tags.Elements()) != 0 {
-		tags := getTagsParam(ctx, &plan.AWSKeyCommonTFSDK, diags)
-		if diags.HasError() {
-			return nil
-		}
-		for _, t := range tags {
-			tag := AWSKeyParamTagJSON{
-				TagKey:   t.TagKey,
-				TagValue: t.TagValue,
-			}
-			awsParams.Tags = append(awsParams.Tags, &tag)
-		}
-	}
-	if len(plan.Alias.Elements()) != 0 {
-		aliases := make([]string, 0, len(plan.Alias.Elements()))
-		diags.Append(plan.Alias.ElementsAs(ctx, &aliases, false)...)
-		if diags.HasError() {
-			return nil
-		}
-		awsParams.Alias = aliases[0]
-	}
-	return &awsParams
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Delete][response:"+response)
 }

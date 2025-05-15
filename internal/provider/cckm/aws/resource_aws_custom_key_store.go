@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -165,6 +166,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						},
 						"xks_proxy_connectivity": schema.StringAttribute{
 							Optional:    true,
+							Computed:    true,
 							Description: "Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.",
 							Validators: []validator.String{
 								stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...),
@@ -172,6 +174,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						},
 						"xks_proxy_uri_endpoint": schema.StringAttribute{
 							Optional:    true,
+							Computed:    true,
 							Description: "Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. This field is required for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"xks_proxy_uri_path": schema.StringAttribute{
@@ -203,6 +206,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						},
 						"health_check_key_id": schema.StringAttribute{
 							Optional:    true,
+							Computed:    true,
 							Description: "ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. Required field for custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"linked_state": schema.BoolAttribute{
@@ -234,6 +238,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						},
 						"source_key_tier": schema.StringAttribute{
 							Optional:    true,
+							Computed:    true,
 							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.",
 							Validators: []validator.String{
 								stringvalidator.OneOf([]string{"local", "luna-hsm"}...),
@@ -340,7 +345,9 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		awsParamJSON.KeyStorePassword = planAWSParamTFSDK.KeyStorePassword.ValueString()
 	}
 	if planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != "" && planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != types.StringNull().ValueString() {
-		awsParamJSON.TrustAnchorCertificate = planAWSParamTFSDK.TrustAnchorCertificate.ValueString()
+		cert := planAWSParamTFSDK.TrustAnchorCertificate.ValueString()
+		strings.Replace(cert, "\r\n", "\n", -1)
+		awsParamJSON.TrustAnchorCertificate = cert
 	}
 	if planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != "" && planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != types.StringNull().ValueString() {
 		awsParamJSON.XKSProxyConnectivity = planAWSParamTFSDK.XKSProxyConnectivity.ValueString()
@@ -425,12 +432,9 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			}
 			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
 
-			var payload AWSCustomKeyStoreJSON
-			var awsParamJSON AWSParamJSON
-			if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
-				awsParamJSON.KeyStorePassword = common.TrimString(planAWSParamTFSDK.KeyStorePassword.String())
+			payload := AWSCustomKeyStoreConnectPayloadJSON{
+				KeyStorePassword: common.TrimString(awsParamJSON.KeyStorePassword),
 			}
-			payload.AWSParams = &awsParamJSON
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> connect]["+plan.ID.ValueString()+"]")
@@ -754,12 +758,9 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			}
 			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
 
-			var payload AWSCustomKeyStoreJSON
-			var awsParamJSON AWSParamJSON
-			if planAWSParamTFSDK.KeyStorePassword.ValueString() != "" && planAWSParamTFSDK.KeyStorePassword.ValueString() != types.StringNull().ValueString() {
-				awsParamJSON.KeyStorePassword = common.TrimString(planAWSParamTFSDK.KeyStorePassword.String())
+			payload := AWSCustomKeyStoreConnectPayloadJSON{
+				KeyStorePassword: common.TrimString(stateAWSParamTFSDK.KeyStorePassword.ValueString()),
 			}
-			payload.AWSParams = &awsParamJSON
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> connect]["+plan.ID.ValueString()+"]")
@@ -1104,13 +1105,13 @@ func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id strin
 		if err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse); err != nil {
 			return "", err
 		}
+		tflog.Trace(ctx, fmt.Sprintf("ConnectionState: %s (attempt %d/%d)", awsParamJSONResponse.ConnectionState, attempt, maxRetries))
 		if awsParamJSONResponse.ConnectionState == wantState {
 			return response, nil
 		}
 		if awsParamJSONResponse.ConnectionState == StateFailed {
 			break
 		}
-		tflog.Debug(ctx, fmt.Sprintf("Operation failed (attempt %d/%d): %v", attempt, maxRetries, err))
 	}
 
 	return "", fmt.Errorf("operation failed after %d retries: %v", maxRetries, err)
