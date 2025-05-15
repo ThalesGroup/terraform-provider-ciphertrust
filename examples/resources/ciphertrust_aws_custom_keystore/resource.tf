@@ -1,4 +1,3 @@
-# Pre-requisites for EXTERNAL_KEY_STORE and AWS_CLOUDHSM Key store - AWS connection, AWS KMS
 # Create an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws_connection_name"

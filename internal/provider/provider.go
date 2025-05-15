@@ -385,6 +385,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		cckm.NewDataSourceAWSCustomKeyStore,
 		cckm.NewDataSourceAWSXKSKeys,
 		cckm.NewDataSourceAWSKms,
+		cckm.NewDataSourceAWSCloudHSMKeys,
 	}
 }
 
@@ -439,5 +440,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cckm.NewResourceAWSPolicyTemplate,
 		cckm.NewResourceAWSCustomKeyStore,
 		cckm.NewResourceAWSXKSKey,
+		cckm.NewResourceAWSCloudHSMKey,
 	}
 }

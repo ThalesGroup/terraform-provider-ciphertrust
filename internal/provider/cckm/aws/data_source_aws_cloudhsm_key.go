@@ -3,7 +3,6 @@ package cckm
 import (
 	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/url"
 	"regexp"
 	"strings"
@@ -22,15 +21,15 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSXKSKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSXKSKey{}
+	_ datasource.DataSource              = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSourceWithConfigure = &dataSourceAWSCloudHSMKey{}
 )
 
-func NewDataSourceAWSXKSKeys() datasource.DataSource {
-	return &dataSourceAWSXKSKey{}
+func NewDataSourceAWSCloudHSMKeys() datasource.DataSource {
+	return &dataSourceAWSCloudHSMKey{}
 }
 
-func (d *dataSourceAWSXKSKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSCloudHSMKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -45,16 +44,16 @@ func (d *dataSourceAWSXKSKey) Configure(ctx context.Context, req datasource.Conf
 	d.client = client
 }
 
-type dataSourceAWSXKSKey struct {
+type dataSourceAWSCloudHSMKey struct {
 	client *common.Client
 }
 
-func (d *dataSourceAWSXKSKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_aws_xks_key"
+func (d *dataSourceAWSCloudHSMKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_aws_cloudhsm_key"
 }
-func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve the AWS XKS key by id.",
+		Description: "Use this data source to retrieve the AWS CloudHSM key by id.",
 		Attributes: map[string]schema.Attribute{
 			// Optional input parameters
 			"region": schema.StringAttribute{
@@ -91,11 +90,11 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"customer_master_key_spec": schema.StringAttribute{
 				Computed:    true,
-				Description: "Key specification",
+				Description: "Key specification.",
 			},
 			"description": schema.StringAttribute{
 				Computed:    true,
-				Description: "Description of the AWS XKS key.",
+				Description: "Description of the AWS CloudHSM key.",
 			},
 			"enable_key": schema.BoolAttribute{
 				Computed:    true,
@@ -123,8 +122,7 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"aws_key_id": schema.StringAttribute{
 				Computed:    true,
-				Optional:    true,
-				Description: "AWS XKS key ID.",
+				Description: "AWS key ID.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -145,7 +143,7 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			"encryption_algorithms": schema.ListAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Encryption algorithms of an asymmetric key",
+				Description: "Encryption algorithms of an asymmetric key.",
 			},
 			"expiration_model": schema.StringAttribute{
 				Computed:    true,
@@ -220,12 +218,12 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"policy": schema.StringAttribute{
 				Computed:    true,
-				Description: "AWS XKS key policy.",
+				Description: "AWS CloudHSM key policy.",
 			},
 			"policy_template_tag": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				Description: "AWS XKS key tag for an associated policy template.",
+				Description: "AWS CloudHSM  key tag for an associated policy template.",
 			},
 			"rotated_at": schema.StringAttribute{
 				Computed:    true,
@@ -257,23 +255,15 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			},
 			"linked": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
+				Description: "Parameter to indicate if AWS CloudHSM  key is linked with AWS.",
 			},
 			"blocked": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
-			},
-			"aws_xks_key_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "XKS key ID in AWS.",
+				Description: "Parameter to indicate if AWS CloudHSM  key is blocked for any data plane operation.",
 			},
 			"aws_custom_key_store_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Custom keystore ID in AWS.",
-			},
-			"source_key_tier": schema.StringAttribute{
-				Computed:    true,
-				Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
 			},
 			"kms_id": schema.StringAttribute{
 				Computed: true,
@@ -282,11 +272,11 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 	}
 }
 
-func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
-	var state AWSXKSKeyDataSourceTFSDK
+	var state AWSCloudHSMKeyDataSourceTFSDK
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
 		resp.Diagnostics = append(resp.Diagnostics, diags...)
@@ -338,7 +328,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	d.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
+	d.setCloudHSMKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -347,41 +337,6 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
+func (d *dataSourceAWSCloudHSMKey) setCloudHSMKeyState(ctx context.Context, response string, plan *AWSCloudHSMKeyDataSourceTFSDK, diags *diag.Diagnostics) {
 	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
-	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
-	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
-}
-
-func setCustomKeyStoreKeyCommonState(ctx context.Context, response string, plan *AWSKeyStoreKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyDataSourceState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
-	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
-	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
-	plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
-	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
-	plan.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
-	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
-	if plan.Linked.ValueBool() {
-		plan.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
-		setAliases(response, &plan.Alias, diags)
-		setKeyTags(ctx, response, &plan.Tags, diags)
-	} else {
-		if len(plan.Alias.Elements()) == 0 {
-			var aliases []attr.Value
-			var d diag.Diagnostics
-			plan.Alias, d = types.SetValue(types.StringType, aliases)
-			if d.HasError() {
-				diags.Append(d...)
-			}
-		}
-		if len(plan.Tags.Elements()) == 0 {
-			tags := make(map[string]string)
-			var d diag.Diagnostics
-			plan.Tags, d = types.MapValueFrom(ctx, types.StringType, tags)
-			if d.HasError() {
-				diags.Append(d...)
-			}
-		}
-	}
-	plan.Region = types.StringValue(gjson.Get(response, "region").String())
 }

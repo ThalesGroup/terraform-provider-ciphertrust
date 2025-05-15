@@ -191,14 +191,22 @@ type XKSKeyLocalHostedParamsTFSDK struct {
 }
 
 type AWSXKSKeyTFSDK struct {
+	AWSKeyStoreKeyCommonTFSDK
+	LocalHostParams types.List   `tfsdk:"local_hosted_params"`
+	AWSXKSKeyID     types.String `tfsdk:"aws_xks_key_id"`
+}
+
+type AWSCloudHSMKeyTFSDK struct {
+	AWSKeyStoreKeyCommonTFSDK
+}
+
+type AWSKeyStoreKeyCommonTFSDK struct {
 	AWSKeyCommonTFSDK
-	LocalHostParams        types.List   `tfsdk:"local_hosted_params"`
 	KeySourceContainerName types.String `tfsdk:"key_source_container_name"`
 	KeySourceContainerID   types.String `tfsdk:"key_source_container_id"`
 	CustomKeyStoreID       types.String `tfsdk:"custom_key_store_id"`
 	Linked                 types.Bool   `tfsdk:"linked"`
 	Blocked                types.Bool   `tfsdk:"blocked"`
-	AWSXKSKeyID            types.String `tfsdk:"aws_xks_key_id"`
 	AWSCustomKeyStoreID    types.String `tfsdk:"aws_custom_key_store_id"`
 }
 
@@ -268,6 +276,10 @@ type AWSCustomKeyStoreJSON struct {
 	LinkedState             bool                   `json:"linked_state"`
 	LocalHostedParams       *LocalHostedParamsJSON `json:"local_hosted_params"`
 	KeyStorePassword        string                 `json:"key_store_password"`
+}
+
+type AWSCustomKeyStoreConnectPayloadJSON struct {
+	KeyStorePassword string `json:"key_store_password"`
 }
 
 type AWSKeyParamTagJSON struct {
@@ -500,6 +512,16 @@ type CreateXKSKeyInputPayloadJSON struct {
 	XKSKeyLocalHostedInputParamsJSON `json:"local_hosted_params"`
 }
 
+type CreateCloudHSMKeyInputPayloadJSON struct {
+	AWSParams        XKSKeyCommonAWSParamsJSON `json:"aws_param"`
+	KeyUsers         *[]string                 `json:"key_users"`
+	KeyAdmins        *[]string                 `json:"key_admins"`
+	KeyUsersRoles    *[]string                 `json:"key_users_roles"`
+	KeyAdminsRoles   *[]string                 `json:"key_admins_roles"`
+	ExternalAccounts *[]string                 `json:"external_accounts"`
+	PolicyTemplate   *string                   `json:"policytemplate"`
+}
+
 type AWSKeyDataSourceTFSDK struct {
 	AWSKeyDataSourceCommonTFSDK
 	AutoRotate               types.Bool   `tfsdk:"auto_rotate"`
@@ -559,16 +581,24 @@ type AWSKeyDataSourceCommonTFSDK struct {
 	ValidTo               types.String `tfsdk:"valid_to"`
 }
 
-type AWSXKSKeyDataSourceTFSDK struct {
+type AWSKeyStoreKeyDataSourceCommonTFSDK struct {
 	AWSKeyDataSourceCommonTFSDK
 	KMS                 types.String `tfsdk:"kms"`
 	KMSID               types.String `tfsdk:"kms_id"`
 	CustomKeyStoreID    types.String `tfsdk:"custom_key_store_id"`
 	Linked              types.Bool   `tfsdk:"linked"`
 	Blocked             types.Bool   `tfsdk:"blocked"`
-	AWSXKSKeyID         types.String `tfsdk:"aws_xks_key_id"`
 	AWSCustomKeyStoreID types.String `tfsdk:"aws_custom_key_store_id"`
-	SourceKeyTier       types.String `tfsdk:"source_key_tier"`
+}
+
+type AWSXKSKeyDataSourceTFSDK struct {
+	AWSKeyStoreKeyDataSourceCommonTFSDK
+	AWSXKSKeyID   types.String `tfsdk:"aws_xks_key_id"`
+	SourceKeyTier types.String `tfsdk:"source_key_tier"`
+}
+
+type AWSCloudHSMKeyDataSourceTFSDK struct {
+	AWSKeyStoreKeyDataSourceCommonTFSDK
 }
 
 type AWSEnableXksCredentialRotationJobPayloadJSON struct {

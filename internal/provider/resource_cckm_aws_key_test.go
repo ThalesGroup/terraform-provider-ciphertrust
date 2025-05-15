@@ -238,11 +238,13 @@ func TestCckmAwsKeyNative(t *testing.T) {
 	keyResource := "ciphertrust_aws_key.native_key"
 	schedulerOneName := "tf-" + uuid.NewString()[:8]
 	schedulerTwoName := "tf-" + uuid.NewString()[:8]
+	policyTemplateName := "tf-" + uuid.NewString()[:8]
 	schedulerTwoResource := "ciphertrust_scheduler.scheduler_two"
 	//policyTemplateResource := "ciphertrust_aws_policy_template.policy_template"
 
 	createKeyConfigStr := fmt.Sprintf(createKeyConfig, schedulerOneName, aliasList[0], aliasList[1], awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
 	updateKeyConfigStr := fmt.Sprintf(updateKeyConfig, schedulerOneName, schedulerTwoName, awsKeyPolicy)
+	updateKeyConfigStr2 := fmt.Sprintf(updateKeyConfig2, policyTemplateName)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -330,7 +332,7 @@ func TestCckmAwsKeyNative(t *testing.T) {
 				),
 			},
 			{
-				Config: awsConnectionResource + updateKeyConfig2,
+				Config: awsConnectionResource + updateKeyConfigStr2,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
