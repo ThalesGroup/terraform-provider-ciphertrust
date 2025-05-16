@@ -104,9 +104,9 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 	filters := url.Values{}
-	if state.AwsConnection.ValueString() != "" {
+	if state.AWSConnection.ValueString() != "" {
 		payload := AccountDetailsInputModelJSON{
-			AwsConnection: state.AwsConnection.ValueString(),
+			AWSConnection: state.AWSConnection.ValueString(),
 		}
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
@@ -142,7 +142,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 	for _, resource := range resources {
 		kmsState := AWSKmsDataSourceTFSDK{}
 		kmsState.KmsID = types.StringValue(gjson.Get(resource.String(), "id").String())
-		kmsState.AwsConnection = types.StringValue(gjson.Get(resource.String(), "connect").String())
+		kmsState.AWSConnection = types.StringValue(gjson.Get(resource.String(), "connect").String())
 		kmsState.KmsName = types.StringValue(gjson.Get(resource.String(), "name").String())
 		regionJSON := gjson.Get(resource.String(), "regions").Array()
 		var regions []attr.Value

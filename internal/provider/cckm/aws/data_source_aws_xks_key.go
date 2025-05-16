@@ -49,10 +49,6 @@ type dataSourceAWSXKSKey struct {
 	client *common.Client
 }
 
-type AWSXKSKey struct {
-	AWSXKSKeyDataSourceTFSDK
-}
-
 func (d *dataSourceAWSXKSKey) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_xks_key"
 }
@@ -91,7 +87,7 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 			// Read only parameters
 			"custom_key_store_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "Custom keystore ID in AWS..",
+				Description: "Custom keystore ID in AWS.",
 			},
 			"customer_master_key_spec": schema.StringAttribute{
 				Computed:    true,
@@ -352,11 +348,15 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 }
 
 func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
+	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
+	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
+	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
+}
+
+func setCustomKeyStoreKeyCommonState(ctx context.Context, response string, plan *AWSKeyStoreKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyDataSourceState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
 	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
-	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
-	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
 	plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
 	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
 	plan.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
