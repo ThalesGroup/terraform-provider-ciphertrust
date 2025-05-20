@@ -276,7 +276,7 @@ func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.Schema
 func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_aws_key.go -> Read]")
 	var state AWSCloudHSMKeyDataSourceTFSDK
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
