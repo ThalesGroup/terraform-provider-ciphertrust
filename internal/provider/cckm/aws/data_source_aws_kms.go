@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/url"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -111,7 +112,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
 			msg := "Error reading AWS account details, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -119,7 +120,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
 		if err != nil {
 			msg := "Error reading AWS account details."
-			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -163,7 +164,7 @@ func (d *dataSourceAWSKms) listAwsKms(ctx context.Context, id string, filters ur
 	response, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_KMS, filters)
 	if err != nil {
 		msg := "Error listing AWS KMS."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""

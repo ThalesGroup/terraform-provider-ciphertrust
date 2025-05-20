@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -485,7 +486,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating AWS XKS key, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -493,7 +494,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS_KEY, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS XKS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -525,7 +526,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -552,7 +553,7 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -561,7 +562,7 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS XKS key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -597,7 +598,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS XKS key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -619,7 +620,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS XKS key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -662,7 +663,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -671,7 +672,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS XKS key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -703,7 +704,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
@@ -711,7 +712,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		if keyState == "PendingDeletion" {
 			msg := "AWS XKS key is already pending deletion, it will be removed from state."
-			details := apiError(msg, map[string]interface{}{"key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
 		}
@@ -722,7 +723,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
 			msg := "Error deleting AWS XKS key, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -730,7 +731,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
 			msg := "Error deleting AWS XKS key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 		}
@@ -738,7 +739,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		_, err := r.client.DeleteByURL(ctx, keyID, common.URL_AWS_KEY+"/"+keyID)
 		if err != nil {
 			msg := "Error deleting AWS XKS Key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -802,7 +803,7 @@ func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, p
 			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/block")
 			if err != nil {
 				msg := "Error blocking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				diags.AddError(details, "")
 				tflog.Error(ctx, details)
 			}
@@ -810,7 +811,7 @@ func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, p
 			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/unblock")
 			if err != nil {
 				msg := "Error unblocking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				diags.AddError(details, "")
 				tflog.Error(ctx, details)
 			}
@@ -837,7 +838,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				msg := "Error linking AWS XKS key, invalid data input."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return
@@ -845,7 +846,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 			_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/link", payloadJSON)
 			if err != nil {
 				msg := "Error linking AWS XKS key."
-				details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
 				return

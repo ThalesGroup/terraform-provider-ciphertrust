@@ -9,14 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	cckm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
-
-	"github.com/google/uuid"
-
+	aws "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	cte "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cte"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -380,12 +378,12 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		connections.NewDataSourceAzureConnection,
 		cm.NewDataSourceScheduler,
 		connections.NewDataSourceAWSConnection,
-		cckm.NewDataSourceAWSAccountDetails,
-		cckm.NewDataSourceAWSKeys,
-		cckm.NewDataSourceAWSCustomKeyStore,
-		cckm.NewDataSourceAWSXKSKeys,
-		cckm.NewDataSourceAWSKms,
-		cckm.NewDataSourceAWSCloudHSMKeys,
+		aws.NewDataSourceAWSAccountDetails,
+		aws.NewDataSourceAWSKeys,
+		aws.NewDataSourceAWSCustomKeyStore,
+		aws.NewDataSourceAWSXKSKeys,
+		aws.NewDataSourceAWSKms,
+		aws.NewDataSourceAWSCloudHSMKeys,
 	}
 }
 
@@ -435,11 +433,11 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMProperty,
 		cm.NewResourceCMProxy,
 		cm.NewResourceCMSyslog,
-		cckm.NewResourceCCKMAWSKMS,
-		cckm.NewResourceAWSKey,
-		cckm.NewResourceAWSPolicyTemplate,
-		cckm.NewResourceAWSCustomKeyStore,
-		cckm.NewResourceAWSXKSKey,
-		cckm.NewResourceAWSCloudHSMKey,
+		aws.NewResourceCCKMAWSKMS,
+		aws.NewResourceAWSKey,
+		aws.NewResourceAWSPolicyTemplate,
+		aws.NewResourceAWSCustomKeyStore,
+		aws.NewResourceAWSXKSKey,
+		aws.NewResourceAWSCloudHSMKey,
 	}
 }

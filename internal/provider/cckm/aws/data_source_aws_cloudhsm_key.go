@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -291,7 +292,7 @@ func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.Read
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
 			msg := "Unexpected AWS ARN format."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -299,7 +300,7 @@ func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.Read
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) != 2 {
 			msg := "Unexpected AWS ARN format, unable to extract AWS KID."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
