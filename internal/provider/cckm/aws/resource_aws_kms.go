@@ -258,6 +258,14 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	response, err = r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	if err != nil {
+		msg := "Error reading AWS KMS."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
 	r.setKmsState(response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS KMS, failed to set resource state."

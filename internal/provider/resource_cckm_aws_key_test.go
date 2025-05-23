@@ -639,9 +639,9 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 				},
 				{
 					Config: updateResources,
-					Check: resource.ComposeTestCheckFunc(
-						// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
-						//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
+					Check:  resource.ComposeTestCheckFunc(
+					// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
+					//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
 					),
 				},
 			},
@@ -793,6 +793,9 @@ func testCheckAttributeContains(resourceName string, attributeName string, strin
 			for _, k := range keys {
 				if k == attributeName {
 					found = true
+					//fmt.Printf("found %s\n", attributeName)
+					//fmt.Printf("stringsToFind %v\n", stringsToFind)
+					//fmt.Printf("rs.Primary.Attributes[k]: %v\n", rs.Primary.Attributes[k])
 					for _, str := range stringsToFind {
 						if contains {
 							if !strings.Contains(rs.Primary.Attributes[k], str) {
@@ -803,7 +806,6 @@ func testCheckAttributeContains(resourceName string, attributeName string, strin
 								return fmt.Errorf("error: %s.%s does contain %s", resourceName, attributeName, str)
 							}
 						}
-
 					}
 				}
 			}
@@ -822,6 +824,15 @@ func testVerifyResourceDeleted(resourceType string) resource.TestCheckFunc {
 			if rs.Type == resourceType {
 				return fmt.Errorf("error: resource %s still exists", resourceType)
 			}
+		}
+		return nil
+	}
+}
+
+func testAccListResources() resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		for rn, rs := range s.RootModule().Resources {
+			fmt.Printf("rn: %s rt: %s\n", rn, rs.Type)
 		}
 		return nil
 	}
