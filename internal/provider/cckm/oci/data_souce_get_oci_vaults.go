@@ -156,9 +156,6 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	for _, vault := range data {
-		vault.DefinedTags = definedTags
-		vault.FreeformTags = freeformTags
-
 		ociVault := GetOCIVaultTFSDK{
 			CompartmentID:      types.StringValue(vault.CompartmentID),
 			DisplayName:        types.StringValue(vault.DisplayName),

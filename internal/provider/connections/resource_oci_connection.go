@@ -225,11 +225,18 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 		)
 		return
 	}
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+
 	// The connection has been created, no errors returned after this
 	tflog.Trace(ctx, "[resource_oci_connection.go -> Create Output]["+response+"]")
 
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	r.testConnection(ctx, id, plan.ID.ValueString(), &resp.Diagnostics)
+	var testConnectionDiags diag.Diagnostics
+	r.testConnection(ctx, id, plan.ID.ValueString(), &testConnectionDiags)
+	if resp.Diagnostics.HasError() {
+		for _, d := range testConnectionDiags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+	}
 	response, err = r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
 		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
@@ -239,11 +246,10 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 		)
 		return
 	}
-
-	var diags diag.Diagnostics
-	r.getOciParamsFromResponse(ctx, response, &diags, &plan)
-	if resp.Diagnostics.HasError() {
-		for _, d := range diags {
+	var getParamsDiags diag.Diagnostics
+	r.getOciParamsFromResponse(ctx, response, &getParamsDiags, &plan)
+	if getParamsDiags.HasError() {
+		for _, d := range getParamsDiags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
