@@ -639,9 +639,9 @@ func TestCckmAwsKeyMultiRegion(t *testing.T) {
 				},
 				{
 					Config: updateResources,
-					Check:  resource.ComposeTestCheckFunc(
-					// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
-					//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
+					Check: resource.ComposeTestCheckFunc(
+						// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
+						//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
 					),
 				},
 			},
@@ -793,9 +793,6 @@ func testCheckAttributeContains(resourceName string, attributeName string, strin
 			for _, k := range keys {
 				if k == attributeName {
 					found = true
-					//fmt.Printf("found %s\n", attributeName)
-					//fmt.Printf("stringsToFind %v\n", stringsToFind)
-					//fmt.Printf("rs.Primary.Attributes[k]: %v\n", rs.Primary.Attributes[k])
 					for _, str := range stringsToFind {
 						if contains {
 							if !strings.Contains(rs.Primary.Attributes[k], str) {
