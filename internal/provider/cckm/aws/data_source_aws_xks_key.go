@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -285,7 +286,7 @@ func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaReque
 func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_aws_key.go -> Read]")
 	var state AWSXKSKeyDataSourceTFSDK
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
@@ -301,7 +302,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
 			msg := "Unexpected AWS ARN format."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -309,7 +310,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) != 2 {
 			msg := "Unexpected AWS ARN format, unable to extract AWS KID."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return

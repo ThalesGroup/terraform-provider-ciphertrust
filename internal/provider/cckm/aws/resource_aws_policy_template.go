@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -155,7 +156,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating AWS key policy template, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -163,7 +164,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -190,7 +191,7 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
 	if err != nil {
 		msg := "Error reading AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -198,7 +199,7 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"template id": templateID})
+		details := utils.ApiError(msg, map[string]interface{}{"template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -234,7 +235,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error updating AWS key policy template, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -242,7 +243,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	response, err := r.client.UpdateDataV2(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS key policy template."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -250,7 +251,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS key policy template, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"template id": templateID})
+		details := utils.ApiError(msg, map[string]interface{}{"template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 	}
@@ -269,12 +270,12 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 	if err != nil {
 		if strings.Contains(err.Error(), "has one or more key associated") {
 			msg := "AWS policy template " + templateID + " has one or more keys associated with it so it can't be deleted. This includes keys scheduled for deletion."
-			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
 		} else {
 			msg := "Error deleting AWS policy template " + templateID + "."
-			details := apiError(msg, map[string]interface{}{"error": err.Error()})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 		}
@@ -336,24 +337,24 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, 
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	externalAccounts := gjson.Get(response, "external_accounts").Array()
 	if len(externalAccounts) != 0 {
-		state.ExternalAccounts = stringSliceJSONToSetValue(externalAccounts, diags)
+		state.ExternalAccounts = utils.StringSliceJSONToSetValue(externalAccounts, diags)
 	}
 	state.IsVerified = types.BoolValue(gjson.Get(response, "is_verified").Bool())
 	keyAdmins := gjson.Get(response, "key_admins").Array()
 	if len(keyAdmins) != 0 {
-		state.KeyAdmins = stringSliceJSONToSetValue(keyAdmins, diags)
+		state.KeyAdmins = utils.StringSliceJSONToSetValue(keyAdmins, diags)
 	}
 	keyAdminsRoles := gjson.Get(response, "key_admins_roles").Array()
 	if len(keyAdminsRoles) != 0 {
-		state.KeyAdminsRoles = stringSliceJSONToSetValue(keyAdminsRoles, diags)
+		state.KeyAdminsRoles = utils.StringSliceJSONToSetValue(keyAdminsRoles, diags)
 	}
 	keyUsers := gjson.Get(response, "key_users").Array()
 	if len(keyUsers) != 0 {
-		state.KeyUsers = stringSliceJSONToSetValue(keyUsers, diags)
+		state.KeyUsers = utils.StringSliceJSONToSetValue(keyUsers, diags)
 	}
 	keyUsersRoles := gjson.Get(response, "key_users_roles").Array()
 	if len(keyUsersRoles) != 0 {
-		state.KeyUsersRoles = stringSliceJSONToSetValue(keyUsersRoles, diags)
+		state.KeyUsersRoles = utils.StringSliceJSONToSetValue(keyUsersRoles, diags)
 	}
 	equivalent := getPoliciesAreEqual(ctx, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
 	if !equivalent {
@@ -378,7 +379,7 @@ func getPoliciesAreEqual(ctx context.Context, policy string, planPolicy string, 
 	equivalent, err := policyBytesEqual([]byte(policy), []byte(planPolicy))
 	if err != nil {
 		msg := "Error comparing state and plan key policy'."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return false

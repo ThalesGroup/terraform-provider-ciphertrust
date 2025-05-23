@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -346,7 +347,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	}
 	if planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != "" && planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != types.StringNull().ValueString() {
 		cert := planAWSParamTFSDK.TrustAnchorCertificate.ValueString()
-		strings.Replace(cert, "\r\n", "\n", -1)
+		cert = strings.Replace(cert, "\r\n", "\n", -1)
 		awsParamJSON.TrustAnchorCertificate = cert
 	}
 	if planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != "" && planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != types.StringNull().ValueString() {
@@ -1175,7 +1176,7 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
 			msg := "Failed to enable credential rotation for custom key store, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return
@@ -1183,7 +1184,7 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 		response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/enable-credential-rotation-job", payloadJSON)
 		if err != nil {
 			msg := "Failed to enable credential rotation for AWS key store."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return
@@ -1197,7 +1198,7 @@ func (r *resourceAWSCustomKeyStore) disableCredentialRotation(ctx context.Contex
 	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_XKS+"/"+keyStoreID+"/disable-credential-rotation-job")
 	if err != nil {
 		msg := "Error updating custom key store, failed to disable credential rotation job for AWS key store."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 		diags.AddError(details, "")
 		tflog.Error(ctx, details)
 		return
@@ -1211,7 +1212,7 @@ func setKeyStoreLabels(ctx context.Context, response string, keyStoreID string, 
 		labelsJSON := gjson.Get(response, "labels").Raw
 		if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
 			msg := "Error setting state for custom keystore labels, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
 			return

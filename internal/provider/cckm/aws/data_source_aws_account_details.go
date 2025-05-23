@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -107,7 +108,7 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error reading AWS account details, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -115,13 +116,13 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
 	if err != nil {
 		msg := "Error reading AWS account details."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
-	state.Regions = stringSliceJSONToListValue(gjson.Get(response, "regions").Array(), &resp.Diagnostics)
+	state.Regions = utils.StringSliceJSONToListValue(gjson.Get(response, "regions").Array(), &resp.Diagnostics)
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }

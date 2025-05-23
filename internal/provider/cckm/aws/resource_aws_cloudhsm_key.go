@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -445,7 +446,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -454,7 +455,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+customKeyStoreID+"/create-aws-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -486,7 +487,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -518,7 +519,7 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -527,7 +528,7 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	setCommonKeyStoreKeyState(ctx, response, &state.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS CloudHSM key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -563,15 +564,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS CloudHSM key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-	if err != nil {
-		msg := "Error updating AWS CloudHSM key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -614,7 +607,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -623,7 +616,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS CloudHSM key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -655,7 +648,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
@@ -663,7 +656,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		if keyState == "PendingDeletion" {
 			msg := "AWS CloudHSM key is already pending deletion, it will be removed from state."
-			details := apiError(msg, map[string]interface{}{"key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
 		}
@@ -674,7 +667,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM key, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -682,7 +675,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 		}
@@ -690,7 +683,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		_, err := r.client.DeleteByURL(ctx, keyID, common.URL_AWS_KEY+"/"+keyID)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM Key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
