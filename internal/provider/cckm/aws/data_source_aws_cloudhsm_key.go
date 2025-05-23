@@ -168,7 +168,7 @@ func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.Schema
 			"key_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager Key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -211,11 +211,11 @@ func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.Schema
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"policy": schema.StringAttribute{
 				Computed:    true,

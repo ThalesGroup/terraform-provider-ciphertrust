@@ -207,7 +207,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager Key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -258,11 +258,11 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"policy": schema.StringAttribute{
 				Computed:    true,
@@ -369,7 +369,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						},
 						"policy_template": schema.StringAttribute{
 							Optional:    true,
-							Description: "CipherTrust policy template ID",
+							Description: "CipherTrust Manager policy template ID",
 						},
 					},
 				},

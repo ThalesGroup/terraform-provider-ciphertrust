@@ -264,7 +264,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager Key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -311,11 +311,11 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"multi_region_key_type": schema.StringAttribute{
 				Computed:    true,
@@ -416,7 +416,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						},
 						"policy_template": schema.StringAttribute{
 							Optional:    true,
-							Description: "CipherTrust policy template ID",
+							Description: "CipherTrust Manager policy template ID",
 						},
 					},
 				},
@@ -430,7 +430,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 					Attributes: map[string]schema.Attribute{
 						"key_id": schema.StringAttribute{
 							Required:    true,
-							Description: "CipherTrust key ID of the key to replicate.",
+							Description: "CipherTrust Manager key ID of the key to replicate.",
 						},
 						"import_key_material": schema.BoolAttribute{
 							Optional:    true,
@@ -465,7 +465,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 					Attributes: map[string]schema.Attribute{
 						"source_key_identifier": schema.StringAttribute{
 							Required:    true,
-							Description: "CipherTrust key ID to upload to AWS.",
+							Description: "CipherTrust Manager key ID to upload to AWS.",
 						},
 						"key_expiration": schema.BoolAttribute{
 							Computed:    true,
@@ -477,7 +477,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Computed:    true,
 							Optional:    true,
 							Default:     stringdefault.StaticString("local"),
-							Description: "Source of the key material. Current option is 'local' implying a CipherTrust key. Default is 'local'.",
+							Description: "Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.",
 						},
 						"valid_to": schema.StringAttribute{
 							Optional:    true,
@@ -504,7 +504,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 							Computed:    true,
 							Optional:    true,
 							Default:     stringdefault.StaticString("local"),
-							Description: "Source of the key material. Current option is 'local' implying a CipherTrust key. Default is 'local'.",
+							Description: "Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.",
 						},
 						"key_expiration": schema.BoolAttribute{
 							Computed:    true,
@@ -2276,7 +2276,7 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 		}
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			msg := "Error creating CipherTrust key, invalid data input."
+			msg := "Error creating CipherTrust Manager key, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
@@ -2284,7 +2284,7 @@ func (r *resourceAWSKey) createKeyMaterial(ctx context.Context, id string, impor
 		}
 		response, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 		if err != nil {
-			msg := "Error creating CipherTrust key."
+			msg := "Error creating CipherTrust Manager key."
 			details := utils.ApiError(msg, map[string]interface{}{
 				"error":     err.Error(),
 				"name":      payload.Name,

@@ -62,14 +62,14 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 		Description: kmsResourceDescription,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Description: "The unique identifier of the resource",
+				Description: "The unique identifier of the resource.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"uri": schema.StringAttribute{
-				Description: "A human-readable unique identifier of the resource",
+				Description: "A human-readable unique identifier of the resource.",
 				Computed:    true,
 			},
 			"account": schema.StringAttribute{
