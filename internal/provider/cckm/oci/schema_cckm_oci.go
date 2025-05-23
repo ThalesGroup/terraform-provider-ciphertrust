@@ -1,7 +1,6 @@
 package cckm
 
 import (
-	"encoding/json"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -15,16 +14,16 @@ type GetOCIRegionsDataSourceTFSDK struct {
 }
 
 type GetOCICompartmentTFSDK struct {
-	ID             types.String `tfsdk:"id"`
-	CompartmentID  types.String `tfsdk:"compartment_id"`
-	Name           types.String `tfsdk:"name"`
-	Description    types.String `tfsdk:"description"`
-	TimeCreated    types.String `tfsdk:"time_created"`
-	LifecycleState types.String `tfsdk:"lifecycle_state"`
-	InactiveStatus types.Int64  `tfsdk:"inactive_status"`
-	IsAccessible   types.Bool   `tfsdk:"is_accessible"`
-	FreeformTags   types.String `tfsdk:"freeform_tags"`
-	DefinedTags    types.String `tfsdk:"defined_tags"`
+	ID             types.String         `tfsdk:"id"`
+	CompartmentID  types.String         `tfsdk:"compartment_id"`
+	Name           types.String         `tfsdk:"name"`
+	Description    types.String         `tfsdk:"description"`
+	TimeCreated    types.String         `tfsdk:"time_created"`
+	LifecycleState types.String         `tfsdk:"lifecycle_state"`
+	InactiveStatus types.Int64          `tfsdk:"inactive_status"`
+	IsAccessible   types.Bool           `tfsdk:"is_accessible"`
+	FreeformTags   types.Map            `tfsdk:"freeform_tags"`
+	DefinedTags    map[string]types.Map `tfsdk:"defined_tags"`
 }
 
 type GetOCICompartmentJSON struct {
@@ -101,4 +100,3 @@ type GetOCIVaultsDataSourceModelTFSDK struct {
 	Limit         types.Int64        `tfsdk:"limit"`
 	Vaults        []GetOCIVaultTFSDK `tfsdk:"vaults"`
 }
-

@@ -386,8 +386,9 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		aws.NewDataSourceAWSKms,
 		aws.NewDataSourceAWSCloudHSMKeys,
 		connections.NewDataSourceOCIConnection,
-		oci.NewDataSourceOCIRegions,
-		oci.NewDataSourceOCICompartments,
+		oci.NewDataSourceGetOCIRegions,
+		oci.NewDataSourceGetOCICompartments,
+		oci.NewDataSourceGetOCIVaults,
 	}
 }
 

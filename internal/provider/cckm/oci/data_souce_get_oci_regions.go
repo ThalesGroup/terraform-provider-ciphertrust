@@ -16,15 +16,15 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceOCIRegions{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIRegions{}
+	_ datasource.DataSource              = &dataSourceGetOCIRegions{}
+	_ datasource.DataSourceWithConfigure = &dataSourceGetOCIRegions{}
 )
 
-func NewDataSourceOCIRegions() datasource.DataSource {
-	return &dataSourceOCIRegions{}
+func NewDataSourceGetOCIRegions() datasource.DataSource {
+	return &dataSourceGetOCIRegions{}
 }
 
-func (d *dataSourceOCIRegions) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceGetOCIRegions) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -39,15 +39,15 @@ func (d *dataSourceOCIRegions) Configure(ctx context.Context, req datasource.Con
 	d.client = client
 }
 
-type dataSourceOCIRegions struct {
+type dataSourceGetOCIRegions struct {
 	client *common.Client
 }
 
-func (d *dataSourceOCIRegions) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *dataSourceGetOCIRegions) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_get_oci_regions"
 }
 
-func (d *dataSourceOCIRegions) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *dataSourceGetOCIRegions) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of OCI regions available to the connection.",
 		Attributes: map[string]schema.Attribute{
@@ -64,7 +64,7 @@ func (d *dataSourceOCIRegions) Schema(_ context.Context, _ datasource.SchemaRequ
 	}
 }
 
-func (d *dataSourceOCIRegions) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_regions.go -> Read]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_regions.go -> Read]")
 

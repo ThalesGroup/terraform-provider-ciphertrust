@@ -20,15 +20,15 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceOCICompartments{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCICompartments{}
+	_ datasource.DataSource              = &dataSourceGetOCICompartments{}
+	_ datasource.DataSourceWithConfigure = &dataSourceGetOCICompartments{}
 )
 
-func NewDataSourceOCICompartments() datasource.DataSource {
-	return &dataSourceOCICompartments{}
+func NewDataSourceGetOCICompartments() datasource.DataSource {
+	return &dataSourceGetOCICompartments{}
 }
 
-func (d *dataSourceOCICompartments) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceGetOCICompartments) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -43,15 +43,15 @@ func (d *dataSourceOCICompartments) Configure(ctx context.Context, req datasourc
 	d.client = client
 }
 
-type dataSourceOCICompartments struct {
+type dataSourceGetOCICompartments struct {
 	client *common.Client
 }
 
-func (d *dataSourceOCICompartments) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *dataSourceGetOCICompartments) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_get_oci_compartments"
 }
 
-func (d *dataSourceOCICompartments) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of OCI compartments available to the connection.",
 		Attributes: map[string]schema.Attribute{
@@ -110,7 +110,7 @@ func (d *dataSourceOCICompartments) Schema(_ context.Context, _ datasource.Schem
 	}
 }
 
-func (d *dataSourceOCICompartments) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_compartments.go -> Read]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_compartments.go -> Read]")
 	id := uuid.New().String()
@@ -146,15 +146,6 @@ func (d *dataSourceOCICompartments) Read(ctx context.Context, req datasource.Rea
 		data = append(data, compartments.Data...)
 		nextPage = compartments.NextPage
 	}
-
-	// SARAH
-	//definedTags := make(map[string]map[string]string)
-	//definedTags["one"] = make(map[string]string)
-	//definedTags["one"]["keyOne"] = "valueOne"
-	//definedTags["one"]["keyTwo"] = "valueTwo"
-	//
-	//freeformTags := make(map[string]string)
-	//freeformTags["ff_one"] = "ff_one"
 
 	for _, compartment := range data {
 		//compartment.DefinedTags = definedTags
@@ -203,7 +194,7 @@ func (d *dataSourceOCICompartments) Read(ctx context.Context, req datasource.Rea
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-func (d *dataSourceOCICompartments) fetchCompartments(ctx context.Context, id string,
+func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id string,
 	payload GetOCICompartmentsPayloadJSON, diags *diag.Diagnostics) *GetOCICompartmentsJSON {
 
 	payloadJSON, err := json.Marshal(payload)
