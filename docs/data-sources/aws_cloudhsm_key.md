@@ -42,7 +42,7 @@ data "ciphertrust_aws_cloudhsm_key" "ciphertrust_aws_cloudhsm_key_by_key_id" {
 
 - `alias` (Set of String) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.
 - `arn` (String) The Amazon Resource Name (ARN) of the key.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager Key ID.
 - `region` (String) AWS region to which the key belongs.
 
 ### Read-Only
@@ -78,8 +78,8 @@ data "ciphertrust_aws_cloudhsm_key" "ciphertrust_aws_cloudhsm_key_by_key_id" {
 - `kms_id` (String)
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS CloudHSM  key is linked with AWS.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `origin` (String) Source of the key material.
 - `policy` (String) AWS CloudHSM key policy.
 - `policy_template_tag` (Map of String) AWS CloudHSM  key tag for an associated policy template.
@@ -91,5 +91,3 @@ data "ciphertrust_aws_cloudhsm_key" "ciphertrust_aws_cloudhsm_key_by_key_id" {
 - `tags` (Map of String)
 - `updated_at` (String) Date the key was last updated.
 - `valid_to` (String) Date of key material expiry.
-
-

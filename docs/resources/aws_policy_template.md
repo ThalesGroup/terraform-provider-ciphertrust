@@ -90,5 +90,3 @@ resource "ciphertrust_aws_key" "aws_key" {
 
 - `id` (String) The ID of this resource.
 - `is_verified` (Boolean) If true, the policy template has been applied.
-
-

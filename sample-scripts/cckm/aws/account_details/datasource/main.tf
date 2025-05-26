@@ -1,7 +1,8 @@
 terraform {
   required_providers {
     ciphertrust = {
-      source = "thales.com/terraform/ciphertrust"
+      source  = "ThalesGroup/ciphertrust"
+      version = "1.0.0-pre3"
     }
   }
 }

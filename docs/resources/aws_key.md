@@ -173,7 +173,7 @@ resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
 - `id` (String) AWS region and AWS key identifier separated by a backslash.
 - `key_admins` (Set of String) Key administrators - users.
 - `key_admins_roles` (Set of String) Key administrators - roles.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager Key ID.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
@@ -184,8 +184,8 @@ resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
 - `key_users_roles` (Set of String) Key users - roles.
 - `kms_id` (String) ID of the KMS
 - `labels` (Map of String) A list of key:value pairs associated with the key.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
 - `multi_region_primary_key` (Map of String)
 - `multi_region_replica_keys` (List of Map of String)
@@ -225,7 +225,7 @@ Required:
 Optional:
 
 - `key_expiration` (Boolean) Enable key material expiration. Default is false.
-- `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust key. Default is 'local'.
+- `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.
 - `valid_to` (String) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z.
 
 
@@ -240,7 +240,7 @@ Optional:
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
 - `policy` (String) AWS key policy json.
-- `policy_template` (String) CipherTrust policy template ID
+- `policy_template` (String) CipherTrust Manager policy template ID
 
 
 <a id="nestedblock--replicate_key"></a>
@@ -248,7 +248,7 @@ Optional:
 
 Required:
 
-- `key_id` (String) CipherTrust key ID of the key to replicate.
+- `key_id` (String) CipherTrust Manager key ID of the key to replicate.
 
 Optional:
 
@@ -263,12 +263,10 @@ Optional:
 
 Required:
 
-- `source_key_identifier` (String) CipherTrust key ID to upload to AWS.
+- `source_key_identifier` (String) CipherTrust Manager key ID to upload to AWS.
 
 Optional:
 
 - `key_expiration` (Boolean) Enable key expiration. Default is false.
-- `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust key. Default is 'local'.
+- `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.
 - `valid_to` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. Only valid if 'key_expiration' is true.
-
-
