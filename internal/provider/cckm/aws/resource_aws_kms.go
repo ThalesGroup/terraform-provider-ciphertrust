@@ -62,14 +62,14 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 		Description: kmsResourceDescription,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Description: "The unique identifier of the resource",
+				Description: "The unique identifier of the resource.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"uri": schema.StringAttribute{
-				Description: "A human-readable unique identifier of the resource",
+				Description: "A human-readable unique identifier of the resource.",
 				Computed:    true,
 			},
 			"account": schema.StringAttribute{
@@ -253,6 +253,14 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	response, err := r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS KMS."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	response, err = r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	if err != nil {
+		msg := "Error reading AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")

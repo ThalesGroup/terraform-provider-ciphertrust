@@ -1,14 +1,28 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/tidwall/gjson"
 )
+
+func StringSliceToListValue(inputStrings []string, diags *diag.Diagnostics) basetypes.ListValue {
+	var values []attr.Value
+	for _, item := range inputStrings {
+		values = append(values, types.StringValue(item))
+	}
+	stringList, d := types.ListValue(types.StringType, values)
+	if d.HasError() {
+		diags.Append(d...)
+	}
+	return stringList
+}
 
 func StringSliceJSONToListValue(jsonString []gjson.Result, diags *diag.Diagnostics) basetypes.ListValue {
 	var values []attr.Value
@@ -99,4 +113,47 @@ func ApiError(msg string, details map[string]interface{}) string {
 		}
 	}
 	return str
+}
+
+func GetAclsStateList(ctx context.Context, acslJSON gjson.Result, aclsList *types.List, diags *diag.Diagnostics) {
+	type AclsTFSDK struct {
+		UserID  types.String `tfsdk:"user_id"`
+		Group   types.String `tfsdk:"group"`
+		Actions types.Set    `tfsdk:"actions"`
+	}
+	var aclsTfsdk []AclsTFSDK
+	for _, aclJSON := range acslJSON.Array() {
+		var actions []attr.Value
+		for _, item := range gjson.Get(aclJSON.String(), "actions").Array() {
+			actions = append(actions, types.StringValue(item.String()))
+		}
+		var dg diag.Diagnostics
+		actionSet, dg := types.SetValue(types.StringType, actions)
+		if dg.HasError() {
+			diags.Append(dg...)
+			return
+		}
+		aclTfsdk := AclsTFSDK{
+			UserID:  types.StringValue(gjson.Get(aclJSON.String(), "user_id").String()),
+			Group:   types.StringValue(gjson.Get(aclJSON.String(), "group").String()),
+			Actions: actionSet,
+		}
+		aclsTfsdk = append(aclsTfsdk, aclTfsdk)
+	}
+	var dg diag.Diagnostics
+	aclsListValue, dg := types.ListValueFrom(ctx,
+		types.ObjectType{AttrTypes: map[string]attr.Type{
+			"user_id": types.StringType,
+			"group":   types.StringType,
+			"actions": types.SetType{ElemType: types.StringType},
+		}}, aclsTfsdk)
+	if dg.HasError() {
+		diags.Append(dg...)
+		return
+	}
+	*aclsList, dg = aclsListValue.ToListValue(ctx)
+	if dg.HasError() {
+		diags.Append(dg...)
+		return
+	}
 }

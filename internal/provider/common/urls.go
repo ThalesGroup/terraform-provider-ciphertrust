@@ -50,4 +50,7 @@ const (
 	URL_CM_PASSWORD_POLICY    = "api/v1/usermgmt/pwdpolicies"
 	URL_CM_LOG_FORWARDS       = "api/v1/configs/log-forwarders"
 	URL_NTP                   = "api/v1/system/ntp/servers"
+	URL_OCI_CONNECTION        = "api/v1/connectionmgmt/services/oci/connections"
+	URL_OCI_CONNECTION_TEST   = "api/v1/connectionmgmt/services/oci/connection-test"
+	URL_OCI                   = "api/v1/cckm/oci"
 )

@@ -58,5 +58,3 @@ Read-Only:
 - `kms_id` (String) Terraform or CipherTrust AWS KMS resource ID.
 - `kms_name` (String) Name of the AWS KMS.
 - `regions` (List of String) AWS regions assigned to the AWS KMS.
-
-

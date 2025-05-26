@@ -206,7 +206,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -257,11 +257,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"policy": schema.StringAttribute{
 				Computed:    true,
@@ -310,7 +310,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"custom_key_store_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust ID of the CloudHSM keystore where key is to be created.",
+				Description: "CipherTrust Manager ID of the CloudHSM keystore where key is to be created.",
 			},
 			"linked": schema.BoolAttribute{
 				Computed:    true,
@@ -364,7 +364,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 						},
 						"policy_template": schema.StringAttribute{
 							Optional:    true,
-							Description: "CipherTrust policy template ID",
+							Description: "CipherTrust Manager policy template ID",
 						},
 					},
 				},

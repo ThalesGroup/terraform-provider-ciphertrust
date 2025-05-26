@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	aws "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
+	oci "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
@@ -384,6 +385,10 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		aws.NewDataSourceAWSXKSKeys,
 		aws.NewDataSourceAWSKms,
 		aws.NewDataSourceAWSCloudHSMKeys,
+		connections.NewDataSourceOCIConnection,
+		oci.NewDataSourceGetOCIRegions,
+		oci.NewDataSourceGetOCICompartments,
+		oci.NewDataSourceGetOCIVaults,
 	}
 }
 
@@ -439,5 +444,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		aws.NewResourceAWSCustomKeyStore,
 		aws.NewResourceAWSXKSKey,
 		aws.NewResourceAWSCloudHSMKey,
+		connections.NewResourceCCKMOCIConnection,
 	}
 }

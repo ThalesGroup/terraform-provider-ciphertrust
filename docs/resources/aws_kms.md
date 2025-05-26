@@ -76,8 +76,6 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `arn` (String) Amazon Resource Name.
 - `created_at` (String) Date/time the application was created
 - `dev_account` (String) The developer account which owns this resource's application.
-- `id` (String) The unique identifier of the resource
+- `id` (String) The unique identifier of the resource.
 - `updated_at` (String) Date/time the application was updated
-- `uri` (String) A human-readable unique identifier of the resource
-
-
+- `uri` (String) A human-readable unique identifier of the resource.

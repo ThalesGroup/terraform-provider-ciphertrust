@@ -51,5 +51,3 @@ resource "ciphertrust_aws_kms" "kms" {
 
 - `account_id` (String) AWS account ID managed by the connection.
 - `regions` (List of String) AWS regions available for the account.
-
-

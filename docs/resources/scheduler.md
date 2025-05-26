@@ -3,7 +3,7 @@
 page_title: "ciphertrust_scheduler Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Creates a new job configuration. The 'databasebackupparams', 'cckmsynchronizationparams' and 'cckmkeyrotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 ---
 
 # ciphertrust_scheduler (Resource)
@@ -218,6 +218,10 @@ Optional:
 <a id="nestedatt--database_backup_params--filters"></a>
 ### Nested Schema for `database_backup_params.filters`
 
+Required:
+
+- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".
+
 Optional:
 
 - `resource_query` (String) A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
@@ -228,6 +232,3 @@ For Customer fragments, valid resourceQuery parameter values are 'ids' and 'name
 
 Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
 For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"
-- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".
-
-

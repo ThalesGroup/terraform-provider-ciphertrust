@@ -203,7 +203,7 @@ resource "ciphertrust_aws_xks_key" "xks_linked_key_with_cm_as_source_1" {
 - `id` (String) XKS key ID.
 - `key_admins` (Set of String) Key administrators - users.
 - `key_admins_roles` (Set of String) Key administrators - roles.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager Key ID.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
@@ -219,8 +219,8 @@ resource "ciphertrust_aws_xks_key" "xks_linked_key_with_cm_as_source_1" {
 - `kms_id` (String) ID of the KMS
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `region` (String) AWS region in which the XKS key resides.
@@ -257,7 +257,7 @@ Optional:
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
 - `policy` (String) AWS key policy json.
-- `policy_template` (String) CipherTrust policy template ID
+- `policy_template` (String) CipherTrust Manager policy template ID
 
 
 <a id="nestedblock--local_hosted_params"></a>
@@ -270,5 +270,3 @@ Required:
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `source_key_id` (String) ID of the source key for AWS XKS key.
 - `source_key_tier` (String) Source key tier for AWS XKS key. Current option is local. Default is local.
-
-
