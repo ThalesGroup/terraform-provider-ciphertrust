@@ -389,6 +389,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		oci.NewDataSourceGetOCIRegions,
 		oci.NewDataSourceGetOCICompartments,
 		oci.NewDataSourceGetOCIVaults,
+		oci.NewDataSourceOCIVault,
 	}
 }
 
@@ -445,5 +446,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		aws.NewResourceAWSXKSKey,
 		aws.NewResourceAWSCloudHSMKey,
 		connections.NewResourceCCKMOCIConnection,
+		oci.NewResourceCCKMOCIVault,
 	}
 }
