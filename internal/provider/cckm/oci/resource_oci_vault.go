@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
-	"github.com/hashicorp/terraform-plugin-framework/path"
-	"github.com/tidwall/gjson"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -20,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"strings"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -235,13 +234,8 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		msg := "Error adding OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault": payload.VaultIDs[0]})
-		if strings.Contains(err.Error(), "is pending deletion") {
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-		} else {
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-		}
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 	}
 	if gjson.Get(response, "vaults").Exists() {
 		vaultsJSON := gjson.Get(response, "vaults").Array()
