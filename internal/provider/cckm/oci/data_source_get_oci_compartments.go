@@ -4,17 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -97,10 +94,18 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 							Computed:    true,
 							ElementType: types.StringType,
 						},
-						"defined_tags": schema.MapAttribute{
+						"defined_tags": schema.ListNestedAttribute{
 							Computed: true,
-							ElementType: types.MapType{
-								ElemType: types.StringType,
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"tag": schema.StringAttribute{
+										Computed: true,
+									},
+									"values": schema.MapAttribute{
+										Computed:    true,
+										ElementType: types.StringType,
+									},
+								},
 							},
 						},
 					},
@@ -148,9 +153,6 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	}
 
 	for _, compartment := range data {
-		//compartment.DefinedTags = definedTags
-		//compartment.FreeformTags = freeformTags
-
 		compartmentTFSDK := GetOCICompartmentTFSDK{
 			ID:             types.StringValue(compartment.ID),
 			CompartmentID:  types.StringValue(compartment.CompartmentID),
@@ -161,33 +163,13 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 			InactiveStatus: types.Int64Value(compartment.InactiveStatus),
 			IsAccessible:   types.BoolValue(compartment.IsAccessible),
 		}
-
-		freeFormTagsMap := make(map[string]attr.Value)
-		if compartment.FreeformTags != nil {
-			for key, value := range compartment.FreeformTags {
-				freeFormTagsMap[key] = types.StringValue(value)
-			}
-		}
-		var dg diag.Diagnostics
-		compartmentTFSDK.FreeformTags, dg = types.MapValueFrom(ctx, types.StringType, freeFormTagsMap)
-		if dg.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("An error occured creating freeform tag map for oci compartment: %s", compartment.Name))
-			resp.Diagnostics.Append(dg...)
+		setFreeformTagsStateFromMap(ctx, compartment.FreeformTags, &compartmentTFSDK.FreeformTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-
-		compartmentTFSDK.DefinedTags = make(map[string]types.Map)
-		if compartment.DefinedTags != nil {
-			for key, value := range compartment.DefinedTags {
-				var mapValues basetypes.MapValue
-				mapValues, dg = types.MapValueFrom(ctx, types.StringType, value)
-				if dg.HasError() {
-					tflog.Error(ctx, fmt.Sprintf("An error occured creating defined tag map for oci compartment: %s", compartment.Name))
-					resp.Diagnostics.Append(dg...)
-					return
-				}
-				compartmentTFSDK.DefinedTags[key] = mapValues
-			}
+		setDefinedTagsStateFromMap(ctx, compartment.DefinedTags, &compartmentTFSDK.DefinedTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
 		state.Compartments = append(state.Compartments, compartmentTFSDK)
 	}

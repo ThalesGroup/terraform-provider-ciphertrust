@@ -41,7 +41,7 @@ data "ciphertrust_get_oci_compartments" "oci_compartments" {
 Read-Only:
 
 - `compartment_id` (String)
-- `defined_tags` (Map of Map of String)
+- `defined_tags` (Attributes List) (see [below for nested schema](#nestedatt--compartments--defined_tags))
 - `description` (String)
 - `freeform_tags` (Map of String)
 - `id` (String)
@@ -50,3 +50,11 @@ Read-Only:
 - `lifecycle_state` (String)
 - `name` (String)
 - `time_created` (String)
+
+<a id="nestedatt--compartments--defined_tags"></a>
+### Nested Schema for `compartments.defined_tags`
+
+Read-Only:
+
+- `tag` (String)
+- `values` (Map of String)

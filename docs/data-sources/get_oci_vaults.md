@@ -44,7 +44,7 @@ data "ciphertrust_get_oci_vaults" "oci_vaults" {
 Read-Only:
 
 - `compartment_id` (String)
-- `defined_tags` (Map of Map of String)
+- `defined_tags` (Attributes List) (see [below for nested schema](#nestedatt--vaults--defined_tags))
 - `display_name` (String)
 - `freeform_tags` (Map of String)
 - `lifecycle_state` (String)
@@ -52,3 +52,11 @@ Read-Only:
 - `time_created` (String)
 - `vault_id` (String)
 - `vault_type` (String)
+
+<a id="nestedatt--vaults--defined_tags"></a>
+### Nested Schema for `vaults.defined_tags`
+
+Read-Only:
+
+- `tag` (String)
+- `values` (Map of String)

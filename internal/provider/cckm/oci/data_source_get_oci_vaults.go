@@ -10,12 +10,10 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -98,15 +96,23 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 						"vault_type": schema.StringAttribute{
 							Computed: true,
 						},
-						"defined_tags": schema.MapAttribute{
-							Computed: true,
-							ElementType: types.MapType{
-								ElemType: types.StringType,
-							},
-						},
 						"freeform_tags": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
+						},
+						"defined_tags": schema.ListNestedAttribute{
+							Computed: true,
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"tag": schema.StringAttribute{
+										Computed: true,
+									},
+									"values": schema.MapAttribute{
+										Computed:    true,
+										ElementType: types.StringType,
+									},
+								},
+							},
 						},
 					},
 				},
@@ -165,40 +171,20 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 			TimeCreated:        types.StringValue(vault.TimeCreated),
 			VaultType:          types.StringValue(vault.VaultType),
 		}
-		freeFormTagsMap := make(map[string]attr.Value)
-		if vault.FreeformTags != nil {
-			for key, value := range vault.FreeformTags {
-				freeFormTagsMap[key] = types.StringValue(value)
-			}
-		}
-		var dg diag.Diagnostics
-		ociVault.FreeformTags, dg = types.MapValueFrom(ctx, types.StringType, freeFormTagsMap)
-		if dg.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("An error occured creating freeform tag map for oci vault: %s", vault.DisplayName))
-			resp.Diagnostics.Append(dg...)
+		setFreeformTagsStateFromMap(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		ociVault.DefinedTags = make(map[string]types.Map)
-		if vault.DefinedTags != nil {
-			for key, value := range vault.DefinedTags {
-				var tagValuesMap basetypes.MapValue
-				tagValuesMap, dg = types.MapValueFrom(ctx, types.StringType, value)
-				if dg.HasError() {
-					tflog.Error(ctx, fmt.Sprintf("An error occured creating defined tag map for oci vault: %s", vault.DisplayName))
-					resp.Diagnostics.Append(dg...)
-					return
-				}
-				ociVault.DefinedTags[key] = tagValuesMap
-			}
+		setDefinedTagsStateFromMap(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
 		state.Vaults = append(state.Vaults, ociVault)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string,
-	payload GetOCIVaultsPayloadJSON, diags *diag.Diagnostics) *GetOCIVaultsJSON {
-
+func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, payload GetOCIVaultsPayloadJSON, diags *diag.Diagnostics) *GetOCIVaultsJSON {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error reading OCI vaults, invalid data input."

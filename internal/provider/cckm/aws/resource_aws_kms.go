@@ -283,8 +283,8 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 
 func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Update]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Delete]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Delete]["+id+"]")
 	var state KMSModelTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)

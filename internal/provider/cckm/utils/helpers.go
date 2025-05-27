@@ -115,13 +115,14 @@ func ApiError(msg string, details map[string]interface{}) string {
 	return str
 }
 
-func GetAclsStateList(ctx context.Context, acslJSON gjson.Result, aclsList *types.List, diags *diag.Diagnostics) {
-	type AclsTFSDK struct {
-		UserID  types.String `tfsdk:"user_id"`
-		Group   types.String `tfsdk:"group"`
-		Actions types.Set    `tfsdk:"actions"`
-	}
-	var aclsTfsdk []AclsTFSDK
+type AclsTFSDK struct {
+	UserID  types.String `tfsdk:"user_id"`
+	Group   types.String `tfsdk:"group"`
+	Actions types.Set    `tfsdk:"actions"`
+}
+
+func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclsStateList *types.List, diags *diag.Diagnostics) {
+	var aclsTFSDK []AclsTFSDK
 	for _, aclJSON := range acslJSON.Array() {
 		var actions []attr.Value
 		for _, item := range gjson.Get(aclJSON.String(), "actions").Array() {
@@ -138,20 +139,24 @@ func GetAclsStateList(ctx context.Context, acslJSON gjson.Result, aclsList *type
 			Group:   types.StringValue(gjson.Get(aclJSON.String(), "group").String()),
 			Actions: actionSet,
 		}
-		aclsTfsdk = append(aclsTfsdk, aclTfsdk)
+		aclsTFSDK = append(aclsTFSDK, aclTfsdk)
 	}
+	SetAclsStateFromList(ctx, aclsTFSDK, aclsStateList, diags)
+}
+
+func SetAclsStateFromList(ctx context.Context, aclsTFSDK []AclsTFSDK, aclsStateList *types.List, diags *diag.Diagnostics) {
 	var dg diag.Diagnostics
 	aclsListValue, dg := types.ListValueFrom(ctx,
 		types.ObjectType{AttrTypes: map[string]attr.Type{
 			"user_id": types.StringType,
 			"group":   types.StringType,
 			"actions": types.SetType{ElemType: types.StringType},
-		}}, aclsTfsdk)
+		}}, aclsTFSDK)
 	if dg.HasError() {
 		diags.Append(dg...)
 		return
 	}
-	*aclsList, dg = aclsListValue.ToListValue(ctx)
+	*aclsStateList, dg = aclsListValue.ToListValue(ctx)
 	if dg.HasError() {
 		diags.Append(dg...)
 		return
