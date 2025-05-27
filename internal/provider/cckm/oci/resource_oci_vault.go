@@ -130,7 +130,6 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 					},
 				},
 			},
-			// new
 			"compartment_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Compartment OCID.",
