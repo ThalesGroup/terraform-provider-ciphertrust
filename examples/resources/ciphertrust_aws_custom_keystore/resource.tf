@@ -1,4 +1,4 @@
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws_connection_name"
 }
@@ -11,7 +11,7 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
@@ -22,7 +22,7 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Create an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
+# Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
 # key should be unexportable, undeletable, symmetric AES 256 key
 resource "ciphertrust_cm_key" "cm_aes_key" {
   name         = "aes-key-name"
@@ -36,7 +36,7 @@ output "cm_aes_key" {
   value = ciphertrust_cm_key.cm_aes_key
 }
 
-# Create unlinked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
+# Define unlinked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
 resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore_for_cm_as_source" {
   depends_on = [
     ciphertrust_aws_kms.kms,
@@ -64,7 +64,7 @@ output "unlinked_xks_custom_keystore_for_cm_as_source" {
   value = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore_for_cm_as_source
 }
 
-# Create linked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
+# Define linked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
 resource "ciphertrust_aws_custom_keystore" "linked_xks_custom_keystore_for_cm_as_source" {
   depends_on = [
     ciphertrust_aws_kms.kms,

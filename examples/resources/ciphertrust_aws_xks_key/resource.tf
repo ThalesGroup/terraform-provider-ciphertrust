@@ -1,4 +1,4 @@
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name              = "aws_connection_name"
   access_key_id     = "access-key-id"
@@ -13,7 +13,7 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
@@ -24,7 +24,7 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Create an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
+# Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
 # key should be unexportable, undeletable, symmetric AES 256 key
 resource "ciphertrust_cm_key" "cm_aes_key" {
   name         = "aes-key-name"
@@ -34,7 +34,7 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
   undeletable  = true
 }
 
-# Create a policy template using key users and roles
+# Define a policy template using key users and roles
 resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   name             = "template-with-users-and-roles-test"
   kms              = ciphertrust_aws_kms.kms.id
@@ -44,7 +44,7 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   key_users_roles  = ["key-users-roles"]
 }
 
-# Create unlinked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
+# Define unlinked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
 resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore_for_cm_as_source" {
   depends_on = [
     ciphertrust_aws_kms.kms,
@@ -70,7 +70,7 @@ resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore_for_cm_
 
 # Set blocked = true to block above unlinked keystore
 
-# Create an unlinked XKS key with cm as key source in above unlinked external key store
+# Define an unlinked XKS key with cm as key source in above unlinked external key store
 resource "ciphertrust_aws_xks_key" "xks_unlinked_key_with_cm_as_source_1" {
   depends_on = [
     ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore_for_cm_as_source,
@@ -96,7 +96,7 @@ resource "ciphertrust_aws_xks_key" "xks_unlinked_key_with_cm_as_source_1" {
   }
 }
 
-# Create linked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
+# Define linked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
 resource "ciphertrust_aws_custom_keystore" "linked_xks_custom_keystore_for_cm_as_source" {
   depends_on = [
     ciphertrust_aws_kms.kms,
@@ -123,7 +123,7 @@ resource "ciphertrust_aws_custom_keystore" "linked_xks_custom_keystore_for_cm_as
 # Set connect_disconnect_keystore = CONNECT_KEYSTORE to connect above linked keystore
 # Set blocked = true to block above linked keystore
 
-# Create an linked XKS key with cm as key source in above linked external key store
+# Define an linked XKS key with cm as key source in above linked external key store
 resource "ciphertrust_aws_xks_key" "xks_linked_key_with_cm_as_source_1" {
   depends_on = [
     ciphertrust_aws_custom_keystore.linked_xks_custom_keystore_for_cm_as_source,
