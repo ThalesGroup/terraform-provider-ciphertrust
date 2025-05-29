@@ -13,7 +13,7 @@ Use this resource to create an AWS CloudHSM key.
 ## Example Usage
 
 ```terraform
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws_connection_name"
 }
@@ -23,7 +23,7 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
@@ -34,7 +34,7 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = ["us-west-1"]
 }
 
-## Create cloudHSM keystore
+## Define cloudHSM keystore
 resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
   depends_on = [
     ciphertrust_aws_kms.kms,
@@ -74,7 +74,7 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
 }
 
 
-# Create a policy template using key users and roles
+# Define a policy template using key users and roles
 resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   name             = "template-with-users-and-roles-test"
   kms              = ciphertrust_aws_kms.kms.id
@@ -84,7 +84,7 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   key_users_roles  = ["key-users-roles"]
 }
 
-# Create a cloudhsm key in cloudhsm keystore
+# Define a cloudhsm key in cloudhsm keystore
 resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
   custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_custom_keystore.id
   description = "desc for cloudhsm_key_1"

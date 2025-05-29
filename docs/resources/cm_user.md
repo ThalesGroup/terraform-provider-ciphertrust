@@ -82,6 +82,7 @@ output "username" {
 
 ### Read-Only
 
+- `id` (String) The ID of this resource.
 - `is_domain_user` (Boolean)
 - `password_change_required` (Boolean)
 - `prevent_ui_login` (Boolean)

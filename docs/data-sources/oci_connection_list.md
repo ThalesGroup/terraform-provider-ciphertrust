@@ -16,7 +16,7 @@ description: |-
 # Terraform Configuration for CipherTrust Provider
 
 # The provider is configured to connect to the CipherTrust appliance and fetch details
-# about the Oracle OCI connection.
+# about Oracle OCI connections.
 
 terraform {
   # Define the required providers for the configuration
