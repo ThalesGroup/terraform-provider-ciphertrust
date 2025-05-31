@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -92,7 +94,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager OCI connection ID or connection name.",
+				Description: "CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use connection name.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"region": schema.StringAttribute{
@@ -108,7 +110,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "Vault name.",
 			},
-			"acls": schema.ListNestedAttribute{
+			"acls": schema.SetNestedAttribute{
 				Computed:    true,
 				Description: "List of ACLs that have been added to the vault.",
 				NestedObject: schema.NestedAttributeObject{
@@ -236,6 +238,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault": payload.VaultIDs[0]})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	if gjson.Get(response, "vaults").Exists() {
 		vaultsJSON := gjson.Get(response, "vaults").Array()
@@ -274,14 +277,22 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 	if err != nil {
 		msg := "Error reading OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
+	if state.Connection.ValueString() == "" {
+		// Don't overwrite what might be connection ID with connection name
+		state.Connection = types.StringValue(gjson.Get(response, "connection").String())
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Import]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Import]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -289,18 +300,19 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Update]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Update]["+id+"]")
-	var (
-		plan  VaultTFSDK
-		state VaultTFSDK
-	)
+
+	var plan VaultTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	var state VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	vaultID := state.ID.ValueString()
 	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
@@ -352,11 +364,12 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating OCI Vault, failed to set resource state."
-		details := utils.ApiError(msg, map[string]interface{}{"kms id": vaultID})
+		details := utils.ApiError(msg, map[string]interface{}{"vault id": vaultID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	state.Connection = plan.Connection
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -376,8 +389,11 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 		msg := "Error deleting OCI Vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
 		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+		if strings.Contains(err.Error(), "NCERRResourceNotFound") {
+			resp.Diagnostics.AddWarning(details, "")
+		} else {
+			resp.Diagnostics.AddError(details, "")
+		}
 	}
 }
 
@@ -408,12 +424,11 @@ func setCommonVaultState(ctx context.Context, response string, state *VaultCommo
 	state.LifecycleState = types.StringValue(gjson.Get(response, "lifecycle_state").String())
 	state.TimeCreated = types.StringValue(gjson.Get(response, "time_created").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
-	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
 	state.VaultType = types.StringValue(gjson.Get(response, "vault_type").String())
 	state.RestoredFromVaultID = types.StringValue(gjson.Get(response, "restored_from_vault_id").String())
 	state.ReplicationID = types.StringValue(gjson.Get(response, "replication_id").String())
-	state.IsPrimary = types.BoolValue(gjson.Get(response, "replication_id").Bool())
-	utils.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
+	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())
+	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.RefreshedAt = types.StringValue(gjson.Get(response, "refreshed_at").String())
 	state.Tenancy = types.StringValue(gjson.Get(response, "tenancy").String())
 	state.Region = types.StringValue(gjson.Get(response, "region").String())

@@ -57,12 +57,12 @@ resource "ciphertrust_oci_vault" "vault" {
 
 # Import an existing OCI vault
 
-## Define a resource for the existing vault with data matching the existing vault
+## Define a resource for the existing vault with values matching the existing vault
 resource "ciphertrust_oci_vault" "imported_vault" {
   region        = "region"
-  connection_id = "connection-name-or-id"
+  connection_id = "connection-name"
   vault_id      = "vault_ocid"
 }
 
 ## Run the terraform import command
-terraform import ciphertrust_oci_vault.imported_vault "ciphertrust_manager_oci_vault_resource_id"
+terraform import ciphertrust_oci_vault.imported_vault "ciphertrust-manager-oci-vault-resource-id"

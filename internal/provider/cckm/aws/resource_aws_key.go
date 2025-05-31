@@ -801,7 +801,8 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		msg := "Error reading AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	keyState := gjson.Get(response, "aws_param.KeyState").String()
 	if keyState == "PendingDeletion" || keyState == "PendingReplicaDeletion" {

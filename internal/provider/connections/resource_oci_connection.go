@@ -465,8 +465,12 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	data.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	data.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
-	data.Meta = common.ParseMap(response, diags, "meta")
-	data.Products = common.ParseArray(response, "products")
+	if len(gjson.Get(response, "meta").String()) > 0 {
+		data.Meta = common.ParseMap(response, diags, "meta")
+	}
+	if len(gjson.Get(response, "products").String()) > 0 {
+		data.Products = common.ParseArray(response, "products")
+	}
 }
 
 func readKeyFileData(ctx context.Context, inputParam string, diags *diag.Diagnostics) string {

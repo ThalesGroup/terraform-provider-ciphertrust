@@ -2,6 +2,7 @@ package cckm
 
 import (
 	"encoding/json"
+
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -160,7 +161,7 @@ type VaultCommonTFSDK struct {
 	RestoredFromVaultID types.String `tfsdk:"restored_from_vault_id"`
 	ReplicationID       types.String `tfsdk:"replication_id"`
 	IsPrimary           types.Bool   `tfsdk:"is_primary"`
-	Acls                types.List   `tfsdk:"acls"`
+	Acls                types.Set    `tfsdk:"acls"`
 	RefreshedAt         types.String `tfsdk:"refreshed_at"`
 	Tenancy             types.String `tfsdk:"tenancy"`
 	Region              types.String `tfsdk:"region"`

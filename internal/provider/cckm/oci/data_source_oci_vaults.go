@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -107,7 +107,7 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "Vault name.",
 						},
-						"acls": schema.ListNestedAttribute{
+						"acls": schema.SetNestedAttribute{
 							Computed:    true,
 							Description: "List of ACLs that have been added to the vault.",
 							NestedObject: schema.NestedAttributeObject{
@@ -270,7 +270,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 			BucketName:      types.StringValue(bucketName),
 			BucketNamespace: types.StringValue(bucketNamespace),
 		}
-		utils.SetAclsStateFromJSON(ctx, gjson.Get(resourceJSON, "acls"), &vaultTFSDK.Acls, &resp.Diagnostics)
+		acls.SetAclsStateFromJSON(ctx, gjson.Get(resourceJSON, "acls"), &vaultTFSDK.Acls, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
