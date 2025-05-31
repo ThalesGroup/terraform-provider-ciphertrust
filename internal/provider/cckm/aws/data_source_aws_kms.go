@@ -153,6 +153,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		regionsList, dg := types.ListValue(types.StringType, regions)
 		if dg.HasError() {
 			resp.Diagnostics = append(resp.Diagnostics, dg...)
+			return
 		}
 		kmsState.Regions = regionsList
 		state.KmsList = append(state.KmsList, kmsState)

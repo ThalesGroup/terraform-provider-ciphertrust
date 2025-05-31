@@ -254,6 +254,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 		details := utils.ApiError(msg, map[string]interface{}{"template id": templateID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

@@ -659,6 +659,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
+			return
 		}
 		removeKeyPolicyTemplateTag(ctx, id, r.client, response, &resp.Diagnostics)
 		payload := ScheduleForDeletionJSON{
