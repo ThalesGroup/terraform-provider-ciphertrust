@@ -37,11 +37,14 @@ func (r *resourceCMGroup) Metadata(_ context.Context, req resource.MetadataReque
 func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"name": schema.StringAttribute{
-				Required: true,
+			"id": schema.StringAttribute{
+				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"name": schema.StringAttribute{
+				Required: true,
 			},
 			"app_metadata": schema.MapNestedAttribute{
 				Optional: true,
@@ -118,6 +121,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 		)
 		return
 	}
+	plan.ID = plan.Name
 
 	tflog.Debug(ctx, "[resource_cm_user.go -> Create Output]["+response+"]")
 

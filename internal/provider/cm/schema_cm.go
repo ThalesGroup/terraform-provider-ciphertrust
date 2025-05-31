@@ -49,6 +49,7 @@ type CMGroupsDataSourceModelTFSDK struct {
 }
 
 type CMGroupTFSDK struct {
+	ID             types.String `tfsdk:"id"`
 	Name           types.String `tfsdk:"name"`
 	AppMetadata    types.Map    `tfsdk:"app_metadata"`
 	ClientMetadata types.Map    `tfsdk:"client_metadata"`
@@ -397,6 +398,7 @@ type CMRegTokenJSON struct {
 }
 
 type CMUserTFSDK struct {
+	ID                     types.String `tfsdk:"id"`
 	UserID                 types.String `tfsdk:"user_id"`
 	Name                   types.String `tfsdk:"full_name"`
 	UserName               types.String `tfsdk:"username"`

@@ -86,7 +86,7 @@ Optional:
 Read-Only:
 
 - `account` (String) The account which owns this resource.
-- `acls` (Attributes List) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
+- `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
 - `cloud_name` (String) Cloud name.
 - `compartment_id` (String) Compartment OCID.
 - `compartment_name` (String) Compartment name.

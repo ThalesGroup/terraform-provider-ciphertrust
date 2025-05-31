@@ -3,6 +3,7 @@ package cckm
 import (
 	"encoding/json"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -259,4 +260,10 @@ type UpdateExternalVaultJSON struct {
 type UpdateVaultJSON struct {
 	UpdateVaultCommonJSON
 	BucketParamsJSON
+}
+
+type VaultAclTFSDK struct {
+	ID      types.String `tfsdk:"id"`
+	VaultID types.String `tfsdk:"vault_id"`
+	acls.AclCommonTFSDK
 }
