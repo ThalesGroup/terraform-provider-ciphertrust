@@ -3,12 +3,12 @@
 page_title: "ciphertrust_oci_acl Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage OCI vault resources in CipherTrust Manager.
+  Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.
 ---
 
 # ciphertrust_oci_acl (Resource)
 
-Use this resource to create and manage OCI vault resources in CipherTrust Manager.
+Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.
 
 ## Example Usage
 

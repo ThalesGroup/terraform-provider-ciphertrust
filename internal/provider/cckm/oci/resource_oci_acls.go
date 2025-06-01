@@ -89,7 +89,7 @@ var cckmMutex = mutex.NewCCKMMutex()
 
 func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI vault resources in CipherTrust Manager.",
+		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The unique identifier of the resource. This is either vault_id::user_id or vault_id::group_id.",
