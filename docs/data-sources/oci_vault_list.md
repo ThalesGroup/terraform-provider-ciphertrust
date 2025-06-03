@@ -97,6 +97,7 @@ Read-Only:
 - `id` (String) The unique identifier of the resource.
 - `is_primary` (Boolean) True if a primary vault.
 - `lifecycle_state` (String) Current state of the vault.
+- `management_endpoint` (String) Vault endpoint.
 - `name` (String) Vault name.
 - `refreshed_at` (String) Date/time the application was refreshed.
 - `region` (String) OCI region.
@@ -108,6 +109,7 @@ Read-Only:
 - `uri` (String) A human-readable unique identifier of the resource.
 - `vault_id` (String) Vault OCID.
 - `vault_type` (String) OCI Vault type.
+- `wrappingkey_id` (String) Vault wrapping key ID.
 
 <a id="nestedatt--vaults--acls"></a>
 ### Nested Schema for `vaults.acls`

@@ -140,9 +140,17 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "Current state of the vault.",
 						},
+						"management_endpoint": schema.StringAttribute{
+							Computed:    true,
+							Description: "Vault endpoint.",
+						},
 						"vault_type": schema.StringAttribute{
 							Computed:    true,
 							Description: "OCI Vault type.",
+						},
+						"wrappingkey_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "Vault wrapping key ID.",
 						},
 						"time_created": schema.StringAttribute{
 							Computed:    true,
@@ -246,10 +254,12 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 				DisplayName:         types.StringValue(vault.DisplayName),
 				VaultID:             types.StringValue(vault.VaultID),
 				LifecycleState:      types.StringValue(vault.LifecycleState),
+				ManagementEndpoint:  types.StringValue(vault.ManagementEndpoint),
 				TimeCreated:         types.StringValue(vault.TimeCreated),
 				CloudName:           types.StringValue(vault.CloudName),
 				Connection:          types.StringValue(vault.Connection),
 				VaultType:           types.StringValue(vault.VaultType),
+				WrappingkeyID:       types.StringValue(vault.WrappingkeyID),
 				RestoredFromVaultID: types.StringValue(vault.RestoredFromVaultID),
 				ReplicationID:       types.StringValue(vault.ReplicationID),
 				IsPrimary:           types.BoolValue(vault.IsPrimary),

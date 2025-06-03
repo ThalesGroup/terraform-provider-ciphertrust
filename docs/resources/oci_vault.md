@@ -111,6 +111,7 @@ For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f
 - `id` (String) The unique identifier of the resource.
 - `is_primary` (Boolean) True if a primary vault.
 - `lifecycle_state` (String) Current state of the vault.
+- `management_endpoint` (String) OCI Vault endpoint.
 - `name` (String) Vault name.
 - `refreshed_at` (String) Date/time the application was refreshed.
 - `replication_id` (String) OCI replication ID.
@@ -120,6 +121,7 @@ For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f
 - `updated_at` (String) Date/time the application was updated.
 - `uri` (String) A human-readable unique identifier of the resource.
 - `vault_type` (String) OCI Vault type.
+- `wrappingkey_id` (String) OCI Vault wrapping key.
 
 <a id="nestedatt--acls"></a>
 ### Nested Schema for `acls`

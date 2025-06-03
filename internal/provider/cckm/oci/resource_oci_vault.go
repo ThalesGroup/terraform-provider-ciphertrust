@@ -143,9 +143,17 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "Current state of the vault.",
 			},
+			"management_endpoint": schema.StringAttribute{
+				Computed:    true,
+				Description: "OCI Vault endpoint.",
+			},
 			"vault_type": schema.StringAttribute{
 				Computed:    true,
 				Description: "OCI Vault type.",
+			},
+			"wrappingkey_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "OCI Vault wrapping key.",
 			},
 			"time_created": schema.StringAttribute{
 				Computed:    true,
@@ -424,9 +432,11 @@ func setCommonVaultState(ctx context.Context, response string, state *VaultCommo
 	state.CompartmentID = types.StringValue(gjson.Get(response, "compartment_id").String())
 	state.DisplayName = types.StringValue(gjson.Get(response, "display_name").String())
 	state.LifecycleState = types.StringValue(gjson.Get(response, "lifecycle_state").String())
+	state.ManagementEndpoint = types.StringValue(gjson.Get(response, "management_endpoint").String())
 	state.TimeCreated = types.StringValue(gjson.Get(response, "time_created").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.VaultType = types.StringValue(gjson.Get(response, "vault_type").String())
+	state.WrappingkeyID = types.StringValue(gjson.Get(response, "wrappingkey_id").String())
 	state.RestoredFromVaultID = types.StringValue(gjson.Get(response, "restored_from_vault_id").String())
 	state.ReplicationID = types.StringValue(gjson.Get(response, "replication_id").String())
 	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())

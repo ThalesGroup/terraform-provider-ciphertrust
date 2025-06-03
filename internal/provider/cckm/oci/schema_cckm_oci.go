@@ -155,10 +155,12 @@ type VaultCommonTFSDK struct {
 	DisplayName         types.String `tfsdk:"name"`
 	VaultID             types.String `tfsdk:"vault_id"`
 	LifecycleState      types.String `tfsdk:"lifecycle_state"`
+	ManagementEndpoint  types.String `tfsdk:"management_endpoint"`
 	TimeCreated         types.String `tfsdk:"time_created"`
 	CloudName           types.String `tfsdk:"cloud_name"`
 	Connection          types.String `tfsdk:"connection_id"`
 	VaultType           types.String `tfsdk:"vault_type"`
+	WrappingkeyID       types.String `tfsdk:"wrappingkey_id"`
 	RestoredFromVaultID types.String `tfsdk:"restored_from_vault_id"`
 	ReplicationID       types.String `tfsdk:"replication_id"`
 	IsPrimary           types.Bool   `tfsdk:"is_primary"`
