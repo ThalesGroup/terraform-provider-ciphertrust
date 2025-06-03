@@ -154,9 +154,11 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"freeform_tags": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
+				Description: "Freeform tags for the key. A freeform tag is a simple key-value pair with no predefined name, type, or namespace.",
 			},
 			"defined_tags": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Defined tags for the key. A tag consists of namespace, key, and value.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"tag": schema.StringAttribute{

@@ -1386,6 +1386,7 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 	}
 	tStart = time.Now()
 	for retry := 0; retry < numRetries && keyState != "Enabled"; retry++ {
+		time.Sleep(time.Duration(longAwsKeyOpSleep) * time.Second)
 		if time.Since(tStart).Seconds() > refreshTokenSeconds {
 			if err = r.client.RefreshToken(ctx, id); err != nil {
 				msg := "Error replicating AWS key. Error refreshing authentication token."
@@ -1397,7 +1398,6 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 				diags.AddWarning(details, "")
 				return ""
 			}
-			time.Sleep(time.Duration(longAwsKeyOpSleep) * time.Second)
 		}
 		response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {

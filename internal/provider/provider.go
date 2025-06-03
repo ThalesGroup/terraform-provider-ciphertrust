@@ -447,5 +447,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		aws.NewResourceAWSCloudHSMKey,
 		connections.NewResourceCCKMOCIConnection,
 		oci.NewResourceCCKMOCIVault,
+		oci.NewResourceCCKMOCIAcl,
 	}
 }

@@ -43,10 +43,10 @@ func TestCckmOciVault(t *testing.T) {
 			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = data.ciphertrust_get_oci_compartments.compartments.compartments.0.id
-			region = data.ciphertrust_get_oci_regions.regions.regions.0
+			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 		}
 		 resource "ciphertrust_oci_vault" "vault" {
-		   region = data.ciphertrust_get_oci_regions.regions.regions.0
+		   region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 		   connection_id = ciphertrust_oci_connection.connection.name
 		   vault_id = data.ciphertrust_get_oci_vaults.vaults.vaults.0.vault_id
 		}`
@@ -73,10 +73,10 @@ func TestCckmOciVault(t *testing.T) {
 			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = data.ciphertrust_get_oci_compartments.compartments.compartments.0.id
-			region = data.ciphertrust_get_oci_regions.regions.regions.0
+			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 		}
 		resource "ciphertrust_oci_vault" "vault" {
-				region = data.ciphertrust_get_oci_regions.regions.regions.0
+				region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 				connection_id = ciphertrust_oci_connection.connection_two.name
 				vault_id = data.ciphertrust_get_oci_vaults.vaults.vaults.0.vault_id
 		}
@@ -110,7 +110,7 @@ func TestCckmOciVault(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
-					resource.TestCheckResourceAttrPair(vaultResource, "region", regionsDataSource, "regions.0"),
+					resource.TestCheckResourceAttrPair(vaultResource, "region", regionsDataSource, "oci_regions.0"),
 				),
 			},
 			{

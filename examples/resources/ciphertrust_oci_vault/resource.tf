@@ -46,18 +46,18 @@ data "ciphertrust_get_oci_compartments" "compartments" {
 data "ciphertrust_get_oci_vaults" "vaults" {
   connection_id = ciphertrust_oci_connection.connection.name
   compartment_id = data.ciphertrust_get_oci_compartments.compartments.compartments.0.id
-  region         = data.ciphertrust_get_oci_regions.regions.regions.0
+  region         = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 }
 
 resource "ciphertrust_oci_vault" "vault" {
-  region        = data.ciphertrust_get_oci_regions.regions.regions.0
+  region        = data.ciphertrust_get_oci_regions.regions.oci_regions.0
   connection_id = ciphertrust_oci_connection.connection.name
   vault_id      = data.ciphertrust_get_oci_vaults.vaults.vaults.0.vault_id
 }
 
 # Import an existing OCI vault
 
-## Define a resource for the existing vault with values matching the existing vault
+## Define a resource for an existing vault with values matching the vault
 resource "ciphertrust_oci_vault" "imported_vault" {
   region        = "region"
   connection_id = "connection-name"
@@ -65,4 +65,5 @@ resource "ciphertrust_oci_vault" "imported_vault" {
 }
 
 ## Run the terraform import command
-terraform import ciphertrust_oci_vault.imported_vault "ciphertrust-manager-oci-vault-resource-id"
+terraform import ciphertrust_oci_vault.imported_vault ciphertrust-manager-oci-vault-resource-id
+For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b

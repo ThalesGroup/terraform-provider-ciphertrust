@@ -250,7 +250,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	response, err := r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
+	_, err = r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
@@ -258,7 +258,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	response, err = r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
 		msg := "Error reading AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})

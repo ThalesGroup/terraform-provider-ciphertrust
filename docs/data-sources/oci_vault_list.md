@@ -86,14 +86,14 @@ Optional:
 Read-Only:
 
 - `account` (String) The account which owns this resource.
-- `acls` (Attributes List) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
+- `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
 - `cloud_name` (String) Cloud name.
 - `compartment_id` (String) Compartment OCID.
 - `compartment_name` (String) Compartment name.
 - `connection_id` (String) CipherTrust Manager OCI connection ID or connection name.
 - `created_at` (String) Date/time the application was created
-- `defined_tags` (Attributes List) (see [below for nested schema](#nestedatt--vaults--defined_tags))
-- `freeform_tags` (Map of String)
+- `defined_tags` (Attributes List) Defined tags for the key. A tag consists of namespace, key, and value. (see [below for nested schema](#nestedatt--vaults--defined_tags))
+- `freeform_tags` (Map of String) Freeform tags for the key. A freeform tag is a simple key-value pair with no predefined name, type, or namespace.
 - `id` (String) The unique identifier of the resource.
 - `is_primary` (Boolean) True if a primary vault.
 - `lifecycle_state` (String) Current state of the vault.

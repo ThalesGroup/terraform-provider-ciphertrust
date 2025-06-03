@@ -34,12 +34,12 @@ data "ciphertrust_get_oci_compartments" "compartments" {
 data "ciphertrust_get_oci_vaults" "vaults" {
   connection_id  = ciphertrust_oci_connection.connection.name
   compartment_id = data.ciphertrust_get_oci_compartments.compartments.compartments.0.id
-  region         = data.ciphertrust_get_oci_regions.regions.regions.0
+  region         = data.ciphertrust_get_oci_regions.regions.oci_regions.0
 }
 
 # Create an OCI vault using information obtained from above datasources
 resource "ciphertrust_oci_vault" "vault" {
-  region        = data.ciphertrust_get_oci_regions.regions.regions.0
+  region        = data.ciphertrust_get_oci_regions.regions.oci_regions.0
   connection_id = ciphertrust_oci_connection.connection.name
   vault_id      = data.ciphertrust_get_oci_vaults.vaults.vaults.0.vault_id
 }

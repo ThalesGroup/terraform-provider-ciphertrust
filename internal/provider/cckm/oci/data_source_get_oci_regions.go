@@ -55,7 +55,7 @@ func (d *dataSourceGetOCIRegions) Schema(_ context.Context, _ datasource.SchemaR
 				Required:    true,
 				Description: "CipherTrust Manager OCI connection name or ID.",
 			},
-			"regions": schema.ListAttribute{
+			"oci_regions": schema.ListAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
 				Description: "A list of regions available to the connection.",

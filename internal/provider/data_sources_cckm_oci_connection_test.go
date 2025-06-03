@@ -47,13 +47,13 @@ func TestCckmOciDataSourceConnection(t *testing.T) {
 		data "ciphertrust_get_oci_vaults" "vaults_no_limit" {
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = data.ciphertrust_get_oci_compartments.compartments_with_limit.compartments.0.id
-			region = data.ciphertrust_get_oci_regions.regions_by_connection_id.regions.0
+			region = data.ciphertrust_get_oci_regions.regions_by_connection_id.oci_regions.0
 		}
 		data "ciphertrust_get_oci_vaults" "vaults_with_limit" {
 			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = data.ciphertrust_get_oci_compartments.compartments_with_limit.compartments.0.id
-			region = data.ciphertrust_get_oci_regions.regions_by_connection_id.regions.0
+			region = data.ciphertrust_get_oci_regions.regions_by_connection_id.oci_regions.0
 		}`
 
 	name := "tf-" + uuid.New().String()[:8]
@@ -71,8 +71,8 @@ func TestCckmOciDataSourceConnection(t *testing.T) {
 			{
 				Config: connectionConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					testCheckAttributeContains(regionsByName, "regions.#", []string{"0"}, false),
-					testCheckAttributeContains(regionsById, "regions.#", []string{"0"}, false),
+					testCheckAttributeContains(regionsByName, "oci_regions.#", []string{"0"}, false),
+					testCheckAttributeContains(regionsById, "oci_regions.#", []string{"0"}, false),
 					testCheckAttributeContains(compartmentsNoLimit, "compartments.#", []string{"0"}, false),
 					testCheckAttributeContains(compartmentsNoLimit, "compartments.#", []string{"2"}, false),
 					testCheckAttributeContains(compartmentsWithLimit, "compartments.#", []string{"0"}, false),

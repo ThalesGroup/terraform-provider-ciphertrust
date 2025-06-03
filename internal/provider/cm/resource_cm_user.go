@@ -38,11 +38,14 @@ func (r *resourceCMUser) Metadata(_ context.Context, req resource.MetadataReques
 func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"user_id": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"user_id": schema.StringAttribute{
+				Computed: true,
 			},
 			"username": schema.StringAttribute{
 				Required: true,
@@ -140,6 +143,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	plan.UserID = types.StringValue(response)
+	plan.ID = types.StringValue(response)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
