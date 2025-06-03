@@ -41,3 +41,6 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 data "ciphertrust_get_oci_regions" "oci_regions" {
   connection_id = ciphertrust_oci_connection.oci_connection.name
 }
+output "regions" {
+  value = ciphertrust_get_oci_regions.oci_regions
+}

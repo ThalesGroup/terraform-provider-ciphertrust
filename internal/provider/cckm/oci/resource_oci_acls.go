@@ -85,8 +85,6 @@ func (r *resourceCCKMOCIAcl) Configure(_ context.Context, req resource.Configure
 	r.client = client
 }
 
-var cckmMutex = mutex.NewCCKMMutex()
-
 func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.",
@@ -306,22 +304,22 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 
 func (r *resourceCCKMOCIAcl) applyAcls(ctx context.Context, id string, vaultID string, payloadJSON []byte, diags *diag.Diagnostics, ignoreNotFoundErrors bool) string {
 	mutexKey := fmt.Sprintf("ociacls-%s", vaultID)
-	cckmMutex.Lock(mutexKey)
+	mutex.CckmMutex.Lock(mutexKey)
 	response, err := r.client.PostDataV2(ctx, id, common.URL_OCI+"/vaults/"+vaultID+"/update-acls", payloadJSON)
 	if err != nil {
 		if ignoreNotFoundErrors && strings.Contains(err.Error(), "NCERRResourceNotFound") {
-			cckmMutex.Unlock(mutexKey)
+			mutex.CckmMutex.Unlock(mutexKey)
 			return ""
 		} else {
 			msg := "Error updating OCI ACL list."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
-			cckmMutex.Unlock(mutexKey)
+			mutex.CckmMutex.Unlock(mutexKey)
 			return ""
 		}
 	}
-	cckmMutex.Unlock(mutexKey)
+	mutex.CckmMutex.Unlock(mutexKey)
 	return response
 }
 

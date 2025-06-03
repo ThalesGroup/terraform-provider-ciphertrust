@@ -13,7 +13,7 @@ type GetOCIRegionsPayloadJSON struct {
 
 type GetOCIRegionsDataSourceTFSDK struct {
 	Connection types.String `tfsdk:"connection_id"`
-	Regions    types.List   `tfsdk:"regions"`
+	Regions    types.List   `tfsdk:"oci_regions"`
 }
 
 type GetOCICompartmentTFSDK struct {
