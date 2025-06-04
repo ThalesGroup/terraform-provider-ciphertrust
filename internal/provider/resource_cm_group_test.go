@@ -12,12 +12,12 @@ func TestResourceCMGroup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: providerConfig + `
-resource "ciphertrust_cm_group" "testGroup" {
+resource "ciphertrust_groups" "testGroup" {
   name="TestGroup"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_group.testGroup", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "name"),
 				),
 			},
 			//ImportState testing
@@ -30,12 +30,12 @@ resource "ciphertrust_cm_group" "testGroup" {
 			// Update and Read testing
 			{
 				Config: providerConfig + `
-resource "ciphertrust_cm_group" "testGroup" {
+resource "ciphertrust_groups" "testGroup" {
   description="Updated via TF"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_group.testGroup", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "name"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase

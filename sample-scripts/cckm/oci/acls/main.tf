@@ -45,7 +45,7 @@ resource "ciphertrust_oci_vault" "vault" {
 }
 
 # Create a CipherTrust Manager user
-resource "ciphertrust_cm_user" "user" {
+resource "ciphertrust_user" "user" {
   username = "example-user"
   password = "admin"
 }
@@ -53,19 +53,19 @@ resource "ciphertrust_cm_user" "user" {
 # Create an ACL that will be added to the vault for the user
 resource "ciphertrust_oci_acl" "user_acl" {
   vault_id = ciphertrust_oci_vault.vault.id
-  user_id  = ciphertrust_cm_user.user
+  user_id  = ciphertrust_user.user
   actions  = ["view", "keycreate"]
 }
 
 # Create a CipherTrust Manager group
-resource "ciphertrust_cm_group" "group" {
+resource "ciphertrust_groups" "group" {
   name = "example-group"
 }
 
 # Create an ACL that will be added to the vault for the group
 resource "ciphertrust_oci_acl" "group_acl" {
   vault_id = ciphertrust_oci_vault.vault.id
-  group    = ciphertrust_cm_group.group
+  group    = ciphertrust_groups.group
   actions  = ["view", "keyupdate"]
 }
 

@@ -53,21 +53,21 @@ func TestCckmOciAcl(t *testing.T) {
 
 	createACLsConfig := `
 		%s
-		resource "ciphertrust_cm_user" "user" {
+		resource "ciphertrust_user" "user" {
 			username = "%s"
 			password = "admin"
 		}
-		resource "ciphertrust_cm_group" "group" {
+		resource "ciphertrust_groups" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			user_id  = ciphertrust_cm_user.user.id
+			user_id  = ciphertrust_user.user.id
 			actions  = ["view", "keycreate"]
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_cm_group.group.id
+			group    = ciphertrust_groups.group.id
 			actions  = ["view", "keyupdate", "keydelete"]
 		}
 		data "ciphertrust_oci_vault_list" "vault_ds" {
@@ -79,41 +79,41 @@ func TestCckmOciAcl(t *testing.T) {
 
 	addAclActionsConfig := `
 		%s
-		resource "ciphertrust_cm_user" "user" {
+		resource "ciphertrust_user" "user" {
 			username = "%s"
 			password = "admin"
 		}
-		resource "ciphertrust_cm_group" "group" {
+		resource "ciphertrust_groups" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			user_id  = ciphertrust_cm_user.user.id
+			user_id  = ciphertrust_user.user.id
 			actions  = ["view", "keycreate", "keydelete"]
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_cm_group.group.id
+			group    = ciphertrust_groups.group.id
 			actions  = ["view", "keycreate", "keyupdate", "keydelete"]
 		}`
 
 	removeAclActionsConfig := `
 		%s
-		resource "ciphertrust_cm_user" "user" {
+		resource "ciphertrust_user" "user" {
 			username = "%s"
 			password = "admin"
 		}
-		resource "ciphertrust_cm_group" "group" {
+		resource "ciphertrust_groups" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			user_id  = ciphertrust_cm_user.user.id
+			user_id  = ciphertrust_user.user.id
 			actions  = ["view"]
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_cm_group.group.id
+			group    = ciphertrust_groups.group.id
 			actions  = ["view", "keycreate", "keydelete"]
 		}`
 

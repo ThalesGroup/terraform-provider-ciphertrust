@@ -31,21 +31,18 @@ type resourceCMUser struct {
 }
 
 func (r *resourceCMUser) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cm_user"
+	resp.TypeName = req.ProviderTypeName + "_user"
 }
 
 // Schema defines the schema for the resource.
 func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
+			"user_id": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-			},
-			"user_id": schema.StringAttribute{
-				Computed: true,
 			},
 			"username": schema.StringAttribute{
 				Required: true,
@@ -73,6 +70,9 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"password_change_required": schema.BoolAttribute{
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
 			},
 		},
 	}
