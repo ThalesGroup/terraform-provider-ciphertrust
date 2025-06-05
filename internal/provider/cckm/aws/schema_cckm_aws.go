@@ -180,6 +180,7 @@ type AWSKeyTFSDK struct {
 	ReplicaPolicy            types.String `tfsdk:"replica_policy"`
 	ReplicateKey             types.List   `tfsdk:"replicate_key"`
 	UploadKey                types.List   `tfsdk:"upload_key"`
+	RotateKeyMaterial        types.Bool   `tfsdk:"rotate_key_material"`
 }
 
 type XKSKeyLocalHostedParamsTFSDK struct {
