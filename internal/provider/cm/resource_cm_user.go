@@ -73,6 +73,9 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -194,46 +197,55 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMUserTFSDK
-	var loginFlags UserLoginFlagsJSON
-	var payload CMUserJSON
-
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
-
-	payload.Email = common.TrimString(plan.Email.String())
-	payload.Name = common.TrimString(plan.Name.String())
-	payload.Nickname = common.TrimString(plan.Nickname.String())
-	payload.UserName = common.TrimString(plan.UserName.String())
-	payload.Password = common.TrimString(plan.Password.String())
-	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
-	payload.LoginFlags = loginFlags
-	payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Invalid data input: User Update",
-			err.Error(),
-		)
+	var state CMUserTFSDK
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Error creating user on CipherTrust Manager: ",
-			"Could not create user, unexpected error: "+err.Error(),
-		)
-		return
-	}
-	plan.UserID = types.StringValue(response)
+	plan.ID = state.ID
+	plan.UserID = state.UserID
+
+	//var loginFlags UserLoginFlagsJSON
+	//var payload CMUserUpdateJSON
+	//loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
+	//
+	//payload.Email = common.TrimString(plan.Email.String())
+	//payload.Name = common.TrimString(plan.Name.String())
+	//payload.Nickname = common.TrimString(plan.Nickname.String())
+	//payload.UserName = common.TrimString(plan.UserName.String())
+	//payload.Password = common.TrimString(plan.Password.String())
+	//payload.IsDomainUser = plan.IsDomainUser.ValueBool()
+	//payload.LoginFlags = loginFlags
+	//payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+	//
+	//payloadJSON, err := json.Marshal(payload)
+	//if err != nil {
+	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+	//	resp.Diagnostics.AddError(
+	//		"Invalid data input: User Update",
+	//		err.Error(),
+	//	)
+	//	return
+	//}
+	//
+	//response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
+	//if err != nil {
+	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+	//	resp.Diagnostics.AddError(
+	//		"Error creating user on CipherTrust Manager: ",
+	//		"Could not create user, unexpected error: "+err.Error(),
+	//	)
+	//	return
+	//}
+	//plan.UserID = types.StringValue(response)
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
