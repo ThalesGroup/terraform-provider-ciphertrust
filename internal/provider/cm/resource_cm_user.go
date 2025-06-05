@@ -162,7 +162,7 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	// 	return
 	// }
 
-	// users, err := r.client.GetAll(ctx, state.UserID.ValueString(), URL_USER_MANAGEMENT)
+	// users, err := r.client.GetAll(ctx, state.ID.ValueString(), URL_USER_MANAGEMENT)
 	// tflog.Trace(ctx, users)
 	// if err != nil {
 	// 	resp.Diagnostics.AddError(
@@ -224,7 +224,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.UserID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
+	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -252,8 +252,8 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 
 	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_USER_MANAGEMENT, state.UserID.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.UserID.ValueString(), url, nil)
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_USER_MANAGEMENT, state.ID.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Delete]["+state.UserID.ValueString()+"]["+output+"]")
 	if err != nil {
 		resp.Diagnostics.AddError(
