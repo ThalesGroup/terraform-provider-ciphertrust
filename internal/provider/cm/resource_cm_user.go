@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -53,21 +52,25 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"email": schema.StringAttribute{
 				Optional: true,
 			},
-			"full_name": schema.StringAttribute{
-				Optional: true,
+			"name": schema.StringAttribute{
+				Optional:    true,
+				Description: "Users full name",
 			},
 			"password": schema.StringAttribute{
 				Required: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
 			"prevent_ui_login": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
 			"password_change_required": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
@@ -76,6 +79,11 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"user_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Description: "Information that can be stored with the user.",
 			},
 		},
 	}
@@ -123,6 +131,14 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 	if plan.PasswordChangeRequired.ValueBool() != types.BoolNull().ValueBool() {
 		payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+	}
+
+	if len(plan.Metadata.Elements()) != 0 {
+		metadata := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	payloadJSON, err := json.Marshal(payload)
