@@ -79,16 +79,16 @@ data "ciphertrust_get_oci_compartments" "oci_compartments" {
 
 Read-Only:
 
-- `compartment_id` (String)
-- `defined_tags` (Attributes List) (see [below for nested schema](#nestedatt--compartments--defined_tags))
-- `description` (String)
-- `freeform_tags` (Map of String)
+- `compartment_id` (String) The compartment's OCID.
+- `defined_tags` (Attributes Set) The defined tags of the compartment. (see [below for nested schema](#nestedatt--compartments--defined_tags))
+- `description` (String) The compartment's description.
+- `freeform_tags` (Map of String) The freeform tags of the compartment.
 - `id` (String)
-- `inactive_status` (Number)
-- `is_accessible` (Boolean)
-- `lifecycle_state` (String)
-- `name` (String)
-- `time_created` (String)
+- `inactive_status` (Number) The detailed status of the INACTIVE lifecycleState.
+- `is_accessible` (Boolean) Whether or not the compartment is accessible for the user making the request.
+- `lifecycle_state` (String) The compartment's current lifecycle state.
+- `name` (String) The compartment's name.
+- `time_created` (String) The time the compartment was created.
 
 <a id="nestedatt--compartments--defined_tags"></a>
 ### Nested Schema for `compartments.defined_tags`

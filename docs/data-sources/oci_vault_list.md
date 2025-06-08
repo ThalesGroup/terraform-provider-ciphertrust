@@ -87,29 +87,29 @@ Read-Only:
 
 - `account` (String) The account which owns this resource.
 - `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
-- `cloud_name` (String) Cloud name.
-- `compartment_id` (String) Compartment OCID.
+- `cloud_name` (String) CipherTrust Manager cloud name.
+- `compartment_id` (String) The compartment's OCID.
 - `compartment_name` (String) Compartment name.
 - `connection_id` (String) CipherTrust Manager OCI connection ID or connection name.
 - `created_at` (String) Date/time the application was created
-- `defined_tags` (Attributes List) Defined tags for the key. A tag consists of namespace, key, and value. (see [below for nested schema](#nestedatt--vaults--defined_tags))
-- `freeform_tags` (Map of String) Freeform tags for the key. A freeform tag is a simple key-value pair with no predefined name, type, or namespace.
+- `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
+- `freeform_tags` (Map of String) The freeform tags of the vault.
 - `id` (String) The unique identifier of the resource.
-- `is_primary` (Boolean) True if a primary vault.
-- `lifecycle_state` (String) Current state of the vault.
-- `management_endpoint` (String) Vault endpoint.
-- `name` (String) Vault name.
+- `is_primary` (Boolean) Whether the key belongs to a primary vault or a replica vault.
+- `lifecycle_state` (String) The vault's current lifecycle state.
+- `management_endpoint` (String) The vault's management endpoint.
+- `name` (String) The vault's name.
 - `refreshed_at` (String) Date/time the application was refreshed.
-- `region` (String) OCI region.
-- `replication_id` (String) OCI replication ID.
+- `region` (String) The vault's region.
+- `replication_id` (String) The replication ID associated with a vault operation.
 - `restored_from_vault_id` (String) OCID of the vault this vault was restored from.
-- `tenancy` (String) Tenancy name.
-- `time_created` (String) OCI Vault type.
+- `tenancy` (String) The tenancy name.
+- `time_created` (String) The time the vault was created.
 - `updated_at` (String) Date/time the application was updated.
 - `uri` (String) A human-readable unique identifier of the resource.
-- `vault_id` (String) Vault OCID.
-- `vault_type` (String) OCI Vault type.
-- `wrappingkey_id` (String) Vault wrapping key ID.
+- `vault_id` (String) The vault's OCID.
+- `vault_type` (String) The vault's type.
+- `wrappingkey_id` (String) Vault's wrapping key OCID.
 
 <a id="nestedatt--vaults--acls"></a>
 ### Nested Schema for `vaults.acls`

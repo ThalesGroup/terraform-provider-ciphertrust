@@ -82,20 +82,20 @@ data "ciphertrust_get_oci_vaults" "oci_vaults" {
 
 Read-Only:
 
-- `compartment_id` (String)
-- `defined_tags` (Attributes List) (see [below for nested schema](#nestedatt--vaults--defined_tags))
-- `display_name` (String)
-- `freeform_tags` (Map of String)
-- `lifecycle_state` (String)
-- `management_endpoint` (String)
-- `time_created` (String)
-- `vault_id` (String)
-- `vault_type` (String)
+- `compartment_id` (String) The compartment's OCID.
+- `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
+- `display_name` (String) The vault's name.
+- `freeform_tags` (Map of String) The freeform tags of the vault.
+- `lifecycle_state` (String) The vaults's current lifecycle state.
+- `management_endpoint` (String) The vault's management endpoint.
+- `time_created` (String) The time the vault was created in OCI.
+- `vault_id` (String) The vaults OCID.
+- `vault_type` (String) OCI Vault type.
 
 <a id="nestedatt--vaults--defined_tags"></a>
 ### Nested Schema for `vaults.defined_tags`
 
 Read-Only:
 
-- `tag` (String)
-- `values` (Map of String)
+- `tag` (String) The vault's defined tags.
+- `values` (Map of String) The key:vault pair's associated with the tag.
