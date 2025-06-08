@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -12,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
-	"net/url"
 )
 
 var (
@@ -37,7 +38,7 @@ func (d *dataSourceOCIVault) Metadata(_ context.Context, req datasource.Metadata
 	resp.TypeName = req.ProviderTypeName + "_oci_vault_list"
 }
 
-func (d *dataSourceOCIVault) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceOCIVault) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -89,7 +90,7 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"cloud_name": schema.StringAttribute{
 							Computed:    true,
-							Description: "Cloud name.",
+							Description: "CipherTrust Manager cloud name.",
 						},
 						"connection_id": schema.StringAttribute{
 							Computed:    true,
@@ -97,15 +98,15 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"region": schema.StringAttribute{
 							Computed:    true,
-							Description: "OCI region.",
+							Description: "The vault's region.",
 						},
 						"tenancy": schema.StringAttribute{
 							Computed:    true,
-							Description: "Tenancy name.",
+							Description: "The tenancy name.",
 						},
 						"name": schema.StringAttribute{
 							Computed:    true,
-							Description: "Vault name.",
+							Description: "The vault's name.",
 						},
 						"acls": schema.SetNestedAttribute{
 							Computed:    true,
@@ -130,7 +131,7 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "Compartment OCID.",
+							Description: "The compartment's OCID.",
 						},
 						"compartment_name": schema.StringAttribute{
 							Computed:    true,
@@ -138,32 +139,32 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"lifecycle_state": schema.StringAttribute{
 							Computed:    true,
-							Description: "Current state of the vault.",
+							Description: "The vault's current lifecycle state.",
 						},
 						"management_endpoint": schema.StringAttribute{
 							Computed:    true,
-							Description: "Vault endpoint.",
+							Description: "The vault's management endpoint.",
 						},
 						"vault_type": schema.StringAttribute{
 							Computed:    true,
-							Description: "OCI Vault type.",
+							Description: "The vault's type.",
 						},
 						"wrappingkey_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "Vault wrapping key ID.",
+							Description: "Vault's wrapping key OCID.",
 						},
 						"time_created": schema.StringAttribute{
 							Computed:    true,
-							Description: "OCI Vault type.",
+							Description: "The time the vault was created.",
 						},
 						"freeform_tags": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
-							Description: "Freeform tags for the key. A freeform tag is a simple key-value pair with no predefined name, type, or namespace.",
+							Description: "The freeform tags of the vault.",
 						},
-						"defined_tags": schema.ListNestedAttribute{
+						"defined_tags": schema.SetNestedAttribute{
 							Computed:    true,
-							Description: "Defined tags for the key. A tag consists of namespace, key, and value.",
+							Description: "The defined tags of the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"tag": schema.StringAttribute{
@@ -182,15 +183,15 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"replication_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "OCI replication ID.",
+							Description: "The replication ID associated with a vault operation.",
 						},
 						"is_primary": schema.BoolAttribute{
 							Computed:    true,
-							Description: "True if a primary vault.",
+							Description: "Whether the key belongs to a primary vault or a replica vault.",
 						},
 						"vault_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "Vault OCID.",
+							Description: "The vault's OCID.",
 						},
 						"bucket_name": schema.StringAttribute{
 							Optional:    true,
@@ -213,7 +214,11 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_vaults.go -> Read]["+id+"]")
 	var state OCIVaultDataSourceModel
-	req.Config.Get(ctx, &state)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	filters := url.Values{}
 	for k, v := range state.Filters.Elements() {
 		val, ok := v.(types.String)
@@ -231,8 +236,8 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	var ociVaults VaultDataSourceJSON
-	err = json.Unmarshal([]byte(jsonStr), &ociVaults)
+	var vaults DataSourceVaultsJSON
+	err = json.Unmarshal([]byte(jsonStr), &vaults)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_vaults.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -242,7 +247,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	for ndx, vault := range ociVaults.Resources {
+	for ndx, vault := range vaults.Resources {
 		vaultTFSDK := VaultTFSDK{
 			VaultCommonTFSDK: VaultCommonTFSDK{
 				ID:                  types.StringValue(vault.ID),
@@ -286,17 +291,19 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		setFreeformTagsStateFromMap(ctx, vault.FreeformTags, &vaultTFSDK.FreeformTags, &resp.Diagnostics)
+		freeformTags := getFreeformTagsState(ctx, vault.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		setDefinedTagsStateFromMap(ctx, vault.DefinedTags, &vaultTFSDK.DefinedTags, &resp.Diagnostics)
+		vaultTFSDK.FreeformTags = *freeformTags
+		definedTags := getDefinedTagsState(ctx, vault.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
+		vaultTFSDK.DefinedTags = *definedTags
 		state.Vaults = append(state.Vaults, vaultTFSDK)
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_vaults.go -> Read]["+id+"]")
-	diags := resp.State.Set(ctx, &state)
-	resp.Diagnostics.Append(diags...)
 }

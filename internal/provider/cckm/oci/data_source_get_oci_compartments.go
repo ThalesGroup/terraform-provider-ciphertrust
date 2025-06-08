@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -25,7 +26,7 @@ func NewDataSourceGetOCICompartments() datasource.DataSource {
 	return &dataSourceGetOCICompartments{}
 }
 
-func (d *dataSourceGetOCICompartments) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceGetOCICompartments) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -70,32 +71,41 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 							Computed: true,
 						},
 						"compartment_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The compartment's OCID.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The compartment's name.",
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The compartment's description.",
 						},
 						"time_created": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The time the compartment was created.",
 						},
 						"lifecycle_state": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The compartment's current lifecycle state.",
 						},
 						"inactive_status": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The detailed status of the INACTIVE lifecycleState.",
 						},
 						"is_accessible": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Whether or not the compartment is accessible for the user making the request.",
 						},
 						"freeform_tags": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
+							Description: "The freeform tags of the compartment.",
 						},
-						"defined_tags": schema.ListNestedAttribute{
-							Computed: true,
+						"defined_tags": schema.SetNestedAttribute{
+							Computed:    true,
+							Description: "The defined tags of the compartment.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"tag": schema.StringAttribute{
@@ -121,9 +131,8 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	id := uuid.New().String()
 
 	var state GetOCICompartmentsDataSourceModelTFSDK
-	diags := req.Config.Get(ctx, &state)
-	if diags.HasError() {
-		resp.Diagnostics = append(resp.Diagnostics, diags...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	connection := state.Connection.ValueString()
@@ -163,17 +172,20 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 			InactiveStatus: types.Int64Value(compartment.InactiveStatus),
 			IsAccessible:   types.BoolValue(compartment.IsAccessible),
 		}
-		setFreeformTagsStateFromMap(ctx, compartment.FreeformTags, &compartmentTFSDK.FreeformTags, &resp.Diagnostics)
+		freeformTags := getFreeformTagsState(ctx, compartment.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		setDefinedTagsStateFromMap(ctx, compartment.DefinedTags, &compartmentTFSDK.DefinedTags, &resp.Diagnostics)
+		compartmentTFSDK.FreeformTags = *freeformTags
+		definedTags := getDefinedTagsState(ctx, compartment.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
+		compartmentTFSDK.DefinedTags = *definedTags
 		state.Compartments = append(state.Compartments, compartmentTFSDK)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_get_oci_compartments.go -> Read]["+id+"]")
 }
 
 func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id string,

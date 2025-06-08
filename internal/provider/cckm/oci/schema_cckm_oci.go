@@ -2,6 +2,7 @@ package cckm
 
 import (
 	"encoding/json"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -26,7 +27,7 @@ type GetOCICompartmentTFSDK struct {
 	InactiveStatus types.Int64  `tfsdk:"inactive_status"`
 	IsAccessible   types.Bool   `tfsdk:"is_accessible"`
 	FreeformTags   types.Map    `tfsdk:"freeform_tags"`
-	DefinedTags    types.List   `tfsdk:"defined_tags"`
+	DefinedTags    types.Set    `tfsdk:"defined_tags"`
 }
 
 type GetOCICompartmentJSON struct {
@@ -59,7 +60,7 @@ type GetOCICompartmentsDataSourceModelTFSDK struct {
 	Compartments []GetOCICompartmentTFSDK `tfsdk:"compartments"`
 }
 
-type GetOCIVaultTFSDK struct {
+type DataSourceGetOCIVaultTFSDK struct {
 	CompartmentID      types.String `tfsdk:"compartment_id"`
 	DisplayName        types.String `tfsdk:"display_name"`
 	VaultID            types.String `tfsdk:"vault_id"`
@@ -67,11 +68,11 @@ type GetOCIVaultTFSDK struct {
 	ManagementEndpoint types.String `tfsdk:"management_endpoint"`
 	TimeCreated        types.String `tfsdk:"time_created"`
 	VaultType          types.String `tfsdk:"vault_type"`
-	DefinedTags        types.List   `tfsdk:"defined_tags"`
+	DefinedTags        types.Set    `tfsdk:"defined_tags"`
 	FreeformTags       types.Map    `tfsdk:"freeform_tags"`
 }
 
-type GetOCIVaultJSON struct {
+type DataSourceGetOCIVaultJSON struct {
 	CompartmentID      string                       `json:"compartment_id"`
 	DisplayName        string                       `json:"display_name"`
 	VaultID            string                       `json:"vault_id"`
@@ -92,16 +93,16 @@ type GetOCIVaultsPayloadJSON struct {
 }
 
 type GetOCIVaultsJSON struct {
-	Data     []GetOCIVaultJSON `json:"data"`
-	NextPage string            `json:"ociNextPage"`
+	Data     []DataSourceGetOCIVaultJSON `json:"data"`
+	NextPage string                      `json:"ociNextPage"`
 }
 
-type GetOCIVaultsDataSourceModelTFSDK struct {
-	Connection    types.String       `tfsdk:"connection_id"`
-	CompartmentID types.String       `tfsdk:"compartment_id"`
-	Region        types.String       `tfsdk:"region"`
-	Limit         types.Int64        `tfsdk:"limit"`
-	Vaults        []GetOCIVaultTFSDK `tfsdk:"vaults"`
+type DataSourceGetOCIVaultsTFSDK struct {
+	Connection    types.String                 `tfsdk:"connection_id"`
+	CompartmentID types.String                 `tfsdk:"compartment_id"`
+	Region        types.String                 `tfsdk:"region"`
+	Limit         types.Int64                  `tfsdk:"limit"`
+	Vaults        []DataSourceGetOCIVaultTFSDK `tfsdk:"vaults"`
 }
 
 type AddVaultsPayloadJSON struct {
@@ -141,7 +142,7 @@ type VaultJSON struct {
 	BucketParamsJSON
 }
 
-type VaultDataSourceJSON struct {
+type DataSourceVaultsJSON struct {
 	Resources []VaultJSON `json:"resources"`
 }
 
@@ -171,16 +172,21 @@ type VaultCommonTFSDK struct {
 	CompartmentName     types.String `tfsdk:"compartment_name"`
 }
 
-type DefinedTagsTFSDK struct {
+type DefinedTagTFSDK struct {
 	Tag    types.String `tfsdk:"tag"`
 	Values types.Map    `tfsdk:"values"`
+}
+
+var DefinedTagAttribs = map[string]attr.Type{
+	"tag":    types.StringType,
+	"values": types.MapType{ElemType: types.StringType},
 }
 
 type VaultTFSDK struct {
 	VaultCommonTFSDK
 	BucketParamsTFSDK
-	FreeformTags types.Map  `tfsdk:"freeform_tags"`
-	DefinedTags  types.List `tfsdk:"defined_tags"`
+	FreeformTags types.Map `tfsdk:"freeform_tags"`
+	DefinedTags  types.Set `tfsdk:"defined_tags"`
 }
 
 type ExternalVaultTFSDK struct {

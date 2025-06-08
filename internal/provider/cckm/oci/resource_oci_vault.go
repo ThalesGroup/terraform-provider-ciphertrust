@@ -11,7 +11,6 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -90,7 +89,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "Cloud name.",
+				Description: "CipherTrust Manager cloud name.",
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
@@ -99,16 +98,16 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "OCI region.",
+				Description: "The vault's region.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"tenancy": schema.StringAttribute{
 				Computed:    true,
-				Description: "Tenancy name.",
+				Description: "The tenancy name.",
 			},
 			"name": schema.StringAttribute{
 				Computed:    true,
-				Description: "Vault name.",
+				Description: "The vault's name.",
 			},
 			"acls": schema.SetNestedAttribute{
 				Computed:    true,
@@ -133,7 +132,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"compartment_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "Compartment OCID.",
+				Description: "The compartment's OCID.",
 			},
 			"compartment_name": schema.StringAttribute{
 				Computed:    true,
@@ -141,32 +140,32 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"lifecycle_state": schema.StringAttribute{
 				Computed:    true,
-				Description: "Current state of the vault.",
+				Description: "The vault's current lifecycle state.",
 			},
 			"management_endpoint": schema.StringAttribute{
 				Computed:    true,
-				Description: "OCI Vault endpoint.",
+				Description: "The vault's management endpoint.",
 			},
 			"vault_type": schema.StringAttribute{
 				Computed:    true,
-				Description: "OCI Vault type.",
+				Description: "The vault's type.",
 			},
 			"wrappingkey_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "OCI Vault wrapping key.",
+				Description: "Vault's wrapping key OCID.",
 			},
 			"time_created": schema.StringAttribute{
 				Computed:    true,
-				Description: "OCI Vault type.",
+				Description: "The time the vault was created in OCI.",
 			},
 			"freeform_tags": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Freeform tags for the key. A freeform tag is a simple key-value pair with no predefined name, type, or namespace.",
+				Description: "The freeform tags of the vault.",
 			},
-			"defined_tags": schema.ListNestedAttribute{
+			"defined_tags": schema.SetNestedAttribute{
 				Computed:    true,
-				Description: "Defined tags for the key. A tag consists of namespace, key, and value.",
+				Description: "The defined tags of the vault.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"tag": schema.StringAttribute{
@@ -185,15 +184,15 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"replication_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "OCI replication ID.",
+				Description: "The replication ID associated with a vault operation.",
 			},
 			"is_primary": schema.BoolAttribute{
 				Computed:    true,
-				Description: "True if a primary vault.",
+				Description: "Whether the key belongs to a primary vault or a replica vault.",
 			},
 			"vault_id": schema.StringAttribute{
 				Required:    true,
-				Description: "Vault OCID.",
+				Description: "The vault's OCID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"bucket_name": schema.StringAttribute{
@@ -292,6 +291,9 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	if state.Connection.ValueString() == "" {
 		// Don't overwrite what might be connection ID with connection name
 		state.Connection = types.StringValue(gjson.Get(response, "connection").String())
@@ -373,10 +375,6 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	}
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		msg := "Error updating OCI Vault, failed to set resource state."
-		details := utils.ApiError(msg, map[string]interface{}{"vault id": vaultID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	state.Connection = plan.Connection
@@ -413,14 +411,24 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response strin
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
 	state.BucketNamespace = types.StringValue(gjson.Get(response, "bucket_namespace").String())
 	state.VaultID = types.StringValue(gjson.Get(response, "vault_id").String())
-	setFreeformTagsStateFromJSON(ctx, gjson.Get(response, "freeform_tags"), &state.FreeformTags, diags)
+	freeformJSONTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "freeform_tags"), diags)
 	if diags.HasError() {
 		return
 	}
-	setDefinedTagsStateFromJSON(ctx, gjson.Get(response, "defined_tags"), &state.DefinedTags, diags)
+	freeformTagsMap := getFreeformTagsState(ctx, freeformJSONTags, diags)
 	if diags.HasError() {
 		return
 	}
+	state.FreeformTags = *freeformTagsMap
+	definedJSONTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "defined_tags"), diags)
+	if diags.HasError() {
+		return
+	}
+	definedTagsMap := getDefinedTagsState(ctx, definedJSONTags, diags)
+	if diags.HasError() {
+		return
+	}
+	state.DefinedTags = *definedTagsMap
 }
 
 func setCommonVaultState(ctx context.Context, response string, state *VaultCommonTFSDK, diags *diag.Diagnostics) {
@@ -445,73 +453,4 @@ func setCommonVaultState(ctx context.Context, response string, state *VaultCommo
 	state.Tenancy = types.StringValue(gjson.Get(response, "tenancy").String())
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.CompartmentName = types.StringValue(gjson.Get(response, "compartment_name").String())
-}
-
-func setFreeformTagsStateFromJSON(ctx context.Context, tagsJSON gjson.Result, state *types.Map, diags *diag.Diagnostics) {
-	tags := make(map[string]string)
-	if len(tagsJSON.String()) > 0 {
-		err := json.Unmarshal([]byte(tagsJSON.Raw), &tags)
-		if err != nil {
-			msg := "Error parsing 'freeform_tags', invalid data input."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "tags": tagsJSON.String()})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-			return
-		}
-	}
-	setFreeformTagsStateFromMap(ctx, tags, state, diags)
-}
-
-func setFreeformTagsStateFromMap(ctx context.Context, tags map[string]string, state *types.Map, diags *diag.Diagnostics) {
-	tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, tags)
-	if dg.HasError() {
-		diags.Append(dg...)
-		return
-	}
-	*state = tfMapValue
-}
-
-func setDefinedTagsStateFromJSON(ctx context.Context, tagsJSON gjson.Result, state *types.List, diags *diag.Diagnostics) {
-	tags := make(map[string]map[string]string)
-	if len(tagsJSON.String()) > 0 {
-		err := json.Unmarshal([]byte(tagsJSON.Raw), &tags)
-		if err != nil {
-			msg := "Error parsing 'defined_tags', invalid data input."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "tags": tagsJSON.String()})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-			return
-		}
-	}
-	setDefinedTagsStateFromMap(ctx, tags, state, diags)
-}
-
-func setDefinedTagsStateFromMap(ctx context.Context, tags map[string]map[string]string, state *types.List, diags *diag.Diagnostics) {
-	var definedTagsTFSDK []DefinedTagsTFSDK
-	for namespace, valueMap := range tags {
-		tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, valueMap)
-		if dg.HasError() {
-			diags.Append(dg...)
-			return
-		}
-		definedTagTFSDK := DefinedTagsTFSDK{
-			Tag:    types.StringValue(namespace),
-			Values: tfMapValue,
-		}
-		definedTagsTFSDK = append(definedTagsTFSDK, definedTagTFSDK)
-	}
-	tfListValue, dg := types.ListValueFrom(ctx,
-		types.ObjectType{AttrTypes: map[string]attr.Type{
-			"tag":    types.StringType,
-			"values": types.MapType{ElemType: types.StringType},
-		}}, definedTagsTFSDK)
-	if dg.HasError() {
-		diags.Append(dg...)
-		return
-	}
-	*state, dg = tfListValue.ToListValue(ctx)
-	if dg.HasError() {
-		diags.Append(dg...)
-		return
-	}
 }

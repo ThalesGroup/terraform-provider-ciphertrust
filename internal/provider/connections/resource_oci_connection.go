@@ -354,7 +354,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 				case string:
 					connectionMeta[key] = value.(string)
 				case int64:
-					connectionMeta[key] = fmt.Sprintf("%s", value.(int))
+					connectionMeta[key] = fmt.Sprintf("%v", value.(int))
 				case bool:
 					connectionMeta[key] = fmt.Sprintf("%t", value.(bool))
 				default:

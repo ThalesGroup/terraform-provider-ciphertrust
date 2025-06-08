@@ -24,7 +24,7 @@ func NewDataSourceGetOCIRegions() datasource.DataSource {
 	return &dataSourceGetOCIRegions{}
 }
 
-func (d *dataSourceGetOCIRegions) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceGetOCIRegions) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -65,8 +65,8 @@ func (d *dataSourceGetOCIRegions) Schema(_ context.Context, _ datasource.SchemaR
 }
 
 func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_regions.go -> Read]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_regions.go -> Read]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_get_oci_regions.go -> Read]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_get_oci_regions.go -> Read]")
 
 	id := uuid.New().String()
 	var state GetOCIRegionsDataSourceTFSDK
@@ -97,4 +97,5 @@ func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadR
 	}
 	state.Regions = utils.StringSliceJSONToListValue(gjson.Get(response, "regions").Array(), &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_get_regions.go -> Read]["+id+"]")
 }

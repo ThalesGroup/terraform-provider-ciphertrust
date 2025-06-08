@@ -3,7 +3,6 @@ package cckm
 import (
 	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
@@ -13,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -130,6 +130,7 @@ func (r *resourceCCKMOCIAcl) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	vaultID := plan.VaultID.ValueString()
+
 	var actions []string
 	resp.Diagnostics.Append(plan.Actions.ElementsAs(ctx, &actions, false)...)
 	if resp.Diagnostics.HasError() {
@@ -175,6 +176,7 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	resourceID := state.ID.ValueString()
 	vaultID := state.VaultID.ValueString()
+
 	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
 		msg := "Error reading OCI vault."
@@ -208,9 +210,9 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resourceID := state.ID.ValueString()
 	vaultID := state.VaultID.ValueString()
+
 	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
 		msg := "Error reading OCI vault."
@@ -274,9 +276,9 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resourceID := state.ID.ValueString()
 	vaultID := state.VaultID.ValueString()
+
 	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
 		msg := "Error reading OCI vault."

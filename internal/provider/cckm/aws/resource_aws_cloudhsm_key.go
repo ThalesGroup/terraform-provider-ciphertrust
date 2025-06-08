@@ -115,11 +115,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"key_usage": schema.StringAttribute{
 				Computed:    true,
 				Description: "Specifies the intended use of the key. RSA key options: ENCRYPT_DECRYPT, SIGN_VERIFY. Default is ENCRYPT_DECRYPT. EC key options: SIGN_VERIFY. Default is SIGN_VERIFY. Symmetric key options: ENCRYPT_DECRYPT. Default is ENCRYPT_DECRYPT.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"ENCRYPT_DECRYPT",
-						"SIGN_VERIFY",
-						"GENERATE_VERIFY_MAC"}...),
-				},
+				Validators: []validator.String{stringvalidator.OneOf([]string{"ENCRYPT_DECRYPT","SIGN_VERIFY","GENERATE_VERIFY_MAC"}...)},
 			},
 			"origin": schema.StringAttribute{
 				Computed: true,
@@ -129,13 +125,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"EXTERNAL will create an external AWS key and is the default for import operations. " +
 					"This parameter is not required for upload operations. " +
 					"Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"AWS_KMS",
-						"EXTERNAL",
-						"EXTERNAL_KEY_STORE",
-						"AWS_CLOUDHSM"}...),
-				},
-			},
+				Validators: []validator.String{stringvalidator.OneOf([]string{"AWS_KMS","EXTERNAL","EXTERNAL_KEY_STORE","AWS_CLOUDHSM"}...)}},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
@@ -383,9 +373,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 						"key_source": schema.StringAttribute{
 							Required:    true,
 							Description: "Key source from where the key will be uploaded. Currently, the only option is 'local'.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"local"}...),
-							},
+							Validators: []validator.String{stringvalidator.OneOf([]string{"local"}...)},
 						},
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,

@@ -185,10 +185,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:    true,
 				Optional:    true,
 				Description: "Source of the key material. Options: AWS_KMS, EXTERNAL. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"AWS_KMS",
-						"EXTERNAL"}...),
-				},
+				Validators: []validator.String{stringvalidator.OneOf([]string{"AWS_KMS","EXTERNAL"}...)},
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
@@ -538,9 +535,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						"key_source": schema.StringAttribute{
 							Required:    true,
 							Description: "Key source from where the key will be uploaded. Currently, the only option is 'ciphertrust'.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"ciphertrust"}...),
-							},
+							Validators: []validator.String{stringvalidator.OneOf([]string{"ciphertrust"}...)},
 						},
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,
@@ -1025,6 +1020,7 @@ func (r *resourceAWSKey) enableAutoRotation(ctx context.Context, id string, plan
 						diags.AddError(details, "")
 						return false
 					}
+					tStart = time.Now()
 				}
 				_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/enable-auto-rotation", payloadJSON)
 			}
@@ -1061,6 +1057,7 @@ func (r *resourceAWSKey) disableAutoRotation(ctx context.Context, id string, pla
 						diags.AddError(details, "")
 						return false
 					}
+					tStart = time.Now()
 				}
 				response, err = r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
 			}
@@ -1370,6 +1367,7 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 				diags.AddWarning(details, "")
 				return ""
 			}
+			tStart = time.Now()
 		}
 		response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {

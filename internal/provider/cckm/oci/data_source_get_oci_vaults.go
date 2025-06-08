@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -26,7 +26,7 @@ func NewDataSourceGetOCIVaults() datasource.DataSource {
 	return &dataSourceGetOCIVaults{}
 }
 
-func (d *dataSourceGetOCIVaults) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceGetOCIVaults) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -76,40 +76,51 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"compartment_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The compartment's OCID.",
 						},
 						"display_name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The vault's name.",
 						},
 						"vault_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The vaults OCID.",
 						},
 						"lifecycle_state": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The vaults's current lifecycle state.",
 						},
 						"management_endpoint": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The vault's management endpoint.",
 						},
 						"time_created": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The time the vault was created in OCI.",
 						},
 						"vault_type": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "OCI Vault type.",
 						},
 						"freeform_tags": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
+							Description: "The freeform tags of the vault.",
 						},
-						"defined_tags": schema.ListNestedAttribute{
-							Computed: true,
+						"defined_tags": schema.SetNestedAttribute{
+							Computed:    true,
+							Description: "The defined tags of the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"tag": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The vault's defined tags.",
 									},
 									"values": schema.MapAttribute{
 										Computed:    true,
 										ElementType: types.StringType,
+										Description: "The key:vault pair's associated with the tag.",
 									},
 								},
 							},
@@ -122,16 +133,12 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 }
 
 func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_vaults.go -> Read]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_vaults.go -> Read]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_get_oci_vaults.go -> Read]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_get_oci_vaults.go -> Read]")
 	id := uuid.New().String()
 
-	var state GetOCIVaultsDataSourceModelTFSDK
-	diags := req.Config.Get(ctx, &state)
-	if diags.HasError() {
-		resp.Diagnostics = append(resp.Diagnostics, diags...)
-		return
-	}
+	var state DataSourceGetOCIVaultsTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 
 	connection := state.Connection.ValueString()
 	payload := GetOCIVaultsPayloadJSON{
@@ -144,7 +151,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 		payload.Limit = &limit
 	}
 
-	var data []GetOCIVaultJSON
+	var data []DataSourceGetOCIVaultJSON
 	vaults := d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -162,7 +169,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	for _, vault := range data {
-		ociVault := GetOCIVaultTFSDK{
+		ociVault := DataSourceGetOCIVaultTFSDK{
 			CompartmentID:      types.StringValue(vault.CompartmentID),
 			DisplayName:        types.StringValue(vault.DisplayName),
 			VaultID:            types.StringValue(vault.VaultID),
@@ -171,17 +178,20 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 			TimeCreated:        types.StringValue(vault.TimeCreated),
 			VaultType:          types.StringValue(vault.VaultType),
 		}
-		setFreeformTagsStateFromMap(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
+		freeformTags := getFreeformTagsState(ctx, vault.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		setDefinedTagsStateFromMap(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
+		ociVault.FreeformTags = *freeformTags
+		definedTags := getDefinedTagsState(ctx, vault.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
+		ociVault.DefinedTags = *definedTags
 		state.Vaults = append(state.Vaults, ociVault)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_get_vaults.go -> Read]["+id+"]")
 }
 
 func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, payload GetOCIVaultsPayloadJSON, diags *diag.Diagnostics) *GetOCIVaultsJSON {
