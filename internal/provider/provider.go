@@ -441,6 +441,7 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMSyslog,
 		aws.NewResourceCCKMAWSKMS,
 		aws.NewResourceAWSKey,
+		aws.NewResourceAWSKeyRotation,
 		aws.NewResourceAWSPolicyTemplate,
 		aws.NewResourceAWSCustomKeyStore,
 		aws.NewResourceAWSXKSKey,

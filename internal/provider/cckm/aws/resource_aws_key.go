@@ -126,12 +126,6 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Description: "Enable AWS autorotation of the key. Auto-Rotation only is only applicable to native symmetric keys.",
 				Default:     booldefault.StaticBool(false),
 			},
-			"rotate_key_material": schema.BoolAttribute{
-				Computed:    true,
-				Optional:    true,
-				Description: "Set to true to trigger rotation of key material via the rotate-material API during update.",
-				Default:     booldefault.StaticBool(false),
-			},
 			"auto_rotation_period_in_days": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
@@ -283,6 +277,10 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"key_rotation_enabled": schema.BoolAttribute{
 				Computed:    true,
 				Description: "True if rotation is enabled in AWS for this key.",
+			},
+			"current_key_material_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Current Key material ID.",
 			},
 			"key_source": schema.StringAttribute{
 				Computed:    true,
@@ -709,12 +707,6 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		}
 	}
 
-	if plan.RotateKeyMaterial.ValueBool() && plan.RotateKeyMaterial.ValueBool() != state.RotateKeyMaterial.ValueBool() {
-		_ = r.rotateKeyMaterial(ctx, id, &plan, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	}
 	updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -918,6 +910,7 @@ func setCommonKeyState(response string, state *AWSKeyCommonTFSDK, diags *diag.Di
 	state.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	state.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
+	state.CurrentKeyMaterialID = types.StringValue(gjson.Get(response, "aws_param.CurrentKeyMaterialId").String())
 	state.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	state.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
 	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
@@ -1198,24 +1191,6 @@ func (r *resourceAWSKey) importKeyMaterial(ctx context.Context, id string, plan 
 		return awsKeyResponse
 	}
 	tflog.Trace(ctx, "[resource_aws_key.go -> importKeyMaterial][response:"+response)
-	return response
-}
-
-func (r *resourceAWSKey) rotateKeyMaterial(ctx context.Context, id string, plan *AWSKeyTFSDK, diags *diag.Diagnostics) string {
-	tflog.Trace(ctx, "[resource_aws_key.go -> rotateKeyMaterial]["+id+"]")
-
-	keyID := plan.KeyID.ValueString()
-
-	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotate-material", nil)
-	if err != nil {
-		msg := "Error rotating AWS key material."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return ""
-	}
-
-	tflog.Trace(ctx, "[resource_aws_key.go -> rotateKeyMaterial][response:"+response)
 	return response
 }
 

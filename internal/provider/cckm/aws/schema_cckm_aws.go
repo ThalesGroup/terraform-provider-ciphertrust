@@ -147,6 +147,7 @@ type AWSKeyCommonTFSDK struct {
 	KeyMaterialOrigin              types.String `tfsdk:"key_material_origin"`
 	KeyPolicy                      types.List   `tfsdk:"key_policy"`
 	KeyRotationEnabled             types.Bool   `tfsdk:"key_rotation_enabled"`
+	CurrentKeyMaterialID           types.String `tfsdk:"current_key_material_id"`
 	KeySource                      types.String `tfsdk:"key_source"`
 	KeyState                       types.String `tfsdk:"key_state"`
 	KeyType                        types.String `tfsdk:"key_type"`
@@ -180,7 +181,10 @@ type AWSKeyTFSDK struct {
 	ReplicaPolicy            types.String `tfsdk:"replica_policy"`
 	ReplicateKey             types.List   `tfsdk:"replicate_key"`
 	UploadKey                types.List   `tfsdk:"upload_key"`
-	RotateKeyMaterial        types.Bool   `tfsdk:"rotate_key_material"`
+}
+
+type AWSKeyRotationTFSDK struct {
+	AWSKeyTFSDK
 }
 
 type XKSKeyLocalHostedParamsTFSDK struct {
@@ -563,6 +567,7 @@ type AWSKeyDataSourceCommonTFSDK struct {
 	KeyManager            types.String `tfsdk:"key_manager"`
 	KeyMaterialOrigin     types.String `tfsdk:"key_material_origin"`
 	KeyRotationEnabled    types.Bool   `tfsdk:"key_rotation_enabled"`
+	CurrentKeyMaterialID  types.String `tfsdk:"current_key_material_id"`
 	KeySource             types.String `tfsdk:"key_source"`
 	KeyState              types.String `tfsdk:"key_state"`
 	KeyType               types.String `tfsdk:"key_type"`
