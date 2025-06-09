@@ -185,7 +185,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:    true,
 				Optional:    true,
 				Description: "Source of the key material. Options: AWS_KMS, EXTERNAL. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations.",
-				Validators: []validator.String{stringvalidator.OneOf([]string{"AWS_KMS","EXTERNAL"}...)},
+				Validators:  []validator.String{stringvalidator.OneOf([]string{"AWS_KMS", "EXTERNAL"}...)},
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
@@ -535,7 +535,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 						"key_source": schema.StringAttribute{
 							Required:    true,
 							Description: "Key source from where the key will be uploaded. Currently, the only option is 'ciphertrust'.",
-							Validators: []validator.String{stringvalidator.OneOf([]string{"ciphertrust"}...)},
+							Validators:  []validator.String{stringvalidator.OneOf([]string{"ciphertrust"}...)},
 						},
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,
@@ -1515,8 +1515,19 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, pri
 		return
 	}
 	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / shortAwsKeyOpSleep)
+	tStart := time.Now()
 	for retry := 0; retry < numRetries && currentPrimaryRegion != newPrimaryRegion; retry++ {
 		time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
+		if time.Since(tStart).Seconds() > refreshTokenSeconds {
+			if err = r.client.RefreshToken(ctx, id); err != nil {
+				msg := "Error disabling auto-rotation for AWS key. Error refreshing authentication token."
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": primaryKeyID})
+				tflog.Error(ctx, details)
+				diags.AddError(details, "")
+				return
+			}
+			tStart = time.Now()
+		}
 		response, err = r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error updating AWS key, failed to read key."

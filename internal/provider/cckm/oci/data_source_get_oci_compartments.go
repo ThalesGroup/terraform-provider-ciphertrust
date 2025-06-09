@@ -67,6 +67,10 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Computed:    true,
+							Description: "The compartment's ID.",
+						},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
 							Description: "The compartment's OCID.",

@@ -335,5 +335,5 @@ func (r *resourceCCKMOCIAcl) setOCIAclState(ctx context.Context, resourceID stri
 	} else {
 		state.Group = types.StringValue(userIDOrGroup)
 	}
-	acls.SetAclCommonState(ctx, resourceID, responseJSON, &state.AclCommonTFSDK, diags)
+	acls.SetAclCommonState(ctx, resourceID, responseJSON, &state.AclTFSDK, diags)
 }

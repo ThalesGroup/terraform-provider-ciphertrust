@@ -33,8 +33,8 @@ func DecodeContainerAclID(resourceID string) (containerID string, aclType string
 	return
 }
 
-func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclsStateList *types.Set, diags *diag.Diagnostics) {
-	var aclsTFSDK []AclCommonTFSDK
+func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclSet *types.Set, diags *diag.Diagnostics) {
+	var aclsTFSDK []AclTFSDK
 	for _, aclJSON := range acslJSON.Array() {
 		var actions []attr.Value
 		for _, item := range gjson.Get(aclJSON.String(), "actions").Array() {
@@ -46,29 +46,20 @@ func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclsStateL
 			diags.Append(dg...)
 			return
 		}
-		aclTfsdk := AclCommonTFSDK{
+		aclTfsdk := AclTFSDK{
 			UserID:  types.StringValue(gjson.Get(aclJSON.String(), "user_id").String()),
 			Group:   types.StringValue(gjson.Get(aclJSON.String(), "group").String()),
 			Actions: actionSet,
 		}
 		aclsTFSDK = append(aclsTFSDK, aclTfsdk)
 	}
-	SetAclsStateFromList(ctx, aclsTFSDK, aclsStateList, diags)
-}
-
-func SetAclsStateFromList(ctx context.Context, aclsTFSDK []AclCommonTFSDK, aclsStateList *types.Set, diags *diag.Diagnostics) {
-	var dg diag.Diagnostics
-	aclsListValue, dg := types.SetValueFrom(ctx,
-		types.ObjectType{AttrTypes: map[string]attr.Type{
-			"user_id": types.StringType,
-			"group":   types.StringType,
-			"actions": types.SetType{ElemType: types.StringType},
-		}}, aclsTFSDK)
+	aclsSetValue, dg := types.SetValueFrom(ctx,
+		types.ObjectType{AttrTypes: AclAttributes}, aclsTFSDK)
 	if dg.HasError() {
 		diags.Append(dg...)
 		return
 	}
-	*aclsStateList, dg = aclsListValue.ToSetValue(ctx)
+	*aclSet, dg = aclsSetValue.ToSetValue(ctx)
 	if dg.HasError() {
 		diags.Append(dg...)
 		return
@@ -104,7 +95,6 @@ func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, ac
 			}
 		}
 	}
-	tflog.Info(ctx, fmt.Sprintf("SARAH currentActions %v", currentActions))
 
 	// Discover currently set but now not permitted actions
 	var notPermittedActions []string
@@ -177,10 +167,9 @@ func GetPermittedActionsPayloadJSON(ctx context.Context, resourceID string, newA
 		return nil
 	}
 	return payloadJSON
-
 }
 
-func SetAclCommonState(ctx context.Context, resourceID string, responseJSON string, state *AclCommonTFSDK, diags *diag.Diagnostics) {
+func SetAclCommonState(ctx context.Context, resourceID string, responseJSON string, state *AclTFSDK, diags *diag.Diagnostics) {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error setting state for ACL, invalid resource ID."
@@ -189,7 +178,7 @@ func SetAclCommonState(ctx context.Context, resourceID string, responseJSON stri
 		diags.AddError(details, "")
 		return
 	}
-	var aclTFSDK AclCommonTFSDK
+	var aclTFSDK AclTFSDK
 	if gjson.Get(responseJSON, "acls").Exists() {
 		aclsJSON := gjson.Get(responseJSON, "acls").Array()
 		found := false

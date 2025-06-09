@@ -2,9 +2,9 @@ package cckm
 
 import (
 	"encoding/json"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -133,7 +133,7 @@ type VaultJSON struct {
 	RestoredFromVaultID string                       `json:"restored_from_vault_id"`
 	ReplicationID       string                       `json:"replication_id"`
 	IsPrimary           bool                         `json:"is_primary"`
-	Acls                []AclsJSON                   `json:"acls"`
+	Acls                []acls.AclJSON               `json:"acls"`
 	RefreshedAt         string                       `json:"refreshed_at"`
 	Tenancy             string                       `json:"tenancy"`
 	Region              string                       `json:"region"`
@@ -194,18 +194,6 @@ type ExternalVaultTFSDK struct {
 	ExternalVaultParamsTFSDK
 	WrappingkeyID      types.String `tfsdk:"wrappingkey_id"`
 	ManagementEndpoint types.String `tfsdk:"management_endpoint"`
-}
-
-type AclsJSON struct {
-	UserID  string   `json:"user_id"`
-	Group   string   `json:"group"`
-	Actions []string `json:"actions"`
-}
-
-type AclsTFSDK struct {
-	UserID  types.String `tfsdk:"user_id"`
-	Group   types.String `tfsdk:"group"`
-	Actions types.Set    `tfsdk:"actions"`
 }
 
 type ExternalVaultParamsJSON struct {
@@ -273,5 +261,5 @@ type UpdateVaultJSON struct {
 type VaultAclTFSDK struct {
 	ID      types.String `tfsdk:"id"`
 	VaultID types.String `tfsdk:"vault_id"`
-	acls.AclCommonTFSDK
+	acls.AclTFSDK
 }

@@ -114,8 +114,8 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				Description: "Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
-				Optional: true,
-				Validators: []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
+				Optional:    true,
+				Validators:  []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
 				Description: "Indicates whether to connect or disconnect the custom key store.",
 			},
 			"labels": schema.MapAttribute{
@@ -149,7 +149,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						"custom_key_store_type": schema.StringAttribute{
 							Optional:    true,
 							Description: "Specifies the type of custom key store. The default value is EXTERNAL_KEY_STORE. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
-							Validators: []validator.String{stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)},
+							Validators:  []validator.String{stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)},
 						},
 						"key_store_password": schema.StringAttribute{
 							Computed:    true,
@@ -165,7 +165,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 							Optional:    true,
 							Computed:    true,
 							Description: "Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.",
-							Validators: []validator.String{stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...)},
+							Validators:  []validator.String{stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...)},
 						},
 						"xks_proxy_uri_endpoint": schema.StringAttribute{
 							Optional:    true,
@@ -235,7 +235,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 							Optional:    true,
 							Computed:    true,
 							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.",
-							Validators: []validator.String{stringvalidator.OneOf([]string{"local", "luna-hsm"}...)},
+							Validators:  []validator.String{stringvalidator.OneOf([]string{"local", "luna-hsm"}...)},
 						},
 					},
 				},
