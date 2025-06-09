@@ -127,5 +127,5 @@ Read-Only:
 
 Read-Only:
 
-- `tag` (String)
-- `values` (Map of String)
+- `tag` (String) A tag assigned to the vault.
+- `values` (Map of String) The key:value pairs to added to the tag.

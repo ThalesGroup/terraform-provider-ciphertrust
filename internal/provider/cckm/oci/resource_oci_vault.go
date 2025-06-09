@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"strings"
 
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -72,18 +72,18 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Description: "List of ACLs that have been added to the vault.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"user_id": schema.StringAttribute{
+						"actions": schema.SetAttribute{
 							Computed:    true,
-							Description: "CipherTrust Manager user ID.",
+							Description: "Permitted actions.",
+							ElementType: types.StringType,
 						},
 						"group": schema.StringAttribute{
 							Computed:    true,
 							Description: "CipherTrust Manager group.",
 						},
-						"actions": schema.SetAttribute{
+						"user_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "Permitted actions.",
-							ElementType: types.StringType,
+							Description: "CipherTrust Manager user ID.",
 						},
 					},
 				},
@@ -119,9 +119,35 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "Date/time the application was created",
 			},
+			"defined_tags": schema.SetNestedAttribute{
+				Computed:    true,
+				Description: "The defined tags of the vault.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"tag": schema.StringAttribute{
+							Computed:    true,
+							Description: "A tag assigned to the vault.",
+						},
+						"values": schema.MapAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+							Description: "The key:value pairs to added to the tag.",
+						},
+					},
+				},
+			},
+			"freeform_tags": schema.MapAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "The freeform tags of the vault.",
+			},
 			"id": schema.StringAttribute{
 				Computed:    true,
 				Description: "The vault's CipherTrust Managers resource ID.",
+			},
+			"is_primary": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the key belongs to a primary vault or a replica vault.",
 			},
 			"lifecycle_state": schema.StringAttribute{
 				Computed:    true,
@@ -135,18 +161,30 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "The vault's name.",
 			},
+			"refreshed_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the application was refreshed.",
+			},
 			"region": schema.StringAttribute{
 				Required:    true,
 				Description: "The vault's region.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
-			"refreshed_at": schema.StringAttribute{
+			"replication_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was refreshed.",
+				Description: "The replication ID associated with a vault operation.",
+			},
+			"restored_from_vault_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "OCID of the vault this vault was restored from.",
 			},
 			"tenancy": schema.StringAttribute{
 				Computed:    true,
 				Description: "The tenancy name.",
+			},
+			"time_created": schema.StringAttribute{
+				Computed:    true,
+				Description: "The time the vault was created in OCI.",
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
@@ -160,50 +198,14 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "The vault's type.",
 			},
-			"wrappingkey_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "Vault's wrapping key OCID.",
-			},
-			"time_created": schema.StringAttribute{
-				Computed:    true,
-				Description: "The time the vault was created in OCI.",
-			},
-			"freeform_tags": schema.MapAttribute{
-				Computed:    true,
-				ElementType: types.StringType,
-				Description: "The freeform tags of the vault.",
-			},
-			"defined_tags": schema.SetNestedAttribute{
-				Computed:    true,
-				Description: "The defined tags of the vault.",
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"tag": schema.StringAttribute{
-							Computed: true,
-						},
-						"values": schema.MapAttribute{
-							Computed:    true,
-							ElementType: types.StringType,
-						},
-					},
-				},
-			},
-			"restored_from_vault_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "OCID of the vault this vault was restored from.",
-			},
-			"replication_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "The replication ID associated with a vault operation.",
-			},
-			"is_primary": schema.BoolAttribute{
-				Computed:    true,
-				Description: "Whether the key belongs to a primary vault or a replica vault.",
-			},
 			"vault_id": schema.StringAttribute{
 				Required:    true,
 				Description: "The vault's OCID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"wrappingkey_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Vault's wrapping key OCID.",
 			},
 		},
 	}
