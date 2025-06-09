@@ -38,13 +38,13 @@ func getFreeformTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *
 	return tags
 }
 
-func getFreeformTagsState(ctx context.Context, tags map[string]string, diags *diag.Diagnostics) *types.Map {
+func setFreeformTagsState(ctx context.Context, tags map[string]string, state *types.Map, diags *diag.Diagnostics) {
 	tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, tags)
 	if dg.HasError() {
 		diags.Append(dg...)
-		return nil
+		return
 	}
-	return &tfMapValue
+	*state = tfMapValue
 }
 
 func getDefinedTagsFromPlan(ctx context.Context, planTags *types.Set, diags *diag.Diagnostics) map[string]map[string]string {
@@ -87,13 +87,13 @@ func getDefinedTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *d
 	return tags
 }
 
-func getDefinedTagsState(ctx context.Context, tags map[string]map[string]string, diags *diag.Diagnostics) *types.Set {
+func setDefinedTagsState(ctx context.Context, tags map[string]map[string]string, state *types.Set, diags *diag.Diagnostics) {
 	var definedTagsTFSDK []DefinedTagTFSDK
 	for namespace, valueMap := range tags {
 		tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, valueMap)
 		if dg.HasError() {
 			diags.Append(dg...)
-			return nil
+			return
 		}
 		definedTagTFSDK := DefinedTagTFSDK{
 			Tag:    types.StringValue(namespace),
@@ -105,12 +105,12 @@ func getDefinedTagsState(ctx context.Context, tags map[string]map[string]string,
 		types.ObjectType{AttrTypes: DefinedTagAttribs}, definedTagsTFSDK)
 	if dg.HasError() {
 		diags.Append(dg...)
-		return nil
+		return
 	}
-	tagList, dg := tfSetValue.ToSetValue(ctx)
+	tagSet, dg := tfSetValue.ToSetValue(ctx)
 	if dg.HasError() {
 		diags.Append(dg...)
-		return nil
+		return
 	}
-	return &tagList
+	*state = tagSet
 }

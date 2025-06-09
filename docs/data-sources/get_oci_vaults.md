@@ -86,7 +86,7 @@ Read-Only:
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
 - `display_name` (String) The vault's name.
 - `freeform_tags` (Map of String) The freeform tags of the vault.
-- `lifecycle_state` (String) The vaults's current lifecycle state.
+- `lifecycle_state` (String) The vault's current lifecycle state.
 - `management_endpoint` (String) The vault's management endpoint.
 - `time_created` (String) The time the vault was created in OCI.
 - `vault_id` (String) The vaults OCID.

@@ -15,8 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -66,7 +64,7 @@ const ociACLTable = `The following table lists the accepted values:
 | Create   (HYOK Key)             |  hyokkeycreate         | Permission to create an OCI HYOK key. |
 | Update   (HYOK Key)             |  hyokkeyupdate         | Permission to update an OCI HYOK key. |
 | Block                           |  hyokkeyblockunblock   | Permission to block all the proxy operations on the OCI HYOK key. |
-| Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |        
+| Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
 | Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |`
 
@@ -89,31 +87,28 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Description: "The unique identifier of the resource. This is either vault_id::user_id or vault_id::group_id.",
-				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"vault_id": schema.StringAttribute{
-				Required:    true,
-				Description: "CipherTrust Manager OCI vault resource ID in which to set the ACL",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-			},
-			"user_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "ID of the CipherTrust Manager user the ACL applies to. Specify either \"user_id\" or \"group\".",
-			},
-			"group": schema.StringAttribute{
-				Optional:    true,
-				Description: "CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
-			},
 			"actions": schema.SetAttribute{
 				Required:            true,
 				Description:         "List of permitted actions. The \"view\" action must be included.",
 				ElementType:         types.StringType,
 				MarkdownDescription: ociACLTable,
+			},
+			"group": schema.StringAttribute{
+				Optional:    true,
+				Description: "CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+			},
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name.",
+			},
+			"user_id": schema.StringAttribute{
+				Optional:    true,
+				Description: "ID of the CipherTrust Manager user the ACL applies to. Specify either \"user_id\" or \"group\".",
+			},
+			"vault_id": schema.StringAttribute{
+				Required:    true,
+				Description: "CipherTrust Manager OCI vault resource ID in which to set the ACL",
+				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 		},
 	}

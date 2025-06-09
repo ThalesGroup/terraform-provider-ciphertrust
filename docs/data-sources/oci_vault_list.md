@@ -3,12 +3,15 @@
 page_title: "ciphertrust_oci_vault_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Use this data source to retrieve a list of CipherTrust Manager vaults.
+  Give a filter of 'limit=-1' to list more than 10 matches.
 ---
 
 # ciphertrust_oci_vault_list (Data Source)
 
+Use this data source to retrieve a list of CipherTrust Manager vaults.
 
+Give a filter of 'limit=-1' to list more than 10 matches.
 
 ## Example Usage
 
@@ -69,24 +72,22 @@ data "ciphertrust_oci_vault_list" "all_vaults" {
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager OCI vaults.
 
 ### Read-Only
 
+- `matched` (Number) The number of vaults which matched the filters.
 - `vaults` (Attributes List) (see [below for nested schema](#nestedatt--vaults))
 
 <a id="nestedatt--vaults"></a>
 ### Nested Schema for `vaults`
 
-Optional:
-
-- `bucket_name` (String) Name of the OCI bucket.
-- `bucket_namespace` (String) Namespace of the OCI bucket.
-
 Read-Only:
 
 - `account` (String) The account which owns this resource.
 - `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
+- `bucket_name` (String) Name of the OCI bucket.
+- `bucket_namespace` (String) Namespace of the OCI bucket.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_id` (String) The compartment's OCID.
 - `compartment_name` (String) Compartment name.
@@ -94,7 +95,7 @@ Read-Only:
 - `created_at` (String) Date/time the application was created
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
 - `freeform_tags` (Map of String) The freeform tags of the vault.
-- `id` (String) The unique identifier of the resource.
+- `id` (String) The vault's CipherTrust Manager resource ID.
 - `is_primary` (Boolean) Whether the key belongs to a primary vault or a replica vault.
 - `lifecycle_state` (String) The vault's current lifecycle state.
 - `management_endpoint` (String) The vault's management endpoint.
@@ -106,7 +107,7 @@ Read-Only:
 - `tenancy` (String) The tenancy name.
 - `time_created` (String) The time the vault was created.
 - `updated_at` (String) Date/time the application was updated.
-- `uri` (String) A human-readable unique identifier of the resource.
+- `uri` (String) CipherTrust Manager's unique identifier for the resource.
 - `vault_id` (String) The vault's OCID.
 - `vault_type` (String) The vault's type.
 - `wrappingkey_id` (String) Vault's wrapping key OCID.

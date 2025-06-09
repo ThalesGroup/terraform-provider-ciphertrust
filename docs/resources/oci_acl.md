@@ -131,7 +131,7 @@ For example: terraform import ciphertrust_oci_acl.imported_group_acl "fd466e89-d
 | Create   (HYOK Key)             |  hyokkeycreate         | Permission to create an OCI HYOK key. |
 | Update   (HYOK Key)             |  hyokkeyupdate         | Permission to update an OCI HYOK key. |
 | Block                           |  hyokkeyblockunblock   | Permission to block all the proxy operations on the OCI HYOK key. |
-| Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |        
+| Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
 | Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |
 - `vault_id` (String) CipherTrust Manager OCI vault resource ID in which to set the ACL
@@ -143,4 +143,4 @@ For example: terraform import ciphertrust_oci_acl.imported_group_acl "fd466e89-d
 
 ### Read-Only
 
-- `id` (String) The unique identifier of the resource. This is either vault_id::user_id or vault_id::group_id.
+- `id` (String) The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name.

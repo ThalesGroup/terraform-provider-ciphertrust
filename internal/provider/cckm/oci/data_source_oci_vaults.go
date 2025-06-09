@@ -31,6 +31,7 @@ type dataSourceOCIVault struct {
 
 type OCIVaultDataSourceModel struct {
 	Filters types.Map    `tfsdk:"filters"`
+	Matched types.Int64  `tfsdk:"matched"`
 	Vaults  []VaultTFSDK `tfsdk:"vaults"`
 }
 
@@ -55,38 +56,45 @@ func (d *dataSourceOCIVault) Configure(_ context.Context, req datasource.Configu
 
 func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Use this data source to retrieve a list of CipherTrust Manager vaults.\n\n" +
+			"Give a filter of 'limit=-1' to list more than 10 matches.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
-				ElementType: types.StringType,
 				Optional:    true,
+				ElementType: types.StringType,
+				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager OCI vaults.",
+			},
+			"matched": schema.Int64Attribute{
+				Computed:    true,
+				Description: "The number of vaults which matched the filters.",
 			},
 			"vaults": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Description: "The unique identifier of the resource.",
 							Computed:    true,
+							Description: "The vault's CipherTrust Manager resource ID.",
 						},
 						"uri": schema.StringAttribute{
-							Description: "A human-readable unique identifier of the resource.",
 							Computed:    true,
+							Description: "CipherTrust Manager's unique identifier for the resource.",
 						},
 						"account": schema.StringAttribute{
-							Description: "The account which owns this resource.",
 							Computed:    true,
+							Description: "The account which owns this resource.",
 						},
 						"created_at": schema.StringAttribute{
-							Description: "Date/time the application was created",
 							Computed:    true,
+							Description: "Date/time the application was created",
 						},
 						"refreshed_at": schema.StringAttribute{
-							Description: "Date/time the application was refreshed.",
 							Computed:    true,
+							Description: "Date/time the application was refreshed.",
 						},
 						"updated_at": schema.StringAttribute{
-							Description: "Date/time the application was updated.",
 							Computed:    true,
+							Description: "Date/time the application was updated.",
 						},
 						"cloud_name": schema.StringAttribute{
 							Computed:    true,
@@ -194,12 +202,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Description: "The vault's OCID.",
 						},
 						"bucket_name": schema.StringAttribute{
-							Optional:    true,
 							Computed:    true,
 							Description: "Name of the OCI bucket.",
 						},
 						"bucket_namespace": schema.StringAttribute{
-							Optional:    true,
 							Computed:    true,
 							Description: "Namespace of the OCI bucket.",
 						},
@@ -291,18 +297,17 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		freeformTags := getFreeformTagsState(ctx, vault.FreeformTags, &resp.Diagnostics)
+		setFreeformTagsState(ctx, vault.FreeformTags, &vaultTFSDK.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		vaultTFSDK.FreeformTags = *freeformTags
-		definedTags := getDefinedTagsState(ctx, vault.DefinedTags, &resp.Diagnostics)
+		setDefinedTagsState(ctx, vault.DefinedTags, &vaultTFSDK.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		vaultTFSDK.DefinedTags = *definedTags
 		state.Vaults = append(state.Vaults, vaultTFSDK)
 	}
+	state.Matched = types.Int64Value(gjson.Get(jsonStr, "total").Int())
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_vaults.go -> Read]["+id+"]")

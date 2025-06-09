@@ -3,12 +3,25 @@
 page_title: "ciphertrust_oci_vault Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage OCI vault resources in CipherTrust Manager.
+  Use this resource to create and manage OCI vaults in CipherTrust Manager.
+  Import an Existing Vault
+  To import an existing vault, first define a resource with
+  required values matching the existing vault's values then run the terraform import command specifying
+  the vault's CipherTrust Manager resource ID on the command line.
+  For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b.
 ---
 
 # ciphertrust_oci_vault (Resource)
 
-Use this resource to create and manage OCI vault resources in CipherTrust Manager.
+Use this resource to create and manage OCI vaults in CipherTrust Manager.
+
+### Import an Existing Vault
+
+To import an existing vault, first define a resource with
+required values matching the existing vault's values then run the terraform import command specifying
+the vault's CipherTrust Manager resource ID on the command line.
+
+For example: `terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b`.
 
 ## Example Usage
 
@@ -89,7 +102,7 @@ For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f
 
 ### Required
 
-- `connection_id` (String) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use connection name.
+- `connection_id` (String) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.
 - `region` (String) The vault's region.
 - `vault_id` (String) The vault's OCID.
 
@@ -108,7 +121,7 @@ For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f
 - `created_at` (String) Date/time the application was created
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--defined_tags))
 - `freeform_tags` (Map of String) The freeform tags of the vault.
-- `id` (String) The unique identifier of the resource.
+- `id` (String) The vault's CipherTrust Managers resource ID.
 - `is_primary` (Boolean) Whether the key belongs to a primary vault or a replica vault.
 - `lifecycle_state` (String) The vault's current lifecycle state.
 - `management_endpoint` (String) The vault's management endpoint.
@@ -119,7 +132,7 @@ For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f
 - `tenancy` (String) The tenancy name.
 - `time_created` (String) The time the vault was created in OCI.
 - `updated_at` (String) Date/time the application was updated.
-- `uri` (String) A human-readable unique identifier of the resource.
+- `uri` (String) CipherTrust Manager's unique identifier for the resource.
 - `vault_type` (String) The vault's type.
 - `wrappingkey_id` (String) Vault's wrapping key OCID.
 

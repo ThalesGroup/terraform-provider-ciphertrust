@@ -79,35 +79,6 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 							Computed:    true,
 							Description: "The compartment's OCID.",
 						},
-						"display_name": schema.StringAttribute{
-							Computed:    true,
-							Description: "The vault's name.",
-						},
-						"vault_id": schema.StringAttribute{
-							Computed:    true,
-							Description: "The vaults OCID.",
-						},
-						"lifecycle_state": schema.StringAttribute{
-							Computed:    true,
-							Description: "The vaults's current lifecycle state.",
-						},
-						"management_endpoint": schema.StringAttribute{
-							Computed:    true,
-							Description: "The vault's management endpoint.",
-						},
-						"time_created": schema.StringAttribute{
-							Computed:    true,
-							Description: "The time the vault was created in OCI.",
-						},
-						"vault_type": schema.StringAttribute{
-							Computed:    true,
-							Description: "OCI Vault type.",
-						},
-						"freeform_tags": schema.MapAttribute{
-							Computed:    true,
-							ElementType: types.StringType,
-							Description: "The freeform tags of the vault.",
-						},
 						"defined_tags": schema.SetNestedAttribute{
 							Computed:    true,
 							Description: "The defined tags of the vault.",
@@ -124,6 +95,35 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 									},
 								},
 							},
+						},
+						"display_name": schema.StringAttribute{
+							Computed:    true,
+							Description: "The vault's name.",
+						},
+						"freeform_tags": schema.MapAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+							Description: "The freeform tags of the vault.",
+						},
+						"lifecycle_state": schema.StringAttribute{
+							Computed:    true,
+							Description: "The vault's current lifecycle state.",
+						},
+						"management_endpoint": schema.StringAttribute{
+							Computed:    true,
+							Description: "The vault's management endpoint.",
+						},
+						"time_created": schema.StringAttribute{
+							Computed:    true,
+							Description: "The time the vault was created in OCI.",
+						},
+						"vault_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "The vaults OCID.",
+						},
+						"vault_type": schema.StringAttribute{
+							Computed:    true,
+							Description: "OCI Vault type.",
 						},
 					},
 				},
@@ -178,16 +178,14 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 			TimeCreated:        types.StringValue(vault.TimeCreated),
 			VaultType:          types.StringValue(vault.VaultType),
 		}
-		freeformTags := getFreeformTagsState(ctx, vault.FreeformTags, &resp.Diagnostics)
+		setFreeformTagsState(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		ociVault.FreeformTags = *freeformTags
-		definedTags := getDefinedTagsState(ctx, vault.DefinedTags, &resp.Diagnostics)
+		setDefinedTagsState(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		ociVault.DefinedTags = *definedTags
 		state.Vaults = append(state.Vaults, ociVault)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)

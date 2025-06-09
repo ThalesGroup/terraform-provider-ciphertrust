@@ -67,41 +67,13 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"id": schema.StringAttribute{
-							Computed: true,
-						},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
 							Description: "The compartment's OCID.",
 						},
-						"name": schema.StringAttribute{
-							Computed:    true,
-							Description: "The compartment's name.",
-						},
 						"description": schema.StringAttribute{
 							Computed:    true,
 							Description: "The compartment's description.",
-						},
-						"time_created": schema.StringAttribute{
-							Computed:    true,
-							Description: "The time the compartment was created.",
-						},
-						"lifecycle_state": schema.StringAttribute{
-							Computed:    true,
-							Description: "The compartment's current lifecycle state.",
-						},
-						"inactive_status": schema.Int64Attribute{
-							Computed:    true,
-							Description: "The detailed status of the INACTIVE lifecycleState.",
-						},
-						"is_accessible": schema.BoolAttribute{
-							Computed:    true,
-							Description: "Whether or not the compartment is accessible for the user making the request.",
-						},
-						"freeform_tags": schema.MapAttribute{
-							Computed:    true,
-							ElementType: types.StringType,
-							Description: "The freeform tags of the compartment.",
 						},
 						"defined_tags": schema.SetNestedAttribute{
 							Computed:    true,
@@ -117,6 +89,31 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 									},
 								},
 							},
+						},
+						"freeform_tags": schema.MapAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+							Description: "The freeform tags of the compartment.",
+						},
+						"inactive_status": schema.Int64Attribute{
+							Computed:    true,
+							Description: "The detailed status of the INACTIVE lifecycleState.",
+						},
+						"is_accessible": schema.BoolAttribute{
+							Computed:    true,
+							Description: "Whether or not the compartment is accessible for the user making the request.",
+						},
+						"lifecycle_state": schema.StringAttribute{
+							Computed:    true,
+							Description: "The compartment's current lifecycle state.",
+						},
+						"name": schema.StringAttribute{
+							Computed:    true,
+							Description: "The compartment's name.",
+						},
+						"time_created": schema.StringAttribute{
+							Computed:    true,
+							Description: "The time the compartment was created.",
 						},
 					},
 				},
@@ -172,16 +169,14 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 			InactiveStatus: types.Int64Value(compartment.InactiveStatus),
 			IsAccessible:   types.BoolValue(compartment.IsAccessible),
 		}
-		freeformTags := getFreeformTagsState(ctx, compartment.FreeformTags, &resp.Diagnostics)
+		setFreeformTagsState(ctx, compartment.FreeformTags, &compartmentTFSDK.FreeformTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		compartmentTFSDK.FreeformTags = *freeformTags
-		definedTags := getDefinedTagsState(ctx, compartment.DefinedTags, &resp.Diagnostics)
+		setDefinedTagsState(ctx, compartment.DefinedTags, &compartmentTFSDK.DefinedTags, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		compartmentTFSDK.DefinedTags = *definedTags
 		state.Compartments = append(state.Compartments, compartmentTFSDK)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)

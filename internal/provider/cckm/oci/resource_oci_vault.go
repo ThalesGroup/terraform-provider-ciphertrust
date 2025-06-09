@@ -15,8 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -58,56 +56,16 @@ func (r *resourceCCKMOCIVault) Configure(_ context.Context, req resource.Configu
 
 func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI vault resources in CipherTrust Manager.",
+		Description: "Use this resource to create and manage OCI vaults in CipherTrust Manager.\n\n" +
+			"### Import an Existing Vault\n\n" +
+			"To import an existing vault, first define a resource with\n" +
+			"required values matching the existing vault's values then run the terraform import command specifying\n" +
+			"the vault's CipherTrust Manager resource ID on the command line.\n\n" +
+			"For example: `terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b`.",
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Description: "The unique identifier of the resource.",
-				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"uri": schema.StringAttribute{
-				Description: "A human-readable unique identifier of the resource.",
-				Computed:    true,
-			},
 			"account": schema.StringAttribute{
+				Computed:    true,
 				Description: "The account which owns this resource.",
-				Computed:    true,
-			},
-			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
-				Computed:    true,
-			},
-			"refreshed_at": schema.StringAttribute{
-				Description: "Date/time the application was refreshed.",
-				Computed:    true,
-			},
-			"updated_at": schema.StringAttribute{
-				Description: "Date/time the application was updated.",
-				Computed:    true,
-			},
-			"cloud_name": schema.StringAttribute{
-				Computed:    true,
-				Description: "CipherTrust Manager cloud name.",
-			},
-			"connection_id": schema.StringAttribute{
-				Required:    true,
-				Description: "CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use connection name.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-			},
-			"region": schema.StringAttribute{
-				Required:    true,
-				Description: "The vault's region.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-			},
-			"tenancy": schema.StringAttribute{
-				Computed:    true,
-				Description: "The tenancy name.",
-			},
-			"name": schema.StringAttribute{
-				Computed:    true,
-				Description: "The vault's name.",
 			},
 			"acls": schema.SetNestedAttribute{
 				Computed:    true,
@@ -130,6 +88,20 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 					},
 				},
 			},
+			"bucket_name": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
+			},
+			"bucket_namespace": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
+			},
+			"cloud_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "CipherTrust Manager cloud name.",
+			},
 			"compartment_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "The compartment's OCID.",
@@ -138,6 +110,19 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Description: "Compartment name.",
 			},
+			"connection_id": schema.StringAttribute{
+				Required:    true,
+				Description: "CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.",
+				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the application was created",
+			},
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "The vault's CipherTrust Managers resource ID.",
+			},
 			"lifecycle_state": schema.StringAttribute{
 				Computed:    true,
 				Description: "The vault's current lifecycle state.",
@@ -145,6 +130,31 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"management_endpoint": schema.StringAttribute{
 				Computed:    true,
 				Description: "The vault's management endpoint.",
+			},
+			"name": schema.StringAttribute{
+				Computed:    true,
+				Description: "The vault's name.",
+			},
+			"region": schema.StringAttribute{
+				Required:    true,
+				Description: "The vault's region.",
+				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"refreshed_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the application was refreshed.",
+			},
+			"tenancy": schema.StringAttribute{
+				Computed:    true,
+				Description: "The tenancy name.",
+			},
+			"updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the application was updated.",
+			},
+			"uri": schema.StringAttribute{
+				Computed:    true,
+				Description: "CipherTrust Manager's unique identifier for the resource.",
 			},
 			"vault_type": schema.StringAttribute{
 				Computed:    true,
@@ -194,16 +204,6 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Required:    true,
 				Description: "The vault's OCID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-			},
-			"bucket_name": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
-			},
-			"bucket_namespace": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 		},
 	}
@@ -306,6 +306,27 @@ func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.Imp
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Import]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Import]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+
+	var state VaultTFSDK
+	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	vaultID := req.ID
+	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
+	if err != nil {
+		msg := "Error reading OCI vault."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -411,46 +432,44 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response strin
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
 	state.BucketNamespace = types.StringValue(gjson.Get(response, "bucket_namespace").String())
 	state.VaultID = types.StringValue(gjson.Get(response, "vault_id").String())
-	freeformJSONTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "freeform_tags"), diags)
+	freeformTagsJSON := getFreeformTagsFromJSON(ctx, gjson.Get(response, "freeform_tags"), diags)
 	if diags.HasError() {
 		return
 	}
-	freeformTagsMap := getFreeformTagsState(ctx, freeformJSONTags, diags)
+	setFreeformTagsState(ctx, freeformTagsJSON, &state.FreeformTags, diags)
 	if diags.HasError() {
 		return
 	}
-	state.FreeformTags = *freeformTagsMap
-	definedJSONTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "defined_tags"), diags)
+	definedTagsJSON := getDefinedTagsFromJSON(ctx, gjson.Get(response, "defined_tags"), diags)
 	if diags.HasError() {
 		return
 	}
-	definedTagsMap := getDefinedTagsState(ctx, definedJSONTags, diags)
+	setDefinedTagsState(ctx, definedTagsJSON, &state.DefinedTags, diags)
 	if diags.HasError() {
 		return
 	}
-	state.DefinedTags = *definedTagsMap
 }
 
 func setCommonVaultState(ctx context.Context, response string, state *VaultCommonTFSDK, diags *diag.Diagnostics) {
-	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
+	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CompartmentID = types.StringValue(gjson.Get(response, "compartment_id").String())
+	state.CompartmentName = types.StringValue(gjson.Get(response, "compartment_name").String())
 	state.DisplayName = types.StringValue(gjson.Get(response, "display_name").String())
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())
 	state.LifecycleState = types.StringValue(gjson.Get(response, "lifecycle_state").String())
 	state.ManagementEndpoint = types.StringValue(gjson.Get(response, "management_endpoint").String())
-	state.TimeCreated = types.StringValue(gjson.Get(response, "time_created").String())
-	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
-	state.VaultType = types.StringValue(gjson.Get(response, "vault_type").String())
-	state.WrappingkeyID = types.StringValue(gjson.Get(response, "wrappingkey_id").String())
 	state.RestoredFromVaultID = types.StringValue(gjson.Get(response, "restored_from_vault_id").String())
+	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.ReplicationID = types.StringValue(gjson.Get(response, "replication_id").String())
-	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())
-	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.RefreshedAt = types.StringValue(gjson.Get(response, "refreshed_at").String())
 	state.Tenancy = types.StringValue(gjson.Get(response, "tenancy").String())
-	state.Region = types.StringValue(gjson.Get(response, "region").String())
-	state.CompartmentName = types.StringValue(gjson.Get(response, "compartment_name").String())
+	state.TimeCreated = types.StringValue(gjson.Get(response, "time_created").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	state.URI = types.StringValue(gjson.Get(response, "uri").String())
+	state.VaultType = types.StringValue(gjson.Get(response, "vault_type").String())
+	state.WrappingkeyID = types.StringValue(gjson.Get(response, "wrappingkey_id").String())
 }
