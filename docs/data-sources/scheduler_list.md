@@ -66,6 +66,7 @@ Read-Only:
 
 - `cloud_name` (String)
 - `kms` (Set of String)
+- `oci_vaults` (Set of String)
 - `synchronize_all` (Boolean)
 
 

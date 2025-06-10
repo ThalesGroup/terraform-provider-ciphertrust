@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"regexp"
 	"strings"
@@ -49,8 +48,8 @@ For Customer fragments, valid resourceQuery parameter values are 'ids' and 'name
 Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
 For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"
 `
-	cckmRotationClouds  = []string{"aws"}
-	cckmSyncClouds      = []string{"aws"}
+	cckmRotationClouds  = []string{"aws", "oci"}
+	cckmSyncClouds      = []string{"aws", "oci"}
 	supportedOperations = []string{"database_backup", "cckm_key_rotation", "cckm_synchronization", "cckm_xks_credential_rotation"}
 )
 
@@ -272,7 +271,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 			},
 			"cckm_synchronization_params": schema.ListNestedBlock{
-				Description: "Specifies cloud key synchronization parameters",
+				Description: "Cloud key synchronization parameters.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -280,7 +279,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 					Attributes: map[string]schema.Attribute{
 						"cloud_name": schema.StringAttribute{
 							Required:    true,
-							Description: "Name of the cloud that will be synchronized on schedule. Options are: " + strings.Join(cckmSyncClouds, ",") + ".",
+							Description: "Specify the cloud that will be synchronized on schedule. Options are: " + strings.Join(cckmSyncClouds, ",") + ".",
 							Validators: []validator.String{
 								stringvalidator.OneOf(cckmSyncClouds...),
 							},
@@ -288,14 +287,26 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						"kms": schema.SetAttribute{
 							Optional:    true,
 							Computed:    true,
-							Description: "IDs or names of kms resources from which AWS keys will be synchronized. Unless synchronizing all AWS keys, At least one kms is required.",
+							Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
 							ElementType: types.StringType,
-							Default: setdefault.StaticValue(
-								types.SetValueMust(
-									types.StringType,
-									[]attr.Value{},
-								),
-							),
+							//Default: setdefault.StaticValue(
+							//	types.SetValueMust(
+							//		types.StringType,
+							//		[]attr.Value{},
+							//	),
+							//),
+						},
+						"oci_vaults": schema.SetAttribute{
+							Optional:    true,
+							Computed:    true,
+							Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
+							ElementType: types.StringType,
+							//Default: setdefault.StaticValue(
+							//	types.SetValueMust(
+							//		types.StringType,
+							//		[]attr.Value{},
+							//	),
+							//),
 						},
 						"synchronize_all": schema.BoolAttribute{
 							Computed:    true,
@@ -408,6 +419,14 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 			"Error creating Scheduler Job Configs on CipherTrust Manager: ",
 			"Could not create scheduler job configs: "+err.Error(),
 		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	response, err = r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_SCHEDULER_JOB_CONFIGS)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError("Read Error", "Error fetching scheduler job configs : "+err.Error())
 		return
 	}
 
@@ -712,6 +731,14 @@ func getCckmSyncParams(ctx context.Context, plan CreateJobConfigParamsTFSDK, dia
 			}
 			syncParamsJSON.Kms = planKms
 		}
+		if len(syncParams.OCIVaults.Elements()) != 0 {
+			vaults := make([]string, 0, len(syncParams.OCIVaults.Elements()))
+			diags.Append(syncParams.OCIVaults.ElementsAs(ctx, &vaults, false)...)
+			if diags.HasError() {
+				return nil
+			}
+			syncParamsJSON.OCIVaults = vaults
+		}
 		return &syncParamsJSON
 	}
 	return nil
@@ -786,26 +813,33 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		}
 		plan.CCKMKeyRotationParams = cckmParamsList
 	case "cckm_synchronization":
+
 		cckmParams := &CCKMSynchronizationParamsTFSDK{
 			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
 			SyncAll:   types.BoolValue(gjson.Get(response, "job_config_params.synchronize_all").Bool()),
 		}
-		var elements []string
+
+		var awsContainers []string
 		for _, kms := range gjson.Get(response, "job_config_params.kms").Array() {
-			elements = append(elements, kms.String())
+			awsContainers = append(awsContainers, kms.String())
 		}
-		if len(elements) != 0 {
-			cckmParams.Kms, _ = types.SetValueFrom(ctx, types.StringType, elements)
+		if len(awsContainers) != 0 {
+			cckmParams.Kms, _ = types.SetValueFrom(ctx, types.StringType, awsContainers)
 		} else {
 			cckmParams.Kms = types.SetValueMust(types.StringType, []attr.Value{})
 		}
-		cckmParamsList := types.ListNull(types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"cloud_name":      types.StringType,
-				"synchronize_all": types.BoolType,
-				"kms":             types.SetType{ElemType: types.StringType},
-			},
-		})
+
+		var ociContainers []string
+		for _, vault := range gjson.Get(response, "job_config_params.oci_vaults").Array() {
+			ociContainers = append(ociContainers, vault.String())
+		}
+		if len(ociContainers) != 0 {
+			cckmParams.OCIVaults, _ = types.SetValueFrom(ctx, types.StringType, ociContainers)
+		} else {
+			cckmParams.OCIVaults = types.SetValueMust(types.StringType, []attr.Value{})
+		}
+
+		cckmParamsList := types.ListNull(types.ObjectType{AttrTypes: CCKMSynchronizationParamsAttribs})
 		diags.Append(tfsdk.ValueFrom(ctx, []CCKMSynchronizationParamsTFSDK{*cckmParams}, cckmParamsList.Type(ctx), &cckmParamsList)...)
 		if diags.HasError() {
 			return

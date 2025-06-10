@@ -13,49 +13,11 @@ Use this data source to retrieve a list of OCI compartments available to the con
 ## Example Usage
 
 ```terraform
-# Terraform Configuration for CipherTrust Provider
-
-# This configuration demonstrates the usage of the OCI compartments datasource
-
-terraform {
-  # Define the required providers for the configuration
-  required_providers {
-    # CipherTrust provider for managing CipherTrust Manager resources
-    ciphertrust = {
-      # The source of the provider
-      source = "ThalesGroup/CipherTrust"
-      # Version of the provider to use
-      version = "1.0.0-pre3"
-    }
-  }
-}
-
-# Configure the CipherTrust provider for authentication
-provider "ciphertrust" {
-  # The address of the CipherTrust Manager appliance (replace with the actual address)
-  address = "https://10.10.10.10"
-
-  # Username for authenticating with the CipherTrust Manager appliance
-  username = "admin"
-
-  # Password for authenticating with the CipherTrust Manager appliance
-  password = "ChangeMe101!"
-}
-
-# Define an OCI connection
-resource "ciphertrust_oci_connection" "oci_connection" {
-  key_file            = "path-to-or-contents-of-oci-key-file"
-  name                = "connection-name"
-  pub_key_fingerprint = "public-key-fingerprint"
-  region              = "oci-region"
-  tenancy_ocid        = "tenancy-ocid"
-  user_ocid           = "user-ocid"
-}
-
-# Retrieve a list of compartments available to the OCI connection
-data "ciphertrust_get_oci_compartments" "oci_compartments" {
-  connection_id = ciphertrust_oci_connection.oci_connection.name
-  limit = 5
+data "ciphertrust_get_oci_compartments" "connection_compartments" {
+  # Required parameters
+  connection_id = "oci-connection-id-or-name"
+  # Optional parameters
+  limit         = 5
 }
 ```
 
@@ -83,6 +45,7 @@ Read-Only:
 - `defined_tags` (Attributes Set) The defined tags of the compartment. (see [below for nested schema](#nestedatt--compartments--defined_tags))
 - `description` (String) The compartment's description.
 - `freeform_tags` (Map of String) The freeform tags of the compartment.
+- `id` (String) The compartment's ID.
 - `inactive_status` (Number) The detailed status of the INACTIVE lifecycleState.
 - `is_accessible` (Boolean) Whether or not the compartment is accessible for the user making the request.
 - `lifecycle_state` (String) The compartment's current lifecycle state.

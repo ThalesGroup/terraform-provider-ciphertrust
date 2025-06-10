@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -30,9 +31,9 @@ type dataSourceOCIVault struct {
 }
 
 type OCIVaultDataSourceModel struct {
-	Filters types.Map    `tfsdk:"filters"`
-	Matched types.Int64  `tfsdk:"matched"`
-	Vaults  []VaultTFSDK `tfsdk:"vaults"`
+	Filters types.Map           `tfsdk:"filters"`
+	Matched types.Int64         `tfsdk:"matched"`
+	Vaults  []models.VaultTFSDK `tfsdk:"vaults"`
 }
 
 func (d *dataSourceOCIVault) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -244,7 +245,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	var vaults DataSourceVaultsJSON
+	var vaults models.DataSourceVaultsJSON
 	err = json.Unmarshal([]byte(jsonStr), &vaults)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_vaults.go -> Read]["+id+"]")
@@ -256,8 +257,8 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	for ndx, vault := range vaults.Resources {
-		vaultTFSDK := VaultTFSDK{
-			VaultCommonTFSDK: VaultCommonTFSDK{
+		vaultTFSDK := models.VaultTFSDK{
+			VaultCommonTFSDK: models.VaultCommonTFSDK{
 				ID:                  types.StringValue(vault.ID),
 				URI:                 types.StringValue(vault.URI),
 				Account:             types.StringValue(vault.Account),
@@ -291,7 +292,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 			bucketNamespace = *vault.BucketNamespace
 		}
 		resourceJSON := gjson.Get(jsonStr, "resources").Array()[ndx].String()
-		vaultTFSDK.BucketParamsTFSDK = BucketParamsTFSDK{
+		vaultTFSDK.BucketParamsTFSDK = models.BucketParamsTFSDK{
 			BucketName:      types.StringValue(bucketName),
 			BucketNamespace: types.StringValue(bucketNamespace),
 		}
