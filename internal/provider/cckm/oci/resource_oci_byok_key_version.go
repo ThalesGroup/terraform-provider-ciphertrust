@@ -254,9 +254,7 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-
 	tflog.Trace(ctx, "[resource_oci_byok_keyversion.go -> Create][response:"+response)
 }
 
@@ -286,7 +284,6 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	tflog.Trace(ctx, "[resource_oci_byok_keyversion.go -> Read][response:"+response)
 }

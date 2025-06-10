@@ -391,9 +391,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-
 	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Create][response:"+response)
 }
 
@@ -490,14 +488,12 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	tflog.Trace(ctx, "[resource_oci_key.go -> Update][response:"+response)
-
 	setKeyState(ctx, id, r.client, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	tflog.Trace(ctx, "[resource_oci_key.go -> Update][response:"+response)
 }
 
 func (r *resourceCCKMOCIKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

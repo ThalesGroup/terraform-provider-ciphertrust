@@ -413,9 +413,7 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-
 	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
 }
 

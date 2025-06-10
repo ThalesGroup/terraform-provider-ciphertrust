@@ -236,7 +236,6 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-
 	tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
 }
 
@@ -266,7 +265,6 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	tflog.Trace(ctx, "[resource_oci_key_version.go -> Read][response:"+response)
 }
