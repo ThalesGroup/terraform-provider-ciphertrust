@@ -400,7 +400,7 @@ type CMRegTokenJSON struct {
 type CMUserTFSDK struct {
 	ID                     types.String `tfsdk:"id"`
 	UserID                 types.String `tfsdk:"user_id"`
-	Name                   types.String `tfsdk:"full_name"`
+	Name                   types.String `tfsdk:"name"`
 	UserName               types.String `tfsdk:"username"`
 	Nickname               types.String `tfsdk:"nickname"`
 	Email                  types.String `tfsdk:"email"`
@@ -408,6 +408,7 @@ type CMUserTFSDK struct {
 	IsDomainUser           types.Bool   `tfsdk:"is_domain_user"`
 	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
 	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
+	Metadata               types.Map    `tfsdk:"user_metadata"`
 }
 
 type UserLoginFlagsJSON struct {
@@ -424,6 +425,7 @@ type CMUserJSON struct {
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
 	PasswordChangeRequired bool               `json:"password_change_required"`
+	Metadata               map[string]string  `json:"user_metadata"`
 }
 
 type CMSSHKeyTFSDK struct {

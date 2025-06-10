@@ -13,7 +13,7 @@ provider "ciphertrust" {
 	password = "ChangeMe101!"
 }
 
-resource "ciphertrust_cm_user" "testUser" {
+resource "ciphertrust_user" "testUser" {
   name="frank"
   email="frank@local"
   username="frank"
@@ -21,5 +21,5 @@ resource "ciphertrust_cm_user" "testUser" {
 }
 
 output "cm_user_id" {
-	value = ciphertrust_cm_user.testUser.id
+	value = ciphertrust_user.testUser.id
 }

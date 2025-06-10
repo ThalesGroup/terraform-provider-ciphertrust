@@ -29,7 +29,7 @@ provider "ciphertrust" {
 }
 
 # Add a resource of type CM Group with the name TestGroup
-resource "ciphertrust_cm_group" "testGroup" {
+resource "ciphertrust_groups" "testGroup" {
   # Name of the group to be created on CM
   name = "TestGroup"
 }
@@ -37,5 +37,5 @@ resource "ciphertrust_cm_group" "testGroup" {
 # Output the name of the created CM group
 output "group_name" {
     # The value will be the name of the CM group
-    value = ciphertrust_cm_group.testGroup.name
+    value = ciphertrust_groups.testGroup.name
 }

@@ -29,7 +29,7 @@ provider "ciphertrust" {
 }
 
 # Add a resource of type CM User with the username frank
-resource "ciphertrust_cm_user" "sample_user" {
+resource "ciphertrust_user" "sample_user" {
   # Full name of the user
   name="frank"
   # E-mail of the user
@@ -42,10 +42,10 @@ resource "ciphertrust_cm_user" "sample_user" {
 
 # Output the unique ID of the created User
 output "user_id" {
-	value = ciphertrust_cm_user.sample_user.id
+	value = ciphertrust_user.sample_user.id
 }
 
 # Output the username
 output "username" {
-    value = ciphertrust_cm_user.sample_user.username
+    value = ciphertrust_user.sample_user.username
 }
