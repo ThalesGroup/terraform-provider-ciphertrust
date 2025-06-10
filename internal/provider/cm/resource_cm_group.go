@@ -30,21 +30,18 @@ type resourceCMGroup struct {
 }
 
 func (r *resourceCMGroup) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cm_group"
+	resp.TypeName = req.ProviderTypeName + "_groups"
 }
 
 // Schema defines the schema for the resource.
 func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Computed: true,
+			"name": schema.StringAttribute{
+				Required: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-			},
-			"name": schema.StringAttribute{
-				Required: true,
 			},
 			"app_metadata": schema.MapNestedAttribute{
 				Optional: true,
@@ -57,6 +54,9 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"user_metadata": schema.MapNestedAttribute{
 				Optional: true,
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
 			},
 		},
 	}
