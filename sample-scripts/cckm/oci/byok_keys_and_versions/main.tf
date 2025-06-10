@@ -14,13 +14,13 @@ resource "random_id" "random" {
 }
 
 locals {
-  oci_key_file        = "/work/terraform_server_certs/oci-key-file.pem"
+  oci_key_file        = "./keyfile.pem"
   pubkey_fingerprint  = "c6:eb:b9:b1:22:8b:39:79:80:60:16:33:9b:e3:c9:ec"
   region              = "us-ashburn-1"
-  tenancy_ocid        = "ocid1.tenancy.oc1..aaaaaaaadixb52q2mvlsn634ql5aaal6hb2vg7audpd4d4mcf5zluymff6sq"
-  user_ocid           = "ocid1.user.oc1..aaaaaaaam5qlu6nxoyi4nhewduivm2e7n4ye4dwdk5jcwxvoz2arfjtr5e3q"
-  vault_ocid          = "ocid1.vault.oc1.iad.bzqyzunhaagyg.abuwcljrlzpbjpufvqp366jzmcr3txtbz7dximukyazav4hyzgbpdtd7qnea"
-  compartment_ocid    = "ocid1.compartment.oc1..aaaaaaaasys76jxn2mrjb534orknwrwfe3npr4tfba7npxnal7whxiiztzva"
+  tenancy_ocid        = "ocid1.tenancy.oc1.."
+  user_ocid           = "ocid1.user.oc1.."
+  vault_ocid          = "ocid1.vault.oc1.."
+  compartment_ocid    = "ocid1.compartment.."
   connection_name     = "tf-${lower(random_id.random.hex)}"
   cm_key_name         = "tf-${lower(random_id.random.hex)}"
   oci_key_name        = "tf-${lower(random_id.random.hex)}"
