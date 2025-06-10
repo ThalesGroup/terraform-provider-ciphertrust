@@ -7,6 +7,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -119,7 +120,7 @@ func (r *resourceCCKMOCIAcl) Create(ctx context.Context, req resource.CreateRequ
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> Create]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_acls.go -> Create]["+id+"]")
 
-	var plan VaultAclTFSDK
+	var plan models.VaultAclTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -164,7 +165,7 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> Read]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_acls.go -> Read]["+id+"]")
 
-	var state VaultAclTFSDK
+	var state models.VaultAclTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -195,12 +196,12 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> Update]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_acls.go -> Update]["+id+"]")
 
-	var plan VaultAclTFSDK
+	var plan models.VaultAclTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var state VaultAclTFSDK
+	var state models.VaultAclTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -266,7 +267,7 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> Delete]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_acls.go -> Delete]["+id+"]")
 
-	var state VaultAclTFSDK
+	var state models.VaultAclTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -320,7 +321,7 @@ func (r *resourceCCKMOCIAcl) applyAcls(ctx context.Context, id string, vaultID s
 	return response
 }
 
-func (r *resourceCCKMOCIAcl) setOCIAclState(ctx context.Context, resourceID string, responseJSON string, state *VaultAclTFSDK, diags *diag.Diagnostics) {
+func (r *resourceCCKMOCIAcl) setOCIAclState(ctx context.Context, resourceID string, responseJSON string, state *models.VaultAclTFSDK, diags *diag.Diagnostics) {
 	vaultID, aclType, userIDOrGroup, err := acls.DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error setting state for OCI ACL, invalid resource ID."

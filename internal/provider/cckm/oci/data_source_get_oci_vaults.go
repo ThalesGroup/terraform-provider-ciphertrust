@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -137,11 +138,11 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_get_oci_vaults.go -> Read]")
 	id := uuid.New().String()
 
-	var state DataSourceGetOCIVaultsTFSDK
+	var state models.DataSourceGetOCIVaultsTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 
 	connection := state.Connection.ValueString()
-	payload := GetOCIVaultsPayloadJSON{
+	payload := models.GetOCIVaultsPayloadJSON{
 		Connection:    connection,
 		CompartmentID: state.CompartmentID.ValueString(),
 		Region:        state.Region.ValueString(),
@@ -151,7 +152,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 		payload.Limit = &limit
 	}
 
-	var data []DataSourceGetOCIVaultJSON
+	var data []models.DataSourceGetOCIVaultJSON
 	vaults := d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -169,7 +170,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	}
 
 	for _, vault := range data {
-		ociVault := DataSourceGetOCIVaultTFSDK{
+		ociVault := models.DataSourceGetOCIVaultTFSDK{
 			CompartmentID:      types.StringValue(vault.CompartmentID),
 			DisplayName:        types.StringValue(vault.DisplayName),
 			VaultID:            types.StringValue(vault.VaultID),
@@ -192,7 +193,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_get_vaults.go -> Read]["+id+"]")
 }
 
-func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, payload GetOCIVaultsPayloadJSON, diags *diag.Diagnostics) *GetOCIVaultsJSON {
+func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, payload models.GetOCIVaultsPayloadJSON, diags *diag.Diagnostics) *models.GetOCIVaultsJSON {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error reading OCI vaults, invalid data input."
@@ -209,7 +210,7 @@ func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, pay
 		diags.AddError(details, "")
 		return nil
 	}
-	var ociVaults GetOCIVaultsJSON
+	var ociVaults models.GetOCIVaultsJSON
 	err = json.Unmarshal([]byte(response), &ociVaults)
 	if err != nil {
 		msg := "Error reading OCI vaults, invalid data output."

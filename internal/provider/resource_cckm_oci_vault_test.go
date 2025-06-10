@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmOciVault(t *testing.T) {
+func TestCckmOCIVault(t *testing.T) {
 
 	ociKeyFile := os.Getenv("OCI_KEYFILE")
 	ociPubKeyFP := os.Getenv("OCI_PUBKEY_FP")

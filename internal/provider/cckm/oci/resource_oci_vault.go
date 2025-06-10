@@ -7,6 +7,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -216,13 +217,13 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Create]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Create]["+id+"]")
 
-	var plan VaultTFSDK
+	var plan models.VaultTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	payload := AddVaultsPayloadJSON{
+	payload := models.AddVaultsPayloadJSON{
 		Connection: plan.Connection.ValueString(),
 		Region:     plan.Region.ValueString(),
 		VaultIDs:   []string{plan.VaultID.ValueString()},
@@ -278,7 +279,7 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Read]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Read]["+id+"]")
-	var state VaultTFSDK
+	var state models.VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -309,7 +310,7 @@ func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.Imp
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Import]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 
-	var state VaultTFSDK
+	var state models.VaultTFSDK
 	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -336,13 +337,13 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Update]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Update]["+id+"]")
 
-	var plan VaultTFSDK
+	var plan models.VaultTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var state VaultTFSDK
+	var state models.VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -360,7 +361,7 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		plan.BucketName.ValueString() != gjson.Get(response, "bucket_name").String() ||
 		plan.BucketNamespace.ValueString() != gjson.Get(response, "bucket_namespace").String() {
 
-		var payload UpdateVaultJSON
+		var payload models.UpdateVaultJSON
 		if plan.Connection.ValueString() != gjson.Get(response, "connection").String() {
 			payload.Connection = plan.Connection.ValueStringPointer()
 		}
@@ -409,7 +410,7 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Delete]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Delete]["+id+"]")
 
-	var state VaultTFSDK
+	var state models.VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -428,7 +429,7 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 	}
 }
 
-func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response string, state *VaultTFSDK, diags *diag.Diagnostics) {
+func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response string, state *models.VaultTFSDK, diags *diag.Diagnostics) {
 	tflog.Trace(ctx, "[resource_oci_vault.go -> setVaultState][response:"+response)
 	setCommonVaultState(ctx, response, &state.VaultCommonTFSDK, diags)
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
@@ -452,7 +453,7 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response strin
 	}
 }
 
-func setCommonVaultState(ctx context.Context, response string, state *VaultCommonTFSDK, diags *diag.Diagnostics) {
+func setCommonVaultState(ctx context.Context, response string, state *models.VaultCommonTFSDK, diags *diag.Diagnostics) {
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())

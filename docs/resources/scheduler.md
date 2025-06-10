@@ -147,7 +147,7 @@ For example:
 ### Optional
 
 - `cckm_key_rotation_params` (Block List) Specifies cloud key rotation parameters (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
-- `cckm_synchronization_params` (Block List) Specifies cloud key synchronization parameters (see [below for nested schema](#nestedblock--cckm_synchronization_params))
+- `cckm_synchronization_params` (Block List) Cloud key synchronization parameters. (see [below for nested schema](#nestedblock--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
 - `description` (String) Description for the job configuration.
@@ -171,7 +171,7 @@ For example:
 
 Required:
 
-- `cloud_name` (String) Name of the cloud for which to schedule the key rotation. Options are: aws.
+- `cloud_name` (String) Name of the cloud for which to schedule the key rotation. Options are: aws,oci.
 
 Optional:
 
@@ -185,11 +185,12 @@ Optional:
 
 Required:
 
-- `cloud_name` (String) Name of the cloud that will be synchronized on schedule. Options are: aws.
+- `cloud_name` (String) Specify the cloud that will be synchronized on schedule. Options are: aws,oci.
 
 Optional:
 
-- `kms` (Set of String) IDs or names of kms resources from which AWS keys will be synchronized. Unless synchronizing all AWS keys, At least one kms is required.
+- `kms` (Set of String) A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.
+- `oci_vaults` (Set of String) A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.
 - `synchronize_all` (Boolean) Set true to synchronize all keys.
 
 

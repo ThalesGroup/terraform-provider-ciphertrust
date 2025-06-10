@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -131,13 +132,13 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_compartments.go -> Read]")
 	id := uuid.New().String()
 
-	var state GetOCICompartmentsDataSourceModelTFSDK
+	var state models.GetOCICompartmentsDataSourceModelTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	connection := state.Connection.ValueString()
-	payload := GetOCICompartmentsPayloadJSON{
+	payload := models.GetOCICompartmentsPayloadJSON{
 		Connection: connection,
 	}
 	limit := state.Limit.ValueInt64()
@@ -145,7 +146,7 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 		payload.Limit = &limit
 	}
 
-	var data []GetOCICompartmentJSON
+	var data []models.GetOCICompartmentJSON
 	compartments := d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -163,7 +164,7 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	}
 
 	for _, compartment := range data {
-		compartmentTFSDK := GetOCICompartmentTFSDK{
+		compartmentTFSDK := models.GetOCICompartmentTFSDK{
 			ID:             types.StringValue(compartment.ID),
 			CompartmentID:  types.StringValue(compartment.CompartmentID),
 			Name:           types.StringValue(compartment.Name),
@@ -188,7 +189,7 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 }
 
 func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id string,
-	payload GetOCICompartmentsPayloadJSON, diags *diag.Diagnostics) *GetOCICompartmentsJSON {
+	payload models.GetOCICompartmentsPayloadJSON, diags *diag.Diagnostics) *models.GetOCICompartmentsJSON {
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -206,7 +207,7 @@ func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id
 		diags.AddError(details, "")
 		return nil
 	}
-	var ociCompartments GetOCICompartmentsJSON
+	var ociCompartments models.GetOCICompartmentsJSON
 	err = json.Unmarshal([]byte(response), &ociCompartments)
 	if err != nil {
 		msg := "Error reading OCI compartments, invalid data output."

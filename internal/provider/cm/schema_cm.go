@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -772,6 +773,7 @@ type CCKMKeyRotationParamsJSON struct {
 type CCKMSynchronizationParamsJSON struct {
 	CloudName      string   `json:"cloud_name"`
 	Kms            []string `json:"kms"`
+	OCIVaults      []string `json:"oci_vaults"`
 	SynchronizeAll *bool    `json:"synchronize_all"`
 }
 
@@ -1105,7 +1107,15 @@ type CCKMKeyRotationParamsTFSDK struct {
 type CCKMSynchronizationParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 	Kms       types.Set    `tfsdk:"kms"`
+	OCIVaults types.Set    `tfsdk:"oci_vaults"`
 	SyncAll   types.Bool   `tfsdk:"synchronize_all"`
+}
+
+var CCKMSynchronizationParamsAttribs = map[string]attr.Type{
+	"cloud_name":      types.StringType,
+	"synchronize_all": types.BoolType,
+	"oci_vaults":      types.SetType{ElemType: types.StringType},
+	"kms":             types.SetType{ElemType: types.StringType},
 }
 
 type CCKMXksRotateCredentialsParamsTFSDK struct {

@@ -77,13 +77,14 @@ output "username" {
 ### Optional
 
 - `email` (String)
-- `full_name` (String)
+- `is_domain_user` (Boolean)
+- `name` (String) Users full name
 - `nickname` (String)
+- `password_change_required` (Boolean)
+- `prevent_ui_login` (Boolean)
+- `user_metadata` (Map of String) Information that can be stored with the user.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `is_domain_user` (Boolean)
-- `password_change_required` (Boolean)
-- `prevent_ui_login` (Boolean)
 - `user_id` (String)

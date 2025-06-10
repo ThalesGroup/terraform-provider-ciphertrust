@@ -143,6 +143,10 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 									ElementType: types.StringType,
 									Computed:    true,
 								},
+								"oci_vaults": schema.SetAttribute{
+									ElementType: types.StringType,
+									Computed:    true,
+								},
 								"synchronize_all": schema.BoolAttribute{
 									Computed: true,
 								}},
@@ -329,12 +333,15 @@ func getCCKMKeyRotationParams(jobs CreateJobConfigParamsListJSON, schedulerJobs 
 
 func getCCKMSynchronizationParams(jobs CreateJobConfigParamsListJSON, schedulerJobs *JobConfigParamsTFSDK, diags *diag.Diagnostics) {
 	if jobs.CCKMSynchronizationParams != nil {
+
 		synchronizationParams := &CCKMSynchronizationParamsTFSDK{
 			CloudName: types.StringValue(jobs.CCKMSynchronizationParams.CloudName),
 		}
+
 		if jobs.CCKMSynchronizationParams.SynchronizeAll != nil {
 			synchronizationParams.SyncAll = types.BoolValue(*jobs.CCKMSynchronizationParams.SynchronizeAll)
 		}
+
 		var kmsValues []attr.Value
 		for _, kms := range jobs.CCKMSynchronizationParams.Kms {
 			kmsValues = append(kmsValues, types.StringValue(kms))
@@ -345,6 +352,18 @@ func getCCKMSynchronizationParams(jobs CreateJobConfigParamsListJSON, schedulerJ
 			return
 		}
 		synchronizationParams.Kms = kmses
+
+		var ociValues []attr.Value
+		for _, vault := range jobs.CCKMSynchronizationParams.OCIVaults {
+			ociValues = append(ociValues, types.StringValue(vault))
+		}
+		ociSet, d := types.SetValue(types.StringType, ociValues)
+		if d.HasError() {
+			diags.Append(d...)
+			return
+		}
+		synchronizationParams.OCIVaults = ociSet
+
 		schedulerJobs.CCKMSynchronizationParams = synchronizationParams
 	}
 }

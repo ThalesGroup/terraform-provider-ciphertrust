@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -52,7 +53,7 @@ func getDefinedTagsFromPlan(ctx context.Context, planTags *types.Set, diags *dia
 	if len(planTags.Elements()) == 0 {
 		return definedTags
 	}
-	planParams := make([]DefinedTagTFSDK, 0, len(planTags.Elements()))
+	planParams := make([]models.DefinedTagTFSDK, 0, len(planTags.Elements()))
 	dg := planTags.ElementsAs(ctx, &planParams, false)
 	if dg.HasError() {
 		diags.Append(dg...)
@@ -88,21 +89,21 @@ func getDefinedTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *d
 }
 
 func setDefinedTagsState(ctx context.Context, tags map[string]map[string]string, state *types.Set, diags *diag.Diagnostics) {
-	var definedTagsTFSDK []DefinedTagTFSDK
+	var definedTagsTFSDK []models.DefinedTagTFSDK
 	for namespace, valueMap := range tags {
 		tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, valueMap)
 		if dg.HasError() {
 			diags.Append(dg...)
 			return
 		}
-		definedTagTFSDK := DefinedTagTFSDK{
+		definedTagTFSDK := models.DefinedTagTFSDK{
 			Tag:    types.StringValue(namespace),
 			Values: tfMapValue,
 		}
 		definedTagsTFSDK = append(definedTagsTFSDK, definedTagTFSDK)
 	}
 	tfSetValue, dg := types.SetValueFrom(ctx,
-		types.ObjectType{AttrTypes: DefinedTagAttribs}, definedTagsTFSDK)
+		types.ObjectType{AttrTypes: models.DefinedTagAttribs}, definedTagsTFSDK)
 	if dg.HasError() {
 		diags.Append(dg...)
 		return

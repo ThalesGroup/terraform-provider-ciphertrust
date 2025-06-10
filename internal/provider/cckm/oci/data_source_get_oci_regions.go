@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -69,14 +70,14 @@ func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadR
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_get_oci_regions.go -> Read]")
 
 	id := uuid.New().String()
-	var state GetOCIRegionsDataSourceTFSDK
+	var state models.GetOCIRegionsDataSourceTFSDK
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
 		resp.Diagnostics = append(resp.Diagnostics, diags...)
 		return
 	}
 	connection := state.Connection.ValueString()
-	payload := GetOCIRegionsPayloadJSON{
+	payload := models.GetOCIRegionsPayloadJSON{
 		Connection: connection,
 	}
 	payloadJSON, err := json.Marshal(payload)

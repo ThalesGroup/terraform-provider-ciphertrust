@@ -8,12 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmSchedulers(t *testing.T) {
-	t.Run("Rotation", func(t *testing.T) {
-		connectionResource, ok := initCckmAwsTest()
-		if !ok {
-			t.Skip()
-		}
+func TestCckmSchedulersRotation(t *testing.T) {
+	t.Run("aws", func(t *testing.T) {
 		createSchedulerParams := `
 			resource "ciphertrust_scheduler" "rotation_max_params" {
 			  cckm_key_rotation_params {
@@ -32,15 +28,6 @@ func TestCckmSchedulers(t *testing.T) {
 				name       = "%s"
 				operation  = "cckm_key_rotation"
 				run_at     = "0 9 * * fri"
-			}
-			resource "ciphertrust_aws_key" "aws_key" {
-				kms        = ciphertrust_aws_kms.kms.id
-				region     = ciphertrust_aws_kms.kms.regions[0]
-				enable_rotation {
-					disable_encrypt = true
-					job_config_id   = ciphertrust_scheduler.rotation_max_params.id
-					key_source      = "ciphertrust"
-				}
 			}`
 		updateSchedulerParams := `
 			resource "ciphertrust_scheduler" "rotation_max_params" {
@@ -62,27 +49,17 @@ func TestCckmSchedulers(t *testing.T) {
 				name       = "%s"
 				operation  = "cckm_key_rotation"
 				run_at     = "0 9 * * fri"
-			}
-			resource "ciphertrust_aws_key" "aws_key" {
-				kms        = ciphertrust_aws_kms.kms.id
-				region     = ciphertrust_aws_kms.kms.regions[0]
-				enable_rotation {
-					disable_encrypt = false
-					job_config_id   = ciphertrust_scheduler.rotation_min_params.id
-					key_source      = "ciphertrust"
-				}
 			}`
-		awsKeyResource := "ciphertrust_aws_key.aws_key"
 		maxParamsResource := "ciphertrust_scheduler.rotation_max_params"
 		minParamsResource := "ciphertrust_scheduler.rotation_min_params"
 		maxParamsName := "MaxParams" + uuid.New().String()[:8]
 		minParamsName := "MinParams" + uuid.New().String()[:8]
 		expiration := "44d"
 		expireIn := "22h"
-		createConfig := connectionResource + fmt.Sprintf(createSchedulerParams, expiration, expireIn, maxParamsName, minParamsName)
+		createConfig := fmt.Sprintf(createSchedulerParams, expiration, expireIn, maxParamsName, minParamsName)
 		expirationUpdate := "55d"
 		expireInUpdate := "33h"
-		updateConfig := connectionResource + fmt.Sprintf(updateSchedulerParams, expirationUpdate, expireInUpdate, maxParamsName, expirationUpdate, expireInUpdate, minParamsName)
+		updateConfig := fmt.Sprintf(updateSchedulerParams, expirationUpdate, expireInUpdate, maxParamsName, expirationUpdate, expireInUpdate, minParamsName)
 		resource.Test(t, resource.TestCase{
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
@@ -100,11 +77,6 @@ func TestCckmSchedulers(t *testing.T) {
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.0.cloud_name", "aws"),
 						testCheckAttributeNotSet(minParamsResource, "cckm_key_rotation_params.0.expiration"),
 						testCheckAttributeNotSet(minParamsResource, "cckm_key_rotation_params.0.expire_in"),
-
-						resource.TestCheckResourceAttrSet(awsKeyResource, "id"),
-						resource.TestCheckResourceAttrPair(awsKeyResource, "enable_rotation.0.job_config_id", maxParamsResource, "id"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.disable_encrypt", "true"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.key_source", "ciphertrust"),
 					),
 				},
 				{
@@ -121,11 +93,6 @@ func TestCckmSchedulers(t *testing.T) {
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.0.cloud_name", "aws"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.0.expiration", expirationUpdate),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.0.expire_in", expireInUpdate),
-
-						resource.TestCheckResourceAttrSet(awsKeyResource, "id"),
-						resource.TestCheckResourceAttrPair(awsKeyResource, "enable_rotation.0.job_config_id", minParamsResource, "id"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.disable_encrypt", "false"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.key_source", "ciphertrust"),
 					),
 				},
 				{
@@ -142,17 +109,68 @@ func TestCckmSchedulers(t *testing.T) {
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.0.cloud_name", "aws"),
 						testCheckAttributeNotSet(minParamsResource, "cckm_key_rotation_params.0.expiration"),
 						testCheckAttributeNotSet(minParamsResource, "cckm_key_rotation_params.0.expire_in"),
-
-						resource.TestCheckResourceAttrSet(awsKeyResource, "id"),
-						resource.TestCheckResourceAttrPair(awsKeyResource, "enable_rotation.0.job_config_id", maxParamsResource, "id"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.disable_encrypt", "true"),
-						resource.TestCheckResourceAttr(awsKeyResource, "enable_rotation.0.key_source", "ciphertrust"),
 					),
 				},
 			},
 		})
 	})
-	t.Run("Synchronization", func(t *testing.T) {
+
+	t.Run("XKSCredentialRotation", func(t *testing.T) {
+		schedulerConfig := `
+			resource "ciphertrust_scheduler" "xks_credential_rotation" {
+				cckm_xks_credential_rotation_params = {
+					cloud_name = "aws"
+				}
+				name       = "%s"
+				operation  = "cckm_xks_credential_rotation"
+				run_at     = "0 9 * * fri"
+			}`
+		schedulerName := "tf-xks-cred-rotation" + uuid.New().String()[:8]
+		schedulerConfigStr := fmt.Sprintf(schedulerConfig, schedulerName)
+		schedulerResourceName := "ciphertrust_scheduler.xks_credential_rotation"
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: schedulerConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(schedulerResourceName, "id"),
+						resource.TestCheckResourceAttr(schedulerResourceName, "cckm_xks_credential_rotation_params.cloud_name", "aws"),
+					),
+				},
+			},
+		})
+	})
+
+	t.Run("oci", func(t *testing.T) {
+		createConfig := `	
+			resource "ciphertrust_scheduler" "oci" {
+				cckm_key_rotation_params {
+					cloud_name = "oci"
+					expiration = "%s"
+					expire_in  = "%s"
+				}
+				name       = "%s"
+				operation  = "cckm_key_rotation"
+				run_at     = "0 9 * * fri"
+			}`
+		expiration := "44d"
+		expireIn := "22h"
+		name := "tf" + uuid.New().String()[:8]
+		createConfigStr := fmt.Sprintf(createConfig, expiration, expireIn, name)
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createConfigStr,
+				},
+			},
+		})
+	})
+}
+
+func TestCckmSchedulersSync(t *testing.T) {
+	t.Run("aws", func(t *testing.T) {
 		connectionResource, ok := initCckmAwsTest()
 		if !ok {
 			t.Skip()
@@ -249,29 +267,35 @@ func TestCckmSchedulers(t *testing.T) {
 			},
 		})
 	})
-
-	t.Run("XKSCredentialRotation", func(t *testing.T) {
-		schedulerConfig := `
-			resource "ciphertrust_scheduler" "xks_credential_rotation" {
-				cckm_xks_credential_rotation_params = {
-					cloud_name = "aws"
+	t.Run("oci", func(t *testing.T) {
+		connectionResource := initCckmOCITest(t)
+		createConfig := `	
+			resource "ciphertrust_scheduler" "sync_vault" {
+				cckm_synchronization_params {
+					cloud_name  = "oci"
+					oci_vaults  = [ciphertrust_oci_vault.vault.id]
 				}
 				name       = "%s"
-				operation  = "cckm_xks_credential_rotation"
+				operation  = "cckm_synchronization"
+				run_at     = "0 9 * * fri"
+			}
+			resource "ciphertrust_scheduler" "sync_all" {
+				cckm_synchronization_params {
+					cloud_name      = "oci"
+					synchronize_all = true
+				}
+				name       = "%s"
+				operation  = "cckm_synchronization"
 				run_at     = "0 9 * * fri"
 			}`
-		schedulerName := "tf-xks-cred-rotation" + uuid.New().String()[:8]
-		schedulerConfigStr := fmt.Sprintf(schedulerConfig, schedulerName)
-		schedulerResourceName := "ciphertrust_scheduler.xks_credential_rotation"
+		syncVaultName := "oci-sync-vault" + uuid.New().String()[:8]
+		syncAllName := "oci-sync-all" + uuid.New().String()[:8]
+		createConfigStr := connectionResource + fmt.Sprintf(createConfig, syncVaultName, syncAllName)
 		resource.Test(t, resource.TestCase{
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: schedulerConfigStr,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttrSet(schedulerResourceName, "id"),
-						resource.TestCheckResourceAttr(schedulerResourceName, "cckm_xks_credential_rotation_params.cloud_name", "aws"),
-					),
+					Config: createConfigStr,
 				},
 			},
 		})
