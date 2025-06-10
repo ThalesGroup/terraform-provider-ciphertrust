@@ -289,24 +289,12 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Computed:    true,
 							Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
 							ElementType: types.StringType,
-							//Default: setdefault.StaticValue(
-							//	types.SetValueMust(
-							//		types.StringType,
-							//		[]attr.Value{},
-							//	),
-							//),
 						},
 						"oci_vaults": schema.SetAttribute{
 							Optional:    true,
 							Computed:    true,
 							Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
 							ElementType: types.StringType,
-							//Default: setdefault.StaticValue(
-							//	types.SetValueMust(
-							//		types.StringType,
-							//		[]attr.Value{},
-							//	),
-							//),
 						},
 						"synchronize_all": schema.BoolAttribute{
 							Computed:    true,
