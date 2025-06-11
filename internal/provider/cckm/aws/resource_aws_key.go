@@ -278,10 +278,6 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Computed:    true,
 				Description: "True if rotation is enabled in AWS for this key.",
 			},
-			"current_key_material_id": schema.StringAttribute{
-				Computed:    true,
-				Description: "Current Key material ID.",
-			},
 			"key_source": schema.StringAttribute{
 				Computed:    true,
 				Description: "Source of the key.",
@@ -910,7 +906,6 @@ func setCommonKeyState(response string, state *AWSKeyCommonTFSDK, diags *diag.Di
 	state.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	state.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
-	state.CurrentKeyMaterialID = types.StringValue(gjson.Get(response, "aws_param.CurrentKeyMaterialId").String())
 	state.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	state.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
 	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
