@@ -697,6 +697,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 	}
+
 	updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

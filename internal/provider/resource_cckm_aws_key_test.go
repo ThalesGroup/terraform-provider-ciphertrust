@@ -834,3 +834,72 @@ func testAccListResources() resource.TestCheckFunc {
 		return nil
 	}
 }
+
+func TestAccAWSKey_CreateImportRotate_Update(t *testing.T) {
+	resourceName := "ciphertrust_aws_key.test"
+	region := "us-east-1"
+	importSourceKey := "acc-import-key-material"
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	// Step 1: Create the key and import the initial key material
+	initialConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_key" "test" {
+		  region  = "%s"
+		  description = "Acceptance test for create, import, and rotate"
+		  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+		  origin = "EXTERNAL"
+		  alias = "st-345"
+		
+		  import_key_material {
+		    source_key_name = "%s"
+		    source_key_tier = "local"
+		    key_expiration  = false
+		    valid_to        = "2027-07-03T14:24:00Z"
+		  }
+		}`, region, importSourceKey)
+
+	// Step 2: Rotate key material via update (set the flag)
+	rotateConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_key" "test" {
+		  region  = "%s"
+		  description = "Acceptance test for create, import, and rotate"
+		  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+		  origin = "EXTERNAL"
+		
+		  import_key_material {
+		    source_key_name = "%s"
+		    source_key_tier = "local"
+		    key_expiration  = false
+		    valid_to        = "2027-07-03T14:24:00Z"
+		  }
+		  rotate_key_material = true
+		}`, region, importSourceKey)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnectionResource + initialConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "region", region),
+					resource.TestCheckResourceAttr(resourceName, "import_key_material.0.source_key_name", importSourceKey),
+					resource.TestCheckResourceAttr(resourceName, "rotate_key_material", "false"),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "key_id"),
+				),
+			},
+			{
+				// Update the resource to trigger rotation via the flag
+				Config: awsConnectionResource + rotateConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "region", region),
+					resource.TestCheckResourceAttr(resourceName, "rotate_key_material", "false"), // Should be reset
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+				),
+			},
+		},
+	})
+}

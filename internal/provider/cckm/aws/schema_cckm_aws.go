@@ -182,6 +182,12 @@ type AWSKeyTFSDK struct {
 	UploadKey                types.List   `tfsdk:"upload_key"`
 }
 
+type AWSKeyRotationTFSDK struct {
+	KeyID                          types.String `tfsdk:"key_id"`
+	ID                             types.String `tfsdk:"id"`
+	Status                         types.String `tfsdk:"status"`
+}
+
 type XKSKeyLocalHostedParamsTFSDK struct {
 	Blocked          types.Bool   `tfsdk:"blocked"`
 	SourceKeyID      types.String `tfsdk:"source_key_id"`
