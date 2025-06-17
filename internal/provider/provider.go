@@ -407,6 +407,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		oci.NewDataSourceOCIVault,
 		oci.NewDataSourceOCIKeys,
 		oci.NewDataSourceOCIVersions,
+		aws.NewDataSourceAWSKeyRotationList,
 	}
 }
 
