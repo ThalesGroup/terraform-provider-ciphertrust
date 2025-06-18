@@ -67,7 +67,9 @@ const ociACLTable = `The following table lists the accepted values:
 | Block                           |  hyokkeyblockunblock   | Permission to block all the proxy operations on the OCI HYOK key. |
 | Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
-| Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |`
+| Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |
+
+The "view" or "viewhyokkey" permissions must be included with key or HYOK key actions respectively.`
 
 func (r *resourceCCKMOCIAcl) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
@@ -86,7 +88,13 @@ func (r *resourceCCKMOCIAcl) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.",
+		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.\n\n" +
+			"### Import an Existing OCI ACL\n\n" +
+			"To import an existing ACL, first define a resource with\n" +
+			"required values matching the existing ACLS's values then run the terraform import command specifying\n" +
+			"the CipherTrust Manager vault ID and the user ID or group name separated by a semi-colon.\n\n" +
+			"For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user:local|2f94d5b4-8563-464a-b32b-19aa50878073` or " +
+			"`terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group:CCKM Users`.",
 		Attributes: map[string]schema.Attribute{
 			"actions": schema.SetAttribute{
 				Required:            true,
@@ -100,7 +108,7 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
-				Description: "The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name.",
+				Description: "The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name separated by a semi-colon.",
 			},
 			"user_id": schema.StringAttribute{
 				Optional:    true,
