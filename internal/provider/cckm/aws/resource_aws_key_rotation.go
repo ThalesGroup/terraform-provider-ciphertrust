@@ -10,10 +10,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/tidwall/gjson"
 )
 
@@ -203,7 +203,6 @@ func (r *resourceAWSKeyRotation) Delete(ctx context.Context, req resource.Delete
 	}
 	tflog.Trace(ctx, "[resource_aws_key_rotation.go -> Delete][response:"+response)*/
 }
-
 
 func (r *resourceAWSKeyRotation) rotateKeyMaterial(ctx context.Context, id string, plan *AWSKeyRotationTFSDK, diags *diag.Diagnostics) string {
 	tflog.Trace(ctx, "[resource_aws_key_rotation.go -> rotateKeyMaterial]["+id+"]")

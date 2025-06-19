@@ -183,9 +183,9 @@ type AWSKeyTFSDK struct {
 }
 
 type AWSKeyRotationTFSDK struct {
-	KeyID                          types.String `tfsdk:"key_id"`
-	ID                             types.String `tfsdk:"id"`
-	Status                         types.String `tfsdk:"status"`
+	KeyID  types.String `tfsdk:"key_id"`
+	ID     types.String `tfsdk:"id"`
+	Status types.String `tfsdk:"status"`
 }
 
 type XKSKeyLocalHostedParamsTFSDK struct {

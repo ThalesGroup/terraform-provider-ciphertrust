@@ -236,6 +236,10 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Optional:    true,
 							Description: "Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.",
 						},
+						"rotate_material": schema.BoolAttribute{
+							Optional:    true,
+							Description: "If true, rotate the key material during the key rotation job.",
+						},
 						"cloud_name": schema.StringAttribute{
 							Required:    true,
 							Description: "Name of the cloud for which to schedule the key rotation. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
@@ -685,7 +689,8 @@ func getCckmKeyRotationOperationParams(ctx context.Context, plan CreateJobConfig
 			}
 		}
 		awsParams := CCKMRotationAwsParamsJSON{
-			RetainAlias: rotationParams.RetainAlias.ValueBool(),
+			RetainAlias:    rotationParams.RetainAlias.ValueBool(),
+			RotateMaterial: rotationParams.RotateMaterial.ValueBool(),
 		}
 		rotationParamsJSON := CCKMKeyRotationParamsJSON{
 			CloudName:                 rotationParams.CloudName.ValueString(),
@@ -782,10 +787,11 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		plan.DatabaseBackupParams = dbParams
 	case "cckm_key_rotation_params":
 		cckmParams := &CCKMKeyRotationParamsTFSDK{
-			CloudName:   types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
-			RetainAlias: types.BoolValue(gjson.Get(response, "job_config_params.aw_param.retain_alias").Bool()),
-			Expiration:  types.StringValue(gjson.Get(response, "job_config_params.expiration").String()),
-			ExpireIn:    types.StringValue(gjson.Get(response, "job_config_params.expire_in").String()),
+			CloudName:      types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
+			RetainAlias:    types.BoolValue(gjson.Get(response, "job_config_params.aw_param.retain_alias").Bool()),
+			RotateMaterial: types.BoolValue(gjson.Get(response, "job_config_params.aw_param.rotate_material").Bool()),
+			Expiration:     types.StringValue(gjson.Get(response, "job_config_params.expiration").String()),
+			ExpireIn:       types.StringValue(gjson.Get(response, "job_config_params.expire_in").String()),
 		}
 		cckmParamsList := types.ListNull(types.ObjectType{
 			AttrTypes: map[string]attr.Type{
