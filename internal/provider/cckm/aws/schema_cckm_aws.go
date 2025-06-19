@@ -632,3 +632,62 @@ type AWSKmsDataSourceModel struct {
 	AWSKmsDataSourceInputParamsTFSDK
 	KmsList []AWSKmsDataSourceTFSDK `tfsdk:"kms"`
 }
+
+type KeyRotationAwsParamJSON struct {
+	ExpirationModel        string `json:"ExpirationModel"`
+	ImportState            string `json:"ImportState"`
+	KeyId                  string `json:"KeyId"`
+	KeyMaterialDescription string `json:"KeyMaterialDescription"`
+	KeyMaterialID          string `json:"KeyMaterialId"`
+	KeyMaterialState       string `json:"KeyMaterialState"`
+	RotationDate           string `json:"RotationDate"`
+	RotationType           string `json:"RotationType"`
+	ValidTo                string `json:"ValidTo"`
+}
+
+type KeyRotationAwsParamTFSDK struct {
+	ExpirationModel        types.String `tfsdk:"expiration_model"`
+	ImportState            types.String `tfsdk:"import_state"`
+	KeyID                  types.String `tfsdk:"key_id"`
+	KeyMaterialDescription types.String `tfsdk:"key_material_description"`
+	KeyMaterialID          types.String `tfsdk:"key_material_id"`
+	KeyMaterialState       types.String `tfsdk:"key_material_state"`
+	RotationDate           types.String `tfsdk:"rotation_date"`
+	RotationType           types.String `tfsdk:"rotation_type"`
+	ValidTo                types.String `tfsdk:"valid_to"`
+}
+
+type KeyRotationJSON struct {
+	Account                 string `json:"account"`
+	KeyRotationAwsParamJSON `json:"aws_param"`
+	CreatedAt               string `json:"createdAt"`
+	ID                      string `json:"id"`
+	KeyMaterialOrigin       string `json:"key_material_origin"`
+	KeySource               string `json:"key_source"`
+	KeySourceContainerID    string `json:"key_source_container_id"`
+	KmsID                   string `json:"kms_id"`
+	SourceKeyID             string `json:"source_key_identifier"`
+	SourceKeyName           string `json:"source_key_name"`
+	UpdatedAt               string `json:"updatedAt"`
+	URI                     string `json:"uri"`
+}
+
+type KeyRotationTFSDK struct {
+	Account                types.String             `tfsdk:"account"`
+	AwsParam               KeyRotationAwsParamTFSDK `tfsdk:"aws_params"`
+	CreatedAt              types.String             `tfsdk:"created_at"`
+	ID                     types.String             `tfsdk:"id"`
+	KeyMaterialOrigin      types.String             `tfsdk:"key_material_origin"`
+	KeySource              types.String             `tfsdk:"key_source"`
+	KeySourceContainerID   types.String             `tfsdk:"key_source_container_id"`
+	KeySourceContainerName types.String             `tfsdk:"key_source_container_name"`
+	KmsID                  types.String             `tfsdk:"kms_id"`
+	SourceKeyID            types.String             `tfsdk:"source_key_id"`
+	SourceKeyName          types.String             `tfsdk:"source_key_name"`
+	UpdatedAt              types.String             `tfsdk:"updated_at"`
+	URI                    types.String             `tfsdk:"uri"`
+}
+
+type DataSourceKeyRotationsJSON struct {
+	Resources []KeyRotationJSON `json:"resources"`
+}

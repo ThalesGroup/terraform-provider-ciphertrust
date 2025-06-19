@@ -173,7 +173,7 @@ type DataSourceKeyJSON struct {
 	UpdatedAt                   string            `json:"updated_at"`
 	URI                         string            `json:"uri"`
 	VaultID                     string            `json:"vault_id"`
-	DataSourceKeyParamsJSON     `json:"oci_key_params"`
+	DataSourceKeyParamsJSON     `json:"oci_params"`
 	DataSourceHYOKKeyParamsJSON `json:"hyok_key_params"`
 }
 
