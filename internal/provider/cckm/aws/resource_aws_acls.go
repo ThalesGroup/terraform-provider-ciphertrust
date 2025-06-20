@@ -174,7 +174,7 @@ func (r *resourceCCKMAWSAcl) Create(ctx context.Context, req resource.CreateRequ
 
 	var response string
 	if len(actions) != 0 {
-		acl := acls.GetPermittedActionsPayloadJSON(ctx, resourceID, actions, &resp.Diagnostics)
+		acl := acls.GetPermittedActions(ctx, resourceID, actions, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -254,6 +254,7 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	var aclsJSON string
 	if gjson.Get(response, "acls").Exists() {
 		aclsJSON = gjson.Get(response, "acls").String()
@@ -265,7 +266,7 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	acl := acls.GetUnPermittedActionsPayloadJSON(ctx, resourceID, aclsJSON, planActions, &resp.Diagnostics)
+	acl := acls.GetUnPermittedActions(ctx, resourceID, aclsJSON, planActions, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -277,7 +278,7 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if len(planActions) != 0 {
-		acl = acls.GetPermittedActionsPayloadJSON(ctx, resourceID, planActions, &resp.Diagnostics)
+		acl = acls.GetPermittedActions(ctx, resourceID, planActions, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -325,7 +326,7 @@ func (r *resourceCCKMAWSAcl) Delete(ctx context.Context, req resource.DeleteRequ
 	if gjson.Get(response, "acls").Exists() {
 		aclsJSON = gjson.Get(response, "acls").String()
 	}
-	payloadJSON := acls.GetUnPermittedActionsPayloadJSON(ctx, resourceID, aclsJSON, []string{}, &resp.Diagnostics)
+	payloadJSON := acls.GetUnPermittedActions(ctx, resourceID, aclsJSON, []string{}, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
