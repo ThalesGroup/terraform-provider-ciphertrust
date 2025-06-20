@@ -761,7 +761,8 @@ type CMPrometheusMetricsConfigJSON struct {
 }
 
 type CCKMRotationAwsParamsJSON struct {
-	RetainAlias bool `json:"retain_alias"`
+	RetainAlias    bool `json:"retain_alias"`
+	RotateMaterial bool `json:"rotate_material,omitempty"`
 }
 type CCKMKeyRotationParamsJSON struct {
 	CloudName                 string  `json:"cloud_name"`
@@ -1098,10 +1099,11 @@ type CMLogForwardersJSON struct {
 }
 
 type CCKMKeyRotationParamsTFSDK struct {
-	RetainAlias types.Bool   `tfsdk:"aws_retain_alias"`
-	CloudName   types.String `tfsdk:"cloud_name"`
-	Expiration  types.String `tfsdk:"expiration"`
-	ExpireIn    types.String `tfsdk:"expire_in"`
+	RetainAlias    types.Bool   `tfsdk:"aws_retain_alias"`
+	CloudName      types.String `tfsdk:"cloud_name"`
+	Expiration     types.String `tfsdk:"expiration"`
+	ExpireIn       types.String `tfsdk:"expire_in"`
+	RotateMaterial types.Bool   `tfsdk:"rotate_material"`
 }
 
 type CCKMSynchronizationParamsTFSDK struct {
