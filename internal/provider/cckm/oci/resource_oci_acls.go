@@ -2,6 +2,7 @@ package cckm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -69,7 +70,7 @@ const ociACLTable = `The following table lists the accepted values:
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
 | Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |
 
-The "view" or "viewhyokkey" permissions must be included with key or HYOK key actions respectively.`
+The "view" or "viewhyokkey" permissions must be included with key or "hyok key" actions respectively.`
 
 func (r *resourceCCKMOCIAcl) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
@@ -92,31 +93,30 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			"### Import an Existing OCI ACL\n\n" +
 			"To import an existing ACL, first define a resource with\n" +
 			"required values matching the existing ACLS's values then run the terraform import command specifying\n" +
-			"the CipherTrust Manager vault ID and the user ID or group name separated by a semi-colon.\n\n" +
-			"For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user:local|2f94d5b4-8563-464a-b32b-19aa50878073` or " +
-			"`terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group:CCKM Users`.",
+			"the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.\n\n" +
+			"For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073` or " +
+			"`terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users`.",
 		Attributes: map[string]schema.Attribute{
 			"actions": schema.SetAttribute{
 				Required:            true,
-				Description:         "List of permitted actions. The \"view\" action must be included.",
 				ElementType:         types.StringType,
 				MarkdownDescription: ociACLTable,
 			},
 			"group": schema.StringAttribute{
 				Optional:    true,
-				Description: "CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+				Description: "The CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
-				Description: "The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name separated by a semi-colon.",
+				Description: "The CipherTrust Manager vault resource ID concatenated with either the user ID or the group name separated by a semi-colon.",
 			},
 			"user_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "ID of the CipherTrust Manager user the ACL applies to. Specify either \"user_id\" or \"group\".",
+				Description: "ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
 			},
 			"vault_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager OCI vault resource ID in which to set the ACL",
+				Description: "The CipherTrust Manager OCI vault resource ID in which to set the ACL",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 		},
@@ -143,17 +143,19 @@ func (r *resourceCCKMOCIAcl) Create(ctx context.Context, req resource.CreateRequ
 	}
 	resourceID := acls.EncodeContainerAclID(vaultID, plan.UserID.ValueString(), plan.Group.ValueString())
 
-	payloadJSON := acls.GetPermittedActionsPayloadJSON(ctx, resourceID, actions, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	var response string
-	if payloadJSON != nil {
-		response = r.applyAcls(ctx, id, vaultID, payloadJSON, &resp.Diagnostics, false)
+	if len(actions) != 0 {
+		acl := acls.GetPermittedActionsPayloadJSON(ctx, resourceID, actions, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		tflog.Info(ctx, fmt.Sprintf("Create response: %s", response))
+		if acl != nil {
+			response = r.applyAcls(ctx, id, vaultID, acl, &resp.Diagnostics, false)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			tflog.Info(ctx, fmt.Sprintf("Create response: %s", response))
+		}
 	}
 
 	plan.ID = types.StringValue(resourceID)
@@ -188,11 +190,29 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
-	r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+
+	_, aclType, userIDOrGroup, err := acls.DecodeContainerAclID(resourceID)
+	if err != nil {
+		msg := "Error reading ACL list, invalid resource ID."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+
+	for _, aclJSON := range gjson.Get(response, "acls").Array() {
+		group := gjson.Get(aclJSON.String(), "group").String()
+		userID := gjson.Get(aclJSON.String(), "user_id").String()
+		if aclType == "group" && group == userIDOrGroup || aclType == "user" && userID == userIDOrGroup {
+			response = aclJSON.String()
+			r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+			break
+		}
+	}
 }
 
 func (r *resourceCCKMOCIAcl) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -216,6 +236,7 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	resourceID := state.ID.ValueString()
 	vaultID := state.VaultID.ValueString()
+	plan.ID = state.ID
 
 	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
@@ -236,30 +257,32 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	payloadJSON := acls.GetUnPermittedActionsPayloadJSON(ctx, resourceID, aclsJSON, planActions, &resp.Diagnostics)
+	acl := acls.GetUnPermittedActionsPayloadJSON(ctx, resourceID, aclsJSON, planActions, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if payloadJSON != nil {
-		response = r.applyAcls(ctx, id, vaultID, payloadJSON, &resp.Diagnostics, false)
+	if acl != nil {
+		response = r.applyAcls(ctx, id, vaultID, acl, &resp.Diagnostics, false)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
 
-	payloadJSON = acls.GetPermittedActionsPayloadJSON(ctx, resourceID, planActions, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if payloadJSON != nil {
-		response = r.applyAcls(ctx, id, vaultID, payloadJSON, &resp.Diagnostics, false)
+	if len(planActions) != 0 {
+		acl = acls.GetPermittedActionsPayloadJSON(ctx, resourceID, planActions, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		tflog.Info(ctx, fmt.Sprintf("Update response: %s", response))
+		if acl != nil {
+			response = r.applyAcls(ctx, id, vaultID, acl, &resp.Diagnostics, false)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			tflog.Info(ctx, fmt.Sprintf("Update response: %s", response))
+		}
 	}
 
-	r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
+	r.setOCIAclState(ctx, resourceID, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating OCI ACL, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"id": resourceID})
@@ -267,7 +290,7 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -308,41 +331,36 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
-func (r *resourceCCKMOCIAcl) applyAcls(ctx context.Context, id string, vaultID string, payloadJSON []byte, diags *diag.Diagnostics, ignoreNotFoundErrors bool) string {
-	mutexKey := fmt.Sprintf("ociacls-%s", vaultID)
+func (r *resourceCCKMOCIAcl) applyAcls(ctx context.Context, id string, vaultID string, acl *acls.ContainerAclJSON, diags *diag.Diagnostics, ignoreNotFoundErrors bool) string {
+	mutexKey := fmt.Sprintf("oci-acls-%s", vaultID)
 	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+	payload := acls.BaseAclsJSON{
+		ContainerAcls: []acls.ContainerAclJSON{*acl},
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		msg := "Error updating ACL list, invalid data input."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID, "userID": acl.UserID, "group": acl.Group, "actions": strings.Join(acl.Actions, ",")})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
 	response, err := r.client.PostDataV2(ctx, id, common.URL_OCI+"/vaults/"+vaultID+"/update-acls", payloadJSON)
 	if err != nil {
 		if ignoreNotFoundErrors && strings.Contains(err.Error(), "NCERRResourceNotFound") {
-			mutex.CckmMutex.Unlock(mutexKey)
 			return ""
 		} else {
 			msg := "Error updating OCI ACL list."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID, "userID": acl.UserID, "group": acl.Group, "actions": strings.Join(acl.Actions, ",")})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")
-			mutex.CckmMutex.Unlock(mutexKey)
 			return ""
 		}
 	}
-	mutex.CckmMutex.Unlock(mutexKey)
 	return response
 }
 
 func (r *resourceCCKMOCIAcl) setOCIAclState(ctx context.Context, resourceID string, responseJSON string, state *models.VaultAclTFSDK, diags *diag.Diagnostics) {
-	vaultID, aclType, userIDOrGroup, err := acls.DecodeContainerAclID(resourceID)
-	if err != nil {
-		msg := "Error setting state for OCI ACL, invalid resource ID."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return
-	}
-	state.VaultID = types.StringValue(vaultID)
-	if aclType == "user" {
-		state.UserID = types.StringValue(userIDOrGroup)
-	} else {
-		state.Group = types.StringValue(userIDOrGroup)
-	}
 	acls.SetAclCommonState(ctx, resourceID, responseJSON, &state.AclTFSDK, diags)
 }

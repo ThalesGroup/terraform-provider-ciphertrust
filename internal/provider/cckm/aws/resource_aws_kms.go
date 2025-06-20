@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -61,53 +62,42 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		Description: kmsResourceDescription,
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Description: "The unique identifier of the resource.",
-				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
-			"uri": schema.StringAttribute{
-				Description: "A human-readable unique identifier of the resource.",
-				Computed:    true,
-			},
 			"account": schema.StringAttribute{
 				Description: "The account which owns this resource.",
-				Computed:    true,
-			},
-			"dev_account": schema.StringAttribute{
-				Description: "The developer account which owns this resource's application.",
-				Computed:    true,
-			},
-			"application": schema.StringAttribute{
-				Description: "The application this resource belongs to.",
-				Computed:    true,
-			},
-			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
-				Computed:    true,
-			},
-			"updated_at": schema.StringAttribute{
-				Description: "Date/time the application was updated",
 				Computed:    true,
 			},
 			"account_id": schema.StringAttribute{
 				Required:    true,
 				Description: "ID of the AWS account.",
 			},
-			"aws_connection": schema.StringAttribute{
-				Required:    true,
-				Description: "Name or ID of the connection in which the account is managed.",
+			"acls": schema.SetNestedAttribute{
+				Computed:    true,
+				Description: "List of ACLs that have been added to the KMS.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"actions": schema.SetAttribute{
+							Computed:    true,
+							Description: "Permitted actions.",
+							ElementType: types.StringType,
+						},
+						"group": schema.StringAttribute{
+							Computed:    true,
+							Description: "CipherTrust Manager group.",
+						},
+						"user_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "CipherTrust Manager user ID.",
+						},
+					},
+				},
 			},
-			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Unique name for the KMS.",
+			"application": schema.StringAttribute{
+				Description: "The application this resource belongs to.",
+				Computed:    true,
 			},
-			"regions": schema.ListAttribute{
-				Required:    true,
-				ElementType: types.StringType,
-				Description: "AWS regions to be added to the CCKM.",
+			"arn": schema.StringAttribute{
+				Computed:    true,
+				Description: "Amazon Resource Name.",
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
@@ -117,9 +107,49 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
 			},
-			"arn": schema.StringAttribute{
+			"aws_connection": schema.StringAttribute{
+				Required:    true,
+				Description: "Name or ID of the connection in which the account is managed.",
+			},
+			"auto_added": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Amazon Resource Name.",
+				Description: "True if the KMS was added by a scheduler.",
+			},
+			"created_at": schema.StringAttribute{
+				Description: "Date/time the application was created",
+				Computed:    true,
+			},
+			"dev_account": schema.StringAttribute{
+				Description: "The developer account which owns this resource's application.",
+				Computed:    true,
+			},
+			"id": schema.StringAttribute{
+				Description: "The unique identifier of the resource.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"name": schema.StringAttribute{
+				Required:    true,
+				Description: "Unique name for the KMS.",
+			},
+			"regions": schema.ListAttribute{
+				Required:    true,
+				ElementType: types.StringType,
+				Description: "AWS regions to be added to the KMS.",
+			},
+			"status": schema.StringAttribute{
+				Computed:    true,
+				Description: "The status of the KMS, archived or active.",
+			},
+			"updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date and time the KMS was last updated",
+			},
+			"uri": schema.StringAttribute{
+				Computed:    true,
+				Description: "A human-readable unique identifier of the resource.",
 			},
 		},
 	}
@@ -169,7 +199,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	r.setKmsState(response, &plan, &resp.Diagnostics)
+	r.setKmsState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error creating AWS KMS, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms id": plan.ID.ValueString()})
@@ -203,7 +233,7 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	r.setKmsState(response, &state, &resp.Diagnostics)
+	r.setKmsState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS KMS, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms id": kmsID})
@@ -211,6 +241,7 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Read]["+id+"]")
 }
 
@@ -266,7 +297,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	r.setKmsState(response, &plan, &resp.Diagnostics)
+	r.setKmsState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS KMS, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms id": kmsID})
@@ -302,16 +333,19 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
-func (r *resourceCCKMAWSKMS) setKmsState(response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
-	state.URI = types.StringValue(gjson.Get(response, "uri").String())
+func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
-	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
-	state.Application = types.StringValue(gjson.Get(response, "application").String())
-	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
-	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
+	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.Arn = types.StringValue(gjson.Get(response, "arn").String())
+	state.AutoAdded = types.BoolValue(gjson.Get(response, "auto_added").Bool())
+	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
+	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
+	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Regions = utils.StringSliceJSONToListValue(gjson.Get(response, "regions").Array(), diags)
+	state.Status = types.StringValue(gjson.Get(response, "status").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 }

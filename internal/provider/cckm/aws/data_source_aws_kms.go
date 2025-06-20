@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"net/url"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -27,7 +26,7 @@ func NewDataSourceAWSKms() datasource.DataSource {
 	return &dataSourceAWSKms{}
 }
 
-func (d *dataSourceAWSKms) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSKms) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -46,46 +45,119 @@ type dataSourceAWSKms struct {
 	client *common.Client
 }
 
+type AWSKmsDataSourceModel struct {
+	Filters types.Map       `tfsdk:"filters"`
+	Matched types.Int64     `tfsdk:"matched"`
+	Kmses   []KMSModelTFSDK `tfsdk:"kms"`
+}
+
 func (d *dataSourceAWSKms) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_aws_kms"
+	resp.TypeName = req.ProviderTypeName + "_aws_kms_list"
 }
 
 func (d *dataSourceAWSKms) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of AWS KMS resources.",
+		Description: "Use this data source to retrieve a list of CipherTrust Manager AWS KMS resources.\n\n" +
+			"Give a filter of 'limit=-1' to list all KMS resources that match the filter. Default is 10 matches.",
 		Attributes: map[string]schema.Attribute{
-			"aws_connection": schema.StringAttribute{
+			"filters": schema.MapAttribute{
 				Optional:    true,
-				Description: "Name or ID of the AWS connection. If provided, details of all KMS resources belonging to this connection will be retrieved.",
+				ElementType: types.StringType,
+				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager AWS KMS resources.",
 			},
-			"kms_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "Terraform or CipherTrust AWS KMS resource ID.",
-			},
-			"kms_name": schema.StringAttribute{
-				Optional:    true,
-				Description: "Name of an AWS KMS. If provided, only details for this KMS will be retrieved.",
+			"matched": schema.Int64Attribute{
+				Computed:    true,
+				Description: "The number of vaults which matched the filters.",
 			},
 			"kms": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"account": schema.StringAttribute{
+							Description: "The account which owns this resource.",
+							Computed:    true,
+						},
+						"account_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "ID of the AWS account.",
+						},
+						"acls": schema.SetNestedAttribute{
+							Computed:    true,
+							Description: "List of ACLs that have been added to the KMS.",
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"actions": schema.SetAttribute{
+										Computed:    true,
+										Description: "Permitted actions.",
+										ElementType: types.StringType,
+									},
+									"group": schema.StringAttribute{
+										Computed:    true,
+										Description: "CipherTrust Manager group.",
+									},
+									"user_id": schema.StringAttribute{
+										Computed:    true,
+										Description: "CipherTrust Manager user ID.",
+									},
+								},
+							},
+						},
+						"application": schema.StringAttribute{
+							Description: "The application this resource belongs to.",
+							Computed:    true,
+						},
+						"arn": schema.StringAttribute{
+							Computed:    true,
+							Description: "Amazon Resource Name.",
+						},
+						"assume_role_arn": schema.StringAttribute{
+							Optional:    true,
+							Description: "Amazon Resource Name (ARN) of the role to be assumed.",
+						},
+						"assume_role_external_id": schema.StringAttribute{
+							Optional:    true,
+							Description: "External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
+						},
+						"auto_added": schema.BoolAttribute{
+							Computed:    true,
+							Description: "True if the KMS was added by a scheduler.",
+						},
 						"aws_connection": schema.StringAttribute{
 							Computed:    true,
-							Description: "Name or ID of the AWS connection.",
+							Description: "CipherTrust Manager resource ID of the connection which manages this account.",
 						},
-						"kms_id": schema.StringAttribute{
+						"created_at": schema.StringAttribute{
+							Description: "Date/time the application was created",
 							Computed:    true,
-							Description: "Terraform or CipherTrust AWS KMS resource ID.",
 						},
-						"kms_name": schema.StringAttribute{
+						"dev_account": schema.StringAttribute{
+							Description: "The developer account which owns this resource's application.",
 							Computed:    true,
-							Description: "Name of the AWS KMS.",
+						},
+						"id": schema.StringAttribute{
+							Description: "The CipherTrust Manager resource ID of this KMS.",
+							Computed:    true,
+						},
+						"name": schema.StringAttribute{
+							Computed:    true,
+							Description: "The name given to the KMS.",
 						},
 						"regions": schema.ListAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
-							Description: "AWS regions assigned to the AWS KMS.",
+							Description: "AWS regions managed by the KMS.",
+						},
+						"status": schema.StringAttribute{
+							Computed:    true,
+							Description: "The status of the KMS, archived or active.",
+						},
+						"updated_at": schema.StringAttribute{
+							Description: "Date and time the KMS was last updated",
+							Computed:    true,
+						},
+						"uri": schema.StringAttribute{
+							Description: "CipherTrust Manager's unique identifier for the resource.",
+							Computed:    true,
 						},
 					},
 				},
@@ -98,6 +170,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_kms.go -> Read]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_kms.go -> Read]")
+
 	var state AWSKmsDataSourceModel
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
@@ -105,73 +178,61 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 	filters := url.Values{}
-	if state.AWSConnection.ValueString() != "" {
-		payload := AccountDetailsInputModelJSON{
-			AWSConnection: state.AWSConnection.ValueString(),
-		}
-		payloadJSON, err := json.Marshal(payload)
-		if err != nil {
-			msg := "Error reading AWS account details, invalid data input."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-			return
-		}
-		response, err := d.client.PostDataV2(ctx, id, AccountsURL, payloadJSON)
-		if err != nil {
-			msg := "Error reading AWS account details."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-			return
-		}
-		accountID := gjson.Get(response, "account_id").String()
-		filters.Add("account_id", accountID)
-	} else {
-		if state.KmsID.ValueString() != "" {
-			filters.Add("id", state.KmsID.ValueString())
-		}
-		if state.KmsName.ValueString() != "" {
-			filters.Add("name", state.KmsName.ValueString())
+	for k, v := range state.Filters.Elements() {
+		val, ok := v.(types.String)
+		if ok {
+			filters.Add(k, val.ValueString())
 		}
 	}
-	response := d.listAwsKms(ctx, id, filters, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
+	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_AWS+"/kms/", filters)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_kms.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Unable to read AWS KMS from CipherTrust Manager",
+			err.Error(),
+		)
 		return
 	}
-	resources := gjson.Get(response, "resources").Array()
-	for _, resource := range resources {
-		kmsState := AWSKmsDataSourceTFSDK{}
-		kmsState.KmsID = types.StringValue(gjson.Get(resource.String(), "id").String())
-		kmsState.AWSConnection = types.StringValue(gjson.Get(resource.String(), "connect").String())
-		kmsState.KmsName = types.StringValue(gjson.Get(resource.String(), "name").String())
-		regionJSON := gjson.Get(resource.String(), "regions").Array()
-		var regions []attr.Value
-		for _, region := range regionJSON {
-			regions = append(regions, types.StringValue(region.String()))
+	var kmsList DataSourceKmsListJSON
+	err = json.Unmarshal([]byte(jsonStr), &kmsList)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_kms.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Unable to read AWS KMS from CipherTrust Manager",
+			err.Error(),
+		)
+		return
+	}
+
+	for ndx, kms := range kmsList.Resources {
+		kmsTFSDK := KMSModelTFSDK{
+			Account:              types.StringValue(kms.Account),
+			AccountID:            types.StringValue(kms.AccountID),
+			Application:          types.StringValue(kms.Application),
+			Arn:                  types.StringValue(kms.Arn),
+			AssumeRoleARN:        types.StringValue(kms.AssumeRoleARN),
+			AssumeRoleExternalID: types.StringValue(kms.AssumeRoleExternalID),
+			AutoAdded:            types.BoolValue(kms.AutoAdded),
+			Connection:           types.StringValue(kms.Connection),
+			CreatedAt:            types.StringValue(kms.CreatedAt),
+			DevAccount:           types.StringValue(kms.DevAccount),
+			ID:                   types.StringValue(kms.ID),
+			Name:                 types.StringValue(kms.Name),
+			Status:               types.StringValue(kms.Status),
+			UpdatedAt:            types.StringValue(kms.UpdatedAt),
+			URI:                  types.StringValue(kms.URI),
 		}
-		regionsList, dg := types.ListValue(types.StringType, regions)
-		if dg.HasError() {
-			resp.Diagnostics = append(resp.Diagnostics, dg...)
+		kmsTFSDK.Regions = utils.StringSliceToListValue(kms.Regions, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		kmsState.Regions = regionsList
-		state.KmsList = append(state.KmsList, kmsState)
+		resourceJSON := gjson.Get(jsonStr, "resources").Array()[ndx].String()
+		acls.SetAclsStateFromJSON(ctx, gjson.Get(resourceJSON, "acls"), &kmsTFSDK.Acls, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Kmses = append(state.Kmses, kmsTFSDK)
 	}
+	state.Matched = types.Int64Value(gjson.Get(jsonStr, "total").Int())
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-}
-
-func (d *dataSourceAWSKms) listAwsKms(ctx context.Context, id string, filters url.Values, diags *diag.Diagnostics) string {
-	response, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_KMS, filters)
-	if err != nil {
-		msg := "Error listing AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return ""
-	}
-	if diags.HasError() {
-		return ""
-	}
-	return response
 }

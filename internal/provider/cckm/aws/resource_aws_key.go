@@ -2056,7 +2056,7 @@ func getKeyPolicyPayloadJSON(ctx context.Context, plan *AWSKeyCommonTFSDK, diags
 			}
 			if !kp.Policy.IsNull() && len(kp.Policy.ValueString()) != 0 {
 				policy := kp.Policy.ValueString()
-				policyBytes := json.RawMessage([]byte(policy))
+				policyBytes := json.RawMessage(policy)
 				keyPolicy.Policy = &policyBytes
 			}
 		}
