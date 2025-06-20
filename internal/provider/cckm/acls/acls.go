@@ -60,7 +60,7 @@ func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclSet *ty
 	}
 }
 
-func GetUnPermittedActions(ctx context.Context, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
+func GetUnPermittedAcl(ctx context.Context, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
@@ -121,7 +121,7 @@ func GetUnPermittedActions(ctx context.Context, resourceID string, aclsJSON stri
 	return nil
 }
 
-func GetPermittedActions(ctx context.Context, resourceID string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
+func GetPermittedAcl(ctx context.Context, resourceID string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
