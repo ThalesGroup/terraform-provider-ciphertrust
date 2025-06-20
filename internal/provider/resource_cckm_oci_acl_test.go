@@ -2,10 +2,10 @@ package provider
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 

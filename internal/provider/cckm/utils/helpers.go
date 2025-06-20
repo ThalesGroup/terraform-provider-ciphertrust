@@ -3,6 +3,10 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -37,8 +41,13 @@ func StringSliceJSONToListValue(jsonString []gjson.Result, diags *diag.Diagnosti
 
 func StringSliceJSONToSetValue(jsonString []gjson.Result, diags *diag.Diagnostics) basetypes.SetValue {
 	var values []attr.Value
+	valueMap := make(map[string]bool)
 	for _, item := range jsonString {
-		values = append(values, types.StringValue(item.String()))
+		// No duplicates please!
+		if _, ok := valueMap[item.String()]; !ok {
+			valueMap[item.String()] = true
+			values = append(values, types.StringValue(item.String()))
+		}
 	}
 	stringSet, d := types.SetValue(types.StringType, values)
 	if d.HasError() {
@@ -98,18 +107,22 @@ func BytesAreEqual(a *json.RawMessage, b *json.RawMessage) bool {
 
 func ApiError(msg string, details map[string]interface{}) string {
 	str := msg + "\n"
-	for k, v := range details {
-		if k == "payload" {
-			b, err := json.Marshal(v)
-			if err == nil {
-				v = string(b)
-			}
-		}
-		if len(str) == 0 {
-			str = fmt.Sprintf("%v=%v\n", k, v)
-		} else {
-			str = str + fmt.Sprintf("%v=%v\n", k, v)
+	width := 0
+	var keys []string
+	for k, _ := range details {
+		keys = append(keys, k)
+		if len(k) > width {
+			width = len(k)
 		}
 	}
-	return str
+	width++
+	sort.Strings(keys)
+	for _, k := range keys {
+		str = str + fmt.Sprintf("%*s: %s\n", width, k, strings.TrimSpace(fmt.Sprintf("%v", details[k])))
+	}
+	_, file, line, ok := runtime.Caller(1)
+	if ok {
+		str = str + fmt.Sprintf("%*s: %s:%d", width, "file", filepath.Base(file), line)
+	}
+	return strings.TrimSpace(str)
 }

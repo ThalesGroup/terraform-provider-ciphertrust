@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -26,6 +25,7 @@ func DecodeContainerAclID(resourceID string) (containerID string, aclType string
 	idParts := strings.Split(resourceID, "::")
 	if len(idParts) != 3 {
 		err = fmt.Errorf("%s is not a valid ACL resource id", resourceID)
+		return
 	}
 	containerID = idParts[0]
 	aclType = idParts[1]
@@ -36,14 +36,8 @@ func DecodeContainerAclID(resourceID string) (containerID string, aclType string
 func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclSet *types.Set, diags *diag.Diagnostics) {
 	var aclsTFSDK []AclTFSDK
 	for _, aclJSON := range acslJSON.Array() {
-		var actions []attr.Value
-		for _, item := range gjson.Get(aclJSON.String(), "actions").Array() {
-			actions = append(actions, types.StringValue(item.String()))
-		}
-		var dg diag.Diagnostics
-		actionSet, dg := types.SetValue(types.StringType, actions)
-		if dg.HasError() {
-			diags.Append(dg...)
+		actionSet := utils.StringSliceJSONToSetValue(gjson.Get(aclJSON.String(), "actions").Array(), diags)
+		if diags.HasError() {
 			return
 		}
 		aclTfsdk := AclTFSDK{
@@ -66,7 +60,7 @@ func SetAclsStateFromJSON(ctx context.Context, acslJSON gjson.Result, aclSet *ty
 	}
 }
 
-func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) []byte {
+func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
@@ -77,13 +71,15 @@ func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, ac
 	}
 
 	var currentAcls []ContainerAclJSON
-	err = json.Unmarshal([]byte(aclsJSON), &currentAcls)
-	if err != nil {
-		msg := "Error updating ACL list, invalid data output."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return nil
+	if len(aclsJSON) != 0 {
+		err = json.Unmarshal([]byte(aclsJSON), &currentAcls)
+		if err != nil {
+			msg := "Error updating ACL list, invalid data output."
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return nil
+		}
 	}
 
 	var currentActions []string
@@ -110,7 +106,7 @@ func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, ac
 		}
 	}
 
-	var payloadJSON []byte
+	//	var payloadJSON []byte
 	if len(notPermittedActions) != 0 {
 		acl := ContainerAclJSON{
 			Permit:  false,
@@ -121,23 +117,12 @@ func GetUnPermittedActionsPayloadJSON(ctx context.Context, resourceID string, ac
 		} else {
 			acl.Group = userIDOrGroup
 		}
-		payload := BaseAclsJSON{
-			ContainerAcls: []ContainerAclJSON{acl},
-		}
-		payloadJSON, err = json.Marshal(payload)
-		if err != nil {
-			msg := "Error updating ACL list, invalid data input."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-			return nil
-		}
-		return payloadJSON
+		return &acl
 	}
 	return nil
 }
 
-func GetPermittedActionsPayloadJSON(ctx context.Context, resourceID string, newActions []string, diags *diag.Diagnostics) []byte {
+func GetPermittedActionsPayloadJSON(ctx context.Context, resourceID string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
@@ -155,18 +140,7 @@ func GetPermittedActionsPayloadJSON(ctx context.Context, resourceID string, newA
 	} else {
 		acl.Group = userIDOrGroup
 	}
-	payload := BaseAclsJSON{
-		ContainerAcls: []ContainerAclJSON{acl},
-	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		msg := "Error updating ACL list, invalid data input."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return nil
-	}
-	return payloadJSON
+	return &acl
 }
 
 func SetAclCommonState(ctx context.Context, resourceID string, responseJSON string, state *AclTFSDK, diags *diag.Diagnostics) {
@@ -178,8 +152,8 @@ func SetAclCommonState(ctx context.Context, resourceID string, responseJSON stri
 		diags.AddError(details, "")
 		return
 	}
-	var aclTFSDK AclTFSDK
 	if gjson.Get(responseJSON, "acls").Exists() {
+		var aclTFSDK AclTFSDK
 		aclsJSON := gjson.Get(responseJSON, "acls").Array()
 		found := false
 		for _, aclJSON := range aclsJSON {
@@ -194,9 +168,14 @@ func SetAclCommonState(ctx context.Context, resourceID string, responseJSON stri
 			}
 			if found {
 				aclTFSDK.Actions = utils.StringSliceJSONToSetValue(gjson.Get(aclJSON.String(), "actions").Array(), diags)
+				if diags.HasError() {
+					return
+				}
 				break
 			}
 		}
+		if found {
+			*state = aclTFSDK
+		}
 	}
-	*state = aclTFSDK
 }

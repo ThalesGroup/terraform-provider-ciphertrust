@@ -62,7 +62,7 @@ resource "ciphertrust_aws_key" "aws_key" {
 - `account_id` (String) ID of the AWS account.
 - `aws_connection` (String) Name or ID of the connection in which the account is managed.
 - `name` (String) Unique name for the KMS.
-- `regions` (List of String) AWS regions to be added to the CCKM.
+- `regions` (List of String) AWS regions to be added to the KMS.
 
 ### Optional
 
@@ -72,10 +72,22 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
+- `acls` (Attributes Set) List of ACLs that have been added to the KMS. (see [below for nested schema](#nestedatt--acls))
 - `application` (String) The application this resource belongs to.
 - `arn` (String) Amazon Resource Name.
+- `auto_added` (Boolean) True if the KMS was added by a scheduler.
 - `created_at` (String) Date/time the application was created
 - `dev_account` (String) The developer account which owns this resource's application.
 - `id` (String) The unique identifier of the resource.
-- `updated_at` (String) Date/time the application was updated
+- `status` (String) The status of the KMS, archived or active.
+- `updated_at` (String) Date and time the KMS was last updated
 - `uri` (String) A human-readable unique identifier of the resource.
+
+<a id="nestedatt--acls"></a>
+### Nested Schema for `acls`
+
+Read-Only:
+
+- `actions` (Set of String) Permitted actions.
+- `group` (String) CipherTrust Manager group.
+- `user_id` (String) CipherTrust Manager user ID.

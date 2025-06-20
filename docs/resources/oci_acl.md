@@ -7,8 +7,8 @@ description: |-
   Import an Existing OCI ACL
   To import an existing ACL, first define a resource with
   required values matching the existing ACLS's values then run the terraform import command specifying
-  the CipherTrust Manager vault ID and the user ID or group name separated by a semi-colon.
-  For example: terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user:local|2f94d5b4-8563-464a-b32b-19aa50878073 or terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group:CCKM Users.
+  the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.
+  For example: terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073 or terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users.
 ---
 
 # ciphertrust_oci_acl (Resource)
@@ -19,9 +19,9 @@ Use this resource to create and manage OCI vault access control lists (ACLs) in 
 
 To import an existing ACL, first define a resource with
 required values matching the existing ACLS's values then run the terraform import command specifying
-the CipherTrust Manager vault ID and the user ID or group name separated by a semi-colon.
+the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.
 
-For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user:local|2f94d5b4-8563-464a-b32b-19aa50878073` or `terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group:CCKM Users`.
+For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073` or `terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users`.
 
 ## Example Usage
 
@@ -75,14 +75,14 @@ resource "ciphertrust_oci_acl" "group_acl" {
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
 | Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |
 
-The "view" or "viewhyokkey" permissions must be included with key or HYOK key actions respectively.
-- `vault_id` (String) CipherTrust Manager OCI vault resource ID in which to set the ACL
+The "view" or "viewhyokkey" permissions must be included with key or "hyok key" actions respectively.
+- `vault_id` (String) The CipherTrust Manager OCI vault resource ID in which to set the ACL
 
 ### Optional
 
-- `group` (String) CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
-- `user_id` (String) ID of the CipherTrust Manager user the ACL applies to. Specify either "user_id" or "group".
+- `group` (String) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
+- `user_id` (String) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
 
 ### Read-Only
 
-- `id` (String) The vault's CipherTrust Manager resource ID concatenated with either the user ID or the group name separated by a semi-colon.
+- `id` (String) The CipherTrust Manager vault resource ID concatenated with either the user ID or the group name separated by a semi-colon.
