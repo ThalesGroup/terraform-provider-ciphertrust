@@ -835,71 +835,44 @@ func testAccListResources() resource.TestCheckFunc {
 	}
 }
 
-func TestAccAWSKey_CreateImportRotate_Update(t *testing.T) {
-	resourceName := "ciphertrust_aws_key.test"
-	region := "us-east-1"
-	importSourceKey := "acc-import-key-material"
+func TestCckmAwsKeyRotation(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
+	t.Run("KeyRotation_Native", func(t *testing.T) {
+		nativeKey := `
+		resource "ciphertrust_aws_key" "native_key" {
+			alias        = [local.alias, "%s"]
+			customer_master_key_spec = "SYMMETRIC_DEFAULT"
+			description  = "create description"
+			key_usage    = "ENCRYPT_DECRYPT"
+			kms          = ciphertrust_aws_kms.kms.id
+			region       = ciphertrust_aws_kms.kms.regions[0]
+			tags = {
+				TagKey1 = "TagValue1"
+				TagKey2 = "TagValue2"
+			}
+		}
+		resource "ciphertrust_aws_key_rotation" "rotate" {
+			key_id = ciphertrust_aws_key.native_key.key_id
+		}`
+		aesNativeKeyResource := "ciphertrust_aws_key_rotation.rotate"
+		aesCmKeyRotationName := "tf-aes-key-rotation" + uuid.NewString()[:]
 
-	// Step 1: Create the key and import the initial key material
-	initialConfig := fmt.Sprintf(`
-		resource "ciphertrust_aws_key" "test" {
-		  region  = "%s"
-		  description = "Acceptance test for create, import, and rotate"
-		  customer_master_key_spec = "SYMMETRIC_DEFAULT"
-		  origin = "EXTERNAL"
-		  alias = "st-345"
-		
-		  import_key_material {
-		    source_key_name = "%s"
-		    source_key_tier = "local"
-		    key_expiration  = false
-		    valid_to        = "2027-07-03T14:24:00Z"
-		  }
-		}`, region, importSourceKey)
-
-	// Step 2: Rotate key material via update (set the flag)
-	rotateConfig := fmt.Sprintf(`
-		resource "ciphertrust_aws_key" "test" {
-		  region  = "%s"
-		  description = "Acceptance test for create, import, and rotate"
-		  customer_master_key_spec = "SYMMETRIC_DEFAULT"
-		  origin = "EXTERNAL"
-		
-		  import_key_material {
-		    source_key_name = "%s"
-		    source_key_tier = "local"
-		    key_expiration  = false
-		    valid_to        = "2027-07-03T14:24:00Z"
-		  }
-		  rotate_key_material = true
-		}`, region, importSourceKey)
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + initialConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "region", region),
-					resource.TestCheckResourceAttr(resourceName, "import_key_material.0.source_key_name", importSourceKey),
-					resource.TestCheckResourceAttr(resourceName, "rotate_key_material", "false"),
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-					resource.TestCheckResourceAttrSet(resourceName, "key_id"),
-				),
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: awsConnectionResource + fmt.Sprintf(nativeKey, aesCmKeyRotationName),
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(aesNativeKeyResource, "id"),
+						resource.TestCheckResourceAttrSet(aesNativeKeyResource, "key_id"),
+						resource.TestCheckResourceAttrSet(aesNativeKeyResource, "status"),
+					),
+				},
 			},
-			{
-				// Update the resource to trigger rotation via the flag
-				Config: awsConnectionResource + rotateConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "region", region),
-					resource.TestCheckResourceAttr(resourceName, "rotate_key_material", "false"), // Should be reset
-					resource.TestCheckResourceAttrSet(resourceName, "id"),
-				),
-			},
-		},
+		})
+
 	})
 }
