@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -24,9 +23,8 @@ import (
 )
 
 var (
-	_ resource.Resource                = &resourceCCKMAWSAcl{}
-	_ resource.ResourceWithConfigure   = &resourceCCKMAWSAcl{}
-	_ resource.ResourceWithImportState = &resourceCCKMAWSAcl{}
+	_ resource.Resource              = &resourceCCKMAWSAcl{}
+	_ resource.ResourceWithConfigure = &resourceCCKMAWSAcl{}
 )
 
 func NewResourceCCKMAWSAcl() resource.Resource {
@@ -113,13 +111,7 @@ func (r *resourceCCKMAWSAcl) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage AWS KMS access control lists (ACLs) in CipherTrust Manager.\n\n" +
-			"### Import an Existing AWS ACL\n\n" +
-			"To import an existing ACL, first define a resource with\n" +
-			"required values matching the existing ACLS's values (including either 'user_id' or 'group') then run the terraform\n" +
-			"import command specifying the CipherTrust Manager KMS resource ID and the user ID or group name separated by two semi-colons.\n\n" +
-			"For example: `terraform import ciphertrust_aws_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073` or " +
-			"`terraform import ciphertrust_aws_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users`.",
+		Description: "Use this resource to create and manage AWS KMS access control lists (ACLs) in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"actions": schema.SetAttribute{
 				Required:            true,
@@ -219,12 +211,9 @@ func (r *resourceCCKMAWSAcl) Read(ctx context.Context, req resource.ReadRequest,
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
+	tflog.Trace(ctx, "[resource_aws_acls.go -> Read][response:"+response)
 	r.setAWSAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-}
-
-func (r *resourceCCKMAWSAcl) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

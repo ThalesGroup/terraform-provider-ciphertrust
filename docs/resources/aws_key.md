@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create an AWS key.
+  Use this resource to create and manage AWS keys in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_key (Resource)
 
-Use this resource to create an AWS key.
+Use this resource to create and manage AWS keys in CipherTrust Manager.
 
 ## Example Usage
 
@@ -138,24 +138,24 @@ resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
 
 ### Optional
 
-- `alias` (Set of String) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.
-- `auto_rotate` (Boolean) Enable AWS autorotation of the key. Auto-Rotation only is only applicable to native symmetric keys.
+- `alias` (Set of String) (Updatable) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.
+- `auto_rotate` (Boolean) (Updatable) Enable AWS autorotation of the key. Auto-Rotation only is only applicable to native symmetric keys.
 - `auto_rotation_period_in_days` (Number) Rotation period in days. Optional parameter for auto_rotate. Must be at least 90 days.
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
 - `customer_master_key_spec` (String) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
-- `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
-- `enable_key` (Boolean) Enable or disable the key. Default is true.
-- `enable_rotation` (Block List) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
+- `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
+- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true.
+- `enable_rotation` (Block List) (Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
 - `import_key_material` (Block List) Both a 'source_key_tier' key and an AWS external key will be created. Key material from the 'source_key_tier' key will be imported to the AWS key.The 'source_key_tier' key will not be deleted on Terraform destroy. An alternative is to use 'upload_key' parameter. (see [below for nested schema](#nestedblock--import_key_material))
-- `key_policy` (Block List) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
+- `key_policy` (Block List) (Updatable) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
 - `key_usage` (String) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.Default for RSA keys is ENCRYPT_DECRYPT,default for EC keys is SIGN_VERIFY, default for symmetric keys is ENCRYPT_DECRYPT and default for HMAC keys is GENERATE_VERIFY_MAC.
 - `kms` (String) Name or ID of the KMS to be used to create the key. Required unless replicating a multi-region key.
 - `multi_region` (Boolean) Creates or identifies a multi-region key.
 - `origin` (String) Source of the key material. Options: AWS_KMS, EXTERNAL. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations.
-- `primary_region` (String) Updates the primary region of a multi-region key.
+- `primary_region` (String) (Updatable) Updates the primary region of a multi-region key.
 - `replicate_key` (Block List) Replicate key parameters. (see [below for nested schema](#nestedblock--replicate_key))
-- `schedule_for_deletion_days` (Number) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
-- `tags` (Map of String) A list of tags assigned to the AWS key.
+- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
+- `tags` (Map of String) (Updatable) A list of tags assigned to the AWS key.
 - `upload_key` (Block List) Key material from the 'source_key_tier' will be uploaded to an external AWS key. (see [below for nested schema](#nestedblock--upload_key))
 
 ### Read-Only
@@ -224,7 +224,7 @@ Required:
 
 Optional:
 
-- `key_expiration` (Boolean) Enable key material expiration. Default is false.
+- `key_expiration` (Boolean) Enable key material expiration.
 - `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.
 - `valid_to` (String) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z.
 
@@ -267,6 +267,6 @@ Required:
 
 Optional:
 
-- `key_expiration` (Boolean) Enable key expiration. Default is false.
+- `key_expiration` (Boolean) Enable key expiration.
 - `source_key_tier` (String) Source of the key material. Current option is 'local' implying a CipherTrust Manager key. Default is 'local'.
 - `valid_to` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. Only valid if 'key_expiration' is true.

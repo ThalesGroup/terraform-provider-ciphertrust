@@ -3,20 +3,12 @@
 page_title: "ciphertrust_aws_kms Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  AWS Key Management Service (AWS KMS) is used to create and manage keys.
-  Use the APIs in this section to:
-  List and add the AWS accounts and regions based on the connections.Get, delete, and update the AWS KMS account.Grant permissions to CCKM users to perform specific actions on the AWS KMS.
+  Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_kms (Resource)
 
-AWS Key Management Service (AWS KMS) is used to create and manage keys.
-
-Use the APIs in this section to:
-
-* List and add the AWS accounts and regions based on the connections.
-* Get, delete, and update the AWS KMS account.
-* Grant permissions to CCKM users to perform specific actions on the AWS KMS.
+Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 
 ## Example Usage
 
@@ -60,14 +52,14 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Required
 
 - `account_id` (String) ID of the AWS account.
-- `aws_connection` (String) Name or ID of the connection in which the account is managed.
+- `aws_connection` (String) (Updatable) Name or ID of the connection in which the account is managed.
 - `name` (String) Unique name for the KMS.
 - `regions` (List of String) AWS regions to be added to the KMS.
 
 ### Optional
 
-- `assume_role_arn` (String) Amazon Resource Name (ARN) of the role to be assumed.
-- `assume_role_external_id` (String) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
+- `assume_role_arn` (String) (Updatable) Amazon Resource Name (ARN) of the role to be assumed.
+- `assume_role_external_id` (String) (Updatable) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
 
 ### Read-Only
 

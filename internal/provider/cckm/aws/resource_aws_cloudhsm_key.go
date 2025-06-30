@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -29,8 +30,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceAWSCloudHSMKey{}
-	_ resource.ResourceWithConfigure = &resourceAWSCloudHSMKey{}
+	_ resource.Resource                = &resourceAWSCloudHSMKey{}
+	_ resource.ResourceWithConfigure   = &resourceAWSCloudHSMKey{}
+	_ resource.ResourceWithImportState = &resourceAWSCloudHSMKey{}
 )
 
 func NewResourceAWSCloudHSMKey() resource.Resource {
@@ -62,7 +64,7 @@ func (r *resourceAWSCloudHSMKey) Configure(_ context.Context, req resource.Confi
 
 func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create an AWS CloudHSM key.",
+		Description: "Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -79,7 +81,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Input parameter. Alias assigned to the CloudHSM key.",
+				Description: "(Updatable) Input parameter. Alias assigned to the CloudHSM key.",
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(
 						stringvalidator.RegexMatches(
@@ -101,7 +103,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description of the AWS key. Descriptions can be updated but not removed.",
+				Description: "(Updatable) Description of the AWS key. Descriptions can be updated but not removed.",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
@@ -109,7 +111,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"key_usage": schema.StringAttribute{
@@ -138,7 +140,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"tags": schema.MapAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "A list of tags assigned to the CloudHSM key.",
+				Description: "(Updatable) A list of tags assigned to the CloudHSM key.",
 				ElementType: types.StringType,
 			},
 			//Read-Only Params
@@ -317,7 +319,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 		},
 		Blocks: map[string]schema.Block{
 			"key_policy": schema.ListNestedBlock{
-				Description: "Key policy parameters.",
+				Description: "(Updatable) Key policy parameters.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -360,7 +362,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				},
 			},
 			"enable_rotation": schema.ListNestedBlock{
-				Description: "Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
+				Description: "(Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -409,7 +411,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	payload := CreateCloudHSMKeyInputPayloadJSON{
 		AWSParams: *awsParams,
 	}
-	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
+	keyPolicy := getKeyPolicyParams(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -512,6 +514,7 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Read][response:"+response)
 	description := state.Description
 	setCommonKeyStoreKeyState(ctx, response, &state.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -528,7 +531,13 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Read][response:"+response)
+}
+
+func (r *resourceAWSCloudHSMKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -559,36 +568,47 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	}
 	if gjson.Get(response, "linked_state").Bool() {
 		keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
-		planEnableKey := plan.EnableKey.ValueBool()
-		if !keyEnabled && planEnableKey {
-			enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
+		planEnableKey := false
+		if !plan.EnableKey.IsUnknown() {
+			keyEnabled = gjson.Get(response, "aws_param.Enabled").Bool()
+			planEnableKey = plan.EnableKey.ValueBool()
+			if !keyEnabled && planEnableKey {
+				enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+				if resp.Diagnostics.HasError() {
+					return
+				}
 			}
 		}
 		updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		planTags := make(map[string]string, len(plan.Tags.Elements()))
-		if len(plan.Tags.Elements()) != 0 {
-			resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+		if !plan.Alias.IsNull() && !plan.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if keyEnabled && !planEnableKey {
-			disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if !plan.Tags.IsUnknown() {
+			planTags := make(map[string]string, len(plan.Tags.Elements()))
+			if len(plan.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+			}
+			updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
+			}
+		}
+
+		if !plan.EnableKey.IsUnknown() {
+			if keyEnabled && !planEnableKey {
+				disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+				if resp.Diagnostics.HasError() {
+					return
+				}
 			}
 		}
 	}

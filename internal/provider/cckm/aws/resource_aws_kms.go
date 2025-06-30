@@ -10,6 +10,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -20,15 +21,9 @@ import (
 )
 
 var (
-	_                      resource.Resource              = &resourceCCKMAWSKMS{}
-	_                      resource.ResourceWithConfigure = &resourceCCKMAWSKMS{}
-	kmsResourceDescription                                = `AWS Key Management Service (AWS KMS) is used to create and manage keys.
-
-Use the APIs in this section to:
-
-* List and add the AWS accounts and regions based on the connections.
-* Get, delete, and update the AWS KMS account.
-* Grant permissions to CCKM users to perform specific actions on the AWS KMS.`
+	_ resource.Resource                = &resourceCCKMAWSKMS{}
+	_ resource.ResourceWithConfigure   = &resourceCCKMAWSKMS{}
+	_ resource.ResourceWithImportState = &resourceCCKMAWSKMS{}
 )
 
 func NewResourceCCKMAWSKMS() resource.Resource {
@@ -60,7 +55,7 @@ func (r *resourceCCKMAWSKMS) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: kmsResourceDescription,
+		Description: "Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Description: "The account which owns this resource.",
@@ -101,15 +96,15 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
-				Description: "Amazon Resource Name (ARN) of the role to be assumed.",
+				Description: "(Updatable) Amazon Resource Name (ARN) of the role to be assumed.",
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
+				Description: "(Updatable) External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
 			},
 			"aws_connection": schema.StringAttribute{
 				Required:    true,
-				Description: "Name or ID of the connection in which the account is managed.",
+				Description: "(Updatable) Name or ID of the connection in which the account is managed.",
 			},
 			"auto_added": schema.BoolAttribute{
 				Computed:    true,
@@ -163,8 +158,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		plan    KMSModelTFSDK
 		payload KMSModelJSON
 	)
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -172,8 +166,8 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	payload.Connection = common.TrimString(plan.Connection.String())
 	payload.Name = common.TrimString(plan.Name.String())
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
-	diags.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
-	if diags.HasError() {
+	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
@@ -207,11 +201,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -219,8 +209,7 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Read]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Read]["+id+"]")
 	var state KMSModelTFSDK
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -233,16 +222,19 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_kms.go -> Read][response:"+response)
 	r.setKmsState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		msg := "Error reading AWS KMS, failed to set resource state."
-		details := utils.ApiError(msg, map[string]interface{}{"kms id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Read]["+id+"]")
+}
+
+func (r *resourceCCKMAWSKMS) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -253,14 +245,13 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		plan    KMSModelTFSDK
 		payload KMSModelJSON
 	)
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
-	diags.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
-	if diags.HasError() {
+	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
@@ -305,11 +296,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -317,8 +304,7 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Delete]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Delete]["+id+"]")
 	var state KMSModelTFSDK
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}

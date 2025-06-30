@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_policy_template Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create an AWS key policy that can be used by multiple AWS keys.
+  Use this resource to create and managa AWS key policy templates that can be used by multiple AWS keys.
 ---
 
 # ciphertrust_aws_policy_template (Resource)
 
-Use this resource to create an AWS key policy that can be used by multiple AWS keys.
+Use this resource to create and managa AWS key policy templates that can be used by multiple AWS keys.
 
 ## Example Usage
 
@@ -77,14 +77,14 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Optional
 
 - `account_id` (String) The AWS account which owns this resource.
-- `auto_push` (Boolean) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
-- `external_accounts` (Set of String) Other AWS accounts that can access to the key.
-- `key_admins` (Set of String) Key administrators - users.
-- `key_admins_roles` (Set of String) Key administrators - roles.
-- `key_users` (Set of String) Key users - users.
-- `key_users_roles` (Set of String) Key users - roles.
+- `auto_push` (Boolean) (Updatable) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
+- `external_accounts` (Set of String) (Updatable) Other AWS accounts that can access to the key.
+- `key_admins` (Set of String) (Updatable) Key administrators - users.
+- `key_admins_roles` (Set of String) (Updatable) Key administrators - roles.
+- `key_users` (Set of String) (Updatable) Key users - users.
+- `key_users_roles` (Set of String) (Updatable) Key users - roles.
 - `kms` (String) Name or ID of the KMS to which the template belongs.
-- `policy` (String) AWS key policy json.
+- `policy` (String) (Updatable) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. If no policy parameters are specified the default policy is created.
 
 ### Read-Only
 

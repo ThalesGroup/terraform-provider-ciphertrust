@@ -3,12 +3,12 @@
 page_title: "ciphertrust_scheduler Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields cannot be defined in the same scheduler resource.
 ---
 
 # ciphertrust_scheduler (Resource)
 
-Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields cannot be defined in the same scheduler resource.
 
 ## Example Usage
 
@@ -178,6 +178,7 @@ Optional:
 - `aws_retain_alias` (Boolean) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
 - `expiration` (String) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
 - `expire_in` (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
+- `rotate_material` (Boolean) If true, rotate the key material during the key rotation job.
 
 
 <a id="nestedblock--cckm_synchronization_params"></a>

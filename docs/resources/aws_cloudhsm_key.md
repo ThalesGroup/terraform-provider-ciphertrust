@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_cloudhsm_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create an AWS CloudHSM key.
+  Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_cloudhsm_key (Resource)
 
-Use this resource to create an AWS CloudHSM key.
+Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.
 
 ## Example Usage
 
@@ -105,15 +105,15 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 
 ### Optional
 
-- `alias` (Set of String) Input parameter. Alias assigned to the CloudHSM key.
+- `alias` (Set of String) (Updatable) Input parameter. Alias assigned to the CloudHSM key.
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
-- `enable_key` (Boolean) Enable or disable the key. Default is true.
-- `enable_rotation` (Block List) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
-- `key_policy` (Block List) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
+- `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
+- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true.
+- `enable_rotation` (Block List) (Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
+- `key_policy` (Block List) (Updatable) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
 - `origin` (String) Source of the key material for the customer managed key.  Options: AWS_KMS, EXTERNAL, EXTERNAL_KEY_STORE, AWS_CLOUDHSM. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations. Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.
 - `schedule_for_deletion_days` (Number) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
-- `tags` (Map of String) A list of tags assigned to the CloudHSM key.
+- `tags` (Map of String) (Updatable) A list of tags assigned to the CloudHSM key.
 
 ### Read-Only
 
