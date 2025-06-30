@@ -59,12 +59,7 @@ func (r *resourceCCKMOCIKey) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage native OCI keys in CipherTrust Manager.\n\n" +
-			"### Import an Existing Native Key\n\n" +
-			"To import an existing native key, first define a resource with\n" +
-			"required values matching the existing key's values then run the terraform import command specifying\n" +
-			"the key's CipherTrust Manager resource ID on the command line.\n\n" +
-			"For example: `terraform import ciphertrust_oci_byok_key.imported_key bca423ef-df36-4e30-a635-977e32e380bb`.",
+		Description: "Use this resource to create and manage native OCI keys in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,
@@ -340,7 +335,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Create][response:"+response)
 	keyID := gjson.Get(response, "id").String()
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	plan.ID = types.StringValue(keyID)
@@ -383,7 +378,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 		tflog.Error(ctx, details)
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Create][response:"+response)
 	var setStateDiags diag.Diagnostics
 	setKeyState(ctx, id, r.client, response, &plan, &setStateDiags)
 	if setStateDiags.HasError() {
@@ -392,7 +387,6 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Create][response:"+response)
 }
 
 func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -415,13 +409,12 @@ func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Read][response:"+response)
 	setKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Read][response:"+response)
 }
 
 func (r *resourceCCKMOCIKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -429,31 +422,6 @@ func (r *resourceCCKMOCIKey) ImportState(ctx context.Context, req resource.Impor
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> ImportState]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> ImportState]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-
-	keyID := req.ID
-
-	var state models.KeyTFSDK
-	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	response, err := r.client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
-	if err != nil {
-		msg := "Error reading OCI key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-
-	state.ScheduleForDeletionDays = types.Int64Value(7)
-	setKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_resource_oci_key.go -> Import][response:"+response)
 }
 
 func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -487,13 +455,12 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_oci_key.go -> Update][response:"+response)
 	setKeyState(ctx, id, r.client, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_oci_key.go -> Update][response:"+response)
 }
 
 func (r *resourceCCKMOCIKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -525,4 +492,5 @@ func setKeyState(ctx context.Context, id string, client *common.Client, response
 	} else {
 		state.EnableKey = types.BoolValue(false)
 	}
+	state.Vault = types.StringValue(gjson.Get(response, "cckm_vault_id").String())
 }

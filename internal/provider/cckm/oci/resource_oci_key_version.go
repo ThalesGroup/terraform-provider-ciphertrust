@@ -59,12 +59,7 @@ func (r *resourceCCKMOCIVersion) Configure(_ context.Context, req resource.Confi
 
 func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage native OCI key versions in CipherTrust Manager.\n" +
-			"### Import an Existing Native Key Version\n\n" +
-			"To import an existing native key version, first define a resource with\n" +
-			"required values matching the existing version's values then run the terraform import command specifying\n" +
-			"the key's CipherTrust Manager resource ID and the version's CipherTrust Manager resource ID separated by a colon on the command line.\n\n" +
-			"For example: `terraform import ciphertrust_oci_version.imported_key_version f9fc3532-6a75-423d-9c04-5c802384acd5:5c2da105-99cf-4c6a-9f7c-2199783cc759`.",
+		Description: "Use this resource to create and manage native OCI key versions in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,
@@ -204,7 +199,7 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
 	versionID := gjson.Get(response, "id").String()
 	plan.ID = types.StringValue(versionID)
 
@@ -226,7 +221,7 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddWarning(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
 	var setStateDiags diag.Diagnostics
 	setCommonKeyVersionState(ctx, response, &plan, &setStateDiags)
 	if setStateDiags.HasError() {
@@ -236,7 +231,6 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
 }
 
 func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -260,13 +254,12 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_oci_key_version.go -> Read][response:"+response)
 	setCommonKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_oci_key_version.go -> Read][response:"+response)
 }
 
 func (r *resourceCCKMOCIVersion) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -274,25 +267,16 @@ func (r *resourceCCKMOCIVersion) ImportState(ctx context.Context, req resource.I
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_byok_version.go -> Import]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_byok_version.go -> Import]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-
-	ids := strings.Split(req.ID, ":")
-	if len(ids) != 2 {
-		msg := "Error importing key version, please pass in keyID:versionID on command line as the version's id. For example: f9fc3532-6a75-423d-9c04-5c802384acd5:5c2da105-99cf-4c6a-9f7c-2199783cc759"
-		tflog.Error(ctx, msg)
-		resp.Diagnostics.AddError(msg, "")
+	versionInfo := strings.Split(req.ID, ".")
+	if len(versionInfo) != 2 {
+		msg := "Invalid OCI key version import ID. Please set id to cckm_key_id.version_id."
+		details := utils.ApiError(msg, map[string]interface{}{"id": req.ID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	keyID := ids[0]
-	versionID := ids[1]
-
-	var state models.KeyVersionTFSDK
-	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	state.ID = types.StringValue(versionID)
-	state.CCKMKeyID = types.StringValue(keyID)
+	keyID := versionInfo[0]
+	versionID := versionInfo[1]
 	response, err := r.client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 	if err != nil {
 		msg := "Error reading OCI key version."
@@ -301,14 +285,16 @@ func (r *resourceCCKMOCIVersion) ImportState(ctx context.Context, req resource.I
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
-	state.ScheduleForDeletionDays = types.Int64Value(scheduleForDeletionDays)
+	tflog.Trace(ctx, "[resource_oci_key_version.go -> Import][response:"+response)
+	var state models.KeyVersionTFSDK
+	state.CCKMKeyID = types.StringValue(keyID)
+	state.ID = types.StringValue(versionID)
 	setCommonKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	state.ScheduleForDeletionDays = types.Int64Value(scheduleForDeletionDays)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_oci_key_version.go -> Import][response:"+response)
 }
 
 func (r *resourceCCKMOCIVersion) Update(ctx context.Context, _ resource.UpdateRequest, _ *resource.UpdateResponse) {

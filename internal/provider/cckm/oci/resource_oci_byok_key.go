@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
@@ -32,17 +33,17 @@ var (
 )
 
 const (
-	ociKeySleepSeconds          = 3
-	refreshTokenSeconds         = 180
-	keyStateEnabling            = "ENABLING"
-	keyStateEnabled             = "ENABLED"
-	keyStateDisabling           = "DISABLING"
-	keyStateDisabled            = "DISABLED"
-	keyStateUpdating            = "UPDATING"
-	keyStatePendingDeletion     = "PENDING_DELETION"
-	keyStateChangingCompartment = "CHANGING_COMPARTMENT"
-	notFoundError               = "status: 404"
-	scheduleForDeletionDays     = 7
+	ociKeySleepSeconds           = 3
+	refreshTokenSeconds          = 180
+	keyStateEnabling             = "ENABLING"
+	keyStateEnabled              = "ENABLED"
+	keyStateDisabling            = "DISABLING"
+	keyStateDisabled             = "DISABLED"
+	keyStateUpdating             = "UPDATING"
+	keyStateScheduledForDeletion = "SCHEDULING_DELETION"
+	keyStateChangingCompartment  = "CHANGING_COMPARTMENT"
+	notFoundError                = "status: 404"
+	scheduleForDeletionDays      = 7
 )
 
 func NewResourceCCKMOCIByokKey() resource.Resource {
@@ -74,13 +75,7 @@ func (r *resourceCCKMOCIByokKey) Configure(_ context.Context, req resource.Confi
 
 func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI BYOK keys in CipherTrust Manager.\n\n" +
-			"First create a source key in one of the supported source key tiers then specify the source key tier and ID of the key.\n\n" +
-			"### Import an Existing BYOK Key\n\n" +
-			"To import an existing BYOK key, first define a resource with\n" +
-			"required values matching the existing key's values then run the terraform import command specifying\n" +
-			"the key's CipherTrust Manager resource ID on the command line.\n\n" +
-			"For example: `terraform import ciphertrust_oci_byok_key.imported_key 3366dc06-6d45-4bdd-af8f-fbeb2c097ee6`.",
+		Description: "Use this resource to create and manage OCI BYOK keys in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,
@@ -362,7 +357,7 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
 	keyID := gjson.Get(response, "id").String()
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	plan.ID = types.StringValue(keyID)
@@ -405,7 +400,7 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 		tflog.Error(ctx, details)
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
 	var setStateDiags diag.Diagnostics
 	setByokKeyState(ctx, id, r.client, response, &plan, &setStateDiags)
 	if setStateDiags.HasError() {
@@ -414,7 +409,6 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
 }
 
 func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -437,13 +431,12 @@ func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
+	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Read][response:"+response)
 	setByokKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Read][response:"+response)
 }
 
 func (r *resourceCCKMOCIByokKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -451,31 +444,6 @@ func (r *resourceCCKMOCIByokKey) ImportState(ctx context.Context, req resource.I
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key.go -> ImportState]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key.go -> ImportState]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-
-	keyID := req.ID
-
-	var state models.BYOKKeyTFSDK
-	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	response, err := r.client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
-	if err != nil {
-		msg := "Error reading OCI key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-
-	state.ScheduleForDeletionDays = types.Int64Value(7)
-	setByokKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Import][response:"+response)
 }
 
 func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -509,14 +477,11 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
 	tflog.Trace(ctx, "[resource_oci_byok_key.go -> Update][response:"+response)
-
 	setByokKeyState(ctx, id, r.client, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -544,4 +509,24 @@ func setByokKeyState(ctx context.Context, id string, client *common.Client, resp
 		return
 	}
 	state.KeyParams.CurveID = types.StringValue(gjson.Get(response, "oci_params.curve_id").String())
+	filters := url.Values{}
+	filters.Add("sort", "createdAt")
+	keyID := state.ID.ValueString()
+	versionsResponse, err := client.ListWithFilters(ctx, id, common.URL_OCI+"/keys/"+keyID+"/versions", filters)
+	if err != nil {
+		msg := "Failed to list OCI key versions."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Warn(ctx, details)
+		diags.AddWarning(details, "")
+		return
+	}
+	if gjson.Get(versionsResponse, "resources").Exists() {
+		resources := gjson.Get(versionsResponse, "resources").Array()
+		if len(resources) > 0 {
+			sourceKeyID := gjson.Get(resources[0].Raw, "source_key_identifier").String()
+			sourceKeyTier := gjson.Get(resources[0].Raw, "source_key_tier").String()
+			state.SourceKeyIdentifier = types.StringValue(sourceKeyID)
+			state.SourceKeyTier = types.StringValue(sourceKeyTier)
+		}
+	}
 }

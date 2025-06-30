@@ -16,6 +16,7 @@ resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
 
 # Add a BYOK key version to a BYOK OCI key
 resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
-  cckm_key_id   = ciphertrust_oci_byok_key.test_key.id
-  source_key_id = ciphertrust_cm_key.cm_key_version.id
+  cckm_key_id     = ciphertrust_oci_byok_key.test_key.id
+  source_key_id   = ciphertrust_cm_key.cm_key_version.id
+  source_key_tier = "local"
 }

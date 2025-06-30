@@ -64,6 +64,7 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 		connection_name     = "tf-%s"
 		cm_key_name         = "tf-%s"
 		oci_key_name        = "tf-%s"
+		oci_min_key_name    = "tf-%s"
 		cm_key_version_name = "tf-%s"
 		rotation_job_name   = "tf-%s"
 		rotation_job_name_2 = "tf-%s"
@@ -73,7 +74,8 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 
 	localsResource := fmt.Sprintf(localsConfig,
 		uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8],
-		uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8], compartment2OCID)
+		uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8],
+		compartment2OCID)
 
 	maxConfig := `
 		%s
@@ -345,6 +347,11 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "version_summary.#", "4"),
 				),
+			},
+			{
+				// Get the key deleted
+				Config: connectionResource,
+				Check:  resource.ComposeTestCheckFunc(),
 			},
 			{
 				Config: minResourceStr,

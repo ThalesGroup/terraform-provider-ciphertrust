@@ -57,12 +57,7 @@ func (r *resourceCCKMOCIVault) Configure(_ context.Context, req resource.Configu
 
 func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI vaults in CipherTrust Manager.\n\n" +
-			"### Import an Existing Vault\n\n" +
-			"To import an existing vault, first define a resource with\n" +
-			"required values matching the existing vault's values then run the terraform import command specifying\n" +
-			"the vault's CipherTrust Manager resource ID on the command line.\n\n" +
-			"For example: `terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b`.",
+		Description: "Use this resource to create and manage OCI vaults in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,
@@ -70,7 +65,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"acls": schema.SetNestedAttribute{
 				Computed:    true,
-				Description: "List of ACLs that have been added to the vault.",
+				Description: "(Updatable) List of ACLs that have been added to the vault.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"actions": schema.SetAttribute{
@@ -92,12 +87,12 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"bucket_name": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
+				Description: "(Updatable) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 			"bucket_namespace": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
+				Description: "(Updatable) Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -113,7 +108,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.",
+				Description: "(Updatable) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"created_at": schema.StringAttribute{
@@ -265,14 +260,13 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
-
+	tflog.Trace(ctx, "[resource_oci_vault.go -> Create][response:"+response)
 	var diags diag.Diagnostics
 	r.setVaultState(ctx, response, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_oci_vault.go -> Create][response:"+response)
 }
 
 func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -293,6 +287,7 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_oci_vault.go -> Read][response:"+response)
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -309,27 +304,6 @@ func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.Imp
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Import]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Import]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-
-	var state models.VaultTFSDK
-	resp.Diagnostics.Append(resp.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	vaultID := req.ID
-	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
-	if err != nil {
-		msg := "Error reading OCI vault."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -397,6 +371,7 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 			return
 		}
 	}
+	tflog.Trace(ctx, "[resource_oci_vault.go -> Update][response:"+response)
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -430,7 +405,6 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 }
 
 func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response string, state *models.VaultTFSDK, diags *diag.Diagnostics) {
-	tflog.Trace(ctx, "[resource_oci_vault.go -> setVaultState][response:"+response)
 	setCommonVaultState(ctx, response, &state.VaultCommonTFSDK, diags)
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
 	state.BucketNamespace = types.StringValue(gjson.Get(response, "bucket_namespace").String())

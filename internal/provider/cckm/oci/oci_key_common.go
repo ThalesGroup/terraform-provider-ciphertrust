@@ -33,30 +33,33 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 		return
 	}
 
-	planEnableKey := plan.EnableKey.ValueBool()
 	keyEnabled := gjson.Get(response, "oci_params.lifecycle_state").String() == keyStateEnabled
 	keyDisabled := gjson.Get(response, "oci_params.lifecycle_state").String() == keyStateDisabled
-
-	if planEnableKey && keyDisabled {
-		enableKey(ctx, id, client, keyID, diags)
-		if diags.HasError() {
-			return
+	planEnableKey := false
+	if !plan.EnableKey.IsUnknown() {
+		planEnableKey = plan.EnableKey.ValueBool()
+		if planEnableKey && keyDisabled {
+			enableKey(ctx, id, client, keyID, diags)
+			if diags.HasError() {
+				return
+			}
 		}
 	}
 
 	keyRotationEnabled := gjson.Get(response, "labels").Exists()
-	planRotationEnabled := plan.EnableAutoRotation != nil
-	if keyRotationEnabled && !planRotationEnabled {
-		disableSchedulerRotation(ctx, id, client, keyID, diags)
-		if diags.HasError() {
-			return
+	if plan.EnableAutoRotation != nil {
+		planRotationEnabled := plan.EnableAutoRotation != nil
+		if keyRotationEnabled && !planRotationEnabled {
+			disableSchedulerRotation(ctx, id, client, keyID, diags)
+			if diags.HasError() {
+				return
+			}
 		}
-	}
-
-	if planRotationEnabled && (!keyRotationEnabled || plan.EnableAutoRotation != state.EnableAutoRotation) {
-		enableSchedulerRotation(ctx, id, client, keyID, plan.EnableAutoRotation, diags)
-		if diags.HasError() {
-			return
+		if planRotationEnabled && (!keyRotationEnabled || plan.EnableAutoRotation != state.EnableAutoRotation) {
+			enableSchedulerRotation(ctx, id, client, keyID, plan.EnableAutoRotation, diags)
+			if diags.HasError() {
+				return
+			}
 		}
 	}
 
@@ -65,19 +68,23 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 		return
 	}
 
-	planCompartmentID := plan.KeyParams.CompartmentID.ValueString()
-	keyCompartmentID := gjson.Get(response, "oci_params.compartment_id").String()
-	if planCompartmentID != keyCompartmentID {
-		changeKeyCompartment(ctx, id, client, keyID, planCompartmentID, diags)
-		if diags.HasError() {
-			return
+	if plan.KeyParams != nil && !plan.KeyParams.CompartmentID.IsUnknown() {
+		planCompartmentID := plan.KeyParams.CompartmentID.ValueString()
+		keyCompartmentID := gjson.Get(response, "oci_params.compartment_id").String()
+		if planCompartmentID != keyCompartmentID {
+			changeKeyCompartment(ctx, id, client, keyID, planCompartmentID, diags)
+			if diags.HasError() {
+				return
+			}
 		}
 	}
 
-	if !planEnableKey && keyEnabled {
-		disableKey(ctx, id, client, keyID, diags)
-		if diags.HasError() {
-			return
+	if !plan.EnableKey.IsUnknown() {
+		if !planEnableKey && keyEnabled {
+			disableKey(ctx, id, client, keyID, diags)
+			if diags.HasError() {
+				return
+			}
 		}
 	}
 }
@@ -98,7 +105,7 @@ func deleteKey(ctx context.Context, id string, client *common.Client, keyID stri
 	}
 
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
-	if keyState == keyStatePendingDeletion {
+	if keyState == keyStateScheduledForDeletion {
 		msg := "The OCI key is already pending deletion."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
@@ -249,41 +256,47 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 	var payload models.PatchKeyCommonPayload
 	sendRequest := false
 
-	planDisplayName := plan.Name.ValueString()
-	keyDisplayName := gjson.Get(response, "oci_params.display_name").String()
-	if planDisplayName != keyDisplayName {
-		payload.DisplayName = &planDisplayName
-		sendRequest = true
+	if !plan.Name.IsUnknown() {
+		planDisplayName := plan.Name.ValueString()
+		keyDisplayName := gjson.Get(response, "oci_params.display_name").String()
+		if planDisplayName != keyDisplayName {
+			payload.DisplayName = &planDisplayName
+			sendRequest = true
+		}
 	}
 
-	planFreeformTags := getFreeformTagsFromPlan(ctx, &plan.KeyParams.FreeformTags, diags)
-	if diags.HasError() {
-		return
+	if plan.KeyParams != nil && !plan.KeyParams.FreeformTags.IsUnknown() {
+		planFreeformTags := getFreeformTagsFromPlan(ctx, &plan.KeyParams.FreeformTags, diags)
+		if diags.HasError() {
+			return
+		}
+
+		keyFreeformTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "oci_params.freeform_tags"), diags)
+		if diags.HasError() {
+			return
+		}
+
+		if !reflect.DeepEqual(planFreeformTags, keyFreeformTags) {
+			payload.FreeformTags = planFreeformTags
+			sendRequest = true
+		}
 	}
 
-	keyFreeformTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "oci_params.freeform_tags"), diags)
-	if diags.HasError() {
-		return
-	}
+	if plan.KeyParams != nil && !plan.KeyParams.DefinedTags.IsUnknown() {
+		planDefinedTags := getDefinedTagsFromPlan(ctx, &plan.KeyParams.DefinedTags, diags)
+		if diags.HasError() {
+			return
+		}
 
-	if !reflect.DeepEqual(planFreeformTags, keyFreeformTags) {
-		payload.FreeformTags = planFreeformTags
-		sendRequest = true
-	}
+		keyDefinedTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
+		if diags.HasError() {
+			return
+		}
 
-	planDefinedTags := getDefinedTagsFromPlan(ctx, &plan.KeyParams.DefinedTags, diags)
-	if diags.HasError() {
-		return
-	}
-
-	keyDefinedTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
-	if diags.HasError() {
-		return
-	}
-
-	if !reflect.DeepEqual(planDefinedTags, keyDefinedTags) {
-		payload.DefinedTags = planDefinedTags
-		sendRequest = true
+		if !reflect.DeepEqual(planDefinedTags, keyDefinedTags) {
+			payload.DefinedTags = planDefinedTags
+			sendRequest = true
+		}
 	}
 
 	if sendRequest {

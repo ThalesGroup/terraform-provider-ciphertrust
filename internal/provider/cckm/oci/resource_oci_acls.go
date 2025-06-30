@@ -89,13 +89,7 @@ func (r *resourceCCKMOCIAcl) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.\n\n" +
-			"### Import an Existing OCI ACL\n\n" +
-			"To import an existing ACL, first define a resource with\n" +
-			"required values matching the existing ACLS's values then run the terraform import command specifying\n" +
-			"the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.\n\n" +
-			"For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073` or " +
-			"`terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users`.",
+		Description: "Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.n",
 		Attributes: map[string]schema.Attribute{
 			"actions": schema.SetAttribute{
 				Required:            true,
@@ -181,17 +175,7 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	resourceID := state.ID.ValueString()
-	vaultID := state.VaultID.ValueString()
-
-	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
-	if err != nil {
-		msg := "Error reading OCI vault."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
-	}
-
-	_, aclType, userIDOrGroup, err := acls.DecodeContainerAclID(resourceID)
+	vaultID, _, _, err := acls.DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error reading ACL list, invalid resource ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
@@ -199,23 +183,22 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-
-	for _, aclJSON := range gjson.Get(response, "acls").Array() {
-		group := gjson.Get(aclJSON.String(), "group").String()
-		userID := gjson.Get(aclJSON.String(), "user_id").String()
-		if aclType == "group" && group == userIDOrGroup || aclType == "user" && userID == userIDOrGroup {
-			response = aclJSON.String()
-			r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
-			break
-		}
+	state.VaultID = types.StringValue(vaultID)
+	response, err := r.client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
+	if err != nil {
+		msg := "Error reading OCI vault."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
+		tflog.Warn(ctx, details)
+		resp.Diagnostics.AddWarning(details, "")
 	}
+	r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *resourceCCKMOCIAcl) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_acls.go -> ImportState]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
