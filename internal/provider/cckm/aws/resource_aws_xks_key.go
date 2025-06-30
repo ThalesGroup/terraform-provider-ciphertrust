@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -30,8 +31,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceAWSXKSKey{}
-	_ resource.ResourceWithConfigure = &resourceAWSXKSKey{}
+	_ resource.Resource                = &resourceAWSXKSKey{}
+	_ resource.ResourceWithConfigure   = &resourceAWSXKSKey{}
+	_ resource.ResourceWithImportState = &resourceAWSXKSKey{}
 )
 
 func NewResourceAWSXKSKey() resource.Resource {
@@ -63,7 +65,7 @@ func (r *resourceAWSXKSKey) Configure(_ context.Context, req resource.ConfigureR
 
 func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create an AWS XKS key.",
+		Description: "Use this resource to create and manage AWS XKS keys in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -80,7 +82,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Input parameter. Alias assigned to the XKS key.",
+				Description: "(Updatable) Input parameter. Alias assigned to the XKS key.",
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(
 						stringvalidator.RegexMatches(
@@ -102,7 +104,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description of the AWS key. Descriptions can be updated but not removed.",
+				Description: "(Updatable) Description of the AWS key. Descriptions can be updated but not removed.",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
@@ -110,7 +112,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"key_usage": schema.StringAttribute{
@@ -141,7 +143,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"tags": schema.MapAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "A list of tags assigned to the XKS key.",
+				Description: "(Updatable) A list of tags assigned to the XKS key.",
 				ElementType: types.StringType,
 			},
 			//Read-Only Params
@@ -324,7 +326,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 		},
 		Blocks: map[string]schema.Block{
 			"key_policy": schema.ListNestedBlock{
-				Description: "Key policy parameters.",
+				Description: "(Updatable) Key policy parameters.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -367,7 +369,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 			},
 			"enable_rotation": schema.ListNestedBlock{
-				Description: "Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
+				Description: "(Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -402,7 +404,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					Attributes: map[string]schema.Attribute{
 						"blocked": schema.BoolAttribute{
 							Required:    true,
-							Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
+							Description: "(Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 						},
 						"custom_key_store_id": schema.StringAttribute{
 							Required:    true,
@@ -418,7 +420,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						},
 						"linked": schema.BoolAttribute{
 							Required:    true,
-							Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
+							Description: "(Updatable) Parameter to indicate if AWS XKS key is linked with AWS.",
 						},
 					},
 				},
@@ -451,7 +453,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 		AWSParams:                        *awsParams,
 		XKSKeyLocalHostedInputParamsJSON: *localHostedParamsJSON,
 	}
-	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
+	keyPolicy := getKeyPolicyParams(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -548,13 +550,10 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Read][response:"+response)
 	description := state.Description
 	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		msg := "Error reading AWS XKS key, failed to set resource state."
-		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	if !gjson.Get(response, "linked_state").Bool() {
@@ -564,7 +563,13 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Read][response:"+response)
+}
+
+func (r *resourceAWSXKSKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -616,34 +621,41 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	if gjson.Get(response, "linked_state").Bool() {
+		planEnableKey := false
 		keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
-		planEnableKey := plan.EnableKey.ValueBool()
-		if !keyEnabled && planEnableKey {
-			enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
+		if !plan.EnableKey.IsUnknown() {
+			planEnableKey = plan.EnableKey.ValueBool()
+			if !keyEnabled && planEnableKey {
+				enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+				if resp.Diagnostics.HasError() {
+					return
+				}
 			}
 		}
 		updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		planTags := make(map[string]string, len(plan.Tags.Elements()))
-		if len(plan.Tags.Elements()) != 0 {
-			resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+		if !plan.Alias.IsNull() && !plan.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
+		if !plan.Tags.IsUnknown() {
+			planTags := make(map[string]string, len(plan.Tags.Elements()))
+			if len(plan.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+			}
+			updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
-		if keyEnabled && !planEnableKey {
+		if !plan.EnableKey.IsUnknown() && keyEnabled && !planEnableKey {
 			disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
@@ -705,6 +717,7 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
+			return
 		}
 		removeKeyPolicyTemplateTag(ctx, id, r.client, response, &resp.Diagnostics)
 		payload := ScheduleForDeletionJSON{
@@ -720,19 +733,33 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 		}
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
-			msg := "Error deleting AWS XKS key."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
+			if strings.Contains(err.Error(), "Resource not found") {
+				msg := "AWS XKS key was not found, it will be removed from state."
+				details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				msg := "Error deleting AWS XKS key."
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				tflog.Error(ctx, details)
+				resp.Diagnostics.AddError(details, "")
+			}
 		}
 	} else {
 		_, err := r.client.DeleteByURL(ctx, keyID, common.URL_AWS_KEY+"/"+keyID)
 		if err != nil {
-			msg := "Error deleting AWS XKS Key."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-			return
+			if strings.Contains(err.Error(), "Resource not found") {
+				msg := "AWS XKS key was not found, it will be removed from state."
+				details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				msg := "Error deleting AWS XKS Key."
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				tflog.Error(ctx, details)
+				resp.Diagnostics.AddError(details, "")
+				return
+			}
 		}
 	}
 	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Delete][response:"+response)
@@ -744,7 +771,7 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 }
 
 func setCommonKeyStoreKeyState(ctx context.Context, response string, state *AWSKeyStoreKeyCommonTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyState(response, &state.AWSKeyCommonTFSDK, diags)
+	setCommonKeyState(ctx, response, &state.AWSKeyCommonTFSDK, diags)
 	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	state.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_params.CustomKeyStoreId").String())
 	state.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
@@ -757,11 +784,6 @@ func setCommonKeyStoreKeyState(ctx context.Context, response string, state *AWSK
 		var d diag.Diagnostics
 		state.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 		state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-		labels := make(map[string]string)
-		state.Labels, d = types.MapValueFrom(ctx, types.StringType, labels)
-		if d.HasError() {
-			diags.Append(d...)
-		}
 		state.PolicyTemplateTag = types.MapNull(types.StringType)
 		policy := gjson.Get(response, "aws_param.Policy").String()
 		state.Policy = types.StringValue(policy)
@@ -872,7 +894,7 @@ func getKeyStoreCommonAWSParams(ctx context.Context, plan *AWSKeyStoreKeyCommonT
 	if plan.Description.ValueString() != "" {
 		awsParams.Description = plan.Description.ValueStringPointer()
 	}
-	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, diags)
+	keyPolicy := getKeyPolicyParams(ctx, &plan.AWSKeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return nil
 	}

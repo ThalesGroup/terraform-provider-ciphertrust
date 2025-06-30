@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -24,13 +25,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
 var (
-	_ resource.Resource              = &resourceAWSCustomKeyStore{}
-	_ resource.ResourceWithConfigure = &resourceAWSCustomKeyStore{}
+	_ resource.Resource                = &resourceAWSCustomKeyStore{}
+	_ resource.ResourceWithConfigure   = &resourceAWSCustomKeyStore{}
+	_ resource.ResourceWithImportState = &resourceAWSCustomKeyStore{}
 )
 
 const (
@@ -58,6 +61,11 @@ func (r *resourceAWSCustomKeyStore) Metadata(_ context.Context, req resource.Met
 // Schema defines the schema for the resource.
 func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Use this resource to create and manage Custom Key Stores in CipherTrust Manager." +
+			"CipherTrust Manager provides the integration of Custom Key Stores proxy service for Amazon Web Services.\n\n" +
+			"Custom Key Stores type are External Key Stores (XKS) and CloudHSM Key Stores.\n\n" +
+			"AWS_CLOUDHSM key stores will have keys backed by a CloudHSM cluster in AWS.\n\n" +
+			"EXTERNAL_KEY_STORE key stores will have keys backed by a Luna HSM or CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -95,28 +103,32 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique name for the custom key store.",
+				Description: "(Updatable) Unique name for the custom key store.",
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
 				Description: "Name of the available AWS regions.",
 			},
 			"enable_success_audit_event": schema.BoolAttribute{
-				Computed:    true,
-				Optional:    true,
-				Default:     booldefault.StaticBool(false),
-				Description: "Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.",
+				Computed: true,
+				Optional: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "(Updatable) Enable or disable audit recording of successful operations within an external key store. " +
+					"Default value is false. Recommended value is false as enabling it can affect performance.",
 			},
 			"linked_state": schema.BoolAttribute{
-				Computed:    true,
-				Optional:    true,
-				Default:     booldefault.StaticBool(false),
-				Description: "Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
+				Computed: true,
+				Optional: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "(Updatable) Indicates whether the custom key store is linked with AWS. " +
+					"Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. " +
+					"When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. " +
+					"Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Optional:    true,
 				Validators:  []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
-				Description: "Indicates whether to connect or disconnect the custom key store.",
+				Description: "(Updatable) Indicates whether to connect or disconnect the custom key store.",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -133,9 +145,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"cloud_hsm_cluster_id": schema.StringAttribute{
-							Computed:    true,
-							Optional:    true,
-							Description: "ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. Required field for a custom key store of type AWS_CLOUDHSM.",
+							Computed: true,
+							Optional: true,
+							MarkdownDescription: "(Updatable) ID of a CloudHSM cluster for a custom key store. " +
+								"Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. " +
+								"**Required** field for a custom key store of type AWS_CLOUDHSM.",
 						},
 						"connection_state": schema.StringAttribute{
 							Computed: true,
@@ -147,38 +161,49 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 							Computed: true,
 						},
 						"custom_key_store_type": schema.StringAttribute{
-							Optional:    true,
-							Description: "Specifies the type of custom key store. The default value is EXTERNAL_KEY_STORE. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
-							Validators:  []validator.String{stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)},
+							Required: true,
+							Description: "Specifies the type of custom key store. " +
+								"For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. " +
+								"For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
+							Validators: []validator.String{stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)},
 						},
 						"key_store_password": schema.StringAttribute{
-							Computed:    true,
-							Optional:    true,
-							Description: "The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. Required field for custom key store of type AWS_CLOUDHSM.",
+							Computed: true,
+							Optional: true,
+							MarkdownDescription: "(Updatable) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. " +
+								"This parameter does not change the password in the CloudHSM cluster. " +
+								"User needs to configure the credentials on the CloudHSM cluster separately. " +
+								"**Required** field for custom key store of type AWS_CLOUDHSM.",
 						},
 						"trust_anchor_certificate": schema.StringAttribute{
-							Computed:    true,
-							Optional:    true,
-							Description: "The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. Required field for a custom key store of type AWS_CLOUDHSM",
+							Computed: true,
+							Optional: true,
+							MarkdownDescription: "The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. " +
+								"**Required** field for a custom key store of type AWS_CLOUDHSM",
 						},
 						"xks_proxy_connectivity": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.",
-							Validators:  []validator.String{stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...)},
+							Optional: true,
+							Computed: true,
+							MarkdownDescription: "(Updatable) Indicates how AWS KMS communicates with the Ciphertrust Manager. " +
+								"**Required** field for a custom key store of type EXTERNAL_KEY_STORE. " +
+								"Default value is PUBLIC_ENDPOINT.",
+							Validators: []validator.String{stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...)},
 						},
 						"xks_proxy_uri_endpoint": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. This field is required for a custom key store of type EXTERNAL_KEY_STORE.",
+							Optional: true,
+							Computed: true,
+							MarkdownDescription: "(Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. " +
+								"The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. " +
+								"**Required** field for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"xks_proxy_uri_path": schema.StringAttribute{
 							Computed: true,
 						},
 						"xks_proxy_vpc_endpoint_service_name": schema.StringAttribute{
-							Computed:    true,
-							Optional:    true,
-							Description: "Indicates the VPC endpoint service name the custom key store uses. This field is required when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.",
+							Computed: true,
+							Optional: true,
+							MarkdownDescription: "(Updatable) Indicates the VPC endpoint service name the custom key store uses. " +
+								"**Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.",
 						},
 					},
 				},
@@ -191,36 +216,43 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"blocked": schema.BoolAttribute{
-							Computed:    true,
-							Optional:    true,
-							Default:     booldefault.StaticBool(false),
-							Description: "This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Applicable to a custom key store of type EXTERNAL_KEY_STORE.",
+							Computed: true,
+							Optional: true,
+							Default:  booldefault.StaticBool(false),
+							Description: "(Updatable) This field indicates whether the custom key store is in a blocked or unblocked state. " +
+								"Default value is false, which indicates the key store is in an unblocked state. " +
+								"Applicable to a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"health_check_ciphertext": schema.StringAttribute{
 							Computed: true,
 						},
 						"health_check_key_id": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. Required field for custom key store of type EXTERNAL_KEY_STORE.",
+							Optional: true,
+							Computed: true,
+							MarkdownDescription: "(Updatable) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. " +
+								"Crypto operation would be performed using this key before creating a custom key store. " +
+								"**Required** field for custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"linked_state": schema.BoolAttribute{
 							Computed: true,
 						},
 						"max_credentials": schema.Int32Attribute{
-							Optional:    true,
-							Description: "Max number of credentials that can be associated with custom key store (min value 2. max value 20). Required field for a custom key store of type EXTERNAL_KEY_STORE.",
+							Optional: true,
+							MarkdownDescription: "Max number of credentials that can be associated with custom key store (min value 2. max value 20). " +
+								"**Required** field for a custom key store of type EXTERNAL_KEY_STORE.",
 						},
 						"mtls_enabled": schema.BoolAttribute{
-							Computed:    true,
-							Optional:    true,
-							Default:     booldefault.StaticBool(false),
-							Description: "Set it to true to enable tls client-side certificate verification — where cipher trust manager authenticates the AWS KMS client . Default value is false.",
+							Computed: true,
+							Optional: true,
+							Default:  booldefault.StaticBool(false),
+							Description: "(Updatable) Set it to true to enable tls client-side certificate verification — where CipherTrust manager authenticates the AWS KMS client. +" +
+								"Default value is false.",
 						},
 						"partition_id": schema.StringAttribute{
-							Computed:    true,
-							Optional:    true,
-							Description: "ID of Luna HSM partition. Required field, if custom key store is of type EXTERNAL_KEY_STORE and source key tier is 'hsm-luna'.",
+							Computed: true,
+							Optional: true,
+							MarkdownDescription: "ID of Luna HSM partition. " +
+								"**Required** field, if custom key store is of type EXTERNAL_KEY_STORE and source key tier is 'hsm-luna'.",
 						},
 						"partition_label": schema.StringAttribute{
 							Computed: true,
@@ -232,16 +264,17 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 							Computed: true,
 						},
 						"source_key_tier": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.",
-							Validators:  []validator.String{stringvalidator.OneOf([]string{"local", "luna-hsm"}...)},
+							Optional: true,
+							Computed: true,
+							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. " +
+								"Default value is luna-hsm. The only value supported by the service is 'local'.",
+							Validators: []validator.String{stringvalidator.OneOf([]string{"local", "luna-hsm"}...)},
 						},
 					},
 				},
 			},
 			"enable_credential_rotation": schema.ListNestedBlock{
-				Description: "Enable the custom key store for scheduled credential rotation job.",
+				Description: "(Updatable) Enable the custom key store for scheduled credential rotation job.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -249,7 +282,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					Attributes: map[string]schema.Attribute{
 						"job_config_id": schema.StringAttribute{
 							Required:    true,
-							Description: "ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.",
+							Description: "(Updatable) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.",
 						},
 					},
 				},
@@ -504,12 +537,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			}
 		}
 	}
-
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Read refreshes the Terraform state with the latest data.
@@ -532,15 +560,103 @@ func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadR
 		)
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_custom_key_store.go -> Read][response:"+response)
 	r.setCustomKeyStoreState(ctx, response, &state, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+}
+
+func (r *resourceAWSCustomKeyStore) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+
+	keyStoreID := req.ID
+	response, err := r.client.GetById(ctx, id, keyStoreID, common.URL_AWS_XKS)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> ImportState]["+keyStoreID+"]")
+		resp.Diagnostics.AddError(
+			"Error reading AWS Custom Key Store on CipherTrust Manager: ",
+			"Could not read AWS Custom Key Store, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	var state AWSCustomKeyStoreTFSDK
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.KMS = types.StringValue(gjson.Get(response, "kms_id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Region = types.StringValue(gjson.Get(response, "region").String())
+	state.KMS = types.StringValue(gjson.Get(response, "kms").String())
+
+	var plan AWSCustomKeyStoreTFSDK
+	r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Labels = plan.Labels
+	state.LocalHostedParams = plan.LocalHostedParams
+	state.AWSParams = plan.AWSParams
+
+	var timeoutAttribs = map[string]attr.Type{
+		"create": types.StringType,
+		"update": types.StringType,
+		"read":   types.StringType,
+		"delete": types.StringType,
+	}
+	type timeout struct {
+		Create types.String `tfsdk:"create"`
+		Update types.String `tfsdk:"update"`
+		Read   types.String `tfsdk:"read"`
+		Delete types.String `tfsdk:"delete"`
+	}
+	timeoutValues := timeout{
+		types.StringValue("30m"),
+		types.StringValue("30m"),
+		types.StringValue("5m"),
+		types.StringValue("5m"),
+	}
+	var diags diag.Diagnostics
+	var timeoutObjectValue basetypes.ObjectValue
+	timeoutObjectValue, diags = types.ObjectValueFrom(ctx, timeoutAttribs, &timeoutValues)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+	}
+	var timeoutObject types.Object
+	timeoutObject, diags = timeoutObjectValue.ToObjectValue(ctx)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+	}
+	state.Timeouts = timeouts.Value{Object: timeoutObject}
+
+	var credRotationAttribs = map[string]attr.Type{
+		"job_config_id": types.StringType,
+	}
+	type credRotationTFSDK struct {
+		JobConfigId types.String `tfsdk:"job_config_id"`
+	}
+	credRotationValues := []credRotationTFSDK{{
+		JobConfigId: types.StringValue(""),
+	}}
+	var credRotationListValue basetypes.ListValue
+	credRotationListValue, diags = types.ListValueFrom(ctx, types.ObjectType{AttrTypes: credRotationAttribs}, &credRotationValues)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+	}
+	state.EnableCredentialRotation, diags = credRotationListValue.ToListValue(ctx)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go.go -> Update]["+id+"]")
 	var plan AWSCustomKeyStoreTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -883,11 +999,17 @@ func (r *resourceAWSCustomKeyStore) Delete(ctx context.Context, req resource.Del
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting AWS Custom Key Store",
-			"Could not delete AWS Custom Key Store, unexpected error: "+err.Error(),
-		)
-		return
+		if strings.Contains(err.Error(), "Resource not found") {
+			msg := "AWS custom key stores was not found, it will be removed from state."
+			details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
+		} else {
+			resp.Diagnostics.AddError(
+				"Error Deleting AWS Custom Key Store",
+				"Could not delete AWS Custom Key Store, unexpected error: "+err.Error(),
+			)
+		}
 	}
 }
 
@@ -978,11 +1100,10 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 		"xks_proxy_connectivity":              types.StringType,
 		"xks_proxy_uri_endpoint":              types.StringType,
 		"xks_proxy_vpc_endpoint_service_name": types.StringType,
-
-		"connection_state":      types.StringType,
-		"custom_key_store_id":   types.StringType,
-		"custom_key_store_name": types.StringType,
-		"xks_proxy_uri_path":    types.StringType,
+		"connection_state":                    types.StringType,
+		"custom_key_store_id":                 types.StringType,
+		"custom_key_store_name":               types.StringType,
+		"xks_proxy_uri_path":                  types.StringType,
 	}
 	itemObjectType := types.ObjectType{
 		AttrTypes: attributeTypes,
@@ -990,19 +1111,19 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	terraformList := make([]attr.Value, 0)
 
 	attributeValues := map[string]attr.Value{
-		"cloud_hsm_cluster_id":                types.StringValue(planAWSParamTFSDK.CloudHSMClusterID.ValueString()),
-		"custom_key_store_type":               types.StringValue(planAWSParamTFSDK.CustomKeystoreType.ValueString()),
+		"cloud_hsm_cluster_id":                types.StringValue(awsParamJSONResponse.CloudHSMClusterID),
+		"custom_key_store_type":               types.StringValue(awsParamJSONResponse.CustomKeystoreType),
 		"key_store_password":                  types.StringValue(planAWSParamTFSDK.KeyStorePassword.ValueString()),
-		"trust_anchor_certificate":            types.StringValue(planAWSParamTFSDK.TrustAnchorCertificate.ValueString()),
-		"xks_proxy_connectivity":              types.StringValue(planAWSParamTFSDK.XKSProxyConnectivity.ValueString()),
-		"xks_proxy_uri_endpoint":              types.StringValue(planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString()),
-		"xks_proxy_vpc_endpoint_service_name": types.StringValue(planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString()),
-
-		"connection_state":      types.StringValue(awsParamJSONResponse.ConnectionState),
-		"custom_key_store_id":   types.StringValue(awsParamJSONResponse.CustomKeystoreID),
-		"custom_key_store_name": types.StringValue(awsParamJSONResponse.CustomKeystoreName),
-		"xks_proxy_uri_path":    types.StringValue(awsParamJSONResponse.XKSProxyURIPath),
+		"trust_anchor_certificate":            types.StringValue(awsParamJSONResponse.TrustAnchorCertificate),
+		"xks_proxy_connectivity":              types.StringValue(awsParamJSONResponse.XKSProxyConnectivity),
+		"xks_proxy_uri_endpoint":              types.StringValue(awsParamJSONResponse.XKSProxyURIEndpoint),
+		"xks_proxy_vpc_endpoint_service_name": types.StringValue(awsParamJSONResponse.XKSProxyVPCEndpointServiceName),
+		"connection_state":                    types.StringValue(awsParamJSONResponse.ConnectionState),
+		"custom_key_store_id":                 types.StringValue(awsParamJSONResponse.CustomKeystoreID),
+		"custom_key_store_name":               types.StringValue(awsParamJSONResponse.CustomKeystoreName),
+		"xks_proxy_uri_path":                  types.StringValue(awsParamJSONResponse.XKSProxyURIPath),
 	}
+
 	objectValue, newDiags := types.ObjectValue(attributeTypes, attributeValues)
 	diags.Append(newDiags...)
 	terraformList = append(terraformList, objectValue)
@@ -1033,13 +1154,12 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	}
 
 	attributeTypesLocalHostedParams := map[string]attr.Type{
-		"blocked":             types.BoolType,
-		"health_check_key_id": types.StringType,
-		"max_credentials":     types.Int32Type,
-		"mtls_enabled":        types.BoolType,
-		"partition_id":        types.StringType,
-		"source_key_tier":     types.StringType,
-
+		"blocked":                 types.BoolType,
+		"health_check_key_id":     types.StringType,
+		"max_credentials":         types.Int32Type,
+		"mtls_enabled":            types.BoolType,
+		"partition_id":            types.StringType,
+		"source_key_tier":         types.StringType,
 		"health_check_ciphertext": types.StringType,
 		"linked_state":            types.BoolType,
 		"partition_label":         types.StringType,
@@ -1051,13 +1171,12 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	}
 	terraformListLocalHostedParams := make([]attr.Value, 0)
 	attributeValuesLocalHostedParams := map[string]attr.Value{
-		"blocked":             types.BoolValue(planLocalHostedParamsTFSDK.Blocked.ValueBool()),
-		"health_check_key_id": types.StringValue(planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()),
-		"max_credentials":     types.Int32Value(planLocalHostedParamsTFSDK.MaxCredentials.ValueInt32()),
-		"mtls_enabled":        types.BoolValue(planLocalHostedParamsTFSDK.MTLSEnabled.ValueBool()),
-		"partition_id":        types.StringValue(planLocalHostedParamsTFSDK.PartitionID.ValueString()),
-		"source_key_tier":     types.StringValue(planLocalHostedParamsTFSDK.SourceKeyTier.ValueString()),
-
+		"blocked":                 types.BoolValue(_LocalHostedParamsJSONResponse.Blocked),
+		"health_check_key_id":     types.StringValue(_LocalHostedParamsJSONResponse.HealthCheckKeyID),
+		"max_credentials":         types.Int32Value(_LocalHostedParamsJSONResponse.MaxCredentials),
+		"mtls_enabled":            types.BoolValue(_LocalHostedParamsJSONResponse.MTLSEnabled),
+		"partition_id":            types.StringValue(_LocalHostedParamsJSONResponse.PartitionID),
+		"source_key_tier":         types.StringValue(_LocalHostedParamsJSONResponse.SourceKeyTier),
 		"health_check_ciphertext": types.StringValue(_LocalHostedParamsJSONResponse.HealthCheckCiphertext),
 		"linked_state":            types.BoolValue(_LocalHostedParamsJSONResponse.LinkedState),
 		"partition_label":         types.StringValue(_LocalHostedParamsJSONResponse.PartitionLabel),
