@@ -33,22 +33,22 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 		resource "ciphertrust_groups" "group" {
 			name = "%s"
 		}
-		resource "ciphertrust_aws_acl" "user_acl" {
+		resource "ciphertrust_aws_acl" "user1_acl" {
 			kms_id  = ciphertrust_aws_kms.kms.id
 			user_id = ciphertrust_user.user.id
 			actions = ["keycreate"]
 		}
-		resource "ciphertrust_aws_acl" "group_acl" {
+		resource "ciphertrust_aws_acl" "group1_acl" {
 		kms_id  = ciphertrust_aws_kms.kms.id
 		group   = ciphertrust_groups.group.id
 		actions = ["keyupdate", "keydelete"]
 		}
-		resource "ciphertrust_aws_acl" "user_acl" {
+		resource "ciphertrust_aws_acl" "user2_acl" {
 		kms_id  = ciphertrust_aws_kms.kms_two.id
 		user_id = ciphertrust_user.user.id
 		actions = ["keycreate"]
 		}
-		resource "ciphertrust_aws_acl" "group_acl" {
+		resource "ciphertrust_aws_acl" "group2_acl" {
 		kms_id  = ciphertrust_aws_kms.kms_two.id
 		group   = ciphertrust_groups.group.id
 		actions = ["keyupdate", "keydelete"]
@@ -71,6 +71,12 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 				id = ciphertrust_aws_kms.kms.id
 			}
 		}`
+	noFiltersWithAcls := `
+		data "ciphertrust_aws_kms_list" "all_kms" {
+			depends_on = [ciphertrust_aws_kms.kms, ciphertrust_aws_kms.kms_two,
+						ciphertrust_aws_acl.user1_acl, ciphertrust_aws_acl.user2_acl, 
+						ciphertrust_aws_acl.group1_acl, ciphertrust_aws_acl.group2_acl]
+		}`
 
 	dsAllKmsResources := "data.ciphertrust_aws_kms_list.all_kms"
 	dsByName := "data.ciphertrust_aws_kms_list.by_name"
@@ -92,7 +98,7 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsByName, "kms.#", "1"),
 					resource.TestCheckResourceAttrPair(dsByName, "kms.0.regions.#", kmsTwoResourceName, "regions.#"),
-					resource.TestCheckResourceAttrPair(kmsTwoResourceName, "id", dsByName, "kms.0.kms_id"),
+					resource.TestCheckResourceAttrPair(kmsTwoResourceName, "id", dsByName, "kms.0.id"),
 				),
 			},
 			{
@@ -100,30 +106,11 @@ func TestCckmAwsDataSourceKms(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsByID, "kms.#", "1"),
 					resource.TestCheckResourceAttrPair(dsByID, "kms.0.regions.#", kmsOneResourceName, "regions.#"),
-					resource.TestCheckResourceAttrPair(kmsOneResourceName, "id", dsByID, "kms.0.kms_id"),
+					resource.TestCheckResourceAttrPair(kmsOneResourceName, "id", dsByID, "kms.0.id"),
 				),
 			},
 			{
-				Config: awsConnectionResource + kmsTwoConfigStr + aclsConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrPair(kmsOneResourceName, "id", dsByID, "kms.0.kms_id"),
-				),
-			},
-			{
-				Config: awsConnectionResource + kmsTwoConfigStr + byID,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.0.acls.#", "2"),
-					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.1.acls.#", "2"),
-				),
-			},
-			{
-				Config: awsConnectionResource + kmsTwoConfigStr + aclsConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrPair(kmsOneResourceName, "id", dsByID, "kms.0.kms_id"),
-				),
-			},
-			{
-				Config: awsConnectionResource + kmsTwoConfigStr + byID,
+				Config: awsConnectionResource + kmsTwoConfigStr + aclsConfigStr + noFiltersWithAcls,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.0.acls.#", "2"),
 					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.1.acls.#", "2"),
