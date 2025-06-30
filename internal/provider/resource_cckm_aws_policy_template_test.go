@@ -69,6 +69,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 			key_users   = [%s]
 			key_admins_roles  = [%s]
 			key_users_roles   = [%s]
+			auto_push = true
 		}`
 	resourceNameEx1 := "ciphertrust_aws_policy_template.policy_template_ex1"
 	templateNameEx1 := "tf-template-" + uuid.New().String()[:8]
