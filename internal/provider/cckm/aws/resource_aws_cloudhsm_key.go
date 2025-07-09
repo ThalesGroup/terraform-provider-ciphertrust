@@ -452,6 +452,9 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.KeyID = plan.ID
+
+	// No error after this
+
 	keyID := gjson.Get(response, "id").String()
 	if gjson.Get(response, "linked_state").Bool() && len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
@@ -474,15 +477,20 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+
+	plannedAlias := plan.Alias
+
+	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+		resp.Diagnostics.AddWarning(details, "")
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+response)
 	}
-	plannedAlias := plan.Alias
+
 	var diags diag.Diagnostics
 	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &diags)
 	if !reflect.DeepEqual(plan.Alias, plannedAlias) {

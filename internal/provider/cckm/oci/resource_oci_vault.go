@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -247,24 +247,33 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	if gjson.Get(response, "vaults").Exists() {
 		vaultsJSON := gjson.Get(response, "vaults").Array()
 		for _, vaultJSON := range vaultsJSON {
 			plan.ID = types.StringValue(gjson.Get(vaultJSON.Raw, "id").String())
+			tflog.Trace(ctx, "[resource_oci_vault.go -> Create][response:"+vaultJSON.Raw)
+			var diags diag.Diagnostics
+			r.setVaultState(ctx, vaultJSON.Raw, &plan, &diags)
+			for _, d := range diags {
+				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+			}
 		}
 	}
-	response, err = r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_OCI+"/vaults")
+
+	getResponse, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_OCI+"/vaults")
 	if err != nil {
 		msg := "Error reading OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": plan.ID.ValueString()})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-	}
-	tflog.Trace(ctx, "[resource_oci_vault.go -> Create][response:"+response)
-	var diags diag.Diagnostics
-	r.setVaultState(ctx, response, &plan, &diags)
-	for _, d := range diags {
-		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+	} else {
+		var diags diag.Diagnostics
+		r.setVaultState(ctx, getResponse, &plan, &diags)
+		for _, d := range diags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+		tflog.Trace(ctx, "[resource_oci_vault.go -> Create][response:"+getResponse)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

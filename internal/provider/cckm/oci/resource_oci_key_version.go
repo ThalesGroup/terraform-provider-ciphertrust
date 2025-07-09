@@ -213,22 +213,21 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 		}
 	}
 
-	response, err = r.client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
+	getResponse, err := r.client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 	if err != nil {
 		msg := "Error reading OCI key version."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		return
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
 	}
-	tflog.Trace(ctx, "[resource_oci_key_version.go -> Create][response:"+response)
+
 	var setStateDiags diag.Diagnostics
 	setCommonKeyVersionState(ctx, response, &plan, &setStateDiags)
-	if setStateDiags.HasError() {
-		for _, d := range setStateDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-		return
+	for _, d := range setStateDiags {
+		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

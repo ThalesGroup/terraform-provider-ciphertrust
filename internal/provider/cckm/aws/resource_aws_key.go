@@ -556,9 +556,12 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	kid := gjson.Get(response, "aws_param.KeyID").String()
 	region := gjson.Get(response, "region").String()
 	plan.ID = types.StringValue(encodeAWSKeyTerraformResourceID(region, kid))
+	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
+
+	tflog.Trace(ctx, "[resource_aws_key.go -> Create][response:"+response)
 
 	// Don't return errors after this
-	plan.KeyID = types.StringValue(gjson.Get(response, "id").String())
+
 	if len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
 		addAliases(ctx, r.client, id, &plan.AWSKeyCommonTFSDK, response, &diags)
@@ -590,14 +593,17 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	}
 	keyID := plan.KeyID.ValueString()
 	var err error
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_aws_key.go -> Create][response:"+response)
 	}
-	tflog.Trace(ctx, "[resource_aws_key.go -> Create][response:"+response)
+
 	var diags diag.Diagnostics
 	r.setKeyState(ctx, response, &plan, &diags)
 	for _, d := range diags {

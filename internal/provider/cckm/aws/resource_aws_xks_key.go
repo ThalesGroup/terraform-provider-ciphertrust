@@ -491,8 +491,12 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_xks.go -> Create][response:"+response)
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.KeyID = plan.ID
+
+	// Do not return error after this
+
 	keyID := gjson.Get(response, "id").String()
 	if gjson.Get(response, "linked_state").Bool() && len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
@@ -515,21 +519,24 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+
+	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+		resp.Diagnostics.AddWarning(details, "")
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_aws_key.go -> Create][response:"+response)
 	}
+
 	var diags diag.Diagnostics
 	r.setXKSKeyState(ctx, response, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Create][response:"+response)
 }
 
 func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {

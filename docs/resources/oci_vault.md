@@ -4,24 +4,11 @@ page_title: "ciphertrust_oci_vault Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
   Use this resource to create and manage OCI vaults in CipherTrust Manager.
-  Import an Existing Vault
-  To import an existing vault, first define a resource with
-  required values matching the existing vault's values then run the terraform import command specifying
-  the vault's CipherTrust Manager resource ID on the command line.
-  For example: terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b.
 ---
 
 # ciphertrust_oci_vault (Resource)
 
 Use this resource to create and manage OCI vaults in CipherTrust Manager.
-
-### Import an Existing Vault
-
-To import an existing vault, first define a resource with
-required values matching the existing vault's values then run the terraform import command specifying
-the vault's CipherTrust Manager resource ID on the command line.
-
-For example: `terraform import ciphertrust_oci_vault.imported_vault af0c0c2c-242f-4c23-ab82-76d32d54901b`.
 
 ## Example Usage
 
@@ -42,19 +29,19 @@ resource "ciphertrust_oci_vault" "vault" {
 
 ### Required
 
-- `connection_id` (String) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.
+- `connection_id` (String) (Updatable) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.
 - `region` (String) The vault's region.
 - `vault_id` (String) The vault's OCID.
 
 ### Optional
 
-- `bucket_name` (String) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.
-- `bucket_namespace` (String) Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.
+- `bucket_name` (String) (Updatable) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.
+- `bucket_namespace` (String) (Updatable) Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.
 
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
-- `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--acls))
+- `acls` (Attributes Set) (Updatable) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--acls))
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_id` (String) The compartment's OCID.
 - `compartment_name` (String) Compartment name.

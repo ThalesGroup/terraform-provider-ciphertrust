@@ -4,27 +4,11 @@ page_title: "ciphertrust_oci_byok_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
   Use this resource to create and manage OCI BYOK keys in CipherTrust Manager.
-  First create a source key in one of the supported source key tiers then specify the source key tier and ID of the key.
-  Import an Existing BYOK Key
-  To import an existing BYOK key, first define a resource with
-  required values matching the existing key's values then run the terraform import command specifying
-  the key's CipherTrust Manager resource ID on the command line.
-  For example: terraform import ciphertrust_oci_byok_key.imported_key 3366dc06-6d45-4bdd-af8f-fbeb2c097ee6.
 ---
 
 # ciphertrust_oci_byok_key (Resource)
 
 Use this resource to create and manage OCI BYOK keys in CipherTrust Manager.
-
-First create a source key in one of the supported source key tiers then specify the source key tier and ID of the key.
-
-### Import an Existing BYOK Key
-
-To import an existing BYOK key, first define a resource with
-required values matching the existing key's values then run the terraform import command specifying
-the key's CipherTrust Manager resource ID on the command line.
-
-For example: `terraform import ciphertrust_oci_byok_key.imported_key 3366dc06-6d45-4bdd-af8f-fbeb2c097ee6`.
 
 ## Example Usage
 

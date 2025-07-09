@@ -4,26 +4,11 @@ page_title: "ciphertrust_oci_byok_key_version Resource - terraform-provider-ciph
 subcategory: ""
 description: |-
   Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager.
-  First create a source key in one of the supported source key tiers then specify the source key tier and ID of the key.
-  Import an Existing BYOK Key Version
-  To import an existing BYOK key version, first define a resource with
-  required values matching the existing version's values then run the terraform import command specifying
-  the key's CipherTrust Manager resource ID and the version's CipherTrust Manager resource ID separated by a colon on the command line.
-  For example: terraform import ciphertrust_oci_byok_version.imported_key_version d5f40cfe-eaa0-4657-9862-ba3982a0e2be:013b3896-4a83-4592-8c81-b6acb6a6ef38.
 ---
 
 # ciphertrust_oci_byok_key_version (Resource)
 
 Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager.
-First create a source key in one of the supported source key tiers then specify the source key tier and ID of the key.
-
-### Import an Existing BYOK Key Version
-
-To import an existing BYOK key version, first define a resource with
-required values matching the existing version's values then run the terraform import command specifying
-the key's CipherTrust Manager resource ID and the version's CipherTrust Manager resource ID separated by a colon on the command line.
-
-For example: `terraform import ciphertrust_oci_byok_version.imported_key_version d5f40cfe-eaa0-4657-9862-ba3982a0e2be:013b3896-4a83-4592-8c81-b6acb6a6ef38`.
 
 ## Example Usage
 
@@ -46,8 +31,9 @@ resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
 
 # Add a BYOK key version to a BYOK OCI key
 resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
-  cckm_key_id   = ciphertrust_oci_byok_key.test_key.id
-  source_key_id = ciphertrust_cm_key.cm_key_version.id
+  cckm_key_id     = ciphertrust_oci_byok_key.test_key.id
+  source_key_id   = ciphertrust_cm_key.cm_key_version.id
+  source_key_tier = "local"
 }
 ```
 

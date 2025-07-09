@@ -216,7 +216,7 @@ Optional:
 Optional:
 
 - `cte` (Attributes) CTE specific attributes (see [below for nested schema](#nestedatt--meta--cte))
-- `owner_id` (String) Optional owner information for the key, required for non-admin. Value should be the user's user_id
+- `owner_id` (String) Optional owner information for the key, required for non-admin unless 'assign_self_as_owner' is set to true. Value should be the user's user_id
 - `permissions` (Attributes) Key permissions (see [below for nested schema](#nestedatt--meta--permissions))
 
 <a id="nestedatt--meta--cte"></a>

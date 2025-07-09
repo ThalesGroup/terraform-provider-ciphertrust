@@ -4,24 +4,11 @@ page_title: "ciphertrust_oci_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
   Use this resource to create and manage native OCI keys in CipherTrust Manager.
-  Import an Existing Native Key
-  To import an existing native key, first define a resource with
-  required values matching the existing key's values then run the terraform import command specifying
-  the key's CipherTrust Manager resource ID on the command line.
-  For example: terraform import ciphertrust_oci_byok_key.imported_key bca423ef-df36-4e30-a635-977e32e380bb.
 ---
 
 # ciphertrust_oci_key (Resource)
 
 Use this resource to create and manage native OCI keys in CipherTrust Manager.
-
-### Import an Existing Native Key
-
-To import an existing native key, first define a resource with
-required values matching the existing key's values then run the terraform import command specifying
-the key's CipherTrust Manager resource ID on the command line.
-
-For example: `terraform import ciphertrust_oci_byok_key.imported_key bca423ef-df36-4e30-a635-977e32e380bb`.
 
 ## Example Usage
 

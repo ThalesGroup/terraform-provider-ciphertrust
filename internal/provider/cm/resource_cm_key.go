@@ -264,7 +264,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Attributes: map[string]schema.Attribute{
 					"owner_id": schema.StringAttribute{
 						Optional:    true,
-						Description: "Optional owner information for the key, required for non-admin. Value should be the user's user_id",
+						Description: "Optional owner information for the key, required for non-admin unless 'assign_self_as_owner' is set to true. Value should be the user's user_id",
 					},
 					"permissions": schema.SingleNestedAttribute{
 						Optional:    true,

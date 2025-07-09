@@ -3,25 +3,12 @@
 page_title: "ciphertrust_oci_acl Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.
-  Import an Existing OCI ACL
-  To import an existing ACL, first define a resource with
-  required values matching the existing ACLS's values then run the terraform import command specifying
-  the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.
-  For example: terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073 or terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users.
+  Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.n
 ---
 
 # ciphertrust_oci_acl (Resource)
 
-Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.
-
-### Import an Existing OCI ACL
-
-To import an existing ACL, first define a resource with
-required values matching the existing ACLS's values then run the terraform import command specifying
-the CipherTrust Manager vault's resource ID and the user ID or group name separated by two semi-colons.
-
-For example: `terraform import ciphertrust_oci_acl.imported_user_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:user::local|2f94d5b4-8563-464a-b32b-19aa50878073` or `terraform import ciphertrust_oci_acl.imported_group_acl fd466e89-dc81-4d8d-bc3f-208b5f8e78a0:group::CCKM Users`.
+Use this resource to create and manage OCI vault access control lists (ACLs) in CipherTrust Manager.n
 
 ## Example Usage
 

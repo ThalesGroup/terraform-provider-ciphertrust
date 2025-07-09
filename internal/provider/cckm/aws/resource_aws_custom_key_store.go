@@ -434,18 +434,14 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
+	// No error after this
+
 	if len(plan.EnableCredentialRotation.Elements()) != 0 {
 		var diags diag.Diagnostics
 		r.enableCredentialRotation(ctx, id, &plan, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
-	}
-
-	var warningDiags diag.Diagnostics
-	r.setCustomKeyStoreState(ctx, response, &plan, nil, &warningDiags)
-	for _, d := range warningDiags {
-		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 
 	if plan.ConnectDisconnectKeystore.ValueString() != "" &&
@@ -536,6 +532,24 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				}
 			}
 		}
+	}
+
+	getResponse, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AWS_XKS)
+	if err != nil {
+		tflog.Warn(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+plan.ID.ValueString()+"]")
+		resp.Diagnostics.AddWarning(
+			"Error reading AWS Custom Key Store on CipherTrust Manager: ",
+			"Could not read AWS Custom Key Store, unexpected error: "+err.Error(),
+		)
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_aws_custom_key_store.go -> Create][response:"+response)
+	}
+
+	var warningDiags diag.Diagnostics
+	r.setCustomKeyStoreState(ctx, response, &plan, nil, &warningDiags)
+	for _, d := range warningDiags {
+		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

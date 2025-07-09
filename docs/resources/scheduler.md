@@ -3,12 +3,12 @@
 page_title: "ciphertrust_scheduler Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields cannot be defined in the same scheduler resource.
+  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 ---
 
 # ciphertrust_scheduler (Resource)
 
-Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields cannot be defined in the same scheduler resource.
+Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 
 ## Example Usage
 

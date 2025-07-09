@@ -392,21 +392,21 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 		}
 	}
 
-	response, err = r.client.PostNoData(ctx, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
+	refreshResponse, err := r.client.PostNoData(ctx, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
 	if err != nil {
 		msg := "Error refreshing OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		resp.Diagnostics.AddError(details, "")
+		resp.Diagnostics.AddWarning(details, "")
 		tflog.Error(ctx, details)
-		return
+	} else {
+		response = refreshResponse
+		tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
 	}
-	tflog.Trace(ctx, "[resource_resource_oci_byok_key.go -> Create][response:"+response)
+
 	var setStateDiags diag.Diagnostics
 	setByokKeyState(ctx, id, r.client, response, &plan, &setStateDiags)
-	if setStateDiags.HasError() {
-		for _, d := range setStateDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
+	for _, d := range setStateDiags {
+		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

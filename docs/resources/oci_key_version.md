@@ -4,23 +4,11 @@ page_title: "ciphertrust_oci_key_version Resource - terraform-provider-ciphertru
 subcategory: ""
 description: |-
   Use this resource to create and manage native OCI key versions in CipherTrust Manager.
-  Import an Existing Native Key Version
-  To import an existing native key version, first define a resource with
-  required values matching the existing version's values then run the terraform import command specifying
-  the key's CipherTrust Manager resource ID and the version's CipherTrust Manager resource ID separated by a colon on the command line.
-  For example: terraform import ciphertrust_oci_version.imported_key_version f9fc3532-6a75-423d-9c04-5c802384acd5:5c2da105-99cf-4c6a-9f7c-2199783cc759.
 ---
 
 # ciphertrust_oci_key_version (Resource)
 
 Use this resource to create and manage native OCI key versions in CipherTrust Manager.
-### Import an Existing Native Key Version
-
-To import an existing native key version, first define a resource with
-required values matching the existing version's values then run the terraform import command specifying
-the key's CipherTrust Manager resource ID and the version's CipherTrust Manager resource ID separated by a colon on the command line.
-
-For example: `terraform import ciphertrust_oci_version.imported_key_version f9fc3532-6a75-423d-9c04-5c802384acd5:5c2da105-99cf-4c6a-9f7c-2199783cc759`.
 
 ## Example Usage
 
