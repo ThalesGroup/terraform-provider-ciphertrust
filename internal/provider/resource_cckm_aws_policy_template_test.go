@@ -231,6 +231,38 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
 			},
+			{
+				ResourceName:      resourceNameEx1,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx2,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx3,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx4,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
 		},
 	})
 }

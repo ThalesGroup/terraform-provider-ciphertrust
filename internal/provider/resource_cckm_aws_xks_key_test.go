@@ -191,6 +191,32 @@ func TestCckmAwsXKSUnlinkedKey(t *testing.T) {
 				),
 			},
 			{
+				ResourceName:      keyResourceMaxParams,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"alias",
+					"description",
+					"enable_key",
+					"enable_rotation",
+					"key_policy",
+					"local_hosted_params",
+					"schedule_for_deletion_days",
+					"tags",
+				},
+			},
+			{
+				ResourceName:      keyResourceMinParams,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"description",
+					"enable_key",
+					"local_hosted_params",
+					"schedule_for_deletion_days",
+				},
+			},
+			{
 				Config: updateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "alias.#", "1"),
@@ -214,6 +240,38 @@ func TestCckmAwsXKSUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMinParams, "tags.TagKey2", "TagValue2"),
 				),
 			},
+			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      keyResourceMaxParams,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"alias",
+					"description",
+					"enable_key",
+					"enable_rotation",
+					"key_policy",
+					"local_hosted_params",
+					"schedule_for_deletion_days",
+					"tags",
+				},
+			},
+			{
+				ResourceName:      keyResourceMinParams,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"alias",
+					"description",
+					"enable_key",
+					"enable_rotation",
+					"key_policy",
+					"local_hosted_params",
+					"schedule_for_deletion_days",
+					"tags",
+				}},
 			{
 				Config: createConfigStr,
 				Check: resource.ComposeTestCheckFunc(

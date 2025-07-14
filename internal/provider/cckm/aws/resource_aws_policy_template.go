@@ -109,6 +109,7 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"kms": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Name or ID of the KMS to which the template belongs.",
 			},
 			"name": schema.StringAttribute{
@@ -219,6 +220,10 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if state.AutoPush.IsUnknown() || state.AutoPush.IsNull() {
+		// terraform import
+		state.AutoPush = types.BoolValue(false)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -233,6 +238,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_policy_template -> Update]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_policy_template -> Update]["+id+"]")
+
 	var plan AWSKeyPolicyTemplateTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -244,6 +250,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	response, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
 	if err != nil {
 		msg := "Error reading AWS key policy template."
@@ -258,10 +265,21 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	if keyPolicyParams.Policy == nil && keyPolicyParams.ExternalAccounts == nil &&
+		keyPolicyParams.KeyAdmins == nil && keyPolicyParams.KeyAdminsRoles == nil &&
+		keyPolicyParams.KeyUsers == nil && keyPolicyParams.KeyUsersRoles == nil {
+		// terraform import can lead to this
+		tflog.Trace(ctx, "[resource_aws_policy_template.go -> Update][nothing to update")
+		r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		return
+	}
+
 	payload := KeyPolicyTemplateUpdatePayloadJSON{
 		KeyPolicyParamsJSON: *keyPolicyParams,
 	}
-	if !plan.AutoPush.IsUnknown() {
+	if !plan.AutoPush.IsUnknown() && !plan.AutoPush.IsNull() {
 		payload.AutoPush = plan.AutoPush.ValueBool()
 	}
 	payloadJSON, err := json.Marshal(payload)
@@ -280,6 +298,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	r.setPolicyTemplateState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

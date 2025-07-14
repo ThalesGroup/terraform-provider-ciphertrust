@@ -44,7 +44,8 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
 			name    = "%s"
 			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms     = ciphertrust_aws_kms.kms.name
+			#kms     = ciphertrust_aws_kms.kms.name
+			kms     = ciphertrust_aws_kms.kms.id
 			linked_state = false
 			connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
 			enable_success_audit_event = %t
@@ -79,7 +80,8 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
 			name    = "%s"
 			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms     = ciphertrust_aws_kms.kms.name
+			#kms     = ciphertrust_aws_kms.kms.name
+			kms     = ciphertrust_aws_kms.kms.id
 			linked_state = false
 			enable_success_audit_event = %t
 			local_hosted_params {
@@ -132,6 +134,16 @@ func TestCckmAwsCustomKeyStoreUnlinked(t *testing.T) {
 					// Credential rotation can't be enabled for unlinked key stores
 					resource.TestCheckResourceAttr(keyStoreResourceName, "labels.%", "0"),
 				),
+			},
+			{
+				ResourceName:      keyStoreResourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"aws_param.0.key_store_password",
+					"enable_credential_rotation",
+					"kms",
+				},
 			},
 			{
 				Config: awsConnectionResource + updateKeyStoreConfigStr,

@@ -25,7 +25,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
@@ -127,6 +126,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Validators:  []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
 				Description: "(Updatable) Indicates whether to connect or disconnect the custom key store.",
 			},
@@ -497,41 +497,6 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 				}
 			}
 		}
-		if plan.ConnectDisconnectKeystore.ValueString() == StateDisconnectKeystore {
-			var payload []byte
-			if planAWSParamTFSDK.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM {
-				operationTimeOutInSeconds = 11 * 60
-			}
-			maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
-			_, err := r.client.PostDataV2(
-				ctx,
-				plan.ID.ValueString(),
-				common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/disconnect",
-				payload)
-			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
-				resp.Diagnostics.AddWarning(
-					"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
-					"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
-				)
-			}
-			if err == nil {
-				response, err = r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, &state) }, maxOperationRetries)
-				if err != nil {
-					resp.Diagnostics.AddWarning(
-						"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
-						"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
-					)
-				}
-				if err == nil {
-					var warningDiags diag.Diagnostics
-					r.setCustomKeyStoreState(ctx, response, &plan, &state, &warningDiags)
-					for _, d := range warningDiags {
-						resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-					}
-				}
-			}
-		}
 	}
 
 	getResponse, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AWS_XKS)
@@ -587,83 +552,6 @@ func (r *resourceAWSCustomKeyStore) ImportState(ctx context.Context, req resourc
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go.go -> ImportState]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go.go -> ImportState]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-
-	keyStoreID := req.ID
-	response, err := r.client.GetById(ctx, id, keyStoreID, common.URL_AWS_XKS)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> ImportState]["+keyStoreID+"]")
-		resp.Diagnostics.AddError(
-			"Error reading AWS Custom Key Store on CipherTrust Manager: ",
-			"Could not read AWS Custom Key Store, unexpected error: "+err.Error(),
-		)
-		return
-	}
-	var state AWSCustomKeyStoreTFSDK
-	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.KMS = types.StringValue(gjson.Get(response, "kms_id").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	state.Region = types.StringValue(gjson.Get(response, "region").String())
-	state.KMS = types.StringValue(gjson.Get(response, "kms").String())
-
-	var plan AWSCustomKeyStoreTFSDK
-	r.setCustomKeyStoreState(ctx, response, &plan, &state, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	state.Labels = plan.Labels
-	state.LocalHostedParams = plan.LocalHostedParams
-	state.AWSParams = plan.AWSParams
-
-	var timeoutAttribs = map[string]attr.Type{
-		"create": types.StringType,
-		"update": types.StringType,
-		"read":   types.StringType,
-		"delete": types.StringType,
-	}
-	type timeout struct {
-		Create types.String `tfsdk:"create"`
-		Update types.String `tfsdk:"update"`
-		Read   types.String `tfsdk:"read"`
-		Delete types.String `tfsdk:"delete"`
-	}
-	timeoutValues := timeout{
-		types.StringValue("30m"),
-		types.StringValue("30m"),
-		types.StringValue("5m"),
-		types.StringValue("5m"),
-	}
-	var diags diag.Diagnostics
-	var timeoutObjectValue basetypes.ObjectValue
-	timeoutObjectValue, diags = types.ObjectValueFrom(ctx, timeoutAttribs, &timeoutValues)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-	}
-	var timeoutObject types.Object
-	timeoutObject, diags = timeoutObjectValue.ToObjectValue(ctx)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-	}
-	state.Timeouts = timeouts.Value{Object: timeoutObject}
-
-	var credRotationAttribs = map[string]attr.Type{
-		"job_config_id": types.StringType,
-	}
-	type credRotationTFSDK struct {
-		JobConfigId types.String `tfsdk:"job_config_id"`
-	}
-	credRotationValues := []credRotationTFSDK{{
-		JobConfigId: types.StringValue(""),
-	}}
-	var credRotationListValue basetypes.ListValue
-	credRotationListValue, diags = types.ListValueFrom(ctx, types.ObjectType{AttrTypes: credRotationAttribs}, &credRotationValues)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-	}
-	state.EnableCredentialRotation, diags = credRotationListValue.ToListValue(ctx)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -1050,18 +938,17 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 		planAWSParamTFSDK          AWSCustomKeyStoreParamTFSDK
 		planLocalHostedParamsTFSDK LocalHostedParamsTFSDK
 	)
-	if plan != nil {
-		for _, v := range plan.AWSParams.Elements() {
-			diags.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
-			if diags.HasError() {
-				return
-			}
+
+	for _, v := range plan.AWSParams.Elements() {
+		diags.Append(tfsdk.ValueAs(ctx, v, &planAWSParamTFSDK)...)
+		if diags.HasError() {
+			return
 		}
-		for _, v := range plan.LocalHostedParams.Elements() {
-			diags.Append(tfsdk.ValueAs(ctx, v, &planLocalHostedParamsTFSDK)...)
-			if diags.HasError() {
-				return
-			}
+	}
+	for _, v := range plan.LocalHostedParams.Elements() {
+		diags.Append(tfsdk.ValueAs(ctx, v, &planLocalHostedParamsTFSDK)...)
+		if diags.HasError() {
+			return
 		}
 	}
 
@@ -1096,6 +983,13 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	plan.Type = types.StringValue(gjson.Get(response, "type").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	plan.Name = types.StringValue(gjson.Get(response, "name").String())
+	plan.Region = types.StringValue(gjson.Get(response, "region").String())
+	plan.LinkedState = types.BoolValue(gjson.Get(response, "local_hosted_params.linked_state").Bool())
+	if plan.KMS.ValueString() == "" && state != nil && state.KMS.ValueString() == "" {
+		plan.KMS = types.StringValue(gjson.Get(response, "kms").String())
+	}
+	plan.EnableSuccessAuditEvent = types.BoolValue(gjson.Get(response, "enable_success_audit_event").Bool())
 
 	var awsParamJSONResponse AWSParamJSONResponse
 	err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse)
@@ -1148,6 +1042,12 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 	plan.AWSParams = listValue
 	if diags.HasError() {
 		return
+	}
+
+	if awsParamJSONResponse.ConnectionState == "CONNECTED" {
+		plan.ConnectDisconnectKeystore = types.StringValue("CONNECT_KEYSTORE")
+	} else {
+		plan.ConnectDisconnectKeystore = types.StringValue("DISCONNECT_KEYSTORE")
 	}
 
 	keyStoreID := gjson.Get(response, "id").String()

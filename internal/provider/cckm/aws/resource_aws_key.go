@@ -55,15 +55,16 @@ var (
 )
 
 const (
-	policyTemplateTagKey      = "cckm_policy_template_id"
-	longAwsKeyOpSleep         = 20
-	shortAwsKeyOpSleep        = 5
-	awsValidToRegEx           = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
-	awsValidToFormatMsg       = "must conform to the following example 2027-07-03T14:24:00Z"
-	refreshTokenSeconds       = 20
-	cckmSyncAutoRotationDelay = 5
-	disabledKeyException      = "DisabledException"
-	autoRotationWaitSeconds   = 30
+	policyTemplateTagKey          = "cckm_policy_template_id"
+	longAwsKeyOpSleep             = 20
+	shortAwsKeyOpSleep            = 5
+	awsValidToRegEx               = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
+	awsValidToFormatMsg           = "must conform to the following example 2027-07-03T14:24:00Z"
+	refreshTokenSeconds           = 200
+	cckmSyncAutoRotationDelay     = 5
+	disabledKeyException          = "DisabledException"
+	autoRotationWaitSeconds       = 30
+	cckmMultiRegionBackgroundWait = 100
 )
 
 func NewResourceAWSKey() resource.Resource {
@@ -472,7 +473,8 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"import_key_material": schema.ListNestedBlock{
 				Description: "Both a 'source_key_tier' key and an AWS external key will be created. Key material from the 'source_key_tier' key will be imported to the AWS key." +
-					"The 'source_key_tier' key will not be deleted on Terraform destroy. An alternative is to use 'upload_key' parameter.",
+					"The 'source_key_tier' key will not be deleted on Terraform destroy.\n\n" +
+					"The preferred alternative is to use 'upload_key' parameter.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"source_key_name": schema.StringAttribute{
@@ -659,6 +661,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	keyID := state.KeyID.ValueString()
 	plan.KeyID = types.StringValue(keyID)
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
@@ -669,6 +672,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
 	planEnableKey := false
 	if !plan.EnableKey.IsUnknown() {
@@ -1258,25 +1262,38 @@ func (r *resourceAWSKey) replicateKey(ctx context.Context, id string, plan *AWSK
 	if diags.HasError() {
 		return ""
 	}
+
 	// Don't return errors after this
+
 	replicaKeyID := gjson.Get(response, "id").String()
 	var dg diag.Diagnostics
 	r.waitForReplication(ctx, id, replicaKeyID, &dg)
-	for _, d := range dg {
-		diags.AddWarning(d.Summary(), d.Detail())
-	}
-	if replicateKeyPlan.ImportKeyMaterial.ValueBool() {
-		var dg diag.Diagnostics
-		replicaRegion := plan.Region.ValueString()
-		r.importKeyMaterialToReplica(ctx, id, &replicateKeyPlan, replicaKeyID, replicaRegion, &dg)
+	if dg.HasError() {
 		for _, d := range dg {
 			diags.AddWarning(d.Summary(), d.Detail())
 		}
+		return ""
+	}
+	if replicateKeyPlan.ImportKeyMaterial.ValueBool() {
+		dg = diag.Diagnostics{}
+		replicaRegion := plan.Region.ValueString()
+		r.importKeyMaterialToReplica(ctx, id, &replicateKeyPlan, replicaKeyID, replicaRegion, &dg)
+		if dg.HasError() {
+			for _, d := range dg {
+				diags.AddWarning(d.Summary(), d.Detail())
+			}
+			return ""
+		}
+	}
+	dg = diag.Diagnostics{}
+	r.waitForReplicatedKeyIsEnabled(ctx, id, replicaKeyID, &dg)
+	for _, d := range dg {
+		diags.AddWarning(d.Summary(), d.Detail())
 	}
 	primaryKeyID := replicateKeyPlan.KeyID.ValueString()
 	replicaRegion := plan.Region.ValueString()
 	if replicateKeyPlan.MakePrimary.ValueBool() {
-		var dg diag.Diagnostics
+		dg = diag.Diagnostics{}
 		r.updatePrimaryRegion(ctx, id, primaryKeyID, replicaRegion, &dg)
 		for _, d := range dg {
 			diags.AddWarning(d.Summary(), d.Detail())
@@ -1357,8 +1374,20 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 		err      error
 		response string
 	)
-	keyState := "Creating"
-	numRetries := int(r.client.CCKMConfig.AwsOperationTimeout / longAwsKeyOpSleep)
+	response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
+	if err != nil {
+		msg := "Error creating AWS key. Error reading replicated key."
+		details := utils.ApiError(msg, map[string]interface{}{
+			"error":          err.Error(),
+			"replica_key_id": replicaKeyID,
+		})
+		tflog.Error(ctx, details)
+		diags.AddWarning(details, "")
+		return ""
+	}
+	keyState := gjson.Get(response, "aws_param.KeyState").String()
+
+	numRetries := cckmMultiRegionBackgroundWait / longAwsKeyOpSleep
 	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyState == "Creating"; retry++ {
 		time.Sleep(time.Duration(longAwsKeyOpSleep) * time.Second)
@@ -1387,8 +1416,40 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 			return ""
 		}
 		keyState = gjson.Get(response, "aws_param.KeyState").String()
+		tflog.Trace(ctx, fmt.Sprintf("Key state: %s", keyState))
 	}
-	tStart = time.Now()
+	if keyState == "Creating" {
+		msg := fmt.Sprintf("Error replicating AWS key, key state is still '%s'.", keyState)
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
+		tflog.Warn(ctx, details)
+		diags.AddWarning(details, "")
+	}
+
+	tflog.Trace(ctx, "[resource_aws_key.go -> waitForReplication][response:"+response)
+	return response
+}
+
+func (r *resourceAWSKey) waitForReplicatedKeyIsEnabled(ctx context.Context, id string, replicaKeyID string, diags *diag.Diagnostics) string {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> waitForKeyIsEnabled]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> waitForKeyIsEnabled]["+id+"]")
+	var (
+		err      error
+		response string
+	)
+	response, err = r.client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
+	if err != nil {
+		msg := "Error creating AWS key. Error reading replicated key."
+		details := utils.ApiError(msg, map[string]interface{}{
+			"error":          err.Error(),
+			"replica_key_id": replicaKeyID,
+		})
+		tflog.Error(ctx, details)
+		diags.AddWarning(details, "")
+		return ""
+	}
+	keyState := gjson.Get(response, "aws_param.KeyState").String()
+	numRetries := cckmMultiRegionBackgroundWait / longAwsKeyOpSleep
+	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyState != "Enabled"; retry++ {
 		time.Sleep(time.Duration(longAwsKeyOpSleep) * time.Second)
 		if time.Since(tStart).Seconds() > refreshTokenSeconds {
@@ -1415,14 +1476,15 @@ func (r *resourceAWSKey) waitForReplication(ctx context.Context, id string, repl
 			return ""
 		}
 		keyState = gjson.Get(response, "aws_param.KeyState").String()
+		tflog.Trace(ctx, fmt.Sprintf("Key state: %s", keyState))
 	}
 	if keyState != "Enabled" {
-		msg := "Error creating AWS key, failed to confirm replicated AWS key has been enabled in the given time. Consider extending provider configuration option 'aws_operation_timeout'."
+		msg := fmt.Sprintf("Error replicating AWS key, keystate is '%s' instead of 'Enabled'.", keyState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
 		tflog.Warn(ctx, details)
 		diags.AddWarning(details, "")
 	}
-	tflog.Trace(ctx, "[resource_aws_key.go -> replicateKey][response:"+response)
+	tflog.Trace(ctx, "[resource_aws_key.go -> waitForReplicatedKeyIsEnabled][response:"+response)
 	return response
 }
 
@@ -1543,6 +1605,7 @@ func (r *resourceAWSKey) updatePrimaryRegion(ctx context.Context, id string, pri
 			return
 		}
 		currentPrimaryRegion = gjson.Get(response, "aws_param.MultiRegionConfiguration.PrimaryKey.Region").String()
+		tflog.Trace(ctx, fmt.Sprintf("Key primary region: %s", currentPrimaryRegion))
 	}
 	if currentPrimaryRegion != newPrimaryRegion {
 		msg := "Error updating AWS key. Failed to confirm primary region is set. Consider extending provider configuration option 'aws_operation_timeout'."
