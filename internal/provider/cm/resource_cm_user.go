@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -31,7 +30,7 @@ type resourceCMUser struct {
 }
 
 func (r *resourceCMUser) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cm_user"
+	resp.TypeName = req.ProviderTypeName + "_user"
 }
 
 // Schema defines the schema for the resource.
@@ -53,23 +52,38 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"email": schema.StringAttribute{
 				Optional: true,
 			},
-			"full_name": schema.StringAttribute{
-				Optional: true,
+			"name": schema.StringAttribute{
+				Optional:    true,
+				Description: "Users full name",
 			},
 			"password": schema.StringAttribute{
 				Required: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
 			"prevent_ui_login": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
 			"password_change_required": schema.BoolAttribute{
+				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"user_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Description: "Information that can be stored with the user.",
 			},
 		},
 	}
@@ -119,6 +133,14 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
 	}
 
+	if len(plan.Metadata.Elements()) != 0 {
+		metadata := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Create]["+id+"]")
@@ -140,6 +162,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	plan.UserID = types.StringValue(response)
+	plan.ID = types.StringValue(response)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -158,7 +181,7 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	// 	return
 	// }
 
-	// users, err := r.client.GetAll(ctx, state.UserID.ValueString(), URL_USER_MANAGEMENT)
+	// users, err := r.client.GetAll(ctx, state.ID.ValueString(), URL_USER_MANAGEMENT)
 	// tflog.Trace(ctx, users)
 	// if err != nil {
 	// 	resp.Diagnostics.AddError(
@@ -190,46 +213,55 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMUserTFSDK
-	var loginFlags UserLoginFlagsJSON
-	var payload CMUserJSON
-
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
-
-	payload.Email = common.TrimString(plan.Email.String())
-	payload.Name = common.TrimString(plan.Name.String())
-	payload.Nickname = common.TrimString(plan.Nickname.String())
-	payload.UserName = common.TrimString(plan.UserName.String())
-	payload.Password = common.TrimString(plan.Password.String())
-	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
-	payload.LoginFlags = loginFlags
-	payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Invalid data input: User Update",
-			err.Error(),
-		)
+	var state CMUserTFSDK
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.UserID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Error creating user on CipherTrust Manager: ",
-			"Could not create user, unexpected error: "+err.Error(),
-		)
-		return
-	}
-	plan.UserID = types.StringValue(response)
+	plan.ID = state.ID
+	plan.UserID = state.UserID
+
+	//var loginFlags UserLoginFlagsJSON
+	//var payload CMUserUpdateJSON
+	//loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
+	//
+	//payload.Email = common.TrimString(plan.Email.String())
+	//payload.Name = common.TrimString(plan.Name.String())
+	//payload.Nickname = common.TrimString(plan.Nickname.String())
+	//payload.UserName = common.TrimString(plan.UserName.String())
+	//payload.Password = common.TrimString(plan.Password.String())
+	//payload.IsDomainUser = plan.IsDomainUser.ValueBool()
+	//payload.LoginFlags = loginFlags
+	//payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+	//
+	//payloadJSON, err := json.Marshal(payload)
+	//if err != nil {
+	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+	//	resp.Diagnostics.AddError(
+	//		"Invalid data input: User Update",
+	//		err.Error(),
+	//	)
+	//	return
+	//}
+	//
+	//response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
+	//if err != nil {
+	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+	//	resp.Diagnostics.AddError(
+	//		"Error creating user on CipherTrust Manager: ",
+	//		"Could not create user, unexpected error: "+err.Error(),
+	//	)
+	//	return
+	//}
+	//plan.UserID = types.StringValue(response)
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -248,8 +280,8 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 
 	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_USER_MANAGEMENT, state.UserID.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.UserID.ValueString(), url, nil)
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_USER_MANAGEMENT, state.ID.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Delete]["+state.UserID.ValueString()+"]["+output+"]")
 	if err != nil {
 		resp.Diagnostics.AddError(

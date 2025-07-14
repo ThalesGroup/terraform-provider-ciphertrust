@@ -3,20 +3,12 @@
 page_title: "ciphertrust_aws_kms Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  AWS Key Management Service (AWS KMS) is used to create and manage keys.
-  Use the APIs in this section to:
-  List and add the AWS accounts and regions based on the connections.Get, delete, and update the AWS KMS account.Grant permissions to CCKM users to perform specific actions on the AWS KMS.
+  Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_kms (Resource)
 
-AWS Key Management Service (AWS KMS) is used to create and manage keys.
-
-Use the APIs in this section to:
-
-* List and add the AWS accounts and regions based on the connections.
-* Get, delete, and update the AWS KMS account.
-* Grant permissions to CCKM users to perform specific actions on the AWS KMS.
+Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 
 ## Example Usage
 
@@ -26,7 +18,7 @@ resource "ciphertrust_aws_connection" "aws_connection" {
   name = "aws_connection_name"
 }
 
-# Create a kms resource without using the ciphertrust_aws_account_details data-source and assign it to the connection
+# Define a kms resource without using the ciphertrust_aws_account_details data-source and assign it to the connection
 resource "ciphertrust_aws_kms" "kms" {
   account_id     = ["aws-account-id"]
   aws_connection = ciphertrust_aws_connection.aws_connection.id
@@ -34,7 +26,7 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = ["aws-region", "aws-region"]
 }
 
-# Create a kms resource using the ciphertrust_aws_account_details data-source and assign it to the connection
+# Define a kms resource using the ciphertrust_aws_account_details data-source and assign it to the connection
 data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws_connection.id
 }
@@ -47,7 +39,7 @@ resource "ciphertrust_aws_kms" "kms" {
   data.ciphertrust_aws_account_details.account_details.regions[1]]
 }
 
-# Create an AWS key
+# Define an AWS key
 resource "ciphertrust_aws_key" "aws_key" {
   kms    = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
@@ -60,24 +52,34 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Required
 
 - `account_id` (String) ID of the AWS account.
-- `aws_connection` (String) Name or ID of the connection in which the account is managed.
+- `aws_connection` (String) (Updatable) Name or ID of the connection in which the account is managed.
 - `name` (String) Unique name for the KMS.
-- `regions` (List of String) AWS regions to be added to the CCKM.
+- `regions` (List of String) AWS regions to be added to the KMS.
 
 ### Optional
 
-- `assume_role_arn` (String) Amazon Resource Name (ARN) of the role to be assumed.
-- `assume_role_external_id` (String) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
+- `assume_role_arn` (String) (Updatable) Amazon Resource Name (ARN) of the role to be assumed.
+- `assume_role_external_id` (String) (Updatable) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
 
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
+- `acls` (Attributes Set) List of ACLs that have been added to the KMS. (see [below for nested schema](#nestedatt--acls))
 - `application` (String) The application this resource belongs to.
 - `arn` (String) Amazon Resource Name.
+- `auto_added` (Boolean) True if the KMS was added by a scheduler.
 - `created_at` (String) Date/time the application was created
 - `dev_account` (String) The developer account which owns this resource's application.
-- `id` (String) The unique identifier of the resource
-- `updated_at` (String) Date/time the application was updated
-- `uri` (String) A human-readable unique identifier of the resource
+- `id` (String) The unique identifier of the resource.
+- `status` (String) The status of the KMS, archived or active.
+- `updated_at` (String) Date and time the KMS was last updated
+- `uri` (String) A human-readable unique identifier of the resource.
 
+<a id="nestedatt--acls"></a>
+### Nested Schema for `acls`
 
+Read-Only:
+
+- `actions` (Set of String) Permitted actions.
+- `group` (String) CipherTrust Manager group.
+- `user_id` (String) CipherTrust Manager user ID.

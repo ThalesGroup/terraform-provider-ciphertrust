@@ -1,5 +1,5 @@
 # Pre-requisites for AWS keys - AWS connection, AWS KMS
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws-connection-name"
 }
@@ -12,7 +12,7 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
@@ -35,13 +35,13 @@ resource "ciphertrust_scheduler" "scheduled_rotation" {
   run_on    = "any"
 }
 
-# Create a 2048 bit RSA AWS key
+# Define a 2048 bit RSA AWS key
 resource "ciphertrust_aws_key" "aws_key" {
   kms    = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
 }
 
-# Create an AES CipherTrust key to upload to AWS
+# Define an AES CipherTrust key to upload to AWS
 resource "ciphertrust_cm_key" "cm_key" {
   name      = "cm-key-name"
   algorithm = "aes"
@@ -56,7 +56,7 @@ resource "ciphertrust_aws_key" "upload_aws_key" {
   }
 }
 
-# Create a new CipherTrust key and import its key material to a new AWS key
+# Define a new CipherTrust key and import its key material to a new AWS key
 resource "ciphertrust_aws_key" "import_aws_key" {
   import_key_material {
     source_key_name = "key-name"
@@ -65,7 +65,7 @@ resource "ciphertrust_aws_key" "import_aws_key" {
   region = ciphertrust_aws_kms.kms.regions[0]
 }
 
-# Create a multi-region key
+# Define a multi-region key
 resource "ciphertrust_aws_key" "aws_multiregion_key" {
   kms          = ciphertrust_aws_kms.kms.id
   multi_region = true
@@ -86,7 +86,7 @@ resource "ciphertrust_aws_key" "replicated_key" {
   }
 }
 
-# Create an AWS multi-region key and import its key material from a CipherTrust key
+# Define an AWS multi-region key and import its key material from a CipherTrust key
 resource "ciphertrust_aws_key" "aws_external_multiregion_key" {
   import_key_material {
     source_key_name = "cm-key-name"
@@ -105,7 +105,7 @@ resource "ciphertrust_aws_key" "external_replicated_key" {
   }
 }
 
-# Create am AWS key and enable autorotation by AWS
+# Define am AWS key and enable autorotation by AWS
 resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
   kms                          = ciphertrust_aws_kms.kms.id
   region                       = ciphertrust_aws_kms.kms.regions[0]

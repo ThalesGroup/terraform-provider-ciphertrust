@@ -89,5 +89,3 @@ Read-Only:
 - `source_container_id` (String)
 - `source_container_type` (String)
 - `source_key_tier` (String) This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.
-
-

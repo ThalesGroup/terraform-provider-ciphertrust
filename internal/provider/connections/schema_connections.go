@@ -201,3 +201,52 @@ type GCPConnectionJSON struct {
 	ClientEmail  string                 `json:"client_email"`
 	PrivateKeyID string                 `json:"private_key_id"`
 }
+
+type OCIConnectionCommonTFSDK struct {
+	CMCreateConnectionResponseCommonTFSDK
+	ID          types.String `tfsdk:"id"`
+	Name        types.String `tfsdk:"name"`
+	Products    types.List   `tfsdk:"products"`
+	Meta        types.Map    `tfsdk:"meta"`
+	Description types.String `tfsdk:"description"`
+	UserOcid    types.String `tfsdk:"user_ocid"`
+	TenancyOcid types.String `tfsdk:"tenancy_ocid"`
+	Fingerprint types.String `tfsdk:"pub_key_fingerprint"`
+	Region      types.String `tfsdk:"region"`
+}
+
+type OCIConnectionTFSDK struct {
+	OCIConnectionCommonTFSDK
+	KeyFile                  types.String `tfsdk:"key_file"`
+	PassPhrase               types.String `tfsdk:"key_file_pass_phrase"`
+	SkipConnectionParamsTest types.Bool   `tfsdk:"skip_connection_params_test"`
+}
+
+type OCIConnectionCredentialsJSON struct {
+	KeyFile    string `json:"key_file"`
+	PassPhrase string `json:"pass_phrase,omitempty"`
+}
+
+type OCIConnectionCommonJSON struct {
+	Description string      `json:"description"`
+	Fingerprint string      `json:"fingerprint"`
+	Meta        interface{} `json:"meta"`
+	TenancyOCID string      `json:"tenancy_ocid"`
+	UserOCID    string      `json:"user_ocid"`
+	Region      string      `json:"region"`
+}
+
+type OCIConnectionJSON struct {
+	CMCreateConnectionResponseCommon
+	OCIConnectionCommonJSON
+	Credentials              OCIConnectionCredentialsJSON `json:"credentials"`
+	Name                     string                       `json:"name"`
+	Products                 []string                     `json:"products"`
+	SkipConnectionParamsTest types.Bool                   `json:"skip_connection_params_test"`
+}
+
+type OCIConnectionUpdateJSON struct {
+	Credentials OCIConnectionCredentialsJSON `json:"credentials"`
+	OCIConnectionCommonJSON
+	Products *[]string `json:"products"`
+}

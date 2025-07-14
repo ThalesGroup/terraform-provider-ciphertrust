@@ -3,17 +3,17 @@
 page_title: "ciphertrust_aws_policy_template Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create an AWS key policy that can be used by multiple AWS keys.
+  Use this resource to create and managa AWS key policy templates that can be used by multiple AWS keys.
 ---
 
 # ciphertrust_aws_policy_template (Resource)
 
-Use this resource to create an AWS key policy that can be used by multiple AWS keys.
+Use this resource to create and managa AWS key policy templates that can be used by multiple AWS keys.
 
 ## Example Usage
 
 ```terraform
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws_connection" {
   name = "aws-connection-name"
 }
@@ -30,14 +30,14 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Create a policy template using key_admins and key_users
+# Define a policy template using key_admins and key_users
 resource "ciphertrust_aws_policy_template" "policy_template_ex1" {
   key_admins = ["aws-iam-user", "aws-iam-role"]
   key_users  = ["aws-iam-user", "aws-iam-role"]
   km         = kms.id
 }
 
-# Create a policy template using a policy json
+# Define a policy template using a policy json
 resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
   km     = kms.id
   policy = <<-EOT
@@ -57,7 +57,7 @@ resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
   EOT
 }
 
-# Create an AWS key and assign the key policy template to it
+# Define an AWS key and assign the key policy template to it
 resource "ciphertrust_aws_key" "aws_key" {
   kms    = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
@@ -77,18 +77,16 @@ resource "ciphertrust_aws_key" "aws_key" {
 ### Optional
 
 - `account_id` (String) The AWS account which owns this resource.
-- `auto_push` (Boolean) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
-- `external_accounts` (Set of String) Other AWS accounts that can access to the key.
-- `key_admins` (Set of String) Key administrators - users.
-- `key_admins_roles` (Set of String) Key administrators - roles.
-- `key_users` (Set of String) Key users - users.
-- `key_users_roles` (Set of String) Key users - roles.
+- `auto_push` (Boolean) (Updatable) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
+- `external_accounts` (Set of String) (Updatable) Other AWS accounts that can access to the key.
+- `key_admins` (Set of String) (Updatable) Key administrators - users.
+- `key_admins_roles` (Set of String) (Updatable) Key administrators - roles.
+- `key_users` (Set of String) (Updatable) Key users - users.
+- `key_users_roles` (Set of String) (Updatable) Key users - roles.
 - `kms` (String) Name or ID of the KMS to which the template belongs.
-- `policy` (String) AWS key policy json.
+- `policy` (String) (Updatable) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. If no policy parameters are specified the default policy is created.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
 - `is_verified` (Boolean) If true, the policy template has been applied.
-
-

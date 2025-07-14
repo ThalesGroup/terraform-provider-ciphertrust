@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -49,6 +50,7 @@ type CMGroupsDataSourceModelTFSDK struct {
 }
 
 type CMGroupTFSDK struct {
+	ID             types.String `tfsdk:"id"`
 	Name           types.String `tfsdk:"name"`
 	AppMetadata    types.Map    `tfsdk:"app_metadata"`
 	ClientMetadata types.Map    `tfsdk:"client_metadata"`
@@ -397,8 +399,9 @@ type CMRegTokenJSON struct {
 }
 
 type CMUserTFSDK struct {
+	ID                     types.String `tfsdk:"id"`
 	UserID                 types.String `tfsdk:"user_id"`
-	Name                   types.String `tfsdk:"full_name"`
+	Name                   types.String `tfsdk:"name"`
 	UserName               types.String `tfsdk:"username"`
 	Nickname               types.String `tfsdk:"nickname"`
 	Email                  types.String `tfsdk:"email"`
@@ -406,6 +409,7 @@ type CMUserTFSDK struct {
 	IsDomainUser           types.Bool   `tfsdk:"is_domain_user"`
 	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
 	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
+	Metadata               types.Map    `tfsdk:"user_metadata"`
 }
 
 type UserLoginFlagsJSON struct {
@@ -422,6 +426,7 @@ type CMUserJSON struct {
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
 	PasswordChangeRequired bool               `json:"password_change_required"`
+	Metadata               map[string]string  `json:"user_metadata"`
 }
 
 type CMSSHKeyTFSDK struct {
@@ -756,7 +761,8 @@ type CMPrometheusMetricsConfigJSON struct {
 }
 
 type CCKMRotationAwsParamsJSON struct {
-	RetainAlias bool `json:"retain_alias"`
+	RetainAlias    bool `json:"retain_alias"`
+	RotateMaterial bool `json:"rotate_material,omitempty"`
 }
 type CCKMKeyRotationParamsJSON struct {
 	CloudName                 string  `json:"cloud_name"`
@@ -768,6 +774,7 @@ type CCKMKeyRotationParamsJSON struct {
 type CCKMSynchronizationParamsJSON struct {
 	CloudName      string   `json:"cloud_name"`
 	Kms            []string `json:"kms"`
+	OCIVaults      []string `json:"oci_vaults"`
 	SynchronizeAll *bool    `json:"synchronize_all"`
 }
 
@@ -1092,16 +1099,25 @@ type CMLogForwardersJSON struct {
 }
 
 type CCKMKeyRotationParamsTFSDK struct {
-	RetainAlias types.Bool   `tfsdk:"aws_retain_alias"`
-	CloudName   types.String `tfsdk:"cloud_name"`
-	Expiration  types.String `tfsdk:"expiration"`
-	ExpireIn    types.String `tfsdk:"expire_in"`
+	RetainAlias    types.Bool   `tfsdk:"aws_retain_alias"`
+	CloudName      types.String `tfsdk:"cloud_name"`
+	Expiration     types.String `tfsdk:"expiration"`
+	ExpireIn       types.String `tfsdk:"expire_in"`
+	RotateMaterial types.Bool   `tfsdk:"rotate_material"`
 }
 
 type CCKMSynchronizationParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 	Kms       types.Set    `tfsdk:"kms"`
+	OCIVaults types.Set    `tfsdk:"oci_vaults"`
 	SyncAll   types.Bool   `tfsdk:"synchronize_all"`
+}
+
+var CCKMSynchronizationParamsAttribs = map[string]attr.Type{
+	"cloud_name":      types.StringType,
+	"synchronize_all": types.BoolType,
+	"oci_vaults":      types.SetType{ElemType: types.StringType},
+	"kms":             types.SetType{ElemType: types.StringType},
 }
 
 type CCKMXksRotateCredentialsParamsTFSDK struct {

@@ -43,7 +43,7 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `alias` (Set of String) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.
 - `arn` (String) The Amazon Resource Name (ARN) of the key.
 - `aws_key_id` (String) AWS XKS key ID.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager Key ID.
 - `region` (String) AWS region to which the key belongs.
 
 ### Read-Only
@@ -79,8 +79,8 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `kms_id` (String)
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `origin` (String) Source of the key material.
 - `policy` (String) AWS XKS key policy.
 - `policy_template_tag` (Map of String) AWS XKS key tag for an associated policy template.
@@ -93,5 +93,3 @@ data "ciphertrust_aws_xks_key" "by_alias_and_region" {
 - `tags` (Map of String)
 - `updated_at` (String) Date the key was last updated.
 - `valid_to` (String) Date of key material expiry.
-
-

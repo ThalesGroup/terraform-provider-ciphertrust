@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
@@ -15,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -28,8 +30,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceAWSCloudHSMKey{}
-	_ resource.ResourceWithConfigure = &resourceAWSCloudHSMKey{}
+	_ resource.Resource                = &resourceAWSCloudHSMKey{}
+	_ resource.ResourceWithConfigure   = &resourceAWSCloudHSMKey{}
+	_ resource.ResourceWithImportState = &resourceAWSCloudHSMKey{}
 )
 
 func NewResourceAWSCloudHSMKey() resource.Resource {
@@ -61,7 +64,7 @@ func (r *resourceAWSCloudHSMKey) Configure(_ context.Context, req resource.Confi
 
 func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create an AWS CloudHSM key.",
+		Description: "Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -78,7 +81,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Input parameter. Alias assigned to the CloudHSM key.",
+				Description: "(Updatable) Input parameter. Alias assigned to the CloudHSM key.",
 				Validators: []validator.Set{
 					setvalidator.ValueStringsAre(
 						stringvalidator.RegexMatches(
@@ -100,7 +103,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description of the AWS key. Descriptions can be updated but not removed.",
+				Description: "(Updatable) Description of the AWS key. Descriptions can be updated but not removed.",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
@@ -108,17 +111,13 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"key_usage": schema.StringAttribute{
 				Computed:    true,
 				Description: "Specifies the intended use of the key. RSA key options: ENCRYPT_DECRYPT, SIGN_VERIFY. Default is ENCRYPT_DECRYPT. EC key options: SIGN_VERIFY. Default is SIGN_VERIFY. Symmetric key options: ENCRYPT_DECRYPT. Default is ENCRYPT_DECRYPT.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"ENCRYPT_DECRYPT",
-						"SIGN_VERIFY",
-						"GENERATE_VERIFY_MAC"}...),
-				},
+				Validators:  []validator.String{stringvalidator.OneOf([]string{"ENCRYPT_DECRYPT", "SIGN_VERIFY", "GENERATE_VERIFY_MAC"}...)},
 			},
 			"origin": schema.StringAttribute{
 				Computed: true,
@@ -128,13 +127,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"EXTERNAL will create an external AWS key and is the default for import operations. " +
 					"This parameter is not required for upload operations. " +
 					"Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.",
-				Validators: []validator.String{
-					stringvalidator.OneOf([]string{"AWS_KMS",
-						"EXTERNAL",
-						"EXTERNAL_KEY_STORE",
-						"AWS_CLOUDHSM"}...),
-				},
-			},
+				Validators: []validator.String{stringvalidator.OneOf([]string{"AWS_KMS", "EXTERNAL", "EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)}},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
@@ -147,7 +140,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"tags": schema.MapAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "A list of tags assigned to the CloudHSM key.",
+				Description: "(Updatable) A list of tags assigned to the CloudHSM key.",
 				ElementType: types.StringType,
 			},
 			//Read-Only Params
@@ -205,7 +198,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -256,11 +249,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"policy": schema.StringAttribute{
 				Computed:    true,
@@ -309,7 +302,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"custom_key_store_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust ID of the CloudHSM keystore where key is to be created.",
+				Description: "CipherTrust Manager ID of the CloudHSM keystore where key is to be created.",
 			},
 			"linked": schema.BoolAttribute{
 				Computed:    true,
@@ -326,7 +319,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 		},
 		Blocks: map[string]schema.Block{
 			"key_policy": schema.ListNestedBlock{
-				Description: "Key policy parameters.",
+				Description: "(Updatable) Key policy parameters.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -363,13 +356,13 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 						},
 						"policy_template": schema.StringAttribute{
 							Optional:    true,
-							Description: "CipherTrust policy template ID",
+							Description: "CipherTrust Manager policy template ID",
 						},
 					},
 				},
 			},
 			"enable_rotation": schema.ListNestedBlock{
-				Description: "Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
+				Description: "(Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(1),
 				},
@@ -382,9 +375,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 						"key_source": schema.StringAttribute{
 							Required:    true,
 							Description: "Key source from where the key will be uploaded. Currently, the only option is 'local'.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"local"}...),
-							},
+							Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
 						},
 						"disable_encrypt": schema.BoolAttribute{
 							Optional:    true,
@@ -420,7 +411,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	payload := CreateCloudHSMKeyInputPayloadJSON{
 		AWSParams: *awsParams,
 	}
-	keyPolicy := getKeyPolicyPayloadJSON(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
+	keyPolicy := getKeyPolicyParams(ctx, &plan.AWSKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -445,7 +436,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key, invalid data input."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -454,13 +445,16 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	response, err = r.client.PostDataV2(ctx, id, common.URL_AWS_XKS+"/"+customKeyStoreID+"/create-aws-key", payloadJSON)
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error()})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.KeyID = plan.ID
+
+	// No error after this
+
 	keyID := gjson.Get(response, "id").String()
 	if gjson.Get(response, "linked_state").Bool() && len(plan.Alias.Elements()) > 1 {
 		var diags diag.Diagnostics
@@ -483,15 +477,20 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+
+	plannedAlias := plan.Alias
+
+	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+		resp.Diagnostics.AddWarning(details, "")
+	} else {
+		response = getResponse
+		tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+response)
 	}
-	plannedAlias := plan.Alias
+
 	var diags diag.Diagnostics
 	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &diags)
 	if !reflect.DeepEqual(plan.Alias, plannedAlias) {
@@ -518,16 +517,17 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Read][response:"+response)
 	description := state.Description
 	setCommonKeyStoreKeyState(ctx, response, &state.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS CloudHSM key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -539,7 +539,13 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Read][response:"+response)
+}
+
+func (r *resourceAWSCloudHSMKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -563,58 +569,61 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error updating AWS CloudHSM key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-	if err != nil {
-		msg := "Error updating AWS CloudHSM key. Failed to read key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	if gjson.Get(response, "linked_state").Bool() {
 		keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
-		planEnableKey := plan.EnableKey.ValueBool()
-		if !keyEnabled && planEnableKey {
-			enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
+		planEnableKey := false
+		if !plan.EnableKey.IsUnknown() {
+			keyEnabled = gjson.Get(response, "aws_param.Enabled").Bool()
+			planEnableKey = plan.EnableKey.ValueBool()
+			if !keyEnabled && planEnableKey {
+				enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+				if resp.Diagnostics.HasError() {
+					return
+				}
 			}
 		}
 		updateAwsKeyCommon(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, &state.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		planTags := make(map[string]string, len(plan.Tags.Elements()))
-		if len(plan.Tags.Elements()) != 0 {
-			resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+		if !plan.Alias.IsNull() && !plan.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, &plan.AWSKeyCommonTFSDK, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if keyEnabled && !planEnableKey {
-			disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if !plan.Tags.IsUnknown() {
+			planTags := make(map[string]string, len(plan.Tags.Elements()))
+			if len(plan.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(plan.Tags.ElementsAs(ctx, &planTags, false)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+			}
+			updateTags(ctx, id, r.client, planTags, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
+			}
+		}
+
+		if !plan.EnableKey.IsUnknown() {
+			if keyEnabled && !planEnableKey {
+				disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+				if resp.Diagnostics.HasError() {
+					return
+				}
 			}
 		}
 	}
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -623,7 +632,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	setCommonKeyStoreKeyState(ctx, response, &plan.AWSKeyStoreKeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS CloudHSM key, failed to set resource state."
-		details := apiError(msg, map[string]interface{}{"key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -655,7 +664,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 	response, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS key."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
@@ -663,9 +672,10 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		if keyState == "PendingDeletion" {
 			msg := "AWS CloudHSM key is already pending deletion, it will be removed from state."
-			details := apiError(msg, map[string]interface{}{"key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
+			return
 		}
 		removeKeyPolicyTemplateTag(ctx, id, r.client, response, &resp.Diagnostics)
 		payload := ScheduleForDeletionJSON{
@@ -674,7 +684,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM key, invalid data input."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -682,7 +692,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		_, err = r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion", payloadJSON)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 		}
@@ -690,7 +700,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		_, err := r.client.DeleteByURL(ctx, keyID, common.URL_AWS_KEY+"/"+keyID)
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM Key."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return

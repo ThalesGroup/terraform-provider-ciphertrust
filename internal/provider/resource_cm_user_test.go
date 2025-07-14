@@ -12,7 +12,7 @@ func TestResourceCMUser(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: providerConfig + `
-resource "ciphertrust_cm_user" "testUser" {
+resource "ciphertrust_user" "testUser" {
   name="frank"
   email="frank@local"
   username="frank"
@@ -20,7 +20,7 @@ resource "ciphertrust_cm_user" "testUser" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.testUser", "id"),
 				),
 			},
 			//ImportState testing
@@ -33,14 +33,14 @@ resource "ciphertrust_cm_user" "testUser" {
 			// Update and Read testing
 			{
 				Config: providerConfig + `
-resource "ciphertrust_cm_user" "testUser" {
+resource "ciphertrust_user" "testUser" {
   name="john"
   email="john@local"
   password="ChangeIt01!"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_user.testUser", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.testUser", "id"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase

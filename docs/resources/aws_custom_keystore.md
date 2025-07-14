@@ -3,22 +3,28 @@
 page_title: "ciphertrust_aws_custom_keystore Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Use this resource to create and manage Custom Key Stores in CipherTrust Manager.CipherTrust Manager provides the integration of Custom Key Stores proxy service for Amazon Web Services.
+  Custom Key Stores type are External Key Stores (XKS) and CloudHSM Key Stores.
+  AWS_CLOUDHSM key stores will have keys backed by a CloudHSM cluster in AWS.
+  EXTERNAL_KEY_STORE key stores will have keys backed by a Luna HSM or CipherTrust Manager.
 ---
 
 # ciphertrust_aws_custom_keystore (Resource)
 
+Use this resource to create and manage Custom Key Stores in CipherTrust Manager.CipherTrust Manager provides the integration of Custom Key Stores proxy service for Amazon Web Services.
 
+Custom Key Stores type are External Key Stores (XKS) and CloudHSM Key Stores.
+
+AWS_CLOUDHSM key stores will have keys backed by a CloudHSM cluster in AWS.
+
+EXTERNAL_KEY_STORE key stores will have keys backed by a Luna HSM or CipherTrust Manager.
 
 ## Example Usage
 
 ```terraform
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws_connection_name"
-}
-output "aws_connection_id" {
-  value = ciphertrust_aws_connection.aws-connection.id
 }
 
 # Get the AWS account details
@@ -26,85 +32,102 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
-  depends_on = [
-    ciphertrust_aws_connection.aws-connection,
-  ]
   account_id     = data.ciphertrust_aws_account_details.account_details.account_id
   aws_connection = ciphertrust_aws_connection.aws-connection.id
   name           = "kms-name"
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Create an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
+# Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
 # key should be unexportable, undeletable, symmetric AES 256 key
 resource "ciphertrust_cm_key" "cm_aes_key" {
-  name         = "aes-key-name"
-  algorithm    = "AES"
-  usage_mask   = 60
-  unexportable = true
-  undeletable  = true
+  name                         = "aes-key-name"
+  algorithm                    = "AES"
+  usage_mask                   = 60
+  unexportable                 = true
+  undeletable                  = true
+  # Setting remove_from_state_on_destroy to true will allow the key to be deleted from terraform state on destroy however, it will remain in CipherTrust Manager.
   remove_from_state_on_destroy = true
 }
-output "cm_aes_key" {
-  value = ciphertrust_cm_key.cm_aes_key
-}
 
-# Create unlinked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
-resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore_for_cm_as_source" {
-  depends_on = [
-    ciphertrust_aws_kms.kms,
-    ciphertrust_cm_key.cm_aes_key,
-  ]
-  name = "unlinked-xks-demo-1-for-cm-as-source"
-  region = ciphertrust_aws_kms.kms.regions[0]
-  kms    = ciphertrust_aws_kms.kms.name
-  linked_state = false
-  connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
+# Define unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity
+resource "ciphertrust_aws_custom_keystore" "external_custom_keystor" {
+  name                        = "keystore-name"
+  region                      = ciphertrust_aws_kms.kms.regions[0]
+  kms                         = ciphertrust_aws_kms.kms.name
+  linked_state                = false
+  connect_disconnect_keystore = "CONNECT_KEYSTORE"
   local_hosted_params {
-    blocked = false
+    blocked             = false
     health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
-    max_credentials = 8
-    source_key_tier = "local"
+    max_credentials     = 8
+    source_key_tier     = "local"
   }
   aws_param {
     xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-    custom_key_store_type = "EXTERNAL_KEY_STORE"
+    custom_key_store_type  = "EXTERNAL_KEY_STORE"
   }
 }
 
-output "unlinked_xks_custom_keystore_for_cm_as_source" {
-  value = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore_for_cm_as_source
-}
-
-# Create linked external custom keystore with CM as key source; with xks proxy connectivity as PUBLIC_ENDPOINT
-resource "ciphertrust_aws_custom_keystore" "linked_xks_custom_keystore_for_cm_as_source" {
-  depends_on = [
-    ciphertrust_aws_kms.kms,
-    ciphertrust_cm_key.cm_aes_key,
-  ]
-  name = "linked-xks-demo-1-for-cm-as-source"
-  region = ciphertrust_aws_kms.kms.regions[0]
-  kms    = ciphertrust_aws_kms.kms.name
-  linked_state = true
-  connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
+# Define an unlinked cloudhsm custom keystore
+resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
+  connect_disconnect_keystore = "CONNECT_KEYSTORE"
+  name                        = "keystore-name"
+  region                      = ciphertrust_aws_kms.kms.regions[0]
+  kms                         = ciphertrust_aws_kms.kms.name
+  linked_state                = false
+  enable_success_audit_event  = true
   local_hosted_params {
-    blocked = false
-    health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
+    blocked         = false
     max_credentials = 8
-    source_key_tier = "local"
   }
   aws_param {
-    xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
-    xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-    custom_key_store_type = "EXTERNAL_KEY_STORE"
+    cloud_hsm_cluster_id     = "cluster-qxq7s6inshi"
+    custom_key_store_type    = "AWS_CLOUDHSM"
+    key_store_password       = "kmsuser-password"
+    trust_anchor_certificate = <<-EOT
+                     -----BEGIN CERTIFICATE-----
+                     MIIDhzCCAm+gAwIBAgIUHdJu4algAFs12h87meBhd9Qe4rMwDQYJKoZIhvcNAQEL
+                     BQAwUzELMAkGA1UEBhMCVVMxCzAJCgNVBAgMAkNBMRAwDgYDVQQHDAdTYW5Kb3Nl
+                     MQ8wDQYDVQQKDAZUaGFsZXMxFDASBgNVBAsMC0VuZ2luZWVyaW5nMB4XDTIyMDYy
+                     MzA2NTgwOFoXFTMyMDYyMjA2NTgwOFosUzEMMAkGA1UEBhMCVVNxCzAJBgNVBAgM
+                     AkNBMRAwDgYCVQQHDAdTYW5Kb3NlMQ8wDQYDVQQKDAZUaGFsZXMxFDASBgNVBAsM
+                     C0VuZ2luZWVyaW5nMIIBIjANBgkqhabG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvi0o
+                     wtYFziFlahtH0X0+0fhvcGLJ4SYTOU50ZGb7GlfsKC4i5vGxXFEJ1QwJ+WmkyXwo
+                     RCWaXQbFkFIxlDDIgOe64Z8FRiqdRGXPAYWvJC5pM015kOGtuMrT759Ifbux81Ng
+                     ULlUbz7uLGxut+IbLXIG+/lkDI8OtYNLtU4hbTG/QrTieFg7ZQ/IKKbmCKB3m2cv
+                     l0MzSMZQXMgNmsbbdSATTgSgaBdAF23sp3B78jHFDpikZHvrxjPBRqi/OsSBefmV
+                     LymMhPBVdF9FWJgL+YpxDjKP4ieo8rqWK9zEDnu6VmVx0guQ40uM4ycaDljBueW6
+                     J9FqXFp62FGrGKu2vwIDAQABo1MwUTAdBgNVHQ4EFgQUi/RAIOrEPaUm9T4P+Ju3
+                     qTKpf90wHwYDVR0jBBgwFoATi/RAIOrEPaUm9T6P+Ju3qTKpf90wDwYDVR0TAQH/
+                     BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAfhC8EghStmPq770Edt6lfoEC6pIO
+                     UCMoiwnX9KL7WdKPx7auyJmxj3+MbYqNSzilXPA57J1WE6BhT3JOT4nPsO/IpFv2
+                     fbpUVW9ypwqRQE1S1v6BjvQd5J59c3ZDfH634jCwGwxcBY2gSbZorLb03aH7R2uF
+                     31jlyotNbUd3eWjo11jwVt9ZhpdxbaiK98Q6UdUro0Ok2BaQdZZthnuMMnwK8iO2
+                     w3XiEJU3ucUbs1jC6x2Q/RQ28cdAl1tse9/isLeH9yqIEuzFWAHEX5OmpcrW7qcv
+                     SWLFSofuUkHE2GuN8f4ipAzQ0Fn9Y2C463Q5DCzolhRmJrfXVgM6XLRnHg==
+                     -----END CERTIFICATE-----
+                   EOT
   }
 }
 
-output "linked_xks_custom_keystore_for_cm_as_source" {
-  value = ciphertrust_aws_custom_keystore.linked_xks_custom_keystore_for_cm_as_source
+# An example resource for importing an existing external custom key store
+resource "ciphertrust_aws_custom_keystore" "imported_external_custom_keystore" {
+  aws_param {
+    custom_key_store_type  = "EXTERNAL_KEY_STORE"
+    xks_proxy_connectivity = "PUBLIC_ENDPOINT"
+    xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
+  }
+  kms = "e5a912a6-53b3-436d-a9d9-1fb3a3c86f36"
+  local_hosted_params {
+    health_check_key_id = "b9698199e923444d88a5436064dcde9134c5b0de06bf4975989430a2fab3ce60"
+    max_credentials     = 8
+  }
+  name   = "keystore-name"
+  region = "ap-northeast-1"
 }
 ```
 
@@ -114,16 +137,16 @@ output "linked_xks_custom_keystore_for_cm_as_source" {
 ### Required
 
 - `kms` (String) Name or ID of the AWS Account container in which to create the key store.
-- `name` (String) Unique name for the custom key store.
+- `name` (String) (Updatable) Unique name for the custom key store.
 - `region` (String) Name of the available AWS regions.
 
 ### Optional
 
 - `aws_param` (Block List) Parameters related to AWS interaction with a custom key store. (see [below for nested schema](#nestedblock--aws_param))
-- `connect_disconnect_keystore` (String) Indicates whether to connect or disconnect the custom key store.
-- `enable_credential_rotation` (Block List) Enable the custom key store for scheduled credential rotation job. (see [below for nested schema](#nestedblock--enable_credential_rotation))
-- `enable_success_audit_event` (Boolean) Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.
-- `linked_state` (Boolean) Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.
+- `connect_disconnect_keystore` (String) (Updatable) Indicates whether to connect or disconnect the custom key store.
+- `enable_credential_rotation` (Block List) (Updatable) Enable the custom key store for scheduled credential rotation job. (see [below for nested schema](#nestedblock--enable_credential_rotation))
+- `enable_success_audit_event` (Boolean) (Updatable) Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.
+- `linked_state` (Boolean) (Updatable) Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.
 - `local_hosted_params` (Block List) Parameters related to AWS interaction with a custom key store. (see [below for nested schema](#nestedblock--local_hosted_params))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
@@ -143,15 +166,18 @@ output "linked_xks_custom_keystore_for_cm_as_source" {
 <a id="nestedblock--aws_param"></a>
 ### Nested Schema for `aws_param`
 
+Required:
+
+- `custom_key_store_type` (String) Specifies the type of custom key store. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.
+
 Optional:
 
-- `cloud_hsm_cluster_id` (String) ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. Required field for a custom key store of type AWS_CLOUDHSM.
-- `custom_key_store_type` (String) Specifies the type of custom key store. The default value is EXTERNAL_KEY_STORE. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.
-- `key_store_password` (String) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. Required field for custom key store of type AWS_CLOUDHSM.
-- `trust_anchor_certificate` (String) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. Required field for a custom key store of type AWS_CLOUDHSM
-- `xks_proxy_connectivity` (String) Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.
-- `xks_proxy_uri_endpoint` (String) Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. This field is required for a custom key store of type EXTERNAL_KEY_STORE.
-- `xks_proxy_vpc_endpoint_service_name` (String) Indicates the VPC endpoint service name the custom key store uses. This field is required when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.
+- `cloud_hsm_cluster_id` (String) (Updatable) ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. **Required** field for a custom key store of type AWS_CLOUDHSM.
+- `key_store_password` (String) (Updatable) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. **Required** field for custom key store of type AWS_CLOUDHSM.
+- `trust_anchor_certificate` (String) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. **Required** field for a custom key store of type AWS_CLOUDHSM
+- `xks_proxy_connectivity` (String) (Updatable) Indicates how AWS KMS communicates with the Ciphertrust Manager. **Required** field for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.
+- `xks_proxy_uri_endpoint` (String) (Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. **Required** field for a custom key store of type EXTERNAL_KEY_STORE.
+- `xks_proxy_vpc_endpoint_service_name` (String) (Updatable) Indicates the VPC endpoint service name the custom key store uses. **Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.
 
 Read-Only:
 
@@ -166,7 +192,7 @@ Read-Only:
 
 Required:
 
-- `job_config_id` (String) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.
+- `job_config_id` (String) (Updatable) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.
 
 
 <a id="nestedblock--local_hosted_params"></a>
@@ -174,11 +200,11 @@ Required:
 
 Optional:
 
-- `blocked` (Boolean) This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Applicable to a custom key store of type EXTERNAL_KEY_STORE.
-- `health_check_key_id` (String) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. Required field for custom key store of type EXTERNAL_KEY_STORE.
-- `max_credentials` (Number) Max number of credentials that can be associated with custom key store (min value 2. max value 20). Required field for a custom key store of type EXTERNAL_KEY_STORE.
-- `mtls_enabled` (Boolean) Set it to true to enable tls client-side certificate verification — where cipher trust manager authenticates the AWS KMS client . Default value is false.
-- `partition_id` (String) ID of Luna HSM partition. Required field, if custom key store is of type EXTERNAL_KEY_STORE and source key tier is 'hsm-luna'.
+- `blocked` (Boolean) (Updatable) This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Applicable to a custom key store of type EXTERNAL_KEY_STORE.
+- `health_check_key_id` (String) (Updatable) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. **Required** field for custom key store of type EXTERNAL_KEY_STORE.
+- `max_credentials` (Number) Max number of credentials that can be associated with custom key store (min value 2. max value 20). **Required** field for a custom key store of type EXTERNAL_KEY_STORE.
+- `mtls_enabled` (Boolean) (Updatable) Set it to true to enable tls client-side certificate verification — where CipherTrust manager authenticates the AWS KMS client. +Default value is false.
+- `partition_id` (String) ID of Luna HSM partition. **Required** field, if custom key store is of type EXTERNAL_KEY_STORE and source key tier is 'hsm-luna'.
 - `source_key_tier` (String) This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.
 
 Read-Only:
@@ -199,5 +225,3 @@ Optional:
 - `delete` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Setting a timeout for a Delete operation is only applicable if changes are saved into state before the destroy operation occurs.
 - `read` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Read operations occur during any refresh or planning operation when refresh is enabled.
 - `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
-
-

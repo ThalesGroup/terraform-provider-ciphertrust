@@ -1,4 +1,4 @@
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws_connection" {
   name = "aws-connection-name"
 }
@@ -15,14 +15,14 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Create a policy template using key_admins and key_users
+# Define a policy template using key_admins and key_users
 resource "ciphertrust_aws_policy_template" "policy_template_ex1" {
   key_admins = ["aws-iam-user", "aws-iam-role"]
   key_users  = ["aws-iam-user", "aws-iam-role"]
   km         = kms.id
 }
 
-# Create a policy template using a policy json
+# Define a policy template using a policy json
 resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
   km     = kms.id
   policy = <<-EOT
@@ -42,7 +42,7 @@ resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
   EOT
 }
 
-# Create an AWS key and assign the key policy template to it
+# Define an AWS key and assign the key policy template to it
 resource "ciphertrust_aws_key" "aws_key" {
   kms    = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]

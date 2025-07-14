@@ -216,7 +216,7 @@ Optional:
 Optional:
 
 - `cte` (Attributes) CTE specific attributes (see [below for nested schema](#nestedatt--meta--cte))
-- `owner_id` (String) Optional owner information for the key, required for non-admin. Value should be the user's user_id
+- `owner_id` (String) Optional owner information for the key, required for non-admin unless 'assign_self_as_owner' is set to true. Value should be the user's user_id
 - `permissions` (Attributes) Key permissions (see [below for nested schema](#nestedatt--meta--permissions))
 
 <a id="nestedatt--meta--cte"></a>
@@ -264,7 +264,7 @@ Optional:
 <a id="nestedatt--public_key_parameters--aliases"></a>
 ### Nested Schema for `public_key_parameters.aliases`
 
-Optional:
+Required:
 
 - `alias` (String) An alias for a key name.
 - `index` (Number) Index associated with alias. Each alias within an object has a unique index.
@@ -305,5 +305,3 @@ Optional:
 
 - `aes_key_size` (Number) Size of AES key for RSA AES KWP. Accepted value are 128, 192, 256. Default value is 256.
 - `padding` (String) Padding specifies the type of padding scheme that needs to be set when exporting the Key using RSA AES wrap.
-
-

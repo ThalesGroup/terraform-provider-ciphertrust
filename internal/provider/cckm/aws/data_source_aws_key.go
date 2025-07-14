@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -176,7 +177,7 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"key_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "CipherTrust Key ID.",
+				Description: "CipherTrust Manager Key ID.",
 			},
 			"key_manager": schema.StringAttribute{
 				Computed:    true,
@@ -223,11 +224,11 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key identifier of the external key.",
+				Description: "CipherTrust Manager key identifier of the external key.",
 			},
 			"local_key_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust key name of the external key.",
+				Description: "CipherTrust Manager key name of the external key.",
 			},
 			"multi_region_key_type": schema.StringAttribute{
 				Computed:    true,
@@ -309,7 +310,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 		region, kid, err := decodeAwsKeyResourceID(state.ID.ValueString())
 		if err != nil {
 			msg := "Error decoding AWS XKS key resource ID, failed to set resource state."
-			details := apiError(msg, map[string]interface{}{"error": err.Error(), "id": state.ID.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": state.ID.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -320,7 +321,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 		arnParts := strings.Split(state.ARN.ValueString(), ":")
 		if len(arnParts) != 6 {
 			msg := "Unexpected AWS ARN format."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -328,7 +329,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) != 2 {
 			msg := "Unexpected AWS ARN format, unable to extract AWS KID."
-			details := apiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
+			details := utils.ApiError(msg, map[string]interface{}{"arn": state.ARN.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
@@ -371,7 +372,7 @@ func listAwsKeys(ctx context.Context, id string, client *common.Client, filters 
 	response, err := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 	if err != nil {
 		msg := "Error listing AWS keys on CipherTrust Manager."
-		details := apiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
 		return ""
@@ -380,7 +381,7 @@ func listAwsKeys(ctx context.Context, id string, client *common.Client, filters 
 	if total != 1 {
 		msg := "Failed to list a single AWS key."
 		tflog.Error(ctx, msg)
-		details := apiError(msg, map[string]interface{}{
+		details := utils.ApiError(msg, map[string]interface{}{
 			"filters":               fmt.Sprintf("%v", filters),
 			"Number of keys listed": fmt.Sprintf("%d", gjson.Get(response, "total").Int()),
 		})
@@ -423,19 +424,19 @@ func setCommonKeyDataSourceState(ctx context.Context, response string, state *AW
 	state.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
 	state.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
 	state.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	state.EncryptionAlgorithms = stringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	state.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
 	state.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	state.ExternalAccounts = stringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
-	state.KeyAdmins = stringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
-	state.KeyAdminsRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
+	state.ExternalAccounts = utils.StringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
+	state.KeyAdmins = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
+	state.KeyAdminsRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)
 	state.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	state.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	state.KeySource = types.StringValue(gjson.Get(response, "key_source").String())
 	state.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
 	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
-	state.KeyUsers = stringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
-	state.KeyUsersRoles = stringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
+	state.KeyUsers = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
+	state.KeyUsersRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
 	setKeyLabels(ctx, response, state.KeyID.ValueString(), &state.Labels, diags)
 	state.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
 	state.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())

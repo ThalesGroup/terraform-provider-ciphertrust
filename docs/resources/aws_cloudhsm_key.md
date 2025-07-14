@@ -3,17 +3,17 @@
 page_title: "ciphertrust_aws_cloudhsm_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create an AWS CloudHSM key.
+  Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_cloudhsm_key (Resource)
 
-Use this resource to create an AWS CloudHSM key.
+Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.
 
 ## Example Usage
 
 ```terraform
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = "aws_connection_name"
 }
@@ -23,7 +23,7 @@ data "ciphertrust_aws_account_details" "account_details" {
   aws_connection = ciphertrust_aws_connection.aws-connection.id
 }
 
-# Create a kms
+# Define a kms
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
@@ -34,7 +34,7 @@ resource "ciphertrust_aws_kms" "kms" {
   regions        = ["us-west-1"]
 }
 
-## Create cloudHSM keystore
+## Define cloudHSM keystore
 resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
   depends_on = [
     ciphertrust_aws_kms.kms,
@@ -74,7 +74,7 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
 }
 
 
-# Create a policy template using key users and roles
+# Define a policy template using key users and roles
 resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   name             = "template-with-users-and-roles-test"
   kms              = ciphertrust_aws_kms.kms.id
@@ -84,7 +84,7 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   key_users_roles  = ["key-users-roles"]
 }
 
-# Create a cloudhsm key in cloudhsm keystore
+# Define a cloudhsm key in cloudhsm keystore
 resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
   custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_custom_keystore.id
   description = "desc for cloudhsm_key_1"
@@ -101,19 +101,19 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 
 ### Required
 
-- `custom_key_store_id` (String) CipherTrust ID of the CloudHSM keystore where key is to be created.
+- `custom_key_store_id` (String) CipherTrust Manager ID of the CloudHSM keystore where key is to be created.
 
 ### Optional
 
-- `alias` (Set of String) Input parameter. Alias assigned to the CloudHSM key.
+- `alias` (Set of String) (Updatable) Input parameter. Alias assigned to the CloudHSM key.
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
-- `enable_key` (Boolean) Enable or disable the key. Default is true.
-- `enable_rotation` (Block List) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
-- `key_policy` (Block List) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
+- `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
+- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true.
+- `enable_rotation` (Block List) (Updatable) Enable the key for scheduled rotation job. Parameters 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive (see [below for nested schema](#nestedblock--enable_rotation))
+- `key_policy` (Block List) (Updatable) Key policy parameters. (see [below for nested schema](#nestedblock--key_policy))
 - `origin` (String) Source of the key material for the customer managed key.  Options: AWS_KMS, EXTERNAL, EXTERNAL_KEY_STORE, AWS_CLOUDHSM. AWS_KMS will create a native AWS key and is the default for AWS native key creation. EXTERNAL will create an external AWS key and is the default for import operations. This parameter is not required for upload operations. Origin is EXTERNAL_KEY_STORE for XKS/HYOK key and AWS_CLOUDHSM for key in CloudHSM key store.
 - `schedule_for_deletion_days` (Number) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
-- `tags` (Map of String) A list of tags assigned to the CloudHSM key.
+- `tags` (Map of String) (Updatable) A list of tags assigned to the CloudHSM key.
 
 ### Read-Only
 
@@ -133,7 +133,7 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 - `id` (String) CloudHSM key ID.
 - `key_admins` (Set of String) Key administrators - users.
 - `key_admins_roles` (Set of String) Key administrators - roles.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager key ID.
 - `key_manager` (String) Key manager.
 - `key_material_origin` (String) Key material origin.
 - `key_rotation_enabled` (Boolean) True if rotation is enabled in AWS for this key.
@@ -149,8 +149,8 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 - `kms_id` (String) ID of the KMS
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS CloudHSM key is linked with AWS.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `policy` (String) AWS key policy.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `region` (String) AWS region in which the CloudHSM key resides.
@@ -187,6 +187,4 @@ Optional:
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
 - `policy` (String) AWS key policy json.
-- `policy_template` (String) CipherTrust policy template ID
-
-
+- `policy_template` (String) CipherTrust Manager policy template ID

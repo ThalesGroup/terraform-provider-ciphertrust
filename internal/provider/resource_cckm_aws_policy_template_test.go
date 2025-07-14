@@ -69,6 +69,7 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 			key_users   = [%s]
 			key_admins_roles  = [%s]
 			key_users_roles   = [%s]
+			auto_push = true
 		}`
 	resourceNameEx1 := "ciphertrust_aws_policy_template.policy_template_ex1"
 	templateNameEx1 := "tf-template-" + uuid.New().String()[:8]
@@ -229,6 +230,38 @@ func TestCckmAwsPolicyTemplate(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "2"),
 					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
+			},
+			{
+				ResourceName:      resourceNameEx1,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx2,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx3,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
+			},
+			{
+				ResourceName:      resourceNameEx4,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"policy",
+				},
 			},
 		},
 	})

@@ -9,14 +9,13 @@ import (
 	"strconv"
 	"strings"
 
-	cckm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
-
-	"github.com/google/uuid"
-
+	aws "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
+	oci "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	cte "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cte"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -32,7 +31,8 @@ var (
 )
 
 const (
-	defaultAwsOperationTimeout = 80
+	defaultAwsOperationTimeout = 480
+	defaultOciOperationTimeout = 480
 )
 
 // New is a helper function to simplify provider server and testing implementation.
@@ -62,6 +62,7 @@ type ciphertrustProviderModel struct {
 	RestOperationTimeout types.Int64  `tfsdk:"rest_api_timeout"`
 	Address              types.String `tfsdk:"address"`
 	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
+	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
 }
 
 const (
@@ -118,6 +119,10 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "aws_operation_timeout", defaultAwsOperationTimeout),
 			},
+			"oci_operation_timeout": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "oci_operation_timeout", defaultOciOperationTimeout),
+			},
 		},
 	}
 }
@@ -138,6 +143,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var no_ssl_verify bool
 	var rest_api_timeout int64
 	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
+	var oci_operation_timeout = int64(defaultOciOperationTimeout)
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -187,6 +193,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
 		case "aws_operation_timeout":
 			aws_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
+		case "oci_operation_timeout":
+			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
 		}
 	}
 
@@ -259,6 +267,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	if !config.AwsOperationTimeout.IsNull() {
 		aws_operation_timeout = config.AwsOperationTimeout.ValueInt64()
+	}
+
+	if !config.OCIOperationTimeout.IsNull() {
+		oci_operation_timeout = config.OCIOperationTimeout.ValueInt64()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -336,6 +348,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			return
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
+		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
@@ -350,6 +363,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			return
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
+		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	}
@@ -380,12 +394,20 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		connections.NewDataSourceAzureConnection,
 		cm.NewDataSourceScheduler,
 		connections.NewDataSourceAWSConnection,
-		cckm.NewDataSourceAWSAccountDetails,
-		cckm.NewDataSourceAWSKeys,
-		cckm.NewDataSourceAWSCustomKeyStore,
-		cckm.NewDataSourceAWSXKSKeys,
-		cckm.NewDataSourceAWSKms,
-		cckm.NewDataSourceAWSCloudHSMKeys,
+		aws.NewDataSourceAWSAccountDetails,
+		aws.NewDataSourceAWSKeys,
+		aws.NewDataSourceAWSCustomKeyStore,
+		aws.NewDataSourceAWSXKSKeys,
+		aws.NewDataSourceAWSKms,
+		aws.NewDataSourceAWSCloudHSMKeys,
+		connections.NewDataSourceOCIConnection,
+		oci.NewDataSourceGetOCIRegions,
+		oci.NewDataSourceGetOCICompartments,
+		oci.NewDataSourceGetOCIVaults,
+		oci.NewDataSourceOCIVault,
+		oci.NewDataSourceOCIKeys,
+		oci.NewDataSourceOCIVersions,
+		aws.NewDataSourceAWSKeyRotationList,
 	}
 }
 
@@ -435,11 +457,20 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMProperty,
 		cm.NewResourceCMProxy,
 		cm.NewResourceCMSyslog,
-		cckm.NewResourceCCKMAWSKMS,
-		cckm.NewResourceAWSKey,
-		cckm.NewResourceAWSPolicyTemplate,
-		cckm.NewResourceAWSCustomKeyStore,
-		cckm.NewResourceAWSXKSKey,
-		cckm.NewResourceAWSCloudHSMKey,
+		aws.NewResourceCCKMAWSKMS,
+		aws.NewResourceAWSKey,
+		aws.NewResourceAWSKeyRotation,
+		aws.NewResourceAWSPolicyTemplate,
+		aws.NewResourceAWSCustomKeyStore,
+		aws.NewResourceAWSXKSKey,
+		aws.NewResourceAWSCloudHSMKey,
+		connections.NewResourceCCKMOCIConnection,
+		oci.NewResourceCCKMOCIVault,
+		oci.NewResourceCCKMOCIAcl,
+		oci.NewResourceCCKMOCIByokKey,
+		oci.NewResourceCCKMOCIByokVersion,
+		oci.NewResourceCCKMOCIVersion,
+		oci.NewResourceCCKMOCIKey,
+		aws.NewResourceCCKMAWSAcl,
 	}
 }

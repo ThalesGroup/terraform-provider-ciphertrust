@@ -55,7 +55,7 @@ data "ciphertrust_aws_key" "by_aws_key_id_and_region" {
 - `arn` (String) The Amazon Resource Name (ARN) of the key.
 - `aws_key_id` (String) AWS key ID.
 - `id` (String) Terraform AWS Key resource ID.
-- `key_id` (String) CipherTrust Key ID.
+- `key_id` (String) CipherTrust Manager Key ID.
 - `region` (String) AWS region to which the key belongs.
 
 ### Read-Only
@@ -87,8 +87,8 @@ data "ciphertrust_aws_key" "by_aws_key_id_and_region" {
 - `kms` (String) Name or ID of the KMS to be used to create the key.
 - `kms_id` (String) ID of the kms
 - `labels` (Map of String) A list of key:value pairs associated with the key.
-- `local_key_id` (String) CipherTrust key identifier of the external key.
-- `local_key_name` (String) CipherTrust key name of the external key.
+- `local_key_id` (String) CipherTrust Manager key identifier of the external key.
+- `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `multi_region` (Boolean) Creates or identifies a multi-region key.
 - `multi_region_key_type` (String) Indicates if the key is the primary key or a replica key.
 - `multi_region_primary_key` (Map of String)
@@ -106,5 +106,3 @@ data "ciphertrust_aws_key" "by_aws_key_id_and_region" {
 - `tags` (Map of String)
 - `updated_at` (String) Date the key was last updated.
 - `valid_to` (String) Date of key material expiry.
-
-

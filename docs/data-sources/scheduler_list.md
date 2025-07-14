@@ -30,6 +30,9 @@ Read-Only:
 
 - `account` (String)
 - `application` (String)
+- `cckm_key_rotation_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_key_rotation_params))
+- `cckm_synchronization_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_synchronization_params))
+- `cckm_xks_credential_rotation_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_xks_credential_rotation_params))
 - `created_at` (String)
 - `database_backup_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--database_backup_params))
 - `description` (String)
@@ -44,6 +47,36 @@ Read-Only:
 - `start_date` (String)
 - `updated_at` (String)
 - `uri` (String)
+
+<a id="nestedatt--scheduler--cckm_key_rotation_params"></a>
+### Nested Schema for `scheduler.cckm_key_rotation_params`
+
+Read-Only:
+
+- `aws_retain_alias` (Boolean)
+- `cloud_name` (String)
+- `expiration` (String)
+- `expire_in` (String)
+
+
+<a id="nestedatt--scheduler--cckm_synchronization_params"></a>
+### Nested Schema for `scheduler.cckm_synchronization_params`
+
+Read-Only:
+
+- `cloud_name` (String)
+- `kms` (Set of String)
+- `oci_vaults` (Set of String)
+- `synchronize_all` (Boolean)
+
+
+<a id="nestedatt--scheduler--cckm_xks_credential_rotation_params"></a>
+### Nested Schema for `scheduler.cckm_xks_credential_rotation_params`
+
+Read-Only:
+
+- `cloud_name` (String)
+
 
 <a id="nestedatt--scheduler--database_backup_params"></a>
 ### Nested Schema for `scheduler.database_backup_params`

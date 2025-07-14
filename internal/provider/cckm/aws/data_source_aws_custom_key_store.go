@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -136,9 +135,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(ctx context.Context, _ da
 						"custom_key_store_type": schema.StringAttribute{
 							Computed:    true,
 							Description: "Specifies the type of custom key store. The default value is EXTERNAL_KEY_STORE. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...),
-							},
 						},
 						"key_store_password": schema.StringAttribute{
 							Computed:    true,
@@ -151,9 +147,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(ctx context.Context, _ da
 						"xks_proxy_connectivity": schema.StringAttribute{
 							Computed:    true,
 							Description: "Indicates how AWS KMS communicates with the Ciphertrust Manager. This field is required for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...),
-							},
 						},
 						"xks_proxy_uri_endpoint": schema.StringAttribute{
 							Computed:    true,
@@ -214,9 +207,6 @@ func (d *datasourceAWSCustomKeyStoreDataSource) Schema(ctx context.Context, _ da
 						"source_key_tier": schema.StringAttribute{
 							Computed:    true,
 							Description: "This field indicates whether to use Luna HSM (luna-hsm) or Ciphertrust Manager (local) as source for cryptographic keys in this key store. Default value is luna-hsm. The only value supported by the service is 'local'.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"local", "luna-hsm"}...),
-							},
 						},
 					},
 				},

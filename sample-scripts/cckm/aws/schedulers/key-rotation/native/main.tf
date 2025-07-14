@@ -2,7 +2,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "0.9.0-beta4"
+      version = "1.0.0-pre3"
     }
   }
 }
@@ -37,6 +37,7 @@ resource "ciphertrust_aws_kms" "kms" {
 resource "ciphertrust_scheduler" "rotation_job" {
   cckm_key_rotation_params {
     cloud_name = "aws"
+    rotate_material = true
   }
   name      = local.rotation_scheduler_name
   operation = "cckm_key_rotation"

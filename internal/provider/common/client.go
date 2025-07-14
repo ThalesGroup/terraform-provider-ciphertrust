@@ -16,6 +16,7 @@ const CipherTrustURL string = "https://10.10.10.10"
 
 type CCKMProviderConfig struct {
 	AwsOperationTimeout int64
+	OCIOperationTimeout int64
 }
 
 // Client

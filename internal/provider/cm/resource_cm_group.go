@@ -30,7 +30,7 @@ type resourceCMGroup struct {
 }
 
 func (r *resourceCMGroup) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cm_group"
+	resp.TypeName = req.ProviderTypeName + "_groups"
 }
 
 // Schema defines the schema for the resource.
@@ -54,6 +54,9 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"user_metadata": schema.MapNestedAttribute{
 				Optional: true,
+			},
+			"id": schema.StringAttribute{
+				Computed: true,
 			},
 		},
 	}
@@ -118,6 +121,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 		)
 		return
 	}
+	plan.ID = plan.Name
 
 	tflog.Debug(ctx, "[resource_cm_user.go -> Create Output]["+response+"]")
 

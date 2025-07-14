@@ -3,6 +3,7 @@ package cckm
 import (
 	"encoding/json"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -182,6 +183,12 @@ type AWSKeyTFSDK struct {
 	UploadKey                types.List   `tfsdk:"upload_key"`
 }
 
+type AWSKeyRotationTFSDK struct {
+	KeyID  types.String `tfsdk:"key_id"`
+	ID     types.String `tfsdk:"id"`
+	Status types.String `tfsdk:"status"`
+}
+
 type XKSKeyLocalHostedParamsTFSDK struct {
 	Blocked          types.Bool   `tfsdk:"blocked"`
 	SourceKeyID      types.String `tfsdk:"source_key_id"`
@@ -347,46 +354,24 @@ type AWSEnableKeyRotationJobPayloadJSON struct {
 	AutoRotateDisableEncryptOnAllAccounts bool    `json:"auto_rotate_disable_encrypt_on_all_accounts"`
 }
 
-type AWSKeyJSON struct {
-	ID                           string               `json:"id"`
-	KMS                          string               `json:"kms"`
-	Region                       string               `json:"region"`
-	AWSParam                     *AWSKeyParamJSON     `json:"aws_param"`
-	JobConfigID                  string               `json:"job_config_id"`
-	AutoRotateDisableEncrypt     bool                 `json:"auto_rotate_disable_encrypt"`
-	AutoRotateDomainID           string               `json:"auto_rotate_domain_id"`
-	AutoRotateExternalCMDomainID string               `json:"auto_rotate_external_cm_domain_id"`
-	AutoRotateKeySource          string               `json:"auto_rotate_key_source"`
-	AutoRotatePartitionID        string               `json:"auto_rotate_partition_id"`
-	KeyExpiration                bool                 `json:"key_expiration"`
-	SourceKeyIdentifier          string               `json:"source_key_identifier"`
-	SourceKeyTier                string               `json:"source_key_tier"`
-	ValidTo                      string               `json:"valid_to"`
-	DisableEncrypt               bool                 `json:"disable_encrypt"`
-	RetainAlias                  bool                 `json:"retain_alias"`
-	SourceKeyID                  string               `json:"source_key_id"`
-	Days                         int64                `json:"days"`
-	Tags                         []AWSKeyParamTagJSON `json:"tags"`
-	//	DeleteTags                            []string             `json:"delete_tags"`
-	Alias                string `json:"alias"`
-	RotationPeriodInDays int64  `json:"rotation_period_in_days"`
-}
-
 type KMSModelTFSDK struct {
-	ID                   types.String `tfsdk:"id"`
-	URI                  types.String `tfsdk:"uri"`
 	Account              types.String `tfsdk:"account"`
-	Application          types.String `tfsdk:"application"`
-	DevAccount           types.String `tfsdk:"dev_account"`
-	CreatedAt            types.String `tfsdk:"created_at"`
-	UpdatedAt            types.String `tfsdk:"updated_at"`
 	AccountID            types.String `tfsdk:"account_id"`
-	Connection           types.String `tfsdk:"aws_connection"`
-	Name                 types.String `tfsdk:"name"`
-	Regions              types.List   `tfsdk:"regions"`
+	Acls                 types.Set    `tfsdk:"acls"`
+	Application          types.String `tfsdk:"application"`
+	Arn                  types.String `tfsdk:"arn"`
 	AssumeRoleARN        types.String `tfsdk:"assume_role_arn"`
 	AssumeRoleExternalID types.String `tfsdk:"assume_role_external_id"`
-	Arn                  types.String `tfsdk:"arn"`
+	AutoAdded            types.Bool   `tfsdk:"auto_added"`
+	Connection           types.String `tfsdk:"aws_connection"`
+	CreatedAt            types.String `tfsdk:"created_at"`
+	DevAccount           types.String `tfsdk:"dev_account"`
+	ID                   types.String `tfsdk:"id"`
+	Name                 types.String `tfsdk:"name"`
+	Regions              types.List   `tfsdk:"regions"`
+	Status               types.String `tfsdk:"status"`
+	UpdatedAt            types.String `tfsdk:"updated_at"`
+	URI                  types.String `tfsdk:"uri"`
 }
 
 type KMSModelJSON struct {
@@ -609,20 +594,92 @@ type AWSEnableXksCredentialRotationJobTFSDK struct {
 	JobConfigID types.String `tfsdk:"job_config_id"`
 }
 
-type AWSKmsDataSourceTFSDK struct {
-	AWSConnection types.String `tfsdk:"aws_connection"`
-	KmsName       types.String `tfsdk:"kms_name"`
-	KmsID         types.String `tfsdk:"kms_id"`
-	Regions       types.List   `tfsdk:"regions"`
+type KeyRotationAwsParamJSON struct {
+	ExpirationModel        string `json:"ExpirationModel"`
+	ImportState            string `json:"ImportState"`
+	KeyId                  string `json:"KeyId"`
+	KeyMaterialDescription string `json:"KeyMaterialDescription"`
+	KeyMaterialID          string `json:"KeyMaterialId"`
+	KeyMaterialState       string `json:"KeyMaterialState"`
+	RotationDate           string `json:"RotationDate"`
+	RotationType           string `json:"RotationType"`
+	ValidTo                string `json:"ValidTo"`
 }
 
-type AWSKmsDataSourceInputParamsTFSDK struct {
-	AWSConnection types.String `tfsdk:"aws_connection"`
-	KmsName       types.String `tfsdk:"kms_name"`
-	KmsID         types.String `tfsdk:"kms_id"`
+type KeyRotationAwsParamTFSDK struct {
+	ExpirationModel        types.String `tfsdk:"expiration_model"`
+	ImportState            types.String `tfsdk:"import_state"`
+	KeyID                  types.String `tfsdk:"key_id"`
+	KeyMaterialDescription types.String `tfsdk:"key_material_description"`
+	KeyMaterialID          types.String `tfsdk:"key_material_id"`
+	KeyMaterialState       types.String `tfsdk:"key_material_state"`
+	RotationDate           types.String `tfsdk:"rotation_date"`
+	RotationType           types.String `tfsdk:"rotation_type"`
+	ValidTo                types.String `tfsdk:"valid_to"`
 }
 
-type AWSKmsDataSourceModel struct {
-	AWSKmsDataSourceInputParamsTFSDK
-	KmsList []AWSKmsDataSourceTFSDK `tfsdk:"kms"`
+type KeyRotationJSON struct {
+	Account                 string `json:"account"`
+	KeyRotationAwsParamJSON `json:"aws_param"`
+	CreatedAt               string `json:"createdAt"`
+	ID                      string `json:"id"`
+	KeyMaterialOrigin       string `json:"key_material_origin"`
+	KeySource               string `json:"key_source"`
+	KeySourceContainerID    string `json:"key_source_container_id"`
+	KmsID                   string `json:"kms_id"`
+	SourceKeyID             string `json:"source_key_identifier"`
+	SourceKeyName           string `json:"source_key_name"`
+	UpdatedAt               string `json:"updatedAt"`
+	URI                     string `json:"uri"`
+}
+
+type KeyRotationTFSDK struct {
+	Account                types.String             `tfsdk:"account"`
+	AwsParam               KeyRotationAwsParamTFSDK `tfsdk:"aws_params"`
+	CreatedAt              types.String             `tfsdk:"created_at"`
+	ID                     types.String             `tfsdk:"id"`
+	KeyMaterialOrigin      types.String             `tfsdk:"key_material_origin"`
+	KeySource              types.String             `tfsdk:"key_source"`
+	KeySourceContainerID   types.String             `tfsdk:"key_source_container_id"`
+	KeySourceContainerName types.String             `tfsdk:"key_source_container_name"`
+	KmsID                  types.String             `tfsdk:"kms_id"`
+	SourceKeyID            types.String             `tfsdk:"source_key_id"`
+	SourceKeyName          types.String             `tfsdk:"source_key_name"`
+	UpdatedAt              types.String             `tfsdk:"updated_at"`
+	URI                    types.String             `tfsdk:"uri"`
+}
+
+type DataSourceKeyRotationsJSON struct {
+	Resources []KeyRotationJSON `json:"resources"`
+}
+
+type KMSAclTFSDK struct {
+	ID         types.String `tfsdk:"id"`
+	KmsID      types.String `tfsdk:"kms_id"`
+	KmsActions types.Set    `tfsdk:"kms_actions"`
+	acls.AclTFSDK
+}
+
+type DataSourceKmsJSON struct {
+	Account              string         `json:"account"`
+	AccountID            string         `json:"account_id"`
+	Acls                 []acls.AclJSON `json:"acls"`
+	Application          string         `json:"application"`
+	Arn                  string         `json:"arn"`
+	AssumeRoleARN        string         `json:"assume_role_arn"`
+	AssumeRoleExternalID string         `json:"assume_role_external_id"`
+	AutoAdded            bool           `json:"auto_added"`
+	Connection           string         `json:"connection"`
+	CreatedAt            string         `json:"createdAt"`
+	DevAccount           string         `json:"devAccount"`
+	ID                   string         `json:"id"`
+	Name                 string         `json:"name"`
+	Regions              []string       `json:"regions"`
+	Status               string         `json:"status"`
+	UpdatedAt            string         `json:"updatedAt"`
+	URI                  string         `json:"uri"`
+}
+
+type DataSourceKmsListJSON struct {
+	Resources []DataSourceKmsJSON `json:"resources"`
 }

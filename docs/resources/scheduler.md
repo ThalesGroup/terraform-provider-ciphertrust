@@ -3,7 +3,7 @@
 page_title: "ciphertrust_scheduler Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Creates a new job configuration. The 'databasebackupparams', 'cckmsynchronizationparams' and 'cckmkeyrotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 ---
 
 # ciphertrust_scheduler (Resource)
@@ -147,7 +147,7 @@ For example:
 ### Optional
 
 - `cckm_key_rotation_params` (Block List) Specifies cloud key rotation parameters (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
-- `cckm_synchronization_params` (Block List) Specifies cloud key synchronization parameters (see [below for nested schema](#nestedblock--cckm_synchronization_params))
+- `cckm_synchronization_params` (Block List) Cloud key synchronization parameters. (see [below for nested schema](#nestedblock--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
 - `description` (String) Description for the job configuration.
@@ -171,13 +171,14 @@ For example:
 
 Required:
 
-- `cloud_name` (String) Name of the cloud for which to schedule the key rotation. Options are: aws.
+- `cloud_name` (String) Name of the cloud for which to schedule the key rotation. Options are: aws,oci.
 
 Optional:
 
 - `aws_retain_alias` (Boolean) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
 - `expiration` (String) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
 - `expire_in` (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours.
+- `rotate_material` (Boolean) If true, rotate the key material during the key rotation job.
 
 
 <a id="nestedblock--cckm_synchronization_params"></a>
@@ -185,11 +186,12 @@ Optional:
 
 Required:
 
-- `cloud_name` (String) Name of the cloud that will be synchronized on schedule. Options are: aws.
+- `cloud_name` (String) Specify the cloud that will be synchronized on schedule. Options are: aws,oci.
 
 Optional:
 
-- `kms` (Set of String) IDs or names of kms resources from which AWS keys will be synchronized. Unless synchronizing all AWS keys, At least one kms is required.
+- `kms` (Set of String) A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.
+- `oci_vaults` (Set of String) A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.
 - `synchronize_all` (Boolean) Set true to synchronize all keys.
 
 
@@ -218,6 +220,10 @@ Optional:
 <a id="nestedatt--database_backup_params--filters"></a>
 ### Nested Schema for `database_backup_params.filters`
 
+Required:
+
+- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".
+
 Optional:
 
 - `resource_query` (String) A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
@@ -228,6 +234,3 @@ For Customer fragments, valid resourceQuery parameter values are 'ids' and 'name
 
 Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
 For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"
-- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".
-
-

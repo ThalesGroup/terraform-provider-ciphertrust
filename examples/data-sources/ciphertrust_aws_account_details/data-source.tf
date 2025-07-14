@@ -1,4 +1,4 @@
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws_connection" {
   name              = "connection-name"
   access_key_id     = "access-key-id"

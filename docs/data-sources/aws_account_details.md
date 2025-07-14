@@ -13,7 +13,7 @@ Use this data source to retrieve the account and regions associated with the AWS
 ## Example Usage
 
 ```terraform
-# Create an AWS connection
+# Define an AWS connection
 resource "ciphertrust_aws_connection" "aws_connection" {
   name              = "connection-name"
   access_key_id     = "access-key-id"
@@ -51,5 +51,3 @@ resource "ciphertrust_aws_kms" "kms" {
 
 - `account_id` (String) AWS account ID managed by the connection.
 - `regions` (List of String) AWS regions available for the account.
-
-

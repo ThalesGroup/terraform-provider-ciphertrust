@@ -12,7 +12,7 @@ terraform {
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
       version = "1.0.0-pre3"
-    }
+    }c
   }
 }
 
