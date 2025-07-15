@@ -283,8 +283,8 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 
 func (r *resourceCCKMOCIByokVersion) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_byok_version.go -> Import]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_byok_version.go -> Import]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_oci_byok_version.go -> ImportState]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_oci_byok_version.go -> ImportState]["+id+"]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 	versionInfo := strings.Split(req.ID, ".")
 	if len(versionInfo) != 2 {

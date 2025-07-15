@@ -55,6 +55,7 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 		}`
 
 	keyResource := "ciphertrust_oci_key.rsa"
+	versionResource := "ciphertrust_oci_key_version.version"
 	keysDataSource := "data.ciphertrust_oci_key_list.keys"
 	versionDataSource := "data.ciphertrust_oci_key_version_list.versions"
 
@@ -69,6 +70,25 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
 					resource.TestCheckResourceAttr(versionDataSource, "versions.#", "2"),
 				),
+			},
+			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      keyResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"version_summary",
+					"oci_key_params.current_key_version",
+					"schedule_for_deletion_days",
+				},
+			},
+			{
+				ResourceName:      versionResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
 			},
 			{
 				Config: createResourceStr,

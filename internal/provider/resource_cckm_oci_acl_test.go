@@ -152,6 +152,19 @@ func TestCckmOCIAcl(t *testing.T) {
 				),
 			},
 			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      userACLResourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				ResourceName:      groupACLResourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
 				Config: addAclActionsConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(userACLResourceName, "actions.#", "3"),
