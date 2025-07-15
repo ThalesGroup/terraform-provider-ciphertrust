@@ -203,6 +203,15 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 		diags.Append(dg...)
 		return
 	}
+	if state.EnableAutoRotation == nil && len(labels) != 0 {
+		state.EnableAutoRotation = new(models.EnableAutoRotationTFSDK)
+		if v, ok := labels["job_config_id"]; ok {
+			state.EnableAutoRotation.JobConfigID = types.StringValue(v)
+		}
+		if v, ok := labels["auto_rotate_key_source"]; ok {
+			state.EnableAutoRotation.KeySource = types.StringValue(v)
+		}
+	}
 }
 
 func setKeyVersionSummaryState(ctx context.Context, id string, client *common.Client, keyID string, state *types.List, diags *diag.Diagnostics) {

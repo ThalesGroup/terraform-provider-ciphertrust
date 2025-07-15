@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func initCckmOCITest(t *testing.T) string {
@@ -324,6 +325,7 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 		}`
 
 	keyResource := "ciphertrust_oci_byok_key.aes"
+	versionResource := "ciphertrust_oci_byok_key_version.byok_v1"
 	keysDataSource := "data.ciphertrust_oci_key_list.keys"
 	versionDataSource := "data.ciphertrust_oci_key_version_list.versions"
 
@@ -343,6 +345,25 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 				),
 			},
 			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      keyResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"version_summary",
+					"oci_key_params.current_key_version",
+					"schedule_for_deletion_days",
+				},
+			},
+			{
+				ResourceName:      versionResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
+			},
+			{
 				Config: updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "version_summary.#", "4"),
@@ -360,6 +381,25 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 				),
 			},
 			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      keyResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"version_summary",
+					"oci_key_params.current_key_version",
+					"schedule_for_deletion_days",
+				},
+			},
+			{
+				ResourceName:      versionResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
+			},
+			{
 				Config: updateResourceStr,
 				Check:  resource.ComposeTestCheckFunc(),
 			},
@@ -369,4 +409,26 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 			},
 		},
 	})
+}
+
+func getOCIKeyVersionID(keyResourceName string, versionResourceName string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[keyResourceName]
+		if !ok {
+			return "", fmt.Errorf("not found: " + keyResourceName)
+		}
+		keyID, ok := rs.Primary.Attributes["id"]
+		if !ok {
+			return "", fmt.Errorf("id not found in state for " + keyResourceName)
+		}
+		rs, ok = s.RootModule().Resources[versionResourceName]
+		if !ok {
+			return "", fmt.Errorf("not found: " + versionResourceName)
+		}
+		versionID, ok := rs.Primary.Attributes["id"]
+		if !ok {
+			return "", fmt.Errorf("id not found in state for " + versionResourceName)
+		}
+		return keyID + "." + versionID, nil
+	}
 }

@@ -114,12 +114,28 @@ func TestCckmOCIVault(t *testing.T) {
 				),
 			},
 			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      vaultResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
 				Config: updateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionTwoResource, "name"),
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
 				),
+			},
+			{
+				RefreshState: true,
+			},
+			{
+				ResourceName:      vaultResource,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
