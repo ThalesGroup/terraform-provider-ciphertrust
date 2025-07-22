@@ -138,4 +138,5 @@ provider "ciphertrust" {}
 - `log_file` (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
 - `log_level` (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
 - `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
+- `replication_delay_ms` (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after the creating a resource may be required to allow for replication to other cluster instances. replication_delay_ms can be set in the provider block or in ~/.ciphertrust/config. Default is 50.
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.

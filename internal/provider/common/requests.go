@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -29,6 +30,7 @@ func (c *Client) DeleteByID(ctx context.Context, method string, uuid string, url
 
 	responseJson := gjson.Get(string(body), "resources").String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAll]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return responseJson, nil
 }
 
@@ -48,6 +50,7 @@ func (c *Client) DeleteByURL(ctx context.Context, uuid string, endpoint string) 
 
 	responseJson := gjson.Get(string(body), "resources").String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> DeleteByurl]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return responseJson, nil
 }
 
@@ -151,6 +154,7 @@ func (c *Client) PostData(ctx context.Context, uuid string, endpoint string, dat
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
 
@@ -175,7 +179,7 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 		return "", err
 	}
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
-
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return string(body), nil
 }
 
@@ -194,7 +198,7 @@ func (c *Client) PostNoData(ctx context.Context, uuid string, endpoint string) (
 		return "", err
 	}
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
-
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return string(body), nil
 }
 
@@ -219,7 +223,7 @@ func (c *Client) PutData(ctx context.Context, uuid string, endpoint string, data
 		return "", err
 	}
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PutData]["+uuid+"]")
-
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return string(body), nil
 }
 
@@ -247,6 +251,7 @@ func (c *Client) UpdateData(ctx context.Context, uuid string, endpoint string, d
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
 
@@ -270,7 +275,7 @@ func (c *Client) UpdateDataV2(ctx context.Context, uuid string, endpoint string,
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
 		return "", err
 	}
-
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
 	return string(body), nil
 }
@@ -299,6 +304,7 @@ func (c *Client) UpdateDataFullURL(ctx context.Context, uuid string, endpoint st
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
 
@@ -321,6 +327,7 @@ func (c *CMClientBootstrap) PostDataBootstrap(ctx context.Context, uuid string, 
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostDataBootstrap]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
 
@@ -343,5 +350,6 @@ func (c *CMClientBootstrap) PatchDataBootstrap(ctx context.Context, uuid string,
 
 	ret := string(body)
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }

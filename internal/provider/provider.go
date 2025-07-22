@@ -33,6 +33,7 @@ var (
 const (
 	defaultAwsOperationTimeout = 480
 	defaultOciOperationTimeout = 480
+	defaultReplicationDelay    = 50
 )
 
 // New is a helper function to simplify provider server and testing implementation.
@@ -63,6 +64,7 @@ type ciphertrustProviderModel struct {
 	Address              types.String `tfsdk:"address"`
 	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
 	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
+	ReplicationDetailMs  types.Int64  `tfsdk:"replication_delay_ms"`
 }
 
 const (
@@ -123,6 +125,10 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "oci_operation_timeout", defaultOciOperationTimeout),
 			},
+			"replication_delay_ms": schema.Int64Attribute{
+				Optional: true,
+				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after the creating a resource may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescWithDefault, "replication_delay_ms", defaultReplicationDelay),
+			},
 		},
 	}
 }
@@ -144,6 +150,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var rest_api_timeout int64
 	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
 	var oci_operation_timeout = int64(defaultOciOperationTimeout)
+	var replication_delay_ms = int64(defaultReplicationDelay)
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -195,6 +202,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			aws_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
 		case "oci_operation_timeout":
 			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
+		case "replication_delay_ms":
+			replication_delay_ms, _ = strconv.ParseInt(value, 10, 64)
 		}
 	}
 
@@ -273,6 +282,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		oci_operation_timeout = config.OCIOperationTimeout.ValueInt64()
 	}
 
+	if !config.ReplicationDetailMs.IsNull() {
+		oci_operation_timeout = config.ReplicationDetailMs.ValueInt64()
+	}
+
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
 	if bootstrap == "no" {
@@ -349,6 +362,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
+		client.ReplicationDelay = replication_delay_ms
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
@@ -364,6 +378,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
+		client.ReplicationDelay = replication_delay_ms
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	}
