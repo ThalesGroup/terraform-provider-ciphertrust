@@ -26,17 +26,18 @@ All CipherTrust Provider parameters can be provided in :
 
 CipherTrust address and authentication parameters can be provided as environment variables also.
 
-The following table illustrates which parameters can be provided as environment variables or in the configuration file.
+The following table illustrates which provider parameters can be provided as environment variables or in the configuration file.
 
-| Provider Parameter   | Environment Variable | Config File | Required  | Default Value              |
-|:---------------------|:---------------------|:------------|:----------|:---------------------------|
-| address              | CM_ADDRESS           | address     | Yes       | N/A                        |
-| username             | CM_USERNAME          | username    | Yes       | N/A                        |
-| password             | CM_PASSWORD          | password    | Yes       | N/A                        |
-| domain               | CM_DOMAIN            | domain      | No        | Empty string (root domain) |
-| auth_domain          | CM_AUTH_DOMAIN       | auth_domain | No        | Empty string (root domain) |
-| remaining parameters | no                   | yes         | No        | N/A                        |
-
+| Provider Parameter   | Environment Variable | Config File             | Required | Default Value              |
+|:---------------------|:---------------------|:------------------------|:---------|:---------------------------|
+| address              | CM_ADDRESS           | address                 | Yes      | N/A                        |
+| username             | CM_USERNAME          | username                | Yes      | N/A                        |
+| password             | CM_PASSWORD          | password                | Yes      | N/A                        |
+| domain               | CM_DOMAIN            | domain                  | No       | Empty string (root domain) |
+| auth_domain          | CM_AUTH_DOMAIN       | auth_domain             | No       | Empty string (root domain) |
+| replication_delay_ms | CM_REPLICATION_DELAY |replication_delay_ms     | No       |100 (milliseconds)          | 
+| remaining parameters | no                   | yes                     | No       | N/A                        |
+ 
 The order of precedence when determining the value of a provider parameter:
 1. Provider Block
 2. Environment Variable
@@ -137,6 +138,6 @@ provider "ciphertrust" {}
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `log_file` (String) Log file name. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
 - `log_level` (String) Logging level. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warning or error.
-- `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
-- `replication_delay_ms` (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after the creating a resource may be required to allow for replication to other cluster instances. replication_delay_ms can be set in the provider block or in ~/.ciphertrust/config. Default is 50.
+- `no_ssl_verify` (Boolean) Set as false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
+- `replication_delay_ms` (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. replication_delay_ms can be set in the provider block, via the CM_REPLICATION_DELAY environment variable or in ~/.ciphertrust/config. Default is 100.
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.

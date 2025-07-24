@@ -33,7 +33,7 @@ var (
 const (
 	defaultAwsOperationTimeout = 480
 	defaultOciOperationTimeout = 480
-	defaultReplicationDelay    = 50
+	defaultReplicationDelay    = 100
 )
 
 // New is a helper function to simplify provider server and testing implementation.
@@ -64,12 +64,13 @@ type ciphertrustProviderModel struct {
 	Address              types.String `tfsdk:"address"`
 	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
 	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
-	ReplicationDetailMs  types.Int64  `tfsdk:"replication_delay_ms"`
+	ReplicationDelayMS   types.Int64  `tfsdk:"replication_delay_ms"`
 }
 
 const (
 	providerDescWithDefault         = "%s can be set in the provider block or in ~/.ciphertrust/config. Default is %v."
 	providerDescNoDefaultWithEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config"
+	providerDescDefaultWithEnvVar   = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %v."
 	defaultRestAPITimeout           = "60"
 	//providerDescWithDefaultAndEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %s."
 )
@@ -111,7 +112,7 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			},
 			"no_ssl_verify": &schema.BoolAttribute{
 				Optional:    true,
-				Description: "Set to false to verify the server's certificate chain and host name. " + fmt.Sprintf(providerDescWithDefault, "no_ssl_verify", "true"),
+				Description: "Set as false to verify the server's certificate chain and host name. " + fmt.Sprintf(providerDescWithDefault, "no_ssl_verify", "true"),
 			},
 			"rest_api_timeout": schema.Int64Attribute{
 				Optional:    true,
@@ -126,8 +127,8 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Description: "Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "oci_operation_timeout", defaultOciOperationTimeout),
 			},
 			"replication_delay_ms": schema.Int64Attribute{
-				Optional: true,
-				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after the creating a resource may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescWithDefault, "replication_delay_ms", defaultReplicationDelay),
+				Optional:    true,
+				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CM_REPLICATION_DELAY", defaultReplicationDelay),
 			},
 		},
 	}
@@ -240,6 +241,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	if restAPITimeoutEnvExists {
 		rest_api_timeout, _ = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
 	}
+	replicationDelayEnvVal, replicationDelayEnvExists := os.LookupEnv("CM_REPLICATION_DELAY")
+	if replicationDelayEnvExists {
+		replication_delay_ms, _ = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
+	}
 
 	// Finally if the provider block has values, make that highest priority
 	if !config.Address.IsNull() {
@@ -282,8 +287,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		oci_operation_timeout = config.OCIOperationTimeout.ValueInt64()
 	}
 
-	if !config.ReplicationDetailMs.IsNull() {
-		oci_operation_timeout = config.ReplicationDetailMs.ValueInt64()
+	if !config.ReplicationDelayMS.IsNull() {
+		oci_operation_timeout = config.ReplicationDelayMS.ValueInt64()
 	}
 
 	// If any of the expected configurations are missing, return
