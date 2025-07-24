@@ -21,18 +21,20 @@ type CCKMProviderConfig struct {
 
 // Client
 type Client struct {
-	CipherTrustURL string
-	HTTPClient     *http.Client
-	Token          string
-	AuthData       AuthStruct
-	CCKMConfig     CCKMProviderConfig
+	CipherTrustURL   string
+	HTTPClient       *http.Client
+	Token            string
+	AuthData         AuthStruct
+	CCKMConfig       CCKMProviderConfig
+	ReplicationDelay int64
 }
 
 // Bootstrap Client for CipherTrust Manager
 type CMClientBootstrap struct {
-	CipherTrustURL string
-	HTTPClient     *http.Client
-	CCKMConfig     CCKMProviderConfig
+	CipherTrustURL   string
+	HTTPClient       *http.Client
+	CCKMConfig       CCKMProviderConfig
+	ReplicationDelay int64
 }
 
 // AuthStruct
