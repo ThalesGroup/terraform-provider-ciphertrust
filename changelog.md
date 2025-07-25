@@ -1,3 +1,14 @@
+# 0.11.2-beta
+## New Provider Settings
+    replication_delay_ms
+        In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. 
+        replication_delay_ms can be set in the provider block, via the CM_REPLICATION_DELAY environment variable or in ~/.ciphertrust/config. The default is 100 milliseconds.
+
+
+## Updated Resources
+    ciphertrust_aws_custom_keystore
+        The 'connect_disconnect_keystore' attribute will reflect the current state of the key store.   
+    
 # 0.11.1-beta
 ## Updated Resources
     ciphertrust_aws_custom_keystore
