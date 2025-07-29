@@ -77,6 +77,16 @@ type AWSKeyImportKeyMaterialTFSDK struct {
 	ValidTo       types.String `tfsdk:"valid_to"`
 }
 
+type AWSKeyImportMaterialTFSDK struct {
+	ImportType             types.String `tfsdk:"import_type"`
+	KeyMaterialDescription types.String `tfsdk:"key_material_description"`
+	KeyMaterialID          types.String `tfsdk:"key_material_id"`
+	SourceKeyID            types.String `tfsdk:"source_key_identifier"`
+	SourceKeyTier          types.String `tfsdk:"source_key_tier"`
+	KeyExpiration          types.Bool   `tfsdk:"key_expiration"`
+	ValidTo                types.String `tfsdk:"valid_to"`
+}
+
 type AWSKeyPolicyCommonTFSDK struct {
 	ExternalAccounts types.Set    `tfsdk:"external_accounts"`
 	KeyAdmins        types.Set    `tfsdk:"key_admins"`
@@ -167,6 +177,47 @@ type AWSKeyCommonTFSDK struct {
 	ValidTo                        types.String `tfsdk:"valid_to"`
 }
 
+type AWSKeyCommonImportMaterialTFSDK struct {
+	ID                      types.String `tfsdk:"id"`
+	Region                  types.String `tfsdk:"region"`
+	CustomerMasterKeySpec   types.String `tfsdk:"customer_master_key_spec"`
+	KeyUsage                types.String `tfsdk:"key_usage"`
+	KMS                     types.String `tfsdk:"kms"`
+	KMSID                   types.String `tfsdk:"kms_id"`
+	Origin                  types.String `tfsdk:"origin"`
+	ScheduleForDeletionDays types.Int64  `tfsdk:"schedule_for_deletion_days"`
+	ARN                     types.String `tfsdk:"arn"`
+	AWSAccountID            types.String `tfsdk:"aws_account_id"`
+	AWSKeyID                types.String `tfsdk:"aws_key_id"`
+	CloudName               types.String `tfsdk:"cloud_name"`
+	CreatedAt               types.String `tfsdk:"created_at"`
+	DeletionDate            types.String `tfsdk:"deletion_date"`
+	EncryptionAlgorithms    types.List   `tfsdk:"encryption_algorithms"`
+	ExpirationModel         types.String `tfsdk:"expiration_model"`
+	ExternalAccounts        types.Set    `tfsdk:"external_accounts"`
+	KeyAdmins               types.Set    `tfsdk:"key_admins"`
+	KeyAdminsRoles          types.Set    `tfsdk:"key_admins_roles"`
+	KeyID                   types.String `tfsdk:"key_id"`
+	KeyManager              types.String `tfsdk:"key_manager"`
+	KeyMaterialOrigin       types.String `tfsdk:"key_material_origin"`
+	KeyRotationEnabled      types.Bool   `tfsdk:"key_rotation_enabled"`
+	KeySource               types.String `tfsdk:"key_source"`
+	KeyState                types.String `tfsdk:"key_state"`
+	KeyType                 types.String `tfsdk:"key_type"`
+	KeyUsers                types.Set    `tfsdk:"key_users"`
+	KeyUsersRoles           types.Set    `tfsdk:"key_users_roles"`
+	Labels                  types.Map    `tfsdk:"labels"`
+	LocalKeyID              types.String `tfsdk:"local_key_id"`
+	LocalKeyName            types.String `tfsdk:"local_key_name"`
+	RotatedAt               types.String `tfsdk:"rotated_at"`
+	RotatedFrom             types.String `tfsdk:"rotated_from"`
+	RotatedTo               types.String `tfsdk:"rotated_to"`
+	RotationStatus          types.String `tfsdk:"rotation_status"`
+	SyncedAt                types.String `tfsdk:"synced_at"`
+	UpdatedAt               types.String `tfsdk:"updated_at"`
+	ValidTo                 types.String `tfsdk:"valid_to"`
+}
+
 type AWSKeyTFSDK struct {
 	AWSKeyCommonTFSDK
 	AutoRotate               types.Bool   `tfsdk:"auto_rotate"`
@@ -181,6 +232,16 @@ type AWSKeyTFSDK struct {
 	ReplicaPolicy            types.String `tfsdk:"replica_policy"`
 	ReplicateKey             types.List   `tfsdk:"replicate_key"`
 	UploadKey                types.List   `tfsdk:"upload_key"`
+}
+
+type AWSKeyForImportMaterialTFSDK struct {
+	AWSKeyCommonImportMaterialTFSDK
+	ImportKeyMaterial      types.List   `tfsdk:"import_key_material"`
+	MultiRegion            types.Bool   `tfsdk:"multi_region"`
+	MultiRegionKeyType     types.String `tfsdk:"multi_region_key_type"`
+	MultiRegionPrimaryKey  types.Map    `tfsdk:"multi_region_primary_key"`
+	MultiRegionReplicaKeys types.List   `tfsdk:"multi_region_replica_keys"`
+	NextRotationDate       types.String `tfsdk:"next_rotation_date"`
 }
 
 type AWSKeyRotationTFSDK struct {
@@ -345,6 +406,16 @@ type AWSKeyImportKeyPayloadJSON struct {
 	SourceKeyTier string `json:"source_key_tier"`
 	KeyExpiration bool   `json:"key_expiration"`
 	ValidTo       string `json:"valid_to"`
+}
+
+type AWSKeyImportMaterialJSON struct {
+	ImportType             string  `json:"import_type"`
+	KeyMaterialDescription *string `json:"key_material_description"`
+	KeyMaterialID          *string `json:"key_material_id"`
+	SourceKeyID            string  `json:"source_key_identifier"`
+	SourceKeyTier          string  `json:"source_key_tier"`
+	KeyExpiration          bool    `json:"key_expiration"`
+	ValidTo                string  `json:"valid_to"`
 }
 
 type AWSEnableKeyRotationJobPayloadJSON struct {

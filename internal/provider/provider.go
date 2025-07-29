@@ -492,5 +492,6 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		oci.NewResourceCCKMOCIVersion,
 		oci.NewResourceCCKMOCIKey,
 		aws.NewResourceCCKMAWSAcl,
+		aws.NewResourceAWSKeyImportMaterial,
 	}
 }
