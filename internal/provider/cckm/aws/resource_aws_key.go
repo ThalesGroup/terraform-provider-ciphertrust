@@ -472,9 +472,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"import_key_material": schema.ListNestedBlock{
-				Description: "Both a 'source_key_tier' key and an AWS external key will be created. Key material from the 'source_key_tier' key will be imported to the AWS key." +
-					"The 'source_key_tier' key will not be deleted on Terraform destroy.\n\n" +
-					"The preferred alternative is to use 'upload_key' parameter.",
+				Description: "Both a 'source_key_tier' key and an AWS external key will be created. Key material from the 'source_key_tier' key will be imported to the AWS key.The 'source_key_tier' key will not be deleted on Terraform destroy. An alternative is to use 'upload_key' parameter.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"source_key_name": schema.StringAttribute{
