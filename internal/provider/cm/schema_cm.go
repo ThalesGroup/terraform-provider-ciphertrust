@@ -411,6 +411,12 @@ type CMUserTFSDK struct {
 	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
 	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
 	Metadata               types.Map    `tfsdk:"user_metadata"`
+	CreatedAt              types.String `tfsdk:"created_at"`
+	UpdatedAt              types.String `tfsdk:"updated_at"`
+	LastLogin              types.String `tfsdk:"last_login"`
+	LoginsCount            types.Int64  `tfsdk:"logins_count"`
+	CertificateDN          types.String `tfsdk:"certificate_subject_dn"`
+	FailedLoginsCount      types.Int64  `tfsdk:"failed_logins_count"`
 }
 
 type UserLoginFlagsJSON struct {
@@ -428,6 +434,12 @@ type CMUserJSON struct {
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
 	PasswordChangeRequired bool               `json:"password_change_required"`
 	Metadata               map[string]string  `json:"user_metadata"`
+	CreatedAt              string             `json:"created_at"`
+	UpdatedAt              string             `json:"updated_at"`
+	LastLogin              string             `json:"last_login"`
+	LoginsCount            int64              `json:"logins_count"`
+	CertificateDN          string             `json:"certificate_subject_dn"`
+	FailedLoginsCount      int64              `json:"failed_logins_count"`
 }
 
 type CMSSHKeyTFSDK struct {
@@ -895,9 +907,8 @@ type CreateJobConfigParamsListJSON struct {
 }
 
 type CMPropertyTFSDK struct {
-	Name        types.String `tfsdk:"name"`
-	Value       types.String `tfsdk:"value"`
-	Description types.String `tfsdk:"description"`
+	Name  types.String `tfsdk:"name"`
+	Value types.String `tfsdk:"value"`
 }
 
 type CMPropertyJSON struct {
@@ -944,15 +955,15 @@ type CMPolicyJSON struct {
 }
 
 type CMPolicyAttachmentTFSDK struct {
-	ID                types.String   `tfsdk:"id"`
-	Policy            types.String   `tfsdk:"policy"`
-	PrincipalSelector types.Map      `tfsdk:"principal_selector"`
-	Jurisdiction      types.String   `tfsdk:"jurisdiction"`
-	Actions           []types.String `tfsdk:"actions"`
-	Resources         []types.String `tfsdk:"resources"`
-	URI               types.String   `tfsdk:"uri"`
-	Account           types.String   `tfsdk:"account"`
-	CreatedAt         types.String   `tfsdk:"created_at"`
+	ID                types.String `tfsdk:"id"`
+	Policy            types.String `tfsdk:"policy"`
+	PrincipalSelector types.Map    `tfsdk:"principal_selector"`
+	Jurisdiction      types.String `tfsdk:"jurisdiction"`
+	//Actions           []types.String `tfsdk:"actions"`
+	//Resources         []types.String `tfsdk:"resources"`
+	URI       types.String `tfsdk:"uri"`
+	Account   types.String `tfsdk:"account"`
+	CreatedAt types.String `tfsdk:"created_at"`
 }
 
 type CMPolicyAttachmentJSON struct {

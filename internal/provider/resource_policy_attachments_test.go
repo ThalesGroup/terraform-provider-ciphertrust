@@ -1,12 +1,25 @@
 package provider
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCMPolicyAttachment(t *testing.T) {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	bootstrap := "no"
+
+	if address == "" || username == "" || password == "" {
+		t.Fatal("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME, and CIPHERTRUST_PASSWORD must be set for testing")
+	}
+
+	providerConfig := fmt.Sprintf(providerConfig, address, username, password, bootstrap)
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -26,7 +39,7 @@ resource "ciphertrust_policies" "policy" {
 
 resource "ciphertrust_policy_attachments" "policy_attachment" {
   	policy = "mypolicy"
-	principalSelector = {
+	principal_selector = {
 		acct = "pers-jsmith"
 		user = "apitestuser"
 	}

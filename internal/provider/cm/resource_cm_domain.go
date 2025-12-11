@@ -47,22 +47,31 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"admins": schema.ListAttribute{
 				Required:    true,
 				Description: "List of administrators for the domain",
+				PlanModifiers: []planmodifier.List{
+					common.NewListUseStateForUnknown(),
+				},
 				ElementType: types.StringType,
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
+				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The name of the domain",
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "To allow user creation and management in the domain, set it to true. The default value is false.",
 			},
 			"hsm_connection_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The ID of the HSM connection. Required for HSM-anchored domains.",
 			},
 			"hsm_kek_label": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label.",
 			},
 			"meta_data": schema.MapAttribute{
@@ -165,6 +174,9 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
+	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
+	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	tflog.Debug(ctx, "[resource_cm_domain.go -> Create Output]["+response+"]")
 
@@ -207,6 +219,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
 	state.Account = types.StringValue(gjson.Get(response, "account ").String())
+	state.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -252,7 +265,11 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	response, err := r.client.UpdateDataV2(
+		ctx,
+		plan.ID.ValueString(),
+		common.URL_DOMAIN,
+		payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+plan.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -261,7 +278,18 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		)
 		return
 	}
-	plan.UpdatedAt = types.StringValue(response)
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
+	plan.Application = types.StringValue(gjson.Get(response, "application").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt ").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account ").String())
+	plan.HSMConnectionId = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
+	plan.HSMKEKLabel = types.StringValue(gjson.Get(response, "hsm_kek_label").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

@@ -33,8 +33,8 @@ builds:
         goarch: arm64
     binary: '{{ .ProjectName }}_v{{ .Version }}'
 archives:
-  - format: zip
-    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    - format: zip
+      name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   extra_files:
     - glob: 'terraform-registry-manifest.json'
@@ -56,8 +56,6 @@ release:
   extra_files:
     - glob: 'terraform-registry-manifest.json'
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
-# If you want to manually examine the release before its live, uncomment this line:
-# draft: true
   github:
       owner: ThalesGroup
       name: terraform-provider-ciphertrust

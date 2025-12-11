@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -48,16 +49,19 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"nickname": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"email": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"name": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Users full name",
 			},
 			"password": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
 				Optional: true,
@@ -85,6 +89,12 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				ElementType: types.StringType,
 				Description: "Information that can be stored with the user.",
 			},
+			"created_at":             schema.StringAttribute{Computed: true},
+			"updated_at":             schema.StringAttribute{Computed: true},
+			"last_login":             schema.StringAttribute{Computed: true},
+			"logins_count":           schema.Int64Attribute{Computed: true},
+			"certificate_subject_dn": schema.StringAttribute{Computed: true},
+			"failed_logins_count":    schema.Int64Attribute{Computed: true},
 		},
 	}
 }
@@ -163,6 +173,16 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 	plan.UserID = types.StringValue(response)
 	plan.ID = types.StringValue(response)
+	plan.Name = types.StringValue(gjson.Get(response, "name").String())
+	plan.UserName = types.StringValue(gjson.Get(response, "username").String())
+	plan.Nickname = types.StringValue(gjson.Get(response, "nickname").String())
+	plan.Email = types.StringValue(gjson.Get(response, "email").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "created_at").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updated_at").String())
+	plan.LastLogin = types.StringValue(gjson.Get(response, "last_login").String())
+	plan.LoginsCount = types.Int64Value(gjson.Get(response, "logins_count").Int())
+	plan.CertificateDN = types.StringValue(gjson.Get(response, "certificate_subject_dn").String())
+	plan.FailedLoginsCount = types.Int64Value(gjson.Get(response, "failed_logins_count").Int())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -174,45 +194,52 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// var state tfsdkCMUserModel
-	// diags := req.State.Get(ctx, &state)
-	// resp.Diagnostics.Append(diags...)
-	// if resp.Diagnostics.HasError() {
-	// 	return
-	// }
+	var state CMUserTFSDK
+	id := uuid.New().String()
 
-	// users, err := r.client.GetAll(ctx, state.ID.ValueString(), URL_USER_MANAGEMENT)
-	// tflog.Trace(ctx, users)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError(
-	// 		"Error Reading CipherTrust User",
-	// 		"Could not read CipherTrust user ID "+state.UserID.ValueString()+": "+err.Error(),
-	// 	)
-	// 	return
-	// }
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	// userJSON := make(map[string]interface{})
-	// errJsonUnmarshall := json.Unmarshal([]byte(users), &userJSON)
-	// if errJsonUnmarshall != nil {
-	// 	log.Fatal(errJsonUnmarshall)
-	// }
+	response, err := r.client.ReadDataByParam(ctx, id, state.UserID.ValueString(), common.URL_USER_MANAGEMENT)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading User on CipherTrust Manager: ",
+			"Could not read User Data : ,"+state.UserID.ValueString()+"unexpected error: "+err.Error(),
+		)
+		return
+	}
 
-	// state.Email = userJSON["email"].(basetypes.StringValue)
-	// state.Name = userJSON["name"].(basetypes.StringValue)
-	// state.Nickname = userJSON["nickname"].(basetypes.StringValue)
-	// state.UserName = userJSON["username"].(basetypes.StringValue)
-	// state.UserID = userJSON["user_id"].(basetypes.StringValue)
+	state.UserID = types.StringValue(gjson.Get(response, "user_id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.UserName = types.StringValue(gjson.Get(response, "username").String())
+	state.Nickname = types.StringValue(gjson.Get(response, "nickname").String())
+	state.Email = types.StringValue(gjson.Get(response, "email").String())
+	state.CreatedAt = types.StringValue(gjson.Get(response, "created_at").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updated_at").String())
+	state.LastLogin = types.StringValue(gjson.Get(response, "last_login").String())
+	state.LoginsCount = types.Int64Value(gjson.Get(response, "logins_count").Int())
+	state.CertificateDN = types.StringValue(gjson.Get(response, "certificate_subject_dn").String())
+	state.FailedLoginsCount = types.Int64Value(gjson.Get(response, "failed_logins_count").Int())
 
-	// diags = resp.State.Set(ctx, &state)
-	// resp.Diagnostics.Append(diags...)
-	// if resp.Diagnostics.HasError() {
-	// 	return
-	// }
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Read]["+id+"]")
+	// Set refreshed state
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMUserTFSDK
+	var loginFlags UserLoginFlagsJSON
+	var payload CMUserJSON
+
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -228,39 +255,52 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	plan.ID = state.ID
 	plan.UserID = state.UserID
 
-	//var loginFlags UserLoginFlagsJSON
-	//var payload CMUserUpdateJSON
-	//loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
-	//
-	//payload.Email = common.TrimString(plan.Email.String())
-	//payload.Name = common.TrimString(plan.Name.String())
-	//payload.Nickname = common.TrimString(plan.Nickname.String())
-	//payload.UserName = common.TrimString(plan.UserName.String())
-	//payload.Password = common.TrimString(plan.Password.String())
-	//payload.IsDomainUser = plan.IsDomainUser.ValueBool()
-	//payload.LoginFlags = loginFlags
-	//payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
-	//
-	//payloadJSON, err := json.Marshal(payload)
-	//if err != nil {
-	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-	//	resp.Diagnostics.AddError(
-	//		"Invalid data input: User Update",
-	//		err.Error(),
-	//	)
-	//	return
-	//}
-	//
-	//response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
-	//if err != nil {
-	//	tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
-	//	resp.Diagnostics.AddError(
-	//		"Error creating user on CipherTrust Manager: ",
-	//		"Could not create user, unexpected error: "+err.Error(),
-	//	)
-	//	return
-	//}
-	//plan.UserID = types.StringValue(response)
+	loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
+
+	payload.Email = common.TrimString(plan.Email.String())
+	payload.Name = common.TrimString(plan.Name.String())
+	payload.Nickname = common.TrimString(plan.Nickname.String())
+	payload.UserName = common.TrimString(plan.UserName.String())
+	payload.Password = common.TrimString(plan.Password.String())
+	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
+	payload.LoginFlags = loginFlags
+	payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: User Update",
+			err.Error(),
+		)
+		return
+	}
+
+	response, err := r.client.UpdateDataV2(
+		ctx,
+		plan.UserID.ValueString(),
+		common.URL_USER_MANAGEMENT,
+		payloadJSON)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Error updating user on CipherTrust Manager: ",
+			"Could not update user, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	plan.UserID = types.StringValue(response)
+	plan.UserID = types.StringValue(gjson.Get(response, "user_id").String())
+	plan.Name = types.StringValue(gjson.Get(response, "name").String())
+	plan.UserName = types.StringValue(gjson.Get(response, "username").String())
+	plan.Nickname = types.StringValue(gjson.Get(response, "nickname").String())
+	plan.Email = types.StringValue(gjson.Get(response, "email").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "created_at").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updated_at").String())
+	plan.LastLogin = types.StringValue(gjson.Get(response, "last_login").String())
+	plan.LoginsCount = types.Int64Value(gjson.Get(response, "logins_count").Int())
+	plan.CertificateDN = types.StringValue(gjson.Get(response, "certificate_subject_dn").String())
+	plan.FailedLoginsCount = types.Int64Value(gjson.Get(response, "failed_logins_count").Int())
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
