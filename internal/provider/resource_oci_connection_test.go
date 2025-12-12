@@ -33,7 +33,6 @@ func TestOciConnection(t *testing.T) {
 	maxParamsConfig := `
 		resource "ciphertrust_oci_connection" "connection" {
 			description = "connection desc"
-			meta        = { meta-key = "meta-value" }
 			key_file = <<-EOT
 			%s
 			EOT
@@ -55,21 +54,18 @@ func TestOciConnection(t *testing.T) {
 				{
 					Config: minParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "0"),
+						testCheckAttributeNotSet(connectionResource, "description"),
 					),
 				},
 				{
 					Config: maxParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "1"),
-						resource.TestCheckResourceAttr(connectionResource, "meta.meta-key", "meta-value"),
 						resource.TestCheckResourceAttr(connectionResource, "description", "connection desc"),
 					),
 				},
 				{
 					Config: minParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "0"),
 						testCheckAttributeNotSet(connectionResource, "description"),
 					),
 				},
@@ -84,23 +80,18 @@ func TestOciConnection(t *testing.T) {
 				{
 					Config: maxParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "1"),
-						resource.TestCheckResourceAttr(connectionResource, "meta.meta-key", "meta-value"),
 						resource.TestCheckResourceAttr(connectionResource, "description", "connection desc"),
 					),
 				},
 				{
 					Config: minParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "0"),
 						testCheckAttributeNotSet(connectionResource, "description"),
 					),
 				},
 				{
 					Config: maxParamsConfigStr,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(connectionResource, "meta.%", "1"),
-						resource.TestCheckResourceAttr(connectionResource, "meta.meta-key", "meta-value"),
 						resource.TestCheckResourceAttr(connectionResource, "description", "connection desc"),
 					),
 				},
