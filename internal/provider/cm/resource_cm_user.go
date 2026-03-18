@@ -50,7 +50,6 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"nickname": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
-				Default:  stringdefault.StaticString(""),
 			},
 			"email": schema.StringAttribute{
 				Optional: true,
@@ -179,6 +178,15 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 	plan.UserID = types.StringValue(response)
 	plan.ID = types.StringValue(response)
+
+	userResponse, err := r.client.GetById(ctx, response, response, common.URL_USER_MANAGEMENT)
+	if err == nil {
+		var user CMUserJSON
+		if json.Unmarshal([]byte(userResponse), &user) == nil {
+			plan.Nickname = types.StringValue(user.Nickname)
+			plan.Name = types.StringValue(user.Name)
+		}
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -333,6 +341,15 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 	plan.UserID = types.StringValue(response)
+
+	userResponse, err := r.client.GetById(ctx, plan.ID.ValueString(), plan.ID.ValueString(), common.URL_USER_MANAGEMENT)
+	if err == nil {
+		var user CMUserJSON
+		if json.Unmarshal([]byte(userResponse), &user) == nil {
+			plan.Nickname = types.StringValue(user.Nickname)
+			plan.Name = types.StringValue(user.Name)
+		}
+	}
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

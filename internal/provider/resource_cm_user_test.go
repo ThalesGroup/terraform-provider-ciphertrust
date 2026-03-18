@@ -1,24 +1,28 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCMUser(t *testing.T) {
+	username := fmt.Sprintf("testuser%d", time.Now().Unix())
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUser" {
-  name="frank"
-  email="frank@local"
-  username="frank"
-  password="ChangeIt01!"
+  name     = "%s"
+  email    = "%s@local"
+  username = "%s"
+  password = "CHange01!@"
 }
-`,
+`, username, username, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_user.testUser", "id"),
 				),
@@ -32,13 +36,14 @@ resource "ciphertrust_user" "testUser" {
 			},*/
 			// Update and Read testing
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUser" {
-  name="john"
-  email="john@local"
-  password="ChangeIt01!"
+  name     = "john"
+  email    = "john@local"
+  username = "%s"
+  password = "UPdate02!@"
 }
-`,
+`, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_user.testUser", "id"),
 				),

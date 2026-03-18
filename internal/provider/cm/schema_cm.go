@@ -436,7 +436,7 @@ type UserLoginFlagsJSON struct {
 
 type CMUserJSON struct {
 	UserID                 string             `json:"user_id"`
-	Name                   string             `json:"full_name"`
+	Name                   string             `json:"name"`
 	UserName               string             `json:"username"`
 	Nickname               string             `json:"nickname"`
 	Email                  string             `json:"email"`
