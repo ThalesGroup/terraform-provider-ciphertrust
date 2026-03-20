@@ -194,6 +194,7 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 	plan.Name = types.StringValue(response)
+	plan.ID = plan.Name
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
