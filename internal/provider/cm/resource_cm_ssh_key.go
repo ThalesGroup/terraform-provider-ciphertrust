@@ -10,6 +10,8 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -35,6 +37,12 @@ func (r *resourceCMSSHKey) Metadata(_ context.Context, req resource.MetadataRequ
 func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"key": schema.StringAttribute{
 				Required: true,
 			},
@@ -84,6 +92,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 	tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create Output]["+response+"]")
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Create]["+id+"]")
+	plan.ID = types.StringValue(response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -101,6 +110,18 @@ func (r *resourceCMSSHKey) Update(ctx context.Context, req resource.UpdateReques
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMSSHKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state CMSSHKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Delete]["+state.ID.ValueString()+"]")
+	resp.Diagnostics.AddWarning(
+		"Resource not deleted from CipherTrust Manager",
+		"The CipherTrust API does not support deleting SSH keys. The key will be removed from the Terraform state, but it will remain on the server.",
+	)
 }
 
 func (d *resourceCMSSHKey) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

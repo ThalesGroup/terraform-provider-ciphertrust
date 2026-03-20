@@ -448,6 +448,7 @@ type CMUserJSON struct {
 }
 
 type CMSSHKeyTFSDK struct {
+	ID  types.String `tfsdk:"id"`
 	Key types.String `tfsdk:"key"`
 }
 
