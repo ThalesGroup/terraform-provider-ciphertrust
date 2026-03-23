@@ -51,7 +51,7 @@ resource "ciphertrust_password_policy" "PasswordPolicy" {
     inclusive_min_lower_case = 3
     inclusive_min_digits = 3
     inclusive_min_other = 3
-    inclusive_min_total_length = 8
+    inclusive_min_total_length = 12
     inclusive_max_total_length = 60
     password_history_threshold = 5
     failed_logins_lockout_thresholds = [0, 0, 1, 1]
@@ -65,7 +65,7 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
     inclusive_min_lower_case = 3
     inclusive_min_digits = 3
     inclusive_min_other = 3
-    inclusive_min_total_length = 8
+    inclusive_min_total_length = 12
     inclusive_max_total_length = 60
     password_history_threshold = 5
     failed_logins_lockout_thresholds = [0, 0, 1, 1]

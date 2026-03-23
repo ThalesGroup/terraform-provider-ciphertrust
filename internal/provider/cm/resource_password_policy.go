@@ -38,8 +38,15 @@ func (r *resourceCMPasswordPolicy) Metadata(_ context.Context, req resource.Meta
 func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"policy_name": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -218,6 +225,10 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 	tflog.Debug(ctx, "[resource_password_policy.go -> Create Output]["+response+"]")
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Create]["+id+"]")
+
+	plan.ID = types.StringValue(passwordPolicyName)
+	plan.Name = types.StringValue(passwordPolicyName)
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -275,7 +286,95 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Update not supported", "Unsupported Operation")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_password_policy.go -> Update]["+id+"]")
+
+	// Retrieve values from plan
+	var plan CMPasswordPolicyTFSDK
+	var payload CMPasswordPolicyJSON
+
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var passwordPolicyName string
+	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+		passwordPolicyName = plan.Name.ValueString()
+	} else {
+		passwordPolicyName = "global"
+	}
+
+	var thresholds []int64
+	for _, int := range plan.FailedLoginsLockoutThresholds {
+		thresholds = append(thresholds, int.ValueInt64())
+	}
+	payload.FailedLoginsLockoutThresholds = thresholds
+
+	if plan.InclusiveMaxTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMaxTotalLength = plan.InclusiveMaxTotalLength.ValueInt64()
+	}
+	if plan.InclusiveMinDigits.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMinDigits = plan.InclusiveMinDigits.ValueInt64()
+	}
+	if plan.InclusiveMinLowerCase.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMinLowerCase = plan.InclusiveMinLowerCase.ValueInt64()
+	}
+	if plan.InclusiveMinOther.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMinOther = plan.InclusiveMinOther.ValueInt64()
+	}
+	if plan.InclusiveMinTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMinTotalLength = plan.InclusiveMinTotalLength.ValueInt64()
+	}
+	if plan.InclusiveMinUpperCase.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.InclusiveMinUpperCase = plan.InclusiveMinUpperCase.ValueInt64()
+	}
+	if plan.PasswordChangeMinDays.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.PasswordChangeMinDays = plan.PasswordChangeMinDays.ValueInt64()
+	}
+	if plan.PasswordHistoryThreshold.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.PasswordHistoryThreshold = plan.PasswordHistoryThreshold.ValueInt64()
+	}
+	if plan.PasswordLifetime.ValueInt64() != types.Int64Null().ValueInt64() {
+		payload.PasswordLifetime = plan.PasswordLifetime.ValueInt64()
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_password_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: Password Policy Update",
+			err.Error(),
+		)
+		return
+	}
+
+	responseUPD, errUPD := r.client.UpdateDataV2(
+		ctx,
+		passwordPolicyName,
+		common.URL_CM_PASSWORD_POLICY,
+		payloadJSON)
+	tflog.Debug(ctx, "[resource_password_policy.go -> Update][Payload and URL]"+
+		common.URL_CM_PASSWORD_POLICY+"/"+passwordPolicyName+
+		string(payloadJSON))
+	if errUPD != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+errUPD.Error()+" [resource_password_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error patching User's password policy on CipherTrust Manager: ",
+			"Could not patch User's password policy, unexpected error: "+errUPD.Error(),
+		)
+		return
+	}
+
+	tflog.Debug(ctx, "[resource_password_policy.go -> Update Output]["+responseUPD+"]")
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -289,15 +388,17 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 	}
 
 	// Delete existing order
-	url := fmt.Sprintf("%s/%s", r.client.CipherTrustURL, common.URL_CM_PASSWORD_POLICY+"/"+state.Name.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Delete]["+id+"]["+output+"]")
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting User's password policy",
-			"Could not delete User's password policy, unexpected error: "+err.Error(),
-		)
-		return
+	if state.Name.ValueString() != "global" {
+		url := fmt.Sprintf("%s/%s", r.client.CipherTrustURL, common.URL_CM_PASSWORD_POLICY+"/"+state.Name.ValueString())
+		output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
+		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Delete]["+id+"]["+output+"]")
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error Deleting User's password policy",
+				"Could not delete User's password policy, unexpected error: "+err.Error(),
+			)
+			return
+		}
 	}
 }
 

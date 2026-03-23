@@ -1022,6 +1022,7 @@ type CMProxyJSON struct {
 }
 
 type CMPasswordPolicyTFSDK struct {
+	ID                            types.String  `tfsdk:"id"`
 	Name                          types.String  `tfsdk:"policy_name"`
 	FailedLoginsLockoutThresholds []types.Int64 `tfsdk:"failed_logins_lockout_thresholds"`
 	InclusiveMaxTotalLength       types.Int64   `tfsdk:"inclusive_max_total_length"`
