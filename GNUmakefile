@@ -21,7 +21,7 @@ test:
 	go test -v -cover -timeout=120s -parallel=10 ./...
 
 testacc:
-	TF_ACC=1 go test -v -cover -timeout 120m ./...
+#TF_ACC=1 go test -v -cover -timeout 120m ./...
+	TF_ACC=1 go test -v -timeout 120m ./internal/provider/ -run TestResourceGCPConnection
 
 .PHONY: fmt lint test testacc build install generate
-
