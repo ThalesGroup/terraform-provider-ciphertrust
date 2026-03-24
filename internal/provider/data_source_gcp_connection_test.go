@@ -18,7 +18,7 @@ func TestGCPConnectionDataSource(t *testing.T) {
 		resource "ciphertrust_gcp_connection" "gcp_connection" {
 			name = "test-gcp-connection"
 			products = [
-				"%s"
+				"cckm"
 			]
 			key_file    = <<-EOT
 				%s
