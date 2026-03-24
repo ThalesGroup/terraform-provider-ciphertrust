@@ -15,25 +15,26 @@ func TestGCPConnectionDataSource(t *testing.T) {
 	}
 
 	gcpConnectionConfig := `
-		// Resource configuration for the GCP connection
 		resource "ciphertrust_gcp_connection" "gcp_connection" {
-  name        = "test-gcp-connection"
-  products = [
-    "cckm"
-  ]
-  key_file    = "%s"
-  cloud_name  = "gcp"
-  description = "connection description"
-  labels = {
-    "environment" = "test"
-  }
-  meta = {
-    "custom_meta_key1" = "custom_value1"
-    "customer_meta_key2" = "custom_value2"
-  }
-}
+			name = "test-gcp-connection"
+			products = [
+				"%s"
+			]
+			key_file    = <<-EOT
+				%s
+			EOT
+			cloud_name  = "gcp"
+			description = "connection description"
+			labels = {
+				"environment" = "test"
+			}
+			meta = {
+				"custom_meta_key1"   = "custom_value1"
+				"customer_meta_key2" = "custom_value2"
+			}
+		}
 		
-		// Data source to retrieve the GCP connection
+		# Data source to retrieve the GCP connection
 		data "ciphertrust_gcp_connection_list" "gcp_connection_details" {
 		depends_on = [ciphertrust_gcp_connection.gcp_connection]
 		   filters = {
