@@ -134,7 +134,12 @@ provider "ciphertrust" {}
 - `address` (String) HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config
 - `auth_domain` (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CM_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `aws_operation_timeout` (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
-- `bootstrap` (String) Is it a bootstrap operation. bootstrap can be set in the provider block, via the no environment variable or in ~/.ciphertrust/config
+- `bootstrap` (String) Enables bootstrap mode for CipherTrust Manager setup operations that don't require user authentication for scenarios like following:
+
+  1. **SSH Key Registration** (`ciphertrust_cm_ssh_key`) - Adding SSH public keys to the CipherTrust Manager before user authentication is configured
+  2. **Password Changes** (`ciphertrust_cm_user_password_change`) - Changing a user's password when you only have the current credentials (not a session token)
+
+  The `bootstrap` value can be set in the provider block, via `BOOTSTRAP` environment variable or in ~/.ciphertrust/config file. Default value for `bootstrap` variable is "no". 
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `no_ssl_verify` (Boolean) Set as false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
 - `oci_operation_timeout` (Number) Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. oci_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
