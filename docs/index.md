@@ -10,13 +10,11 @@ description: |-
 
 Use the navigation to the left to read about the available resources.
 
-[Sample scripts](https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/main/sample-scripts) allow you to easily create CipherTrust Manager resources for your cloud and includes some practical examples of using the CipherTrust provider.
+Refer to the [change log](https://github.com/ThalesGroup/terraform-provider-ciphertrust/blob/main/changelog.md) for changes in this version.
 
 ## Thales Devices
 The following devices can be used to create keys for the above public clouds.
 - CipherTrust Manager
-- HSM Luna
-- DSM
 
 ## Provider Initialization
 
