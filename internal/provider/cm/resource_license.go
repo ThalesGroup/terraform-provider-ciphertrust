@@ -258,8 +258,6 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		plan.TrialSecondsRemaining = types.StringNull()
 	}
 
-	// Ensure bind_type is set (it's Optional+Computed, so must have a value after apply)
-	// If the API returns it, use that; otherwise preserve the plan value; if neither, set to null
 	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
 		plan.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
 	} else if plan.BindType.IsUnknown() {
