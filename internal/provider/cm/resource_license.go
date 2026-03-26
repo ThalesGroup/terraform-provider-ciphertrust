@@ -304,8 +304,9 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
 		state.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
+	} else {
+		state.BindType = types.StringNull()
 	}
-	// If bind_type is not in the response, preserve the existing state value (don't set to null)
 
 	if gjson.Get(response, "hash").Exists() && gjson.Get(response, "hash").String() != "" {
 		state.Hash = types.StringValue(gjson.Get(response, "hash").String())
