@@ -41,19 +41,22 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				Computed:    true,
+				Description: "The unique identifier for the NTP server (same as host)",
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
 				Description: "Host (hostname/ip) of NTP server to add",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"key": schema.StringAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Symmetric key value to be used for authenticated NTP servers",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"key_type": schema.StringAttribute{
 				Optional: true,
@@ -66,6 +69,9 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"SHA-512"}...),
 				},
 				Description: "Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 		},
 	}
@@ -113,9 +119,16 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
-	plan.Key = types.StringValue(gjson.Get(response, "key").String())
+	// API does not return id, use host as the identifier
+	plan.ID = types.StringValue(plan.Host.ValueString())
+	// key and key_type are only returned by API if user provided them
+	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
+		plan.Key = types.StringValue(keyVal.String())
+	}
+	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
+		plan.KeyType = types.StringValue(keyTypeVal.String())
+	}
 
 	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
 
@@ -148,9 +161,17 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
-	state.Key = types.StringValue(gjson.Get(response, "key").String())
+	// API does not return id, use host as the identifier
+	state.ID = types.StringValue(state.Host.ValueString())
+	// key and key_type are only returned by API if user provided them
+	// Only update state if API returns non-empty values, otherwise preserve existing state
+	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
+		state.Key = types.StringValue(keyVal.String())
+	}
+	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
+		state.KeyType = types.StringValue(keyTypeVal.String())
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -162,8 +183,9 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
+// Note: All attributes have RequiresReplace, so this method will never be called.
+// Terraform will automatically delete and recreate the resource for any changes.
 func (r *resourceCMNTP) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating NTP configuration is not supported", "Unsupported Operation")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
