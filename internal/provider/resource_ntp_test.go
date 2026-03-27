@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -26,9 +27,7 @@ resource "ciphertrust_ntp" "ntp_server_1" {
   host = "time2.google.com"
 }
 `,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_ntp.ntp_server_1", "host"),
-				),
+				ExpectError: regexp.MustCompile(`Updating NTP configuration is not supported`),
 			},
 			// Delete testing automatically occurs in TestCase
 		},
