@@ -52,6 +52,7 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"bind_type": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"instance",
@@ -87,6 +88,24 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
+// getLicenseIDs retrieves all license IDs from the list endpoint
+func (r *resourceCMLicense) getLicenseIDs(ctx context.Context, id string) (map[string]bool, error) {
+	response, err := r.client.GetAll(ctx, id, common.URL_LICENSE)
+	if err != nil {
+		return nil, err
+	}
+
+	licenseIDs := make(map[string]bool)
+	licenses := gjson.Parse(response).Array()
+	for _, license := range licenses {
+		licenseID := license.Get("id").String()
+		if licenseID != "" {
+			licenseIDs[licenseID] = true
+		}
+	}
+	return licenseIDs, nil
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -101,6 +120,18 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Get list of existing license IDs before creating new license
+	existingLicenseIDs, err := r.getLicenseIDs(ctx, id)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error listing licenses before create: ",
+			"Could not list licenses, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	tflog.Debug(ctx, fmt.Sprintf("[resource_license.go -> Create] Found %d existing licenses before create", len(existingLicenseIDs)))
 
 	payload.License = plan.License.ValueString()
 	if plan.BindType.ValueString() != "" && plan.BindType.ValueString() != types.StringNull().ValueString() {
@@ -117,7 +148,7 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	response, err := r.client.PostDataV2(ctx, id, common.URL_DOMAIN, payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_LICENSE, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -126,7 +157,113 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		)
 		return
 	}
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	// Check if the response contains an ID
+	responseID := gjson.Get(response, "id").String()
+	if responseID != "" {
+		plan.ID = types.StringValue(responseID)
+	} else {
+		// ID not in response, determine it by comparing license lists
+		tflog.Debug(ctx, "[resource_license.go -> Create] ID not in response, determining by comparing license lists")
+
+		newLicenseIDs, err := r.getLicenseIDs(ctx, id)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error listing licenses after create: ",
+				"Could not list licenses, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, fmt.Sprintf("[resource_license.go -> Create] Found %d licenses after create", len(newLicenseIDs)))
+
+		// Find the new license ID by comparing before and after lists
+		var newLicenseID string
+		for licenseID := range newLicenseIDs {
+			if !existingLicenseIDs[licenseID] {
+				newLicenseID = licenseID
+				break
+			}
+		}
+
+		if newLicenseID == "" {
+			resp.Diagnostics.AddError(
+				"Error determining license ID: ",
+				"Could not determine the ID of the newly created license",
+			)
+			return
+		}
+
+		tflog.Debug(ctx, "[resource_license.go -> Create] Determined new license ID: "+newLicenseID)
+		plan.ID = types.StringValue(newLicenseID)
+
+		// Fetch the license details to populate computed attributes
+		response, err = r.client.ReadDataByParam(ctx, id, newLicenseID, common.URL_LICENSE)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error reading license details after create: ",
+				"Could not read license details, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, "[resource_license.go -> Create] Fetched license details for ID: "+newLicenseID)
+	}
+
+	if gjson.Get(response, "expiration").Exists() {
+		plan.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
+	} else {
+		plan.Expiration = types.StringNull()
+	}
+
+	if gjson.Get(response, "hash").Exists() {
+		plan.Hash = types.StringValue(gjson.Get(response, "hash").String())
+	} else {
+		plan.Hash = types.StringNull()
+	}
+
+	if gjson.Get(response, "type").Exists() {
+		plan.Type = types.StringValue(gjson.Get(response, "type").String())
+	} else {
+		plan.Type = types.StringNull()
+	}
+
+	if gjson.Get(response, "state").Exists() {
+		plan.State = types.StringValue(gjson.Get(response, "state").String())
+	} else {
+		plan.State = types.StringNull()
+	}
+
+	if gjson.Get(response, "start").Exists() {
+		plan.Start = types.StringValue(gjson.Get(response, "start").String())
+	} else {
+		plan.Start = types.StringNull()
+	}
+
+	if gjson.Get(response, "version").Exists() {
+		plan.Version = types.StringValue(gjson.Get(response, "version").String())
+	} else {
+		plan.Version = types.StringNull()
+	}
+
+	if gjson.Get(response, "license_count").Exists() {
+		plan.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
+	} else {
+		plan.LicenseCount = types.Int64Null()
+	}
+
+	if gjson.Get(response, "trial_seconds_remaining").Exists() {
+		plan.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
+	} else {
+		plan.TrialSecondsRemaining = types.StringNull()
+	}
+
+	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
+		plan.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
+	} else if plan.BindType.IsUnknown() {
+		plan.BindType = types.StringNull()
+	}
+	// If plan.BindType already has a value from the user's config, keep it
 
 	tflog.Debug(ctx, "[resource_license.go -> Create Output]["+response+"]")
 
@@ -149,7 +286,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
+	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -160,16 +297,64 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.License = types.StringValue(gjson.Get(response, "name").String())
-	state.BindType = types.StringValue(gjson.Get(response, "hsm_connection_id").String())
-	state.Hash = types.StringValue(gjson.Get(response, "hash").String())
-	state.Type = types.StringValue(gjson.Get(response, "type").String())
-	state.State = types.StringValue(gjson.Get(response, "state").String())
-	state.Start = types.StringValue(gjson.Get(response, "start").String())
-	state.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
-	state.Version = types.StringValue(gjson.Get(response, "version").String())
-	state.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
-	state.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
+
+	if gjson.Get(response, "license").Exists() && gjson.Get(response, "license").String() != "" {
+		state.License = types.StringValue(gjson.Get(response, "license").String())
+	}
+
+	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
+		state.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
+	} else {
+		state.BindType = types.StringNull()
+	}
+
+	if gjson.Get(response, "hash").Exists() && gjson.Get(response, "hash").String() != "" {
+		state.Hash = types.StringValue(gjson.Get(response, "hash").String())
+	} else {
+		state.Hash = types.StringNull()
+	}
+
+	if gjson.Get(response, "type").Exists() && gjson.Get(response, "type").String() != "" {
+		state.Type = types.StringValue(gjson.Get(response, "type").String())
+	} else {
+		state.Type = types.StringNull()
+	}
+
+	if gjson.Get(response, "state").Exists() && gjson.Get(response, "state").String() != "" {
+		state.State = types.StringValue(gjson.Get(response, "state").String())
+	} else {
+		state.State = types.StringNull()
+	}
+
+	if gjson.Get(response, "start").Exists() && gjson.Get(response, "start").String() != "" {
+		state.Start = types.StringValue(gjson.Get(response, "start").String())
+	} else {
+		state.Start = types.StringNull()
+	}
+
+	if gjson.Get(response, "expiration").Exists() && gjson.Get(response, "expiration").String() != "" {
+		state.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
+	} else {
+		state.Expiration = types.StringNull()
+	}
+
+	if gjson.Get(response, "version").Exists() && gjson.Get(response, "version").String() != "" {
+		state.Version = types.StringValue(gjson.Get(response, "version").String())
+	} else {
+		state.Version = types.StringNull()
+	}
+
+	if gjson.Get(response, "license_count").Exists() {
+		state.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
+	} else {
+		state.LicenseCount = types.Int64Null()
+	}
+
+	if gjson.Get(response, "trial_seconds_remaining").Exists() && gjson.Get(response, "trial_seconds_remaining").String() != "" {
+		state.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
+	} else {
+		state.TrialSecondsRemaining = types.StringNull()
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -182,6 +367,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMLicense) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	resp.Diagnostics.AddError("Updating License is not supported", "Please delete and recreate the license to apply changes.")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -194,7 +380,7 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 	}
 
 	// Delete existing license
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.ID.ValueString())
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_LICENSE, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
