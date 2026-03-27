@@ -20,7 +20,6 @@ resource "ciphertrust_scheduler" "scheduler" {
   run_on      = "any"
   run_at      = "*/15 * * * *"
   database_backup_params = {
-    backup_key = "d370535b-a035-4251-9780-e608f713be77"
     connection = "f9a81705-2b73-4a9c-9ab3-d78502ff11f1"
     description = "sample description"
     do_scp = false
@@ -35,7 +34,6 @@ resource "ciphertrust_scheduler" "scheduler" {
 					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "operation", "database_backup"),
 					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "run_at", "*/15 * * * *"),
 					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "run_on", "any"),
-					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "database_backup_params.backup_key", "d370535b-a035-4251-9780-e608f713be77"),
 					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "database_backup_params.connection", "f9a81705-2b73-4a9c-9ab3-d78502ff11f1"),
 				),
 			},
@@ -50,7 +48,6 @@ resource "ciphertrust_scheduler" "scheduler" {
   run_on      = "any"
   run_at      = "*/30 * * * *"
   database_backup_params = {
-    backup_key = "d370535b-a035-4251-9780-e608f713be77"
     connection = "f9a81705-2b73-4a9c-9ab3-d78502ff11f1"
     description = "updated backup description"
     do_scp = true
