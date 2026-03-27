@@ -27,6 +27,7 @@ const (
 	URL_CLUSTER_JOIN          = "api/v1/cluster/join"
 	URL_CLUSTER_INFO          = "api/v1/cluster"
 	URL_TRIAL_LICENSE         = "api/v1/licensing/trials"
+	URL_LICENSE               = "api/v1/licensing/licenses"
 	URL_SCP_CONNECTION        = "api/v1/connectionmgmt/services/scp/connections"
 	URL_PROMETHEUS_ENABLE     = "api//v1/system/metrics/prometheus/enable"
 	URL_PROMETHEUS_DISABLE    = "api//v1/system/metrics/prometheus/disable"
