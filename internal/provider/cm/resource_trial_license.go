@@ -132,6 +132,15 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Create]["+id+"]")
+
+	// Re-fetch the license data to get the updated values after activation
+	if err := r.readTrialLicenseFromAPI(ctx, plan.ID.ValueString(), &plan); err != nil {
+		resp.Diagnostics.AddError(
+			"Error reading trial license after activation on CipherTrust Manager: ",
+			"Could not read trial license id : "+plan.ID.ValueString()+" unexpected error: "+err.Error(),
+		)
+		return
+	}
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -150,7 +159,7 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_TRIAL_LICENSE)
+	err := r.readTrialLicenseFromAPI(ctx, state.ID.ValueString(), &state)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -159,13 +168,6 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 		)
 		return
 	}
-
-	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	state.Status = types.StringValue(gjson.Get(response, "status").String())
-	state.Description = types.StringValue(gjson.Get(response, "description").String())
-	state.ActivatedAt = types.StringValue(gjson.Get(response, "activated_at").String())
-	state.DeactivatedAt = types.StringValue(gjson.Get(response, "deactivated_at").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -218,4 +220,24 @@ func (d *resourceCMTrialLicense) Configure(_ context.Context, req resource.Confi
 	}
 
 	d.client = client
+}
+
+// readTrialLicenseFromAPI fetches the trial license data from the API and populates the state struct.
+// This helper function is used by both Create and Read to avoid code duplication.
+func (r *resourceCMTrialLicense) readTrialLicenseFromAPI(ctx context.Context, licenseID string, state *CMTrialLicenseTFSDK) error {
+	id := uuid.New().String()
+	response, err := r.client.ReadDataByParam(ctx, id, licenseID, common.URL_TRIAL_LICENSE)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> readTrialLicenseFromAPI]["+id+"]")
+		return err
+	}
+
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Status = types.StringValue(gjson.Get(response, "status").String())
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.ActivatedAt = types.StringValue(gjson.Get(response, "activated_at").String())
+	state.DeactivatedAt = types.StringValue(gjson.Get(response, "deactivated_at").String())
+
+	return nil
 }

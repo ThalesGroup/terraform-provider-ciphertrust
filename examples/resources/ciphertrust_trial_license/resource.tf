@@ -19,13 +19,13 @@ terraform {
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
 	# The address of the CipherTrust appliance (replace with the actual address)
-  address = "https://10.171.96.187"
+  address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
   username = "admin"
 
   # Password for authenticating with the CipherTrust appliance
-  password = "KeySecure_1"
+  password = "ChangeMe101!"
 }
 
 # Add a resource of type CM trial license activation
