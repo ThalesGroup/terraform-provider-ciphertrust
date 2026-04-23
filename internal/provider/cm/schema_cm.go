@@ -489,7 +489,7 @@ type CMDomainJSON struct {
 	ID                  string                 `json:"id"`
 	Name                string                 `json:"name"`
 	Admins              []string               `json:"admins"`
-	AllowUserManagement bool                   `json:"allow_user_management"`
+	AllowUserManagement *bool                  `json:"allow_user_management,omitempty"`
 	HSMConnectionId     string                 `json:"hsm_connection_id"`
 	HSMKEKLabel         string                 `json:"hsm_kek_label"`
 	Meta                map[string]interface{} `json:"meta"`

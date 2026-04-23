@@ -11,6 +11,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -55,7 +56,11 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "To allow user creation and management in the domain, set it to true. The default value is false.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"hsm_connection_id": schema.StringAttribute{
 				Optional:    true,
@@ -134,8 +139,9 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	}
 	payload.Admins = admins
 
-	if plan.AllowUserManagement.ValueBool() != types.BoolNull().ValueBool() {
-		payload.AllowUserManagement = plan.AllowUserManagement.ValueBool()
+	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
+		val := plan.AllowUserManagement.ValueBool()
+		payload.AllowUserManagement = &val
 	}
 	if plan.HSMConnectionId.ValueString() != "" && plan.HSMConnectionId.ValueString() != types.StringNull().ValueString() {
 		payload.HSMConnectionId = plan.HSMConnectionId.ValueString()
@@ -180,6 +186,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
 	hsmConnectionIdResp := gjson.Get(response, "hsm_connection_id").String()
@@ -350,11 +357,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	// Check allow_user_management
-	if plan.AllowUserManagement.ValueBool() != state.AllowUserManagement.ValueBool() {
-		hasChanges = true
-	}
-
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
 		tflog.Debug(ctx, "[resource_cm_domain.go -> Update] No changes detected, preserving state")
@@ -370,7 +372,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if plan.HSMConnectionId.ValueString() != "" && plan.HSMConnectionId.ValueString() != types.StringNull().ValueString() {
 		payload.HSMConnectionId = plan.HSMConnectionId.ValueString()
 	}
-
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metadataPayload[k] = v.(types.String).ValueString()
@@ -416,6 +417,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	plan.DevAccount = types.StringValue(gjson.Get(readResponse, "devAccount").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(readResponse, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(readResponse, "updatedAt").String())
+	plan.AllowUserManagement = types.BoolValue(gjson.Get(readResponse, "allow_user_management").Bool())
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
 	hsmConnectionIdUpdate := gjson.Get(readResponse, "hsm_connection_id").String()
