@@ -174,7 +174,11 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	// Update state with refreshed values from API
 	state.Name = types.StringValue(group.Name)
 	state.ID = types.StringValue(group.Name)
-	state.Description = types.StringValue(group.Description)
+	// Update description if the API returned a non-empty value OR the user
+	// previously set it in config
+	if group.Description != "" || !state.Description.IsNull() {
+		state.Description = types.StringValue(group.Description)
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, &state)
