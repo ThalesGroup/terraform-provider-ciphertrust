@@ -96,8 +96,19 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 	}
 }
 
-// Read refreshes the Terraform state with the latest data.
+// Read preserves state as-is. Password change is a one-shot action (PATCH /v1/auth/changepw)
+// with no corresponding GET endpoint, so there is no remote state to refresh.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMPwdChangeTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// No remote API to call — preserve existing state
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
