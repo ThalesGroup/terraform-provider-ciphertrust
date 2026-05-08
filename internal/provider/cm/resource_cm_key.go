@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"reflect"
 	"strings"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/google/uuid"
 
@@ -1076,6 +1077,128 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "Key not found on CipherTrust Manager, removing from state: "+state.ID.ValueString())
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Key",
+			"Could not read CipherTrust Key "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	// Refresh readable fields from API response.
+
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	// Optional string fields: only update if API returned non-empty or user previously set them
+	readStringField := func(jsonKey string, current types.String) types.String {
+		if current.IsNull() {
+			// Field was never set by user or previous state; don't populate
+			// from API since the schema doesn't mark it Computed.
+			return current
+		}
+		val := gjson.Get(response, jsonKey).String()
+		return types.StringValue(val)
+	}
+
+	state.Name = readStringField("name", state.Name)
+	state.Algorithm = readStringField("algorithm", state.Algorithm)
+	state.State = readStringField("state", state.State)
+	state.Description = readStringField("description", state.Description)
+	state.ActivationDate = readStringField("activationDate", state.ActivationDate)
+	state.DeactivationDate = readStringField("deactivationDate", state.DeactivationDate)
+	state.ArchiveDate = readStringField("archiveDate", state.ArchiveDate)
+	state.ProcessStartDate = readStringField("processStartDate", state.ProcessStartDate)
+	state.ProtectStopDate = readStringField("protectStopDate", state.ProtectStopDate)
+	state.CompromiseDate = readStringField("compromiseDate", state.CompromiseDate)
+	state.CompromiseOccurrenceDate = readStringField("compromiseOccurrenceDate", state.CompromiseOccurrenceDate)
+	state.DestroyDate = readStringField("destroyDate", state.DestroyDate)
+	// Note: using correct JSON keys here — the CMKeyJSON struct has these tags swapped
+	state.RevocationReason = readStringField("revocationReason", state.RevocationReason)
+	state.RevocationMessage = readStringField("revocationMessage", state.RevocationMessage)
+	state.DefaultIV = readStringField("defaultIV", state.DefaultIV)
+	state.Curveid = readStringField("curveid", state.Curveid)
+	state.ObjectType = readStringField("objectType", state.ObjectType)
+	state.RotationFrequencyDays = readStringField("rotationFrequencyDays", state.RotationFrequencyDays)
+	state.UUID = readStringField("uuid", state.UUID)
+	state.MUID = readStringField("muid", state.MUID)
+	state.KeyId = readStringField("keyId", state.KeyId)
+
+	// Optional int fields: only update if user previously set them in state
+	if !state.Size.IsNull() {
+		if sizeVal := gjson.Get(response, "size"); sizeVal.Exists() {
+			state.Size = types.Int64Value(sizeVal.Int())
+		}
+	}
+	if !state.UsageMask.IsNull() {
+		if usageMaskVal := gjson.Get(response, "usageMask"); usageMaskVal.Exists() {
+			state.UsageMask = types.Int64Value(usageMaskVal.Int())
+		}
+	}
+
+	// Boolean fields: only update if user previously set them in state
+	if !state.UnExportable.IsNull() {
+		state.UnExportable = types.BoolValue(gjson.Get(response, "unexportable").Bool())
+	}
+	if !state.UnDeletable.IsNull() {
+		state.UnDeletable = types.BoolValue(gjson.Get(response, "undeletable").Bool())
+	}
+
+	// Labels: only refresh user-configured label keys from API.
+	// Server may add its own labels (e.g. "ncryptify-reserved/composite-key")
+	// which should not be pulled into state to avoid spurious drift.
+	if !state.Labels.IsNull() {
+		labelsResult := gjson.Get(response, "labels")
+		if labelsResult.Exists() && labelsResult.Type == gjson.JSON {
+			// Only refresh keys that the user had in their state
+			userLabels := make(map[string]string)
+			for k := range state.Labels.Elements() {
+				apiVal := gjson.Get(response, "labels."+k)
+				if apiVal.Exists() {
+					userLabels[k] = apiVal.String()
+				}
+				// If a user-configured label was removed from API, don't include it
+				// so Terraform can detect the drift
+			}
+			if len(userLabels) > 0 {
+				labelsValue, diag := types.MapValueFrom(ctx, types.StringType, userLabels)
+				resp.Diagnostics.Append(diag...)
+				if !resp.Diagnostics.HasError() {
+					state.Labels = labelsValue
+				}
+			} else {
+				state.Labels = types.MapNull(types.StringType)
+			}
+		} else {
+			state.Labels = types.MapNull(types.StringType)
+		}
+	}
+
+	// Aliases: preserved from state (schema/struct type mismatch for index field).
+	// Write-only / create-only fields are preserved from existing state.
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
