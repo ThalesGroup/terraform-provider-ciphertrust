@@ -220,11 +220,12 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		state.NamePrefix = types.StringValue(regToken.NamePrefix)
 	}
 
-	// Optional int fields: only update if API returned non-zero or user previously set them
-	if regToken.CertDuration != 0 || !state.CertDuration.IsNull() {
+	// Optional int fields: only update if API returned a meaningful value or user previously set them.
+	// The API uses 0 and -1 as sentinel values meaning "not set" / "unlimited".
+	if regToken.CertDuration > 0 || !state.CertDuration.IsNull() {
 		state.CertDuration = types.Int64Value(regToken.CertDuration)
 	}
-	if regToken.MaxClients != 0 || !state.MaxClients.IsNull() {
+	if regToken.MaxClients > 0 || !state.MaxClients.IsNull() {
 		state.MaxClients = types.Int64Value(regToken.MaxClients)
 	}
 
