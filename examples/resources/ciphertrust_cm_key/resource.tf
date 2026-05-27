@@ -89,3 +89,20 @@ output "key_name" {
     # The value will be the name of the CM Key
     value = ciphertrust_cm_key.sample_key.name
 }
+
+# Add a resource of type CM Key using the post-quantum ML-DSA signature algorithm.
+# ML-DSA (Module-Lattice Digital Signature Algorithm) supported parameter sets are
+# typically 44, 65, and 87. Requires a CipherTrust Manager version that supports ml-dsa.
+resource "ciphertrust_cm_key" "mldsa_key" {
+  # Name of the key
+  name = "terraform-mldsa"
+
+  # Cryptographic algorithm - post-quantum signature algorithm
+  algorithm = "ml-dsa"
+
+  # ML-DSA parameter set (one of 44, 65, 87)
+  key_size = 65
+
+  # Sign (1) + Verify (2)
+  usage_mask = 3
+}
