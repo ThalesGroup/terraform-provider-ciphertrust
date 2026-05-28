@@ -89,3 +89,22 @@ output "key_name" {
     # The value will be the name of the CM Key
     value = ciphertrust_cm_key.sample_key.name
 }
+
+# Add a resource of type CM Key using the post-quantum ML-DSA signature algorithm.
+# ML-DSA (Module-Lattice Digital Signature Algorithm) is a post-quantum signature scheme.
+resource "ciphertrust_cm_key" "ml_dsa_sample_key" {
+  # Name of the key
+  name="terraform_ml_dsa"
+
+  # Cryptographic algorithm — post-quantum signature algorithm
+  algorithm="ml-dsa"
+
+  # Cryptographic usage mask (Sign + Verify = 3)
+  usage_mask=3
+
+  # Key is deletable
+  undeletable=false
+
+  # Key is exportable
+  unexportable=false
+}
