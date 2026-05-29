@@ -1,10 +1,35 @@
 package provider
 
 import (
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
+
+func TestAccResourceCMKey_MLDSA(t *testing.T) {
+	if os.Getenv("CM_SUPPORTS_MLDSA") == "" {
+		t.Skip("Skipping ML-DSA key test: set CM_SUPPORTS_MLDSA=1 to run against a CipherTrust Manager that supports ml-dsa")
+	}
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "mldsa_key" {
+  name     = "terraform-mldsa"
+  algorithm = "ml-dsa"
+  key_size  = 65
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.mldsa_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.mldsa_key", "algorithm", "ml-dsa"),
+				),
+			},
+		},
+	})
+}
 
 func TestResourceCMKey(t *testing.T) {
 	resource.Test(t, resource.TestCase{

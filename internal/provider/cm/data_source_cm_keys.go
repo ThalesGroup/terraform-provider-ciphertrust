@@ -73,7 +73,8 @@ func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, r
 							Computed: true,
 						},
 						"algorithm": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Cryptographic algorithm this key is used with (e.g. aes, rsa, ec, ml-dsa).",
 						},
 						"size": schema.Int64Attribute{
 							Computed: true,

@@ -89,3 +89,10 @@ output "key_name" {
     # The value will be the name of the CM Key
     value = ciphertrust_cm_key.sample_key.name
 }
+
+# Example: ML-DSA (post-quantum) key using parameter set 65
+resource "ciphertrust_cm_key" "mldsa_key" {
+  name      = "terraform-mldsa"
+  algorithm = "ml-dsa"
+  key_size  = 65
+}
