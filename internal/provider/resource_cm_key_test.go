@@ -6,6 +6,39 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+func TestAccResourceCMKey_MLDSA(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "ml_dsa_key" {
+  name      = "terraform-ml-dsa"
+  algorithm = "ml-dsa"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.ml_dsa_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.ml_dsa_key", "algorithm", "ml-dsa"),
+				),
+			},
+			// Changing algorithm forces replacement
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "ml_dsa_key" {
+  name      = "terraform-ml-dsa-replaced"
+  algorithm = "rsa"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.ml_dsa_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.ml_dsa_key", "algorithm", "rsa"),
+				),
+			},
+		},
+	})
+}
+
 func TestResourceCMKey(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
