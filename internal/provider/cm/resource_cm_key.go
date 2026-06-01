@@ -62,16 +62,17 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"aes",
-						"tdes",
-						"rsa",
+						"aria",
 						"ec",
 						"hmac-sha1",
 						"hmac-sha256",
 						"hmac-sha384",
 						"hmac-sha512",
-						"seed",
-						"aria",
+						"ml-dsa",
 						"opaque",
+						"rsa",
+						"seed",
+						"tdes",
 						"AES", "EC", "RSA"}...),
 				},
 			},
@@ -241,6 +242,19 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"muid": schema.StringAttribute{
 				Optional:    true,
 				Description: "Additional identifier of the key. This is optional and applicable for import key only. If set, the value is imported as the key's muid.",
+			},
+			"ml_dsa_parameter_set": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Parameter set for ML-DSA (Module-Lattice Digital Signature Algorithm) keys. Required when algorithm is 'ml-dsa'. Valid values are 'ML-DSA-44', 'ML-DSA-65', and 'ML-DSA-87', corresponding to NIST FIPS 204 security levels 2, 3, and 5 respectively.",
+				Validators: []validator.String{
+					stringvalidator.OneOf([]string{"ML-DSA-44",
+						"ML-DSA-65",
+						"ML-DSA-87"}...),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"object_type": schema.StringAttribute{
 				Optional:    true,
@@ -745,6 +759,9 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 	if plan.Material.ValueString() != "" && plan.Material.ValueString() != types.StringNull().ValueString() {
 		payload.Material = plan.Material.ValueString()
+	}
+	if plan.MLDSAParameterSet.ValueString() != "" && plan.MLDSAParameterSet.ValueString() != types.StringNull().ValueString() {
+		payload.MLDSAParameterSet = plan.MLDSAParameterSet.ValueString()
 	}
 	if plan.MUID.ValueString() != "" && plan.MUID.ValueString() != types.StringNull().ValueString() {
 		payload.MUID = plan.MUID.ValueString()

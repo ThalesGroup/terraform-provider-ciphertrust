@@ -184,6 +184,7 @@ type CMKeyTFSDK struct {
 	MacSignKeyIdentifier     types.String              `tfsdk:"mac_sign_key_identifier"`
 	MacSignKeyIdentifierType types.String              `tfsdk:"mac_sign_key_identifier_type"`
 	Material                 types.String              `tfsdk:"material"`
+	MLDSAParameterSet        types.String              `tfsdk:"ml_dsa_parameter_set"`
 	MUID                     types.String              `tfsdk:"muid"`
 	ObjectType               types.String              `tfsdk:"object_type"`
 	Name                     types.String              `tfsdk:"name"`
@@ -320,6 +321,7 @@ type CMKeyJSON struct {
 	MacSignKeyIdentifier     string                   `json:"macSignKeyIdentifier,omitempty"`
 	MacSignKeyIdentifierType string                   `json:"macSignKeyIdentifierType,omitempty"`
 	Material                 string                   `json:"material,omitempty"`
+	MLDSAParameterSet        string                   `json:"mlDSAParameterSet,omitempty"`
 	MUID                     string                   `json:"muid,omitempty"`
 	ObjectType               string                   `json:"objectType,omitempty"`
 	Name                     string                   `json:"name,omitempty"`
