@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -196,6 +197,9 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user.go -> Read]["+id+"]")
+
 	var state CMUserTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -203,15 +207,20 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	userResponse, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_USER_MANAGEMENT)
-	tflog.Trace(ctx, userResponse)
+	userResponse, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_USER_MANAGEMENT)
 	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust User",
-			"Could not read CipherTrust user ID "+state.UserID.ValueString()+": "+err.Error(),
+			"Could not read CipherTrust user ID "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
+	tflog.Debug(ctx, "[resource_cm_user.go -> Read Output]["+userResponse+"]")
 
 	var user CMUserJSON
 	if err := json.Unmarshal([]byte(userResponse), &user); err != nil {
@@ -222,10 +231,6 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	// For optional+computed fields with defaults, preserve the config/plan value
-	// if the API auto-populates them with values matching other fields
-	// This prevents drift when user doesn't explicitly set these fields
-
 	state.Email = types.StringValue(user.Email)
 	state.UserName = types.StringValue(user.UserName)
 	state.UserID = types.StringValue(user.UserID)
@@ -233,22 +238,9 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	state.IsDomainUser = types.BoolValue(user.IsDomainUser)
 	state.PasswordChangeRequired = types.BoolValue(user.PasswordChangeRequired)
 	state.PreventUILogin = types.BoolValue(user.LoginFlags.PreventUILogin)
+	state.Name = types.StringValue(user.Name)
+	state.Nickname = types.StringValue(user.Nickname)
 
-	// Only update name if it's non-empty from API
-	// If user set name in config, it will be in state; if not, keep default
-	if user.Name != "" {
-		state.Name = types.StringValue(user.Name)
-	} else if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue("")
-	}
-
-	// Only update nickname if it differs from username
-	// API may auto-populate nickname with username value when not explicitly set
-	if user.Nickname != "" && user.Nickname != user.UserName {
-		state.Nickname = types.StringValue(user.Nickname)
-	} else if state.Nickname.IsNull() || state.Nickname.ValueString() == "" {
-		state.Nickname = types.StringValue("")
-	}
 	if user.Metadata != nil {
 		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
 		resp.Diagnostics.Append(diags...)
@@ -264,6 +256,8 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Read]["+id+"]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
