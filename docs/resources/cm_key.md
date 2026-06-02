@@ -99,6 +99,15 @@ output "key_id" {
     value = ciphertrust_cm_key.sample_key.id
 }
 
+# Create a post-quantum ML-DSA key (Module-Lattice Digital Signature Algorithm)
+resource "ciphertrust_cm_key" "ml_dsa_key" {
+  name                 = "my-ml-dsa-key"
+  algorithm            = "ml-dsa"
+  ml_dsa_parameter_set = "ML-DSA-65"
+  undeletable          = false
+  unexportable         = false
+}
+
 # Output the name of the created CM Key
 output "key_name" {
     # The value will be the name of the CM Key
@@ -112,7 +121,7 @@ output "key_name" {
 ### Optional
 
 - `activation_date` (String) Date/time the object becomes active
-- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'
+- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'. Allowed values: `aes`, `tdes`, `rsa`, `ec`, `hmac-sha1`, `hmac-sha256`, `hmac-sha384`, `hmac-sha512`, `seed`, `aria`, `opaque`, `ml-dsa`.
 - `aliases` (Attributes List) Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified. (see [below for nested schema](#nestedatt--aliases))
 - `all_versions` (Boolean)
 - `archive_date` (String) Date/time the object becomes archived
@@ -139,6 +148,7 @@ When returning the key material, this parameter specifies the format of the retu
 - `key_id` (String) Additional identifier of the key. The format of this value is of type long. This is optional and applicable for import key only. If set, the value is imported as the key's keyId.
 - `key_size` (Number) Bit length for the key.
 - `labels` (Map of String)
+- `ml_dsa_parameter_set` (String) ML-DSA parameter set. Required when `algorithm` is `ml-dsa`. Allowed values: `ML-DSA-44`, `ML-DSA-65`, `ML-DSA-87`. Changing this value forces replacement of the key.
 - `mac_sign_bytes` (String) This parameter specifies the MAC/Signature bytes to be used for verification while importing a key. The wrappingMethod should be mac/sign and the required parameters for the verification must be set.
 - `mac_sign_key_identifier` (String) This parameter specifies the identifier of the key to be used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the MAC/signature(macSignBytes) of the key material(material). For verifying the MAC, the key has to be a HMAC key. For verifying the signature, the key has to be an RSA private or public key.
 - `mac_sign_key_identifier_type` (String) This parameter specifies the identifier of the key(macSignKeyIdentifier) used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the mac/signature(macSignBytes) of the key material(material).

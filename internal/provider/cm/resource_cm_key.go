@@ -13,6 +13,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -23,8 +24,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMKey{}
-	_ resource.ResourceWithConfigure = &resourceCMKey{}
+	_ resource.Resource                   = &resourceCMKey{}
+	_ resource.ResourceWithConfigure      = &resourceCMKey{}
+	_ resource.ResourceWithConfigValidators = &resourceCMKey{}
 )
 
 func NewResourceCMKey() resource.Resource {
@@ -72,7 +74,18 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed",
 						"aria",
 						"opaque",
+						"ml-dsa",
 						"AES", "EC", "RSA"}...),
+				},
+			},
+			"ml_dsa_parameter_set": schema.StringAttribute{
+				Optional:    true,
+				Description: "ML-DSA parameter set. Required when algorithm is 'ml-dsa'. Allowed values: 'ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf("ML-DSA-44", "ML-DSA-65", "ML-DSA-87"),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
@@ -830,6 +843,9 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.XTS.ValueBool() != types.BoolNull().ValueBool() {
 		payload.XTS = plan.XTS.ValueBool()
 	}
+	if plan.MLDSAParameterSet.ValueString() != "" && plan.MLDSAParameterSet.ValueString() != types.StringNull().ValueString() {
+		payload.MLDSAParameterSet = plan.MLDSAParameterSet.ValueString()
+	}
 	// Add aliases to the payload if set
 	var arrAlias []KeyAliasJSON
 	for _, alias := range plan.Aliases {
@@ -1307,4 +1323,50 @@ func (d *resourceCMKey) Configure(_ context.Context, req resource.ConfigureReque
 	}
 
 	d.client = client
+}
+
+func (r *resourceCMKey) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		mlDSAParameterSetValidator{},
+	}
+}
+
+// mlDSAParameterSetValidator rejects ml_dsa_parameter_set unless algorithm is "ml-dsa".
+type mlDSAParameterSetValidator struct{}
+
+func (v mlDSAParameterSetValidator) Description(_ context.Context) string {
+	return "ml_dsa_parameter_set may only be set when algorithm is 'ml-dsa'"
+}
+
+func (v mlDSAParameterSetValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v mlDSAParameterSetValidator) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var parameterSet types.String
+	var algorithm types.String
+
+	diags := req.Config.GetAttribute(ctx, path.Root("ml_dsa_parameter_set"), &parameterSet)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if parameterSet.IsNull() || parameterSet.IsUnknown() || parameterSet.ValueString() == "" {
+		return
+	}
+
+	diags = req.Config.GetAttribute(ctx, path.Root("algorithm"), &algorithm)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if algorithm.IsNull() || algorithm.IsUnknown() || algorithm.ValueString() != "ml-dsa" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("ml_dsa_parameter_set"),
+			"Invalid ml_dsa_parameter_set",
+			"ml_dsa_parameter_set can only be set when algorithm is 'ml-dsa'.",
+		)
+	}
 }

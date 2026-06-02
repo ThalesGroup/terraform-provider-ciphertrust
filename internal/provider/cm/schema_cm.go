@@ -221,6 +221,7 @@ type CMKeyTFSDK struct {
 	Labels                   types.Map                 `tfsdk:"labels"`
 	AllVersions              types.Bool                `tfsdk:"all_versions"`
 	RemoveFromStateOnDestroy types.Bool                `tfsdk:"remove_from_state_on_destroy"`
+	MLDSAParameterSet        types.String              `tfsdk:"ml_dsa_parameter_set"`
 }
 
 type HKDFParametersJSON struct {
@@ -356,6 +357,7 @@ type CMKeyJSON struct {
 	RSAAESWrap               *WrapRSAAESJSON          `json:"wrapRSAAES,omitempty"`
 	AllVersions              bool                     `json:"allVersions,omitempty"`
 	Labels                   map[string]interface{}   `json:"labels,omitempty"`
+	MLDSAParameterSet        string                   `json:"parameterSet,omitempty"`
 }
 
 type CMRegTokensListTFSDK struct {

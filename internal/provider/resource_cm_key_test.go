@@ -6,6 +6,30 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+func TestResourceCMKeyMLDSA(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "ml_dsa_key" {
+  name                = "terraform-ml-dsa"
+  algorithm           = "ml-dsa"
+  ml_dsa_parameter_set = "ML-DSA-65"
+  undeletable         = false
+  unexportable        = false
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.ml_dsa_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.ml_dsa_key", "algorithm", "ml-dsa"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.ml_dsa_key", "ml_dsa_parameter_set", "ML-DSA-65"),
+				),
+			},
+		},
+	})
+}
+
 func TestResourceCMKey(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
