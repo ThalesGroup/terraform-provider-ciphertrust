@@ -112,7 +112,7 @@ output "key_name" {
 ### Optional
 
 - `activation_date` (String) Date/time the object becomes active
-- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'
+- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'. The 'ml-dsa' value selects ML-DSA (Module-Lattice Digital Signature Algorithm, FIPS 204), a post-quantum signature algorithm.
 - `aliases` (Attributes List) Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified. (see [below for nested schema](#nestedatt--aliases))
 - `all_versions` (Boolean)
 - `archive_date` (String) Date/time the object becomes archived
