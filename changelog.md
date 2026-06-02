@@ -37,6 +37,12 @@
     ciphertrust_oci_key_version_list
     ciphertrust_oci_vault_list
 
+## Bug Fixes
+    ciphertrust_cm_key now correctly serializes revocation_reason and revocation_message
+        (previously their JSON tags were swapped, persisting each value under the wrong field
+        on CipherTrust Manager and causing perpetual drift). Keys applied with prior versions
+        will be corrected automatically on the next terraform apply.
+
 # 1.0.0-pre11 (OpenSource Provider)
 
 ## New Resources
