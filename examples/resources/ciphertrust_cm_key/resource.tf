@@ -89,3 +89,13 @@ output "key_name" {
     # The value will be the name of the CM Key
     value = ciphertrust_cm_key.sample_key.name
 }
+
+# Example: Create a post-quantum ML-DSA signing key (requires CipherTrust Manager 2.16+)
+resource "ciphertrust_cm_key" "mldsa_key" {
+  name      = "terraform-mldsa"
+  algorithm = "ml-dsa"
+}
+
+output "mldsa_key_id" {
+  value = ciphertrust_cm_key.mldsa_key.id
+}

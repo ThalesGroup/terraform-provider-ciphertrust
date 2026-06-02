@@ -112,7 +112,7 @@ output "key_name" {
 ### Optional
 
 - `activation_date` (String) Date/time the object becomes active
-- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'
+- `algorithm` (String) Cryptographic algorithm this key is used with. Defaults to 'aes'. Supported values: `aes`, `tdes`, `rsa`, `ec`, `hmac-sha1`, `hmac-sha256`, `hmac-sha384`, `hmac-sha512`, `seed`, `aria`, `opaque`, `ml-dsa`. `ml-dsa` (Module-Lattice Digital Signature Algorithm) is a post-quantum signature algorithm and requires CipherTrust Manager 2.16 or later.
 - `aliases` (Attributes List) Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified. (see [below for nested schema](#nestedatt--aliases))
 - `all_versions` (Boolean)
 - `archive_date` (String) Date/time the object becomes archived

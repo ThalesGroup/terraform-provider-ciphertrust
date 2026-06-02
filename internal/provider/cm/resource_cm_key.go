@@ -59,7 +59,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"algorithm": schema.StringAttribute{
 				Optional:    true,
-				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'",
+				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'. Supported values: aes, tdes, rsa, ec, hmac-sha1, hmac-sha256, hmac-sha384, hmac-sha512, seed, aria, opaque, ml-dsa. ml-dsa (Module-Lattice Digital Signature Algorithm) is a post-quantum signature algorithm and requires CipherTrust Manager 2.16 or later.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"aes",
 						"tdes",
@@ -72,6 +72,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed",
 						"aria",
 						"opaque",
+						"ml-dsa",
 						"AES", "EC", "RSA"}...),
 				},
 			},
