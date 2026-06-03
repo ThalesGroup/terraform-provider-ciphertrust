@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -195,6 +196,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 }
 
 // Read refreshes the Terraform state with the latest data.
+// Implemented per TFIN-290; other resources remain empty per TFIN-174.
 func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMUserTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -204,14 +206,19 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 
 	userResponse, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_USER_MANAGEMENT)
-	tflog.Trace(ctx, userResponse)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "[resource_cm_user.go -> Read] user not found, removing from state [user id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust User",
 			"Could not read CipherTrust user ID "+state.UserID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
+	tflog.Trace(ctx, userResponse)
 
 	var user CMUserJSON
 	if err := json.Unmarshal([]byte(userResponse), &user); err != nil {
@@ -222,11 +229,6 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	// For optional+computed fields with defaults, preserve the config/plan value
-	// if the API auto-populates them with values matching other fields
-	// This prevents drift when user doesn't explicitly set these fields
-
-	state.Email = types.StringValue(user.Email)
 	state.UserName = types.StringValue(user.UserName)
 	state.UserID = types.StringValue(user.UserID)
 	state.ID = types.StringValue(user.UserID)
@@ -234,21 +236,24 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	state.PasswordChangeRequired = types.BoolValue(user.PasswordChangeRequired)
 	state.PreventUILogin = types.BoolValue(user.LoginFlags.PreventUILogin)
 
-	// Only update name if it's non-empty from API
-	// If user set name in config, it will be in state; if not, keep default
-	if user.Name != "" {
-		state.Name = types.StringValue(user.Name)
-	} else if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue("")
+	if user.Email != "" {
+		state.Email = types.StringValue(user.Email)
+	} else {
+		state.Email = types.StringNull()
 	}
 
-	// Only update nickname if it differs from username
-	// API may auto-populate nickname with username value when not explicitly set
-	if user.Nickname != "" && user.Nickname != user.UserName {
-		state.Nickname = types.StringValue(user.Nickname)
-	} else if state.Nickname.IsNull() || state.Nickname.ValueString() == "" {
-		state.Nickname = types.StringValue("")
+	if user.Name != "" {
+		state.Name = types.StringValue(user.Name)
+	} else {
+		state.Name = types.StringNull()
 	}
+
+	if user.Nickname != "" {
+		state.Nickname = types.StringValue(user.Nickname)
+	} else {
+		state.Nickname = types.StringNull()
+	}
+
 	if user.Metadata != nil {
 		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
 		resp.Diagnostics.Append(diags...)
