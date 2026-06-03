@@ -395,6 +395,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		cm.NewDataSourceUsers,
 		cm.NewDataSourceKeys,
 		cm.NewDataSourceGroups,
+		cm.NewDataSourceCMGroup,
 		cte.NewDataSourceCTEUserSets,
 		cte.NewDataSourceCTEResourceSets,
 		cte.NewDataSourceCTEProcessSets,

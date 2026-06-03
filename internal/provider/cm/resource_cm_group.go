@@ -40,23 +40,29 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"name": schema.StringAttribute{
 				Required: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"app_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"app_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
-			"client_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"client_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
 			},
-			"user_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"user_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -135,6 +141,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// TODO(TFIN-174): implement drift detection
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
