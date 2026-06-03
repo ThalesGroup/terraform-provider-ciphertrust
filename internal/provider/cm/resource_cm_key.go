@@ -59,7 +59,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"algorithm": schema.StringAttribute{
 				Optional:    true,
-				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'",
+				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'. 'ml-dsa' is a post-quantum (Module-Lattice) digital signature algorithm.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"aes",
 						"tdes",
@@ -69,6 +69,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"hmac-sha256",
 						"hmac-sha384",
 						"hmac-sha512",
+						"ml-dsa",
 						"seed",
 						"aria",
 						"opaque",
