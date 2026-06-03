@@ -37,6 +37,9 @@
     ciphertrust_oci_key_version_list
     ciphertrust_oci_vault_list
 
+## Fixes
+    ciphertrust_cm_key: revocation_reason and revocation_message were transmitted with swapped JSON field names and stored swapped on CipherTrust Manager. Existing keys will be corrected on the next apply that touches these attributes (TFIN-286).
+
 # 1.0.0-pre11 (OpenSource Provider)
 
 ## New Resources
