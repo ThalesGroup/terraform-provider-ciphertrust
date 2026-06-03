@@ -1076,6 +1076,69 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMKeyTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError(
+			"Error reading CM Key on CipherTrust Manager: ",
+			"Could not read cm key id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
+		)
+		return
+	}
+	tflog.Debug(ctx, "resource_cm_key.go: response :"+response)
+
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Algorithm = types.StringValue(gjson.Get(response, "algorithm").String())
+	state.Size = types.Int64Value(gjson.Get(response, "size").Int())
+	state.UsageMask = types.Int64Value(gjson.Get(response, "usageMask").Int())
+	state.UnExportable = types.BoolValue(gjson.Get(response, "unexportable").Bool())
+	state.UnDeletable = types.BoolValue(gjson.Get(response, "undeletable").Bool())
+	state.State = types.StringValue(gjson.Get(response, "state").String())
+	state.ObjectType = types.StringValue(gjson.Get(response, "objectType").String())
+	state.Curveid = types.StringValue(gjson.Get(response, "curveid").String())
+	state.KeyId = types.StringValue(gjson.Get(response, "keyId").String())
+	state.DefaultIV = types.StringValue(gjson.Get(response, "defaultIV").String())
+	state.ActivationDate = types.StringValue(gjson.Get(response, "activationDate").String())
+	state.DeactivationDate = types.StringValue(gjson.Get(response, "deactivationDate").String())
+	state.ArchiveDate = types.StringValue(gjson.Get(response, "archiveDate").String())
+	state.DestroyDate = types.StringValue(gjson.Get(response, "destroyDate").String())
+	state.ProcessStartDate = types.StringValue(gjson.Get(response, "processStartDate").String())
+	state.ProtectStopDate = types.StringValue(gjson.Get(response, "protectStopDate").String())
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.UUID = types.StringValue(gjson.Get(response, "uuid").String())
+	state.MUID = types.StringValue(gjson.Get(response, "muid").String())
+
+	state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
+
+	if gjson.Get(response, "meta").Exists() {
+		if state.Metadata == nil {
+			state.Metadata = &KeyMetadataTFSDK{}
+		}
+		state.Metadata.OwnerId = types.StringValue(gjson.Get(response, "meta.owner_id").String())
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
