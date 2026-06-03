@@ -59,7 +59,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"algorithm": schema.StringAttribute{
 				Optional:    true,
-				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'",
+				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'. ml-dsa: NIST FIPS 204 post-quantum signature algorithm. Valid 'key_size' values are parameter-set codes (e.g., 44, 65, 87) accepted by CipherTrust Manager.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"aes",
 						"tdes",
@@ -72,6 +72,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed",
 						"aria",
 						"opaque",
+						"ml-dsa",
 						"AES", "EC", "RSA"}...),
 				},
 			},

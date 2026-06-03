@@ -70,3 +70,25 @@ resource "ciphertrust_cm_key" "cte_key" {
 		},
 	})
 }
+
+func TestResourceCMKeyMLDSA(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "ml_dsa_key" {
+  name="terraform_ml_dsa"
+  algorithm="ml-dsa"
+  key_size=65
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.ml_dsa_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.ml_dsa_key", "algorithm", "ml-dsa"),
+				),
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
