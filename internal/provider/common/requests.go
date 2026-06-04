@@ -331,6 +331,29 @@ func (c *CMClientBootstrap) PostDataBootstrap(ctx context.Context, uuid string, 
 	return ret, nil
 }
 
+// GetByIdBootstrap performs a GET on {endpoint}/{id} using the bootstrap client.
+// It mirrors (*Client).GetById for resources that are created with the
+// unauthenticated bootstrap client, returning the raw response body and an
+// error containing "status: 404" when the object does not exist.
+func (c *CMClientBootstrap) GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetByIdBootstrap][Request ID: "+uuid+
+		"****** URL: "+fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id)+"]")
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequestBootstrap(ctx, uuid, req)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
+	return string(body), nil
+}
+
 func (c *CMClientBootstrap) PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
 	reader := bytes.NewBuffer(data)

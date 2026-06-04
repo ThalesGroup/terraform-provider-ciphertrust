@@ -1075,7 +1075,110 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// It fetches the key from CipherTrust Manager and reconciles state so that
+// out-of-band deletions and attribute changes become visible to Terraform.
+// On a 404 the key is removed from state so a subsequent plan recreates it.
+// Write-only / input-only fields (material, password, wrap parameters,
+// secret_data_link, template_id, etc.) are never returned by the API, so they
+// are preserved by starting from the prior state and only overwriting the
+// server-observable attributes the user may have configured.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_key.go -> Read][key not found, removing from state][key id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Key",
+			"Could not read CipherTrust key ID "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	// gjson is used (rather than unmarshalling into CMKeyJSON) because CMKeyJSON
+	// is the create request payload: it has no id field and swaps the JSON tags
+	// for revocationReason/revocationMessage, which would mis-map a read response.
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	// refreshStr overwrites a configured (non-null/non-empty) string field with
+	// the latest server value so attribute drift is surfaced, while leaving
+	// fields the user never set untouched to avoid perpetual no-op diffs.
+	refreshStr := func(field *types.String, key string) {
+		if field.IsNull() || field.ValueString() == "" {
+			return
+		}
+		*field = types.StringValue(gjson.Get(response, key).String())
+	}
+	refreshInt := func(field *types.Int64, key string) {
+		if field.IsNull() {
+			return
+		}
+		*field = types.Int64Value(gjson.Get(response, key).Int())
+	}
+	refreshBool := func(field *types.Bool, key string) {
+		if field.IsNull() {
+			return
+		}
+		*field = types.BoolValue(gjson.Get(response, key).Bool())
+	}
+
+	refreshStr(&state.Name, "name")
+	refreshStr(&state.Algorithm, "algorithm")
+	refreshStr(&state.CertType, "certType")
+	refreshStr(&state.Curveid, "curveid")
+	refreshStr(&state.DefaultIV, "defaultIV")
+	refreshStr(&state.Description, "description")
+	refreshStr(&state.Format, "format")
+	refreshStr(&state.KeyId, "keyId")
+	refreshStr(&state.MUID, "muid")
+	refreshStr(&state.ObjectType, "objectType")
+	refreshStr(&state.State, "state")
+	refreshStr(&state.UUID, "uuid")
+	refreshStr(&state.ActivationDate, "activationDate")
+	refreshStr(&state.ArchiveDate, "archiveDate")
+	refreshStr(&state.DeactivationDate, "deactivationDate")
+	refreshStr(&state.DestroyDate, "destroyDate")
+	refreshStr(&state.CompromiseDate, "compromiseDate")
+	refreshStr(&state.CompromiseOccurrenceDate, "compromiseOccurrenceDate")
+	refreshStr(&state.ProcessStartDate, "processStartDate")
+	refreshStr(&state.ProtectStopDate, "protectStopDate")
+	refreshStr(&state.RevocationReason, "revocationReason")
+	refreshStr(&state.RevocationMessage, "revocationMessage")
+	refreshInt(&state.Size, "size")
+	refreshInt(&state.UsageMask, "usageMask")
+	refreshBool(&state.UnExportable, "unexportable")
+	refreshBool(&state.UnDeletable, "undeletable")
+
+	// Labels are refreshed only when the user configured them, mirroring the
+	// create/update mapping (a map of strings).
+	if !state.Labels.IsNull() {
+		labels := make(map[string]string)
+		for k, v := range gjson.Get(response, "labels").Map() {
+			labels[k] = v.String()
+		}
+		labelsMap, diags := types.MapValueFrom(ctx, types.StringType, labels)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsMap
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

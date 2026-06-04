@@ -97,7 +97,20 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// ciphertrust_cm_user_password_change is an action-style resource: it performs a
+// one-shot PATCH against the bootstrap "changepw" endpoint and has no persistent
+// remote object to reconcile. All three attributes (username, password,
+// new_password) are write-only inputs that are never returned by any API.
+//
+// A drift-detecting Read would require an existence probe of the user, but this
+// resource is configured with the unauthenticated *common.CMClientBootstrap
+// client (it runs during bootstrap, before a session token exists), which cannot
+// query the authenticated usermgmt/users endpoint. There is therefore nothing to
+// fetch or remove, so the existing state is left unchanged.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Read]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Read]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

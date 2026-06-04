@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -170,13 +171,71 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// The registration token is looked up by id. On a 404 it is removed from state
+// so a subsequent plan recreates it; on success the server-observable
+// attributes are reconciled. The token value is returned only at creation, so
+// it is preserved from prior state (matching the Update behaviour).
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+
 	var state CMRegTokenTFSDK
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_reg_token.go -> Read][reg token not found, removing from state][id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Registration Token",
+			"Could not read CipherTrust registration token ID "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var regToken CMRegTokenJSON
+	if err := json.Unmarshal([]byte(response), &regToken); err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Registration Token",
+			"Could not parse CipherTrust registration token response: "+err.Error(),
+		)
+		return
+	}
+
+	state.ID = types.StringValue(regToken.ID)
+	// token is write-once (returned only at creation); keep the prior value.
+
+	// Only refresh attributes the user configured, to avoid perpetual diffs on
+	// attributes the API defaults when left unset.
+	if !state.CAID.IsNull() && state.CAID.ValueString() != "" {
+		state.CAID = types.StringValue(regToken.CAID)
+	}
+	if !state.ClientManagementProfileID.IsNull() && state.ClientManagementProfileID.ValueString() != "" {
+		state.ClientManagementProfileID = types.StringValue(regToken.ClientManagementProfileID)
+	}
+	if !state.Lifetime.IsNull() && state.Lifetime.ValueString() != "" {
+		state.Lifetime = types.StringValue(regToken.Lifetime)
+	}
+	if !state.NamePrefix.IsNull() && state.NamePrefix.ValueString() != "" {
+		state.NamePrefix = types.StringValue(regToken.NamePrefix)
+	}
+	if !state.CertDuration.IsNull() {
+		state.CertDuration = types.Int64Value(regToken.CertDuration)
+	}
+	if !state.MaxClients.IsNull() {
+		state.MaxClients = types.Int64Value(regToken.MaxClients)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

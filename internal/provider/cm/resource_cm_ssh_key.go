@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -101,7 +102,53 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// The SSH key is managed with the bootstrap client, so it is fetched via
+// GetByIdBootstrap. On a 404 the key is removed from state so a subsequent plan
+// recreates it. The public key material is generally returned by the API; if
+// the response omits it, the prior state value is retained to avoid a spurious
+// replacement.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+
+	var state CMSSHKeyTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetByIdBootstrap(ctx, id, state.ID.ValueString(), common.URL_SSH_KEY)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_ssh_key.go -> Read][ssh key not found, removing from state][id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust SSH Key",
+			"Could not read CipherTrust SSH key ID "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var sshKey CMSSHKeyJSON
+	if err := json.Unmarshal([]byte(response), &sshKey); err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust SSH Key",
+			"Could not parse CipherTrust SSH key response: "+err.Error(),
+		)
+		return
+	}
+
+	// Preserve the prior public key when the API does not return it.
+	if sshKey.Key != "" {
+		state.Key = types.StringValue(sshKey.Key)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

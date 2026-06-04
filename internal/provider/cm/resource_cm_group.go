@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -134,7 +135,56 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// Groups are looked up by name (the resource id). On a 404 the group is removed
+// from state so a subsequent plan recreates it; on success the description is
+// reconciled so out-of-band edits are surfaced. The metadata maps are preserved
+// from prior state (their schema does not declare an element type that can be
+// safely round-tripped from the API response).
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.Name.ValueString(), common.URL_GROUP)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found, removing from state][group name: "+state.Name.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not read CipherTrust group "+state.Name.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var group CMGroupJSON
+	if err := json.Unmarshal([]byte(response), &group); err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not parse CipherTrust group response: "+err.Error(),
+		)
+		return
+	}
+
+	state.Name = types.StringValue(group.Name)
+	state.ID = state.Name
+	// Only refresh description if the user configured it, to avoid a perpetual
+	// diff when the API returns an empty value for an unset attribute.
+	if !state.Description.IsNull() && state.Description.ValueString() != "" {
+		state.Description = types.StringValue(group.Description)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
