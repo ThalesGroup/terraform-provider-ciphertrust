@@ -1,5 +1,8 @@
 # 1.0.1
 
+## Bug Fixes
+    ciphertrust_cm_key: fix swapped serialization of revocation_reason and revocation_message (TFIN-194)
+
 ## New Resources
     ciphertrust_aws_acl
     ciphertrust_aws_key_import_material
