@@ -170,9 +170,47 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// It fetches the registration token from CipherTrust Manager so out-of-band
+// deletion and attribute drift are detected. If the token no longer exists
+// (HTTP 404) it is removed from state via HandleReadResponse so Terraform plans
+// its recreation. The `token` secret is not returned on GET, so it is preserved
+// from prior state (left untouched). Optional attributes are refreshed only when
+// already set in state to avoid spurious diffs for fields the user never
+// configured.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMRegTokenTFSDK
 	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_REG_TOKEN)
+	if HandleReadResponse(ctx, err, resp, "ciphertrust_cm_reg_token") {
+		return
+	}
+
+	if v := gjson.Get(response, "ca_id"); v.Exists() && !state.CAID.IsNull() {
+		state.CAID = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "cert_duration"); v.Exists() && !state.CertDuration.IsNull() {
+		state.CertDuration = types.Int64Value(v.Int())
+	}
+	if v := gjson.Get(response, "client_management_profile_id"); v.Exists() && !state.ClientManagementProfileID.IsNull() {
+		state.ClientManagementProfileID = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "lifetime"); v.Exists() && !state.Lifetime.IsNull() {
+		state.Lifetime = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "max_clients"); v.Exists() && !state.MaxClients.IsNull() {
+		state.MaxClients = types.Int64Value(v.Int())
+	}
+	if v := gjson.Get(response, "name_prefix"); v.Exists() && !state.NamePrefix.IsNull() {
+		state.NamePrefix = types.StringValue(v.String())
+	}
+
+	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

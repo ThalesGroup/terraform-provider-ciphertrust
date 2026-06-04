@@ -3,6 +3,7 @@ package provider
 import (
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -65,6 +66,26 @@ resource "ciphertrust_cm_key" "cte_key" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
 				),
+			},
+			// Out-of-band deletion drift testing (TFIN-293): delete the key
+			// directly on CM after apply. A real Read() must detect the 404 and
+			// remove the key from state, so the follow-up plan is non-empty
+			// (proposing recreation). Before the fix, Read() was a no-op and the
+			// plan was always empty.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "cte_key" {
+  name="terraform_upd"
+  algorithm="aes"
+  key_size=256
+  usage_mask=13
+  description="updated via terraform"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccDeleteCMResourceOutOfBand("ciphertrust_cm_key.cte_key", common.URL_KEY_MANAGEMENT),
+				),
+				ExpectNonEmptyPlan: true,
 			},
 			// Delete testing automatically occurs in TestCase
 		},

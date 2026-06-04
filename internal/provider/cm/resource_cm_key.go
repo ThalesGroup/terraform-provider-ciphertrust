@@ -1075,7 +1075,60 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// It fetches the key from CipherTrust Manager so that out-of-band deletion and
+// attribute drift are detected. If the key no longer exists (HTTP 404) it is
+// removed from state via HandleReadResponse so Terraform plans its recreation.
+//
+// Only attributes that are already tracked in state are refreshed. Most key
+// attributes are Optional (not Computed), so unconditionally writing
+// API-returned defaults for fields the user never configured would introduce
+// spurious diffs on every plan. The response is read with gjson rather than the
+// CMKeyJSON struct because that struct has no ID field and carries the swapped
+// revocationReason/revocationMessage JSON tags (TFIN-194).
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if HandleReadResponse(ctx, err, resp, "ciphertrust_cm_key") {
+		return
+	}
+
+	if v := gjson.Get(response, "name"); v.Exists() && !state.Name.IsNull() {
+		state.Name = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "algorithm"); v.Exists() && !state.Algorithm.IsNull() {
+		state.Algorithm = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "size"); v.Exists() && !state.Size.IsNull() {
+		state.Size = types.Int64Value(v.Int())
+	}
+	if v := gjson.Get(response, "usageMask"); v.Exists() && !state.UsageMask.IsNull() {
+		state.UsageMask = types.Int64Value(v.Int())
+	}
+	if v := gjson.Get(response, "unexportable"); v.Exists() && !state.UnExportable.IsNull() {
+		state.UnExportable = types.BoolValue(v.Bool())
+	}
+	if v := gjson.Get(response, "undeletable"); v.Exists() && !state.UnDeletable.IsNull() {
+		state.UnDeletable = types.BoolValue(v.Bool())
+	}
+	if v := gjson.Get(response, "state"); v.Exists() && !state.State.IsNull() {
+		state.State = types.StringValue(v.String())
+	}
+	if v := gjson.Get(response, "uuid"); v.Exists() && !state.UUID.IsNull() {
+		state.UUID = types.StringValue(v.String())
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

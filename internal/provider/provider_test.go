@@ -203,6 +203,35 @@ func testVerifyResourceDeleted(resourceName string) resource.TestCheckFunc {
 	}
 }
 
+// testAccDeleteCMResourceOutOfBand deletes a resource directly on CipherTrust
+// Manager, bypassing Terraform, to simulate an out-of-band deletion. It looks up
+// the resource's ID from Terraform state and issues a DELETE against
+// {endpoint}/{id} using a client built from the CIPHERTRUST_* environment
+// variables. Used to verify that a real Read() detects the deletion (TFIN-293):
+// the post-step plan should then be non-empty (proposing recreation), which the
+// step asserts with ExpectNonEmptyPlan.
+func testAccDeleteCMResourceOutOfBand(resourceName, endpoint string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("error: resource %s not found in state", resourceName)
+		}
+		id := rs.Primary.ID
+		if id == "" {
+			return fmt.Errorf("error: resource %s has no ID in state", resourceName)
+		}
+		client, ok := createCMClient()
+		if !ok {
+			return fmt.Errorf("error: could not create CM client for out-of-band delete of %s", resourceName)
+		}
+		url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, endpoint, id)
+		if _, err := client.DeleteByID(context.Background(), "DELETE", id, url, nil); err != nil {
+			return fmt.Errorf("error: out-of-band delete of %s failed: %s", resourceName, err.Error())
+		}
+		return nil
+	}
+}
+
 // testAccListResourceAttributes is a debugging helper that prints every attribute
 // for a resource to stdout. It is not called by any test but is kept here because
 // it is very useful when writing or diagnosing new tests.

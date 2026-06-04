@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -134,7 +135,40 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// A CM group is identified by its name, so the lookup is keyed on the group name
+// (which is also stored as the resource ID). If the group no longer exists
+// (HTTP 404) it is removed from state via HandleReadResponse so Terraform plans
+// its recreation. Only name and description are refreshed; the app/client/user
+// metadata maps are preserved from prior state because their schema
+// (MapNestedAttribute with no nested attributes) does not map cleanly to the
+// untyped maps returned by the API.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMGroupTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, state.Name.ValueString(), state.Name.ValueString(), common.URL_GROUP)
+	if HandleReadResponse(ctx, err, resp, "ciphertrust_groups") {
+		return
+	}
+
+	if v := gjson.Get(response, "name"); v.Exists() {
+		state.Name = types.StringValue(v.String())
+		state.ID = state.Name
+	}
+	if !state.Description.IsNull() {
+		state.Description = types.StringValue(gjson.Get(response, "description").String())
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

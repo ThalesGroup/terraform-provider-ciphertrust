@@ -3,6 +3,7 @@ package provider
 import (
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -68,6 +69,30 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
 					//resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.reg_token", "token"),
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.reg_token", "id"),
 				),
+			},
+			// Out-of-band deletion drift testing (TFIN-293): delete the
+			// registration token directly on CM after apply. A real Read() must
+			// detect the 404 and remove the token from state, so the follow-up
+			// plan is non-empty (proposing recreation). Before the fix, Read()
+			// only re-read local state and the plan was always empty.
+			{
+				Config: providerConfig + `
+data "ciphertrust_cm_local_ca_list" "groups_local_cas" {
+  filters = {
+    subject = "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
+  }
+}
+output "casList" {
+  value = data.ciphertrust_cm_local_ca_list.groups_local_cas
+}
+resource "ciphertrust_cm_reg_token" "reg_token" {
+  ca_id = tolist(data.ciphertrust_cm_local_ca_list.groups_local_cas.cas)[0].id
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccDeleteCMResourceOutOfBand("ciphertrust_cm_reg_token.reg_token", common.URL_REG_TOKEN),
+				),
+				ExpectNonEmptyPlan: true,
 			},
 			// Delete testing automatically occurs in TestCase
 		},

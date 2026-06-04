@@ -97,6 +97,15 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// NOTE: This resource models a one-shot password-change action against
+// api/v1/auth/changepw, not a persistent CM object. It has no ID/Computed
+// attributes (username, password and new_password are all Required write-only
+// inputs) and is configured with the unauthenticated bootstrap client
+// (*common.CMClientBootstrap), which exposes no GET helper. There is therefore
+// nothing to fetch or reconcile: no remote object addresses this resource, and
+// passwords are never returned by the API. A real Read is not feasible or
+// meaningful here, so it is left intentionally empty (TFIN-293).
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 }
 

@@ -101,6 +101,17 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// NOTE: A real, API-backed Read cannot be implemented for this resource with the
+// current client wiring. ciphertrust_cm_ssh_key is configured with the bootstrap
+// client (*common.CMClientBootstrap), which is unauthenticated (it sends no
+// Authorization header) and exposes no GET helper. Reading an SSH key by ID from
+// api/v1/system/ssh/keys/{id} requires an authenticated request, so a Read via
+// the bootstrap client would fail rather than reconcile state. Implementing
+// out-of-band drift/deletion detection here (TFIN-293) would require switching
+// this resource to the authenticated *common.Client and adding a GET helper,
+// which is outside this ticket's scope (it changes provider wiring, not just
+// Read()). Left intentionally empty until that follow-up is approved.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 }
 
