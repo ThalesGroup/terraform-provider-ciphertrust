@@ -3,6 +3,7 @@
 # Added by goreleaser init:
 dist/
 examples/resources/ciphertrust_cm_key/terraform.tfstate.backup
+terraform-provider-ciphertrust
 terraform-provider-ciphertrust.exe
 definition-beta.json
 .claude/swagger/areas/
