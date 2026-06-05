@@ -1,5 +1,8 @@
 # 1.0.1
 
+## Bug Fixes
+    ciphertrust_cm_key no longer swaps revocation_reason and revocation_message in the CipherTrust Manager request body (TFIN-286)
+
 ## New Resources
     ciphertrust_aws_acl
     ciphertrust_aws_key_import_material

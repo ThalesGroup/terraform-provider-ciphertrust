@@ -66,6 +66,24 @@ resource "ciphertrust_cm_key" "cte_key" {
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
 				),
 			},
+			// TFIN-286: revocation_reason / revocation_message wiring (Create-only).
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "revocation_key" {
+  name="terraform_revocation"
+  algorithm="aes"
+  key_size=256
+  usage_mask=13
+  revocation_reason="Unspecified"
+  revocation_message="compromised"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.revocation_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.revocation_key", "revocation_reason", "Unspecified"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.revocation_key", "revocation_message", "compromised"),
+				),
+			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
