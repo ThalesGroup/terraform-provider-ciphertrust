@@ -1,5 +1,8 @@
 # 1.0.1
 
+## Bug Fixes
+    resource/ciphertrust_cm_key: fixed swapped serialization of revocation_reason and revocation_message (TFIN-286). Users who previously swapped their HCL values to compensate must invert them.
+
 ## New Resources
     ciphertrust_aws_acl
     ciphertrust_aws_key_import_material

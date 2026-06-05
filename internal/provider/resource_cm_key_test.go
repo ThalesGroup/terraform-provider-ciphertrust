@@ -1,9 +1,14 @@
 package provider
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/tidwall/gjson"
 )
 
 func TestResourceCMKey(t *testing.T) {
@@ -69,4 +74,75 @@ resource "ciphertrust_cm_key" "cte_key" {
 			// Delete testing automatically occurs in TestCase
 		},
 	})
+}
+
+// TestAccCipherTrustCMKey_RevocationFieldsRoundtrip is the end-to-end guarantee
+// for TFIN-286: it creates a ciphertrust_cm_key with revocation_reason and
+// revocation_message set, then asserts the server-side CM fields hold the
+// matching (non-swapped) values. This is the only check that proves the JSON
+// tag fix produced the intended CM-side state.
+func TestAccCipherTrustCMKey_RevocationFieldsRoundtrip(t *testing.T) {
+	const resourceName = "ciphertrust_cm_key.revocation_key"
+	const wantReason = "Unspecified"
+	const wantMessage = "decommissioned-by-acceptance-test"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "revocation_key" {
+  name              = "terraform-tfin286-revocation"
+  algorithm         = "aes"
+  key_size          = 256
+  usage_mask        = 76
+  revocation_reason  = %q
+  revocation_message = %q
+}
+`, wantReason, wantMessage),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttr(resourceName, "revocation_reason", wantReason),
+					resource.TestCheckResourceAttr(resourceName, "revocation_message", wantMessage),
+					testAccCheckCMKeyRevocationOnServer(resourceName, wantReason, wantMessage),
+				),
+			},
+		},
+	})
+}
+
+// testAccCheckCMKeyRevocationOnServer fetches the key directly from CipherTrust
+// Manager by its resource ID and asserts the server-side revocationReason and
+// revocationMessage fields hold the expected values (i.e. the JSON tags are not
+// swapped). Server-side keys are camelCase, matching the read path in
+// data_source_cm_keys.go.
+func testAccCheckCMKeyRevocationOnServer(resourceName, wantReason, wantMessage string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found in state", resourceName)
+		}
+		keyID := rs.Primary.ID
+		if keyID == "" {
+			return fmt.Errorf("resource %s has no ID set", resourceName)
+		}
+
+		client, ok := createCMClient()
+		if !ok {
+			return fmt.Errorf("failed to create CM client for server-side revocation check")
+		}
+
+		resp, err := client.GetById(context.Background(), "tfin286-revocation-check", keyID, common.URL_KEY_MANAGEMENT)
+		if err != nil {
+			return fmt.Errorf("failed to fetch key %s from CM: %w", keyID, err)
+		}
+
+		if gotReason := gjson.Get(resp, "revocationReason").String(); gotReason != wantReason {
+			return fmt.Errorf("server-side revocationReason = %q, want %q (tags may be swapped): %s", gotReason, wantReason, resp)
+		}
+		if gotMessage := gjson.Get(resp, "revocationMessage").String(); gotMessage != wantMessage {
+			return fmt.Errorf("server-side revocationMessage = %q, want %q (tags may be swapped): %s", gotMessage, wantMessage, resp)
+		}
+		return nil
+	}
 }
