@@ -6,10 +6,8 @@ import (
 	"testing"
 )
 
-// TestCMKeyJSON_RevocationTagSerialization pins the wire contract for the
-// revocation fields on ciphertrust_cm_key (TFIN-286). It guards against the
-// historical bug where RevocationReason and RevocationMessage were serialized
-// with swapped JSON tags, storing each value in the wrong CM field.
+// TestCMKeyJSON_RevocationTagSerialization pins the revocation field wire tags
+// against the swapped-tag bug (TFIN-286).
 func TestCMKeyJSON_RevocationTagSerialization(t *testing.T) {
 	payload := CMKeyJSON{
 		RevocationReason:  "Unspecified",
@@ -38,10 +36,8 @@ func TestCMKeyJSON_RevocationTagSerialization(t *testing.T) {
 	}
 }
 
-// TestCMKeyJSON_RevocationTagOmitempty guards against accidental loss of the
-// omitempty option during the tag edit and covers the Optional-only-one-set
-// edge case: each revocation field must be absent from the wire payload when
-// it is empty.
+// TestCMKeyJSON_RevocationTagOmitempty checks each revocation field is omitted
+// from the payload when empty.
 func TestCMKeyJSON_RevocationTagOmitempty(t *testing.T) {
 	t.Run("only reason set", func(t *testing.T) {
 		out, err := json.Marshal(CMKeyJSON{RevocationReason: "Unspecified"})

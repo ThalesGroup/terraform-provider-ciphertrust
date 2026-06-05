@@ -76,11 +76,8 @@ resource "ciphertrust_cm_key" "cte_key" {
 	})
 }
 
-// TestAccCipherTrustCMKey_RevocationFieldsRoundtrip is the end-to-end guarantee
-// for TFIN-286: it creates a ciphertrust_cm_key with revocation_reason and
-// revocation_message set, then asserts the server-side CM fields hold the
-// matching (non-swapped) values. This is the only check that proves the JSON
-// tag fix produced the intended CM-side state.
+// TestAccCipherTrustCMKey_RevocationFieldsRoundtrip verifies revocation fields
+// reach CM unswapped (TFIN-286).
 func TestAccCipherTrustCMKey_RevocationFieldsRoundtrip(t *testing.T) {
 	const resourceName = "ciphertrust_cm_key.revocation_key"
 	const wantReason = "Unspecified"
@@ -111,11 +108,8 @@ resource "ciphertrust_cm_key" "revocation_key" {
 	})
 }
 
-// testAccCheckCMKeyRevocationOnServer fetches the key directly from CipherTrust
-// Manager by its resource ID and asserts the server-side revocationReason and
-// revocationMessage fields hold the expected values (i.e. the JSON tags are not
-// swapped). Server-side keys are camelCase, matching the read path in
-// data_source_cm_keys.go.
+// testAccCheckCMKeyRevocationOnServer fetches the key from CM and asserts the
+// server-side revocationReason/revocationMessage are not swapped.
 func testAccCheckCMKeyRevocationOnServer(resourceName, wantReason, wantMessage string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
