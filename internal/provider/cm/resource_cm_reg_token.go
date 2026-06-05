@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -169,10 +170,62 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 	}
 }
 
+// TFIN-293: real Read() is the authorized exception to TFIN-174's intentionally-empty-Read policy for this resource.
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
+
 	var state CMRegTokenTFSDK
 	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
+	if err != nil {
+		// Only an absent (404) token is treated as deletion; an expired-but-present
+		// token still returns 200 and remains in state.
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_reg_token.go -> Read][reg token not found on CipherTrust Manager, removing from state][reg token id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading RegToken on CipherTrust Manager: ",
+			"Could not read RegToken, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	var regToken CMRegTokenJSON
+	if err := json.Unmarshal([]byte(response), &regToken); err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error parsing RegToken response from CipherTrust Manager: ",
+			"Could not parse RegToken response, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Preserve the write-once `token` (Computed/UseStateForUnknown) from prior
+	// state. Refresh only the user-managed attributes that were already set and
+	// that the server echoes; other optional inputs (cert_duration, lifetime,
+	// client_management_profile_id, label/labels) are preserved from prior state.
+	if !state.CAID.IsNull() && regToken.CAID != "" {
+		state.CAID = types.StringValue(regToken.CAID)
+	}
+	if !state.NamePrefix.IsNull() && regToken.NamePrefix != "" {
+		state.NamePrefix = types.StringValue(regToken.NamePrefix)
+	}
+	if !state.MaxClients.IsNull() && regToken.MaxClients != 0 {
+		state.MaxClients = types.Int64Value(regToken.MaxClients)
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -268,6 +321,12 @@ func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequ
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		// Treat an already-absent token as a successful delete so out-of-band
+		// deletion does not break teardown (TFIN-293).
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_reg_token.go -> Delete][reg token already absent on CipherTrust Manager][reg token id: "+state.ID.ValueString()+"]")
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust RegToken",
 			"Could not delete RegToken, unexpected error: "+err.Error(),

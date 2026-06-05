@@ -1,5 +1,13 @@
 # 1.0.1
 
+## Bug Fixes
+    Fix TFIN-293: ciphertrust_cm_key, ciphertrust_groups, and ciphertrust_cm_reg_token now
+    implement a real Read() that calls CipherTrust Manager, so terraform plan/refresh
+    correctly detects out-of-band deletion (resource is removed from state and proposed for
+    recreation) and attribute drift. ciphertrust_cm_ssh_key and ciphertrust_cm_user_password_change
+    are served by the bootstrap client, which exposes no read endpoint, and remain
+    intentionally non-reconciling (documented in-code).
+
 ## New Resources
     ciphertrust_aws_acl
     ciphertrust_aws_key_import_material

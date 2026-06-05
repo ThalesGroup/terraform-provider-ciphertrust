@@ -1074,8 +1074,82 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 }
 
+// TFIN-293: real Read() is the authorized exception to TFIN-174's intentionally-empty-Read policy for this resource.
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		// Out-of-band deletion: drop the resource from state so a subsequent plan
+		// proposes to recreate it.
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_key.go -> Read][key not found on CipherTrust Manager, removing from state][key id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading key on CipherTrust Manager: ",
+			"Could not read key, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	var key CMKeyJSON
+	if err := json.Unmarshal([]byte(response), &key); err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error parsing key response from CipherTrust Manager: ",
+			"Could not parse key response, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Refresh only the user-managed, mutable parameters that were already set in
+	// prior state, and only when the server echoes a value. This surfaces
+	// out-of-band attribute drift while avoiding spurious diffs on optional
+	// attributes the configuration does not manage.
+	//
+	// `name` is intentionally NOT refreshed: the CM key Update API does not
+	// support renaming, so reconciling a server-side name would produce a
+	// permanent, unactionable diff (immutability is handled separately by
+	// TFIN-183). Write-only/sensitive inputs (material, password, wrap_*,
+	// secret_data_link, meta, aliases, etc.) are preserved from prior state and
+	// never overwritten from the API response.
+	if !state.Description.IsNull() && key.Description != "" {
+		state.Description = types.StringValue(key.Description)
+	}
+	if !state.UsageMask.IsNull() && key.UsageMask != 0 {
+		state.UsageMask = types.Int64Value(key.UsageMask)
+	}
+	if !state.Algorithm.IsNull() && key.Algorithm != "" {
+		state.Algorithm = types.StringValue(key.Algorithm)
+	}
+	if !state.Size.IsNull() && key.Size != 0 {
+		state.Size = types.Int64Value(key.Size)
+	}
+	if !state.UnDeletable.IsNull() {
+		state.UnDeletable = types.BoolValue(key.UnDeletable)
+	}
+	if !state.UnExportable.IsNull() {
+		state.UnExportable = types.BoolValue(key.UnExportable)
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -1277,6 +1351,12 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		// Treat an already-absent key as a successful delete so out-of-band
+		// deletion does not break teardown (TFIN-293).
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_key.go -> Delete][key already absent on CipherTrust Manager][key id: "+state.ID.ValueString()+"]")
+			return
+		}
 		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
 			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
 				"key id: "+state.ID.ValueString(),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -133,8 +134,58 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	}
 }
 
+// TFIN-293: real Read() is the authorized exception to TFIN-174's intentionally-empty-Read policy for this resource.
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// A CM group is identified by its name.
+	response, err := r.client.GetById(ctx, id, state.Name.ValueString(), common.URL_GROUP)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found on CipherTrust Manager, removing from state][group: "+state.Name.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading group on CipherTrust Manager: ",
+			"Could not read group, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	var group CMGroupJSON
+	if err := json.Unmarshal([]byte(response), &group); err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error parsing group response from CipherTrust Manager: ",
+			"Could not parse group response, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Refresh the user-managed mutable attribute that was already set in prior
+	// state. The *_metadata maps are preserved from prior state to avoid
+	// spurious diffs (the GET response shape differs from the configured input).
+	if !state.Description.IsNull() && group.Description != "" {
+		state.Description = types.StringValue(group.Description)
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -217,6 +268,12 @@ func (r *resourceCMGroup) Delete(ctx context.Context, req resource.DeleteRequest
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
 	if err != nil {
+		// Treat an already-absent group as a successful delete so out-of-band
+		// deletion does not break teardown (TFIN-293).
+		if strings.Contains(err.Error(), "404") {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Delete][group already absent on CipherTrust Manager][group: "+state.Name.ValueString()+"]")
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Group",
 			"Could not delete group, unexpected error: "+err.Error(),

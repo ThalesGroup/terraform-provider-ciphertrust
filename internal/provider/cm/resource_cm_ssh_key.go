@@ -101,6 +101,14 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// TFIN-293 exception-within-an-exception: Read is intentionally left empty for
+// this resource. The system SSH-key endpoint (api/v1/system/ssh/keys) is served
+// by the bootstrap client (*common.CMClientBootstrap), which exposes no
+// GET-by-id method, and the endpoint provides no per-key retrieval. There is no
+// way to call the CM API here without introducing a new client method, which is
+// out of scope for TFIN-293. Out-of-band reconciliation is therefore not
+// possible for this resource; see TFIN-174.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 }
 

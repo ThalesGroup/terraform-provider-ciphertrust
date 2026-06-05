@@ -97,6 +97,15 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// TFIN-293 exception-within-an-exception: Read is intentionally left empty for
+// this resource. It models a one-shot password-change action (PATCH
+// api/v1/auth/changepw) served by the bootstrap client
+// (*common.CMClientBootstrap), which exposes no GET-by-id method. The resource
+// has no `id` and no natural GET endpoint, and all three attributes
+// (username, password, new_password) are write-only credentials that must be
+// preserved from prior state rather than read back from the API. There is thus
+// nothing to reconcile and no reachable API to reconcile against; see TFIN-174.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 }
 
