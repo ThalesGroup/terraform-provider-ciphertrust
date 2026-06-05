@@ -10,9 +10,12 @@ import (
 
 	"github.com/google/uuid"
 
+	utils "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -21,6 +24,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+// notFoundError is the substring present in the CM client's error string when
+// the API returns HTTP 404 (see common/client.go which formats errors as
+// "status: <code>, body: <...>"). It mirrors the constant used by the CCKM AWS
+// resources (resource_aws_key.go).
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCMKey{}
@@ -1066,6 +1075,14 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
+	// Refresh readable attributes from the create response so Create and Read
+	// converge on identical state. Write-only inputs are left as the user wrote
+	// them because setCMKeyState never touches them.
+	setCMKeyState(ctx, response, &plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -1074,8 +1091,169 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 }
 
-// Read refreshes the Terraform state with the latest data.
+// refreshString refreshes a string attribute from the CM response.
+//
+// To avoid spurious drift on this Optional-only schema (no attribute is
+// Computed), an attribute is only refreshed when it is already set in state -
+// i.e. one the user configured or that was previously persisted. Unconfigured
+// attributes are left null so that a "config null vs server default" mismatch
+// is never produced. When the configured attribute is missing/empty in the
+// response it is set to null to surface that the value was cleared out-of-band.
+func refreshString(cur types.String, res gjson.Result) types.String {
+	if cur.IsNull() || cur.IsUnknown() {
+		return cur
+	}
+	if !res.Exists() || res.String() == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(res.String())
+}
+
+// refreshInt64 refreshes an int64 attribute from the CM response, following the
+// same "refresh only if already set" rule as refreshString.
+func refreshInt64(cur types.Int64, res gjson.Result) types.Int64 {
+	if cur.IsNull() || cur.IsUnknown() {
+		return cur
+	}
+	if !res.Exists() {
+		return types.Int64Null()
+	}
+	return types.Int64Value(res.Int())
+}
+
+// refreshBool refreshes a bool attribute from the CM response, following the
+// same "refresh only if already set" rule as refreshString.
+func refreshBool(cur types.Bool, res gjson.Result) types.Bool {
+	if cur.IsNull() || cur.IsUnknown() {
+		return cur
+	}
+	if !res.Exists() {
+		return types.BoolNull()
+	}
+	return types.BoolValue(res.Bool())
+}
+
+// setCMKeyState maps the JSON response from CipherTrust Manager onto the
+// Terraform state for a ciphertrust_cm_key. It is shared by Create, Read and
+// Update so all three flows produce identical state for readable attributes.
+//
+// Only readable attributes are touched; write-only inputs (material, password,
+// wrap_*, wrapping_*, mac_sign_*, secret_data_*, template_id, encoding,
+// empty_material, generate_key_id, assign_self_as_owner, hkdf_create_parameters,
+// public_key_parameters, wrap_hkdf, wrap_pbe, wrap_rsaaes, all_versions and
+// remove_from_state_on_destroy) are never referenced here, so Create/Update
+// keep the plan-supplied values for those automatically.
+//
+// The nested "aliases" and "meta" attributes are intentionally preserved as-is.
+// The top-level aliases schema declares "index" as a string while the model
+// type is types.Int64; refreshing it would fail State.Set. Reconciling that
+// pre-existing schema/model mismatch is out of scope for TFIN-292.
+//
+// Only mutable attributes (the CM PatchKey set), the lifecycle dates and the
+// identity fields are refreshed. Immutable create/import-only attributes
+// (algorithm, key_size, curveid, object_type, format, default_iv, xts,
+// cert_type, id_size, padded, signing_algo) are deliberately NOT refreshed:
+// they cannot change out-of-band on a key, and re-reading them would risk
+// surfacing server-side case/format normalization as spurious drift - the
+// concern TFIN-195 tracks separately and that CLAUDE.md asks not to surface here.
+func setCMKeyState(ctx context.Context, response string, state *CMKeyTFSDK, diags *diag.Diagnostics) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> setCMKeyState]")
+
+	// Identity.
+	state.ID = refreshString(state.ID, gjson.Get(response, "id"))
+	state.UUID = refreshString(state.UUID, gjson.Get(response, "uuid"))
+	state.Name = refreshString(state.Name, gjson.Get(response, "name"))
+
+	// Mutable attributes (PatchKey) and lifecycle dates.
+	state.ActivationDate = refreshString(state.ActivationDate, gjson.Get(response, "activationDate"))
+	state.ArchiveDate = refreshString(state.ArchiveDate, gjson.Get(response, "archiveDate"))
+	state.CompromiseDate = refreshString(state.CompromiseDate, gjson.Get(response, "compromiseDate"))
+	state.CompromiseOccurrenceDate = refreshString(state.CompromiseOccurrenceDate, gjson.Get(response, "compromiseOccurrenceDate"))
+	state.DeactivationDate = refreshString(state.DeactivationDate, gjson.Get(response, "deactivationDate"))
+	state.Description = refreshString(state.Description, gjson.Get(response, "description"))
+	state.DestroyDate = refreshString(state.DestroyDate, gjson.Get(response, "destroyDate"))
+	state.KeyId = refreshString(state.KeyId, gjson.Get(response, "keyId"))
+	state.MUID = refreshString(state.MUID, gjson.Get(response, "muid"))
+	state.ProcessStartDate = refreshString(state.ProcessStartDate, gjson.Get(response, "processStartDate"))
+	state.ProtectStopDate = refreshString(state.ProtectStopDate, gjson.Get(response, "protectStopDate"))
+	state.RevocationReason = refreshString(state.RevocationReason, gjson.Get(response, "revocationReason"))
+	state.RevocationMessage = refreshString(state.RevocationMessage, gjson.Get(response, "revocationMessage"))
+	state.RotationFrequencyDays = refreshString(state.RotationFrequencyDays, gjson.Get(response, "rotationFrequencyDays"))
+	state.State = refreshString(state.State, gjson.Get(response, "state"))
+
+	state.UsageMask = refreshInt64(state.UsageMask, gjson.Get(response, "usageMask"))
+
+	state.UnExportable = refreshBool(state.UnExportable, gjson.Get(response, "unexportable"))
+	state.UnDeletable = refreshBool(state.UnDeletable, gjson.Get(response, "undeletable"))
+
+	// labels is a free-form CM object. Refresh it only when already set, coercing
+	// each scalar value to its string form. Non-scalar values are skipped with a
+	// warning so the map round-trips without spurious drift.
+	if !state.Labels.IsNull() && !state.Labels.IsUnknown() {
+		labelsResult := gjson.Get(response, "labels")
+		if labelsResult.Exists() && labelsResult.IsObject() {
+			labelsMap := make(map[string]attr.Value)
+			labelsResult.ForEach(func(key, value gjson.Result) bool {
+				if value.IsObject() || value.IsArray() {
+					diags.AddWarning(
+						"Skipping non-scalar key label.",
+						"Label \""+key.String()+"\" has a non-scalar value and cannot be represented in the labels map.",
+					)
+					return true
+				}
+				labelsMap[key.String()] = types.StringValue(value.String())
+				return true
+			})
+			labelsValue, d := types.MapValue(types.StringType, labelsMap)
+			diags.Append(d...)
+			if !d.HasError() {
+				state.Labels = labelsValue
+			}
+		} else {
+			state.Labels = types.MapNull(types.StringType)
+		}
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> setCMKeyState]")
+}
+
+// Read refreshes the Terraform state with the latest data from CipherTrust
+// Manager. A 404 means the key was deleted out-of-band: it is removed from
+// state with a warning so the next plan proposes a recreate. Any other API
+// failure is a hard error and leaves state untouched.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	keyID := state.ID.ValueString()
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			details := utils.ApiError("CipherTrust key not found on CipherTrust Manager, removing from state.", map[string]interface{}{"id": keyID})
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		details := utils.ApiError("Error reading CipherTrust key.", map[string]interface{}{"error": err.Error(), "id": keyID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+
+	setCMKeyState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -1255,6 +1433,22 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	plan.ID = types.StringValue(response)
 
+	// Re-read the key after the PATCH so state reflects what CipherTrust Manager
+	// actually persisted (mirrors the post-update GET in resource_aws_cloudhsm_key.go).
+	// A failure here is non-fatal: the PATCH already succeeded, so keep the plan
+	// values and only warn.
+	getResponse, getErr := r.client.GetById(ctx, uuid.New().String(), plan.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if getErr != nil {
+		details := utils.ApiError("Error reading CipherTrust key after update, state may be stale until the next refresh.", map[string]interface{}{"error": getErr.Error(), "id": plan.ID.ValueString()})
+		tflog.Warn(ctx, details)
+		resp.Diagnostics.AddWarning(details, "")
+	} else {
+		setCMKeyState(ctx, getResponse, &plan, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -1277,7 +1471,13 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Key was already gone (deleted out-of-band): demote to a warning so
+			// Terraform drops it from state cleanly.
+			details := utils.ApiError("CipherTrust key not found on CipherTrust Manager, removing from state.", map[string]interface{}{"id": state.ID.ValueString()})
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
+		} else if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
 			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
 				"key id: "+state.ID.ValueString(),
 			)
