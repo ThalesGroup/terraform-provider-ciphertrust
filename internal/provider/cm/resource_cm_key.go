@@ -1112,29 +1112,81 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	// Refresh server-authoritative fields onto state so out-of-band drift is
-	// detected. Each scalar is only overwritten when it was already set in prior
-	// state (non-null): unset Optional attributes are left null to avoid spurious
-	// diffs against a config that never specified them.
-	if !state.Name.IsNull() {
-		state.Name = types.StringValue(key.Name)
+	// detected. Each attribute is only overwritten when it was already set in
+	// prior state (non-null): unset Optional attributes are left null to avoid
+	// spurious diffs against a config that never specified them. String values
+	// are additionally guarded by a non-empty check so a field that CM does not
+	// echo back in its GET response is never clobbered to "".
+	//
+	// Write-only / secret and create-only inputs that CM never returns
+	// (material, password, wrap_*, id_size, template_id, hkdf/pbe/rsaaes wrap
+	// params, assign_self_as_owner, generate_key_id, empty_material, padded,
+	// xts, and the TF-only all_versions / remove_from_state_on_destroy flags)
+	// are intentionally carried forward from prior state and not refreshed.
+	refreshStr := func(cur types.String, v string) types.String {
+		if !cur.IsNull() && v != "" {
+			return types.StringValue(v)
+		}
+		return cur
 	}
+
+	state.Name = refreshStr(state.Name, key.Name)
+	state.Algorithm = refreshStr(state.Algorithm, key.Algorithm)
+	state.ObjectType = refreshStr(state.ObjectType, key.ObjectType)
+	state.Format = refreshStr(state.Format, key.Format)
+	state.Encoding = refreshStr(state.Encoding, key.Encoding)
+	state.State = refreshStr(state.State, key.State)
+	state.Description = refreshStr(state.Description, key.Description)
+	state.CertType = refreshStr(state.CertType, key.CertType)
+	state.Curveid = refreshStr(state.Curveid, key.Curveid)
+	state.DefaultIV = refreshStr(state.DefaultIV, key.DefaultIV)
+	state.KeyId = refreshStr(state.KeyId, key.KeyId)
+	state.MacSignBytes = refreshStr(state.MacSignBytes, key.MacSignBytes)
+	state.MacSignKeyIdentifier = refreshStr(state.MacSignKeyIdentifier, key.MacSignKeyIdentifier)
+	state.MacSignKeyIdentifierType = refreshStr(state.MacSignKeyIdentifierType, key.MacSignKeyIdentifierType)
+	state.RotationFrequencyDays = refreshStr(state.RotationFrequencyDays, key.RotationFrequencyDays)
+	state.SecretDataEncoding = refreshStr(state.SecretDataEncoding, key.SecretDataEncoding)
+	state.SecretDataLink = refreshStr(state.SecretDataLink, key.SecretDataLink)
+	state.SigningAlgo = refreshStr(state.SigningAlgo, key.SigningAlgo)
+
+	// Lifecycle dates returned by CM.
+	state.ActivationDate = refreshStr(state.ActivationDate, key.ActivationDate)
+	state.ArchiveDate = refreshStr(state.ArchiveDate, key.ArchiveDate)
+	state.DeactivationDate = refreshStr(state.DeactivationDate, key.DeactivationDate)
+	state.DestroyDate = refreshStr(state.DestroyDate, key.DestroyDate)
+	state.CompromiseDate = refreshStr(state.CompromiseDate, key.CompromiseDate)
+	state.CompromiseOccurrenceDate = refreshStr(state.CompromiseOccurrenceDate, key.CompromiseOccurrenceDate)
+	state.ProcessStartDate = refreshStr(state.ProcessStartDate, key.ProcessStartDate)
+	state.ProtectStopDate = refreshStr(state.ProtectStopDate, key.ProtectStopDate)
+
 	if !state.Size.IsNull() {
 		state.Size = types.Int64Value(key.Size)
 	}
 	if !state.UsageMask.IsNull() {
 		state.UsageMask = types.Int64Value(key.UsageMask)
 	}
-	if !state.State.IsNull() {
-		state.State = types.StringValue(key.State)
+	// unexportable / undeletable are always returned by CM.
+	if !state.UnExportable.IsNull() {
+		state.UnExportable = types.BoolValue(key.UnExportable)
 	}
-	if !state.Description.IsNull() {
-		state.Description = types.StringValue(key.Description)
+	if !state.UnDeletable.IsNull() {
+		state.UnDeletable = types.BoolValue(key.UnDeletable)
 	}
 	if !state.UUID.IsNull() && key.UUID != "" {
 		state.UUID = types.StringValue(key.UUID)
 	}
 	if !state.MUID.IsNull() && key.MUID != "" {
 		state.MUID = types.StringValue(key.MUID)
+	}
+
+	// NOTE: CMKeyJSON's RevocationReason / RevocationMessage json tags are
+	// swapped (tracked separately as TFIN-194). Read these two directly from
+	// the raw response so the correct CM values land on state.
+	if !state.RevocationReason.IsNull() {
+		state.RevocationReason = refreshStr(state.RevocationReason, gjson.Get(response, "revocationReason").String())
+	}
+	if !state.RevocationMessage.IsNull() {
+		state.RevocationMessage = refreshStr(state.RevocationMessage, gjson.Get(response, "revocationMessage").String())
 	}
 
 	// labels is a map attribute — hydrate it so label drift surfaces on refresh.
