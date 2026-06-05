@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
+	utils "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -17,8 +22,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMGroup{}
-	_ resource.ResourceWithConfigure = &resourceCMGroup{}
+	_ resource.Resource                = &resourceCMGroup{}
+	_ resource.ResourceWithConfigure   = &resourceCMGroup{}
+	_ resource.ResourceWithImportState = &resourceCMGroup{}
 )
 
 func NewResourceCMGroup() resource.Resource {
@@ -135,6 +141,93 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The group is keyed by its name on CipherTrust Manager; Create() sets id == name.
+	// On import only id is populated, so fall back to it when name is empty.
+	groupName := state.Name.ValueString()
+	if groupName == "" {
+		groupName = state.ID.ValueString()
+	}
+	response, err := r.client.GetById(ctx, id, groupName, common.URL_GROUP)
+	if err != nil {
+		// Out-of-band deletion: remove the resource from state so the next plan
+		// schedules it for re-creation.
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found, removing from state][group: "+groupName+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		// Any other API failure: surface a diagnostic and leave state untouched,
+		// preserving the last-known-good values.
+		msg := "Error reading CM group."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": state.ID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+
+	setCMGroupState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+// setCMGroupState maps a CipherTrust Manager group GET response onto the
+// CMGroupTFSDK state model so that out-of-band changes surface as drift.
+func setCMGroupState(ctx context.Context, response string, state *CMGroupTFSDK, diags *diag.Diagnostics) {
+	// The group GET response keys on "name"; Create() sets id == name, so keep
+	// id and name aligned with the server value to avoid spurious drift.
+	name := gjson.Get(response, "name").String()
+	state.Name = types.StringValue(name)
+	state.ID = types.StringValue(name)
+
+	// description is Optional: an unconfigured value is null in state, while CM
+	// echoes unset descriptions as "". Map a missing or empty value to null so the
+	// two stay aligned (no spurious drift); a non-empty server value that differs
+	// from the configured one still surfaces as drift.
+	if v := gjson.Get(response, "description"); v.Exists() && v.String() != "" {
+		state.Description = types.StringValue(v.String())
+	} else {
+		state.Description = types.StringNull()
+	}
+
+	state.AppMetadata = jsonToStringMap(ctx, gjson.Get(response, "app_metadata"), diags)
+	state.ClientMetadata = jsonToStringMap(ctx, gjson.Get(response, "client_metadata"), diags)
+	state.UserMetadata = jsonToStringMap(ctx, gjson.Get(response, "user_metadata"), diags)
+}
+
+// jsonToStringMap decodes a metadata object from the API response into a
+// types.Map of strings. An absent, JSON-null, or empty ({}) field becomes a null
+// map (not an empty map): the metadata attributes are Optional, so an
+// unconfigured attribute is null in state, and CM echoes unset metadata as {}.
+// Mapping {} to a null map keeps those aligned (no spurious drift) while an
+// out-of-band clear of a configured map still differs from the configured value
+// and so remains visible as drift.
+func jsonToStringMap(ctx context.Context, result gjson.Result, diags *diag.Diagnostics) types.Map {
+	if !result.Exists() || result.Type == gjson.Null {
+		return types.MapNull(types.StringType)
+	}
+	m := make(map[string]string)
+	if err := json.Unmarshal([]byte(result.Raw), &m); err != nil {
+		diags.AddError("Error reading CM group.", "Could not decode metadata map: "+err.Error())
+		return types.MapNull(types.StringType)
+	}
+	if len(m) == 0 {
+		return types.MapNull(types.StringType)
+	}
+	mapValue, d := types.MapValueFrom(ctx, types.StringType, m)
+	diags.Append(d...)
+	return mapValue
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -241,4 +334,11 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+// ImportState imports an existing group into Terraform state using the group
+// name as the import identifier. Create() keys id == name, so the passthrough
+// id is the group name; Read() then reconstructs the full state from CM.
+func (r *resourceCMGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
