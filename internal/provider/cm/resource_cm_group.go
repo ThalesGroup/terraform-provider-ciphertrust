@@ -135,6 +135,58 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]")
+
+	var state CMGroupTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// CM groups are keyed by name; the id attribute holds the group name.
+	response, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_GROUP)
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found on CipherTrust Manager, removing from state][name: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+state.ID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust Group",
+			"Could not read group "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var group CMGroupJSON
+	if err := json.Unmarshal([]byte(response), &group); err != nil {
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust Group",
+			"Could not parse group response: "+err.Error(),
+		)
+		return
+	}
+
+	state.Name = types.StringValue(group.Name)
+	state.ID = types.StringValue(group.Name)
+	// Only refresh description when it was already set in prior state, so an
+	// unset Optional attribute is not populated into state (which would diff
+	// against a config that never specified it).
+	if !state.Description.IsNull() {
+		state.Description = types.StringValue(group.Description)
+	}
+	// app_metadata / client_metadata / user_metadata are carried forward from prior
+	// state: the resource schema models them as nested maps, so re-hydrating the
+	// loosely typed CM response here would risk type mismatches on State.Set.
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+state.ID.ValueString()+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

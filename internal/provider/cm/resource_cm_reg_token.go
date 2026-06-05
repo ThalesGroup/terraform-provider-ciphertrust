@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -171,12 +172,104 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]")
+
 	var state CMRegTokenTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	response, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_REG_TOKEN)
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			tflog.Warn(ctx, "[resource_cm_reg_token.go -> Read][reg token not found on CipherTrust Manager, removing from state][id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+state.ID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust RegToken",
+			"Could not read reg token id "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var token CMRegTokenJSON
+	if err := json.Unmarshal([]byte(response), &token); err != nil {
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust RegToken",
+			"Could not parse reg token response: "+err.Error(),
+		)
+		return
+	}
+
+	state.ID = types.StringValue(token.ID)
+	// token is a computed secret; keep prior state if CM does not return it.
+	if token.Token != "" {
+		state.Token = types.StringValue(token.Token)
+	}
+	// Refresh Optional scalars only when set in prior state, so CM-side defaults
+	// for attributes the config never specified are not pulled into state (which
+	// would diff against config).
+	if !state.CAID.IsNull() {
+		state.CAID = types.StringValue(token.CAID)
+	}
+	if !state.CertDuration.IsNull() {
+		state.CertDuration = types.Int64Value(token.CertDuration)
+	}
+	if !state.ClientManagementProfileID.IsNull() {
+		state.ClientManagementProfileID = types.StringValue(token.ClientManagementProfileID)
+	}
+	if !state.Lifetime.IsNull() {
+		state.Lifetime = types.StringValue(token.Lifetime)
+	}
+	if !state.MaxClients.IsNull() {
+		state.MaxClients = types.Int64Value(token.MaxClients)
+	}
+	if !state.NamePrefix.IsNull() {
+		state.NamePrefix = types.StringValue(token.NamePrefix)
+	}
+
+	// Only refresh map attributes that were set in prior state, so attributes the
+	// config never specified are not populated into state (which would diff).
+	if !state.Label.IsNull() && len(token.Label) > 0 {
+		labelMap, d := stringMapValue(ctx, token.Label)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Label = labelMap
+	}
+	if !state.Labels.IsNull() && len(token.Labels) > 0 {
+		labelsMap, d := stringMapValue(ctx, token.Labels)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsMap
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+state.ID.ValueString()+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+}
+
+// stringMapValue converts a loosely typed CM response map into a types.Map of
+// strings suitable for assigning to a Terraform map attribute.
+func stringMapValue(ctx context.Context, in map[string]interface{}) (types.Map, diag.Diagnostics) {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if v == nil {
+			continue
+		}
+		out[k] = fmt.Sprintf("%v", v)
+	}
+	return types.MapValueFrom(ctx, types.StringType, out)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

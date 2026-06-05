@@ -101,7 +101,24 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// This resource is served by the unauthenticated bootstrap client
+// (*common.CMClientBootstrap), which exposes no GET method, and the CipherTrust
+// Manager SSH-key API supports neither GET-by-id nor delete (see Delete below).
+// A remote refresh is therefore not possible, so Read carries the prior state
+// forward unchanged. The id and key attributes are write-once on create.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]")
+
+	var state CMSSHKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

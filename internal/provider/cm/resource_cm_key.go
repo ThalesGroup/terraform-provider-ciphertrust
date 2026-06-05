@@ -1076,6 +1076,94 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]")
+
+	// Load prior state so write-only / secret fields (material, wrap_*, password,
+	// id_size, template_id, etc.) are carried forward — CM never returns them.
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			tflog.Warn(ctx, "[resource_cm_key.go -> Read][key not found on CipherTrust Manager, removing from state][id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+state.ID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust Key",
+			"Could not read key id "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var key CMKeyJSON
+	if err := json.Unmarshal([]byte(response), &key); err != nil {
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust Key",
+			"Could not parse key response: "+err.Error(),
+		)
+		return
+	}
+
+	// Refresh server-authoritative fields onto state so out-of-band drift is
+	// detected. Each scalar is only overwritten when it was already set in prior
+	// state (non-null): unset Optional attributes are left null to avoid spurious
+	// diffs against a config that never specified them.
+	if !state.Name.IsNull() {
+		state.Name = types.StringValue(key.Name)
+	}
+	if !state.Size.IsNull() {
+		state.Size = types.Int64Value(key.Size)
+	}
+	if !state.UsageMask.IsNull() {
+		state.UsageMask = types.Int64Value(key.UsageMask)
+	}
+	if !state.State.IsNull() {
+		state.State = types.StringValue(key.State)
+	}
+	if !state.Description.IsNull() {
+		state.Description = types.StringValue(key.Description)
+	}
+	if !state.UUID.IsNull() && key.UUID != "" {
+		state.UUID = types.StringValue(key.UUID)
+	}
+	if !state.MUID.IsNull() && key.MUID != "" {
+		state.MUID = types.StringValue(key.MUID)
+	}
+
+	// labels is a map attribute — hydrate it so label drift surfaces on refresh.
+	if !state.Labels.IsNull() {
+		if len(key.Labels) > 0 {
+			labels := make(map[string]string, len(key.Labels))
+			for k, v := range key.Labels {
+				if v == nil {
+					continue
+				}
+				labels[k] = fmt.Sprintf("%v", v)
+			}
+			labelMap, d := types.MapValueFrom(ctx, types.StringType, labels)
+			resp.Diagnostics.Append(d...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Labels = labelMap
+		} else {
+			state.Labels = types.MapNull(types.StringType)
+		}
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+state.ID.ValueString()+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

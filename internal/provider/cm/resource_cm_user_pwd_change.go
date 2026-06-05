@@ -97,7 +97,25 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 }
 
 // Read refreshes the Terraform state with the latest data.
+//
+// This is a write-only action resource: it performs a password change via the
+// unauthenticated bootstrap client (*common.CMClientBootstrap, which has no GET
+// method) and persists no server-side object with a stable identity that could
+// be re-read. Its only attributes — username, password and new_password — are
+// all write-only credentials. There is therefore nothing to refresh against CM,
+// so Read carries the prior state forward unchanged.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Read]")
+
+	var state CMPwdChangeTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
