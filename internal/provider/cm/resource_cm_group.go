@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -16,9 +20,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
+const notFoundError = "status: 404"
+
 var (
-	_ resource.Resource              = &resourceCMGroup{}
-	_ resource.ResourceWithConfigure = &resourceCMGroup{}
+	_ resource.Resource                = &resourceCMGroup{}
+	_ resource.ResourceWithConfigure   = &resourceCMGroup{}
+	_ resource.ResourceWithImportState = &resourceCMGroup{}
+	_ resource.ResourceWithModifyPlan  = &resourceCMGroup{}
 )
 
 func NewResourceCMGroup() resource.Resource {
@@ -51,6 +59,7 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
 			"user_metadata": schema.MapNestedAttribute{
 				Optional: true,
@@ -62,12 +71,42 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 	}
 }
 
+// ModifyPlan errors at plan time if the immutable "name" attribute is changed on an existing resource.
+func (r *resourceCMGroup) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip create and destroy operations.
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		return
+	}
+
+	var plan, state CMGroupTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var changed []string
+	if !plan.Name.IsNull() && !plan.Name.IsUnknown() && plan.Name != state.Name {
+		changed = append(changed, "name")
+	}
+
+	if len(changed) > 0 {
+		resp.Diagnostics.AddError(
+			"Immutable attribute change detected",
+			fmt.Sprintf(
+				"The following attributes cannot be modified after creation: %s. "+
+					"Delete and recreate the resource to apply these changes.",
+				strings.Join(changed, ", "),
+			),
+		)
+	}
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user.go -> Create]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Create]["+id+"]")
 
-	// Retrieve values from plan
 	var plan CMGroupTFSDK
 	var payload CMGroupJSON
 
@@ -123,9 +162,9 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	}
 	plan.ID = plan.Name
 
-	tflog.Debug(ctx, "[resource_cm_user.go -> Create Output]["+response+"]")
+	tflog.Debug(ctx, "[resource_cm_group.go -> Create Output]["+response+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Create]["+id+"]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -135,6 +174,42 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_GROUP)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read] Group not found, removing from state ["+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CM group "+state.ID.ValueString(),
+			err.Error(),
+		)
+		return
+	}
+
+	setGroupState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -176,9 +251,9 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Invalid data input: Group Creation",
+			"Invalid data input: Group Update",
 			err.Error(),
 		)
 		return
@@ -186,7 +261,7 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_GROUP, payloadJSON, "name")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.Name.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Update]["+plan.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating group on CipherTrust Manager: ",
 			"Could not update group, unexpected error: "+err.Error(),
@@ -195,12 +270,12 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	plan.Name = types.StringValue(response)
 	plan.ID = plan.Name
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -212,17 +287,28 @@ func (r *resourceCMGroup) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_GROUP, state.Name.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Already deleted out-of-band; let Terraform remove from state.
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Group",
 			"Could not delete group, unexpected error: "+err.Error(),
 		)
 		return
 	}
+}
+
+// ImportState imports an existing CM group into Terraform state using its name (which is also the ID).
+func (r *resourceCMGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -236,9 +322,19 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 			"Error in fetching client from provider",
 			fmt.Sprintf("Expected *provider.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
 	d.client = client
+}
+
+// setGroupState maps API response fields into the TFSDK state struct.
+// Map fields (app_metadata, client_metadata, user_metadata) are intentionally left
+// unchanged — the schema declares them as MapNestedAttribute which is incompatible with
+// direct string-map assignment. The caller's prior state (loaded via req.State.Get) is
+// preserved for those fields; only the scalar fields are refreshed from the API.
+func setGroupState(_ context.Context, response string, state *CMGroupTFSDK, _ *diag.Diagnostics) {
+	state.ID = types.StringValue(gjson.Get(response, "name").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
 }

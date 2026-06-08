@@ -30,8 +30,11 @@ provider "ciphertrust" {
 
 # Add a resource of type CM Group with the name TestGroup
 resource "ciphertrust_groups" "testGroup" {
-  # Name of the group to be created on CM
+  # Name of the group to be created on CM (immutable after creation)
   name = "TestGroup"
+
+  # Optional human-readable description; tracked for drift detection
+  description = "Managed by Terraform"
 }
 
 # Output the name of the created CM group
@@ -39,3 +42,6 @@ output "group_name" {
     # The value will be the name of the CM group
     value = ciphertrust_groups.testGroup.name
 }
+
+# To import an existing group into Terraform state, run:
+#   terraform import ciphertrust_groups.testGroup <group-name>
