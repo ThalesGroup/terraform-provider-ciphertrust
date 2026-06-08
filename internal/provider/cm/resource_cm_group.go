@@ -51,18 +51,21 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"app_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"app_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
-			"client_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"client_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
 			},
-			"user_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"user_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -328,13 +331,42 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	d.client = client
 }
 
-// setGroupState maps API response fields into the TFSDK state struct.
-// Map fields (app_metadata, client_metadata, user_metadata) are intentionally left
-// unchanged — the schema declares them as MapNestedAttribute which is incompatible with
-// direct string-map assignment. The caller's prior state (loaded via req.State.Get) is
-// preserved for those fields; only the scalar fields are refreshed from the API.
-func setGroupState(_ context.Context, response string, state *CMGroupTFSDK, _ *diag.Diagnostics) {
+// setGroupState maps all API response fields into the TFSDK state struct.
+func setGroupState(ctx context.Context, response string, state *CMGroupTFSDK, diags *diag.Diagnostics) {
 	state.ID = types.StringValue(gjson.Get(response, "name").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Description = types.StringValue(gjson.Get(response, "description").String())
+
+	if raw := gjson.Get(response, "app_metadata").Raw; raw != "" && raw != "null" {
+		var mapData map[string]string
+		if err := json.Unmarshal([]byte(raw), &mapData); err != nil {
+			diags.AddError("Error parsing app_metadata", err.Error())
+			return
+		}
+		var d diag.Diagnostics
+		state.AppMetadata, d = types.MapValueFrom(ctx, types.StringType, mapData)
+		diags.Append(d...)
+	}
+
+	if raw := gjson.Get(response, "client_metadata").Raw; raw != "" && raw != "null" {
+		var mapData map[string]string
+		if err := json.Unmarshal([]byte(raw), &mapData); err != nil {
+			diags.AddError("Error parsing client_metadata", err.Error())
+			return
+		}
+		var d diag.Diagnostics
+		state.ClientMetadata, d = types.MapValueFrom(ctx, types.StringType, mapData)
+		diags.Append(d...)
+	}
+
+	if raw := gjson.Get(response, "user_metadata").Raw; raw != "" && raw != "null" {
+		var mapData map[string]string
+		if err := json.Unmarshal([]byte(raw), &mapData); err != nil {
+			diags.AddError("Error parsing user_metadata", err.Error())
+			return
+		}
+		var d diag.Diagnostics
+		state.UserMetadata, d = types.MapValueFrom(ctx, types.StringType, mapData)
+		diags.Append(d...)
+	}
 }
