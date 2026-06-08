@@ -13,6 +13,8 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -22,9 +24,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
+const notFoundCMKey = "status: 404"
+
 var (
-	_ resource.Resource              = &resourceCMKey{}
-	_ resource.ResourceWithConfigure = &resourceCMKey{}
+	_ resource.Resource                = &resourceCMKey{}
+	_ resource.ResourceWithConfigure   = &resourceCMKey{}
+	_ resource.ResourceWithImportState = &resourceCMKey{}
 )
 
 func NewResourceCMKey() resource.Resource {
@@ -1076,6 +1081,169 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	keyID := state.ID.ValueString()
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundCMKey) {
+			tflog.Warn(ctx, "[resource_cm_key.go -> Read][key not found, removing from state][key id: "+keyID+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust CM Key",
+			"Could not read key id "+keyID+": "+err.Error(),
+		)
+		return
+	}
+
+	// Helpers: only update an attribute when it was previously set in state (not null).
+	// This avoids introducing false diffs for Optional (non-Computed) attributes that the
+	// user did not include in their configuration — the API always returns defaults for
+	// those fields but Terraform would otherwise plan an unwanted update to remove them.
+	strVal := func(current types.String, jsonPath string) types.String {
+		if current.IsNull() {
+			return current
+		}
+		s := gjson.Get(response, jsonPath).String()
+		if s == "" {
+			return types.StringNull()
+		}
+		return types.StringValue(s)
+	}
+	boolVal := func(current types.Bool, jsonPath string) types.Bool {
+		if current.IsNull() {
+			return current
+		}
+		return types.BoolValue(gjson.Get(response, jsonPath).Bool())
+	}
+	int64Val := func(current types.Int64, jsonPath string) types.Int64 {
+		if current.IsNull() {
+			return current
+		}
+		if v := gjson.Get(response, jsonPath); v.Exists() {
+			return types.Int64Value(v.Int())
+		}
+		return types.Int64Null()
+	}
+
+	// id is always populated (Computed with UseStateForUnknown).
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Name = strVal(state.Name, "name")
+	state.Algorithm = strVal(state.Algorithm, "algorithm")
+	state.Size = int64Val(state.Size, "size")
+	state.Curveid = strVal(state.Curveid, "curveid")
+	state.UsageMask = int64Val(state.UsageMask, "usageMask")
+	state.UnExportable = boolVal(state.UnExportable, "unexportable")
+	state.UnDeletable = boolVal(state.UnDeletable, "undeletable")
+	state.ObjectType = strVal(state.ObjectType, "objectType")
+	state.Description = strVal(state.Description, "description")
+	state.State = strVal(state.State, "state")
+	state.ActivationDate = strVal(state.ActivationDate, "activationDate")
+	state.DeactivationDate = strVal(state.DeactivationDate, "deactivationDate")
+	state.ArchiveDate = strVal(state.ArchiveDate, "archiveDate")
+	state.DestroyDate = strVal(state.DestroyDate, "destroyDate")
+	state.ProcessStartDate = strVal(state.ProcessStartDate, "processStartDate")
+	state.ProtectStopDate = strVal(state.ProtectStopDate, "protectStopDate")
+	state.CompromiseDate = strVal(state.CompromiseDate, "compromiseDate")
+	state.CompromiseOccurrenceDate = strVal(state.CompromiseOccurrenceDate, "compromiseOccurrenceDate")
+	state.RotationFrequencyDays = strVal(state.RotationFrequencyDays, "rotationFrequencyDays")
+	// Note: CMKeyJSON struct has a known field-name inversion; wire field "revocationMessage" → TF state RevocationReason.
+	state.RevocationReason = strVal(state.RevocationReason, "revocationMessage")
+	state.RevocationMessage = strVal(state.RevocationMessage, "revocationReason")
+	state.TemplateID = strVal(state.TemplateID, "templateId")
+	state.UUID = strVal(state.UUID, "uuid")
+	state.MUID = strVal(state.MUID, "muid")
+	state.KeyId = strVal(state.KeyId, "keyId")
+
+	// labels (types.Map of types.StringType): only refresh when previously configured.
+	if !state.Labels.IsNull() {
+		labelsResult := gjson.Get(response, "labels")
+		labelsMap := map[string]attr.Value{}
+		if labelsResult.Exists() && labelsResult.IsObject() {
+			for k, v := range labelsResult.Map() {
+				labelsMap[k] = types.StringValue(v.String())
+			}
+		}
+		labelsValue, diags := types.MapValue(types.StringType, labelsMap)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsValue
+	}
+
+	// aliases ([]*KeyAliasTFSDK): only refresh when the user previously configured aliases.
+	// Note: the schema defines aliases[].index as StringAttribute but KeyAliasTFSDK.Index
+	// is types.Int64 — a pre-existing struct/schema mismatch. We populate when previously
+	// set and allow resp.State.Set to surface any framework error from the mismatch.
+	if len(state.Aliases) > 0 {
+		aliasesArr := gjson.Get(response, "aliases").Array()
+		aliases := make([]*KeyAliasTFSDK, 0, len(aliasesArr))
+		for _, a := range aliasesArr {
+			aliases = append(aliases, &KeyAliasTFSDK{
+				Alias: types.StringValue(a.Get("alias").String()),
+				Index: types.Int64Value(a.Get("index").Int()),
+				Type:  types.StringValue(a.Get("type").String()),
+			})
+		}
+		state.Aliases = aliases
+	}
+
+	// meta (*KeyMetadataTFSDK, schema.SingleNestedAttribute): only refresh when previously configured.
+	metaResult := gjson.Get(response, "meta")
+	if state.Metadata != nil && metaResult.Exists() && metaResult.IsObject() {
+		metadata := &KeyMetadataTFSDK{
+			OwnerId: types.StringValue(metaResult.Get("owner_id").String()),
+		}
+		permsResult := metaResult.Get("permissions")
+		if permsResult.Exists() && permsResult.IsObject() {
+			parseStringSlice := func(key string) []types.String {
+				var out []types.String
+				for _, v := range permsResult.Get(key).Array() {
+					out = append(out, types.StringValue(v.String()))
+				}
+				return out
+			}
+			metadata.Permissions = &KeyMetadataPermissionsTFSDK{
+				DecryptWithKey:   parseStringSlice("DecryptWithKey"),
+				EncryptWithKey:   parseStringSlice("EncryptWithKey"),
+				ExportKey:        parseStringSlice("ExportKey"),
+				MACVerifyWithKey: parseStringSlice("MACVerifyWithKey"),
+				MACWithKey:       parseStringSlice("MACWithKey"),
+				ReadKey:          parseStringSlice("ReadKey"),
+				SignVerifyWithKey: parseStringSlice("SignVerifyWithKey"),
+				SignWithKey:      parseStringSlice("SignWithKey"),
+				UseKey:           parseStringSlice("UseKey"),
+			}
+		}
+		cteResult := metaResult.Get("cte")
+		if cteResult.Exists() && cteResult.IsObject() {
+			metadata.CTE = &KeyMetadataCTETFSDK{
+				PersistentOnClient: types.BoolValue(cteResult.Get("persistent_on_client").Bool()),
+				EncryptionMode:     types.StringValue(cteResult.Get("encryption_mode").String()),
+				CTEVersioned:       types.BoolValue(cteResult.Get("cte_versioned").Bool()),
+			}
+		}
+		state.Metadata = metadata
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+// ImportState enables `terraform import` for ciphertrust_cm_key using the CM resource ID.
+func (r *resourceCMKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
