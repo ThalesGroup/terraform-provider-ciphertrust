@@ -72,7 +72,7 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Description about the connection. Once set, 'description' can be changed but not removed.",
 			},
 			"id": schema.StringAttribute{
-				Computed:    true,
+				Computed:      true,
 				Description:   "CipherTrust Manager resource ID of the connection.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},

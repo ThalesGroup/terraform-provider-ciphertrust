@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestResourceCMKey(t *testing.T) {
@@ -67,6 +68,57 @@ resource "ciphertrust_cm_key" "cte_key" {
 				),
 			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+func TestAccCMKey_HMACAlgorithmNoDrift(t *testing.T) {
+	config := providerConfig + `
+resource "ciphertrust_cm_key" "hmac_nodrift" {
+  name       = "terraform-hmac-nodrift"
+  algorithm  = "hmac-sha256"
+  key_size   = 256
+  usage_mask = 28
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.hmac_nodrift", "id"),
+				),
+			},
+			{
+				Config: config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestAccCMKey_HMACAlgorithmStateUppercase(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "hmac_uppercase" {
+  name       = "terraform-hmac-uppercase"
+  algorithm  = "hmac-sha512"
+  key_size   = 512
+  usage_mask = 28
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.hmac_uppercase", "algorithm", "HMAC-SHA512"),
+				),
+			},
 		},
 	})
 }

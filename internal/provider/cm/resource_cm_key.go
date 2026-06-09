@@ -1066,6 +1066,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
+	if !plan.Algorithm.IsNull() && !plan.Algorithm.IsUnknown() && plan.Algorithm.ValueString() != "" {
+		plan.Algorithm = types.StringValue(strings.ToUpper(plan.Algorithm.ValueString()))
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
