@@ -446,7 +446,7 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 	return []func() resource.Resource{
 		cm.NewResourceCMUser,
 		cm.NewResourceCMKey,
-		cm.NewResourceCMGroup,
+		NewResourceCMGroup,
 		cte.NewResourceCTEProcessSet,
 		cte.NewResourceCTEResourceSet,
 		cte.NewResourceCTEUserSet,
