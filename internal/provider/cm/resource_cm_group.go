@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCMGroup{}
@@ -42,9 +45,6 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-			},
-			"app_metadata": schema.MapNestedAttribute{
-				Optional: true,
 			},
 			"client_metadata": schema.MapNestedAttribute{
 				Optional: true,
@@ -83,12 +83,6 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = plan.Description.ValueString()
 	}
-
-	appMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.AppMetadata.Elements() {
-		appMetadataPayload[k] = v.(types.String).ValueString()
-	}
-	payload.AppMetadata = appMetadataPayload
 
 	clientMetadataPayload := make(map[string]interface{})
 	for k, v := range plan.ClientMetadata.Elements() {
@@ -135,6 +129,41 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	groupName := state.Name.ValueString()
+	response, err := r.client.GetById(ctx, id, groupName, common.URL_GROUP)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found, removing from state][group name: "+groupName+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError(
+			"Error reading CM group",
+			"Could not read group "+groupName+": "+err.Error(),
+		)
+		return
+	}
+
+	var groupJSON CMGroupJSON
+	if err := json.Unmarshal([]byte(response), &groupJSON); err != nil {
+		resp.Diagnostics.AddError("Error parsing CM group response", err.Error())
+		return
+	}
+	state.Name = types.StringValue(groupJSON.Name)
+	state.ID = types.StringValue(groupJSON.Name)
+	state.Description = types.StringValue(groupJSON.Description)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -155,12 +184,6 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = plan.Description.ValueString()
 	}
-
-	appMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.AppMetadata.Elements() {
-		appMetadataPayload[k] = v.(types.String).ValueString()
-	}
-	payload.AppMetadata = appMetadataPayload
 
 	clientMetadataPayload := make(map[string]interface{})
 	for k, v := range plan.ClientMetadata.Elements() {
