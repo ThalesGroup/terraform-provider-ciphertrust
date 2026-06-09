@@ -58,6 +58,7 @@ type CMGroupTFSDK struct {
 	ClientMetadata types.Map    `tfsdk:"client_metadata"`
 	Description    types.String `tfsdk:"description"`
 	UserMetadata   types.Map    `tfsdk:"user_metadata"`
+	RefDn          types.String `tfsdk:"ref_dn"`
 }
 
 type CMKeysListTFSDK struct {

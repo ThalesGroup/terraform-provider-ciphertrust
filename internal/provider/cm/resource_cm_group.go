@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -43,19 +46,29 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"app_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"app_metadata": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Computed:    true,
 			},
-			"client_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"client_metadata": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Computed:    true,
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 			},
-			"user_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"user_metadata": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Computed:    true,
 			},
 			"id": schema.StringAttribute{
+				Computed: true,
+			},
+			"ref_dn": schema.StringAttribute{
 				Computed: true,
 			},
 		},
@@ -135,6 +148,38 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CM_GROUPS)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read][group not found, removing from state][group id: "+state.ID.ValueString()+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading CipherTrust Group",
+			"Could not read group, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	setCMGroupState(ctx, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		tflog.Error(ctx, "[resource_cm_group.go -> Read][error setting state from API response]["+id+"]")
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -241,4 +286,50 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+func setCMGroupState(ctx context.Context, response string, state *CMGroupTFSDK, diags *diag.Diagnostics) {
+	state.ID = types.StringValue(gjson.Get(response, "name").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.RefDn = types.StringValue(gjson.Get(response, "ref_dn").String())
+
+	appMetaJSON := gjson.Get(response, "app_metadata")
+	if appMetaJSON.IsObject() {
+		appMetaMap := make(map[string]string)
+		for k, v := range appMetaJSON.Map() {
+			appMetaMap[k] = v.String()
+		}
+		mapVal, d := types.MapValueFrom(ctx, types.StringType, appMetaMap)
+		diags.Append(d...)
+		state.AppMetadata = mapVal
+	} else {
+		state.AppMetadata = types.MapNull(types.StringType)
+	}
+
+	clientMetaJSON := gjson.Get(response, "client_metadata")
+	if clientMetaJSON.IsObject() {
+		clientMetaMap := make(map[string]string)
+		for k, v := range clientMetaJSON.Map() {
+			clientMetaMap[k] = v.String()
+		}
+		mapVal, d := types.MapValueFrom(ctx, types.StringType, clientMetaMap)
+		diags.Append(d...)
+		state.ClientMetadata = mapVal
+	} else {
+		state.ClientMetadata = types.MapNull(types.StringType)
+	}
+
+	userMetaJSON := gjson.Get(response, "user_metadata")
+	if userMetaJSON.IsObject() {
+		userMetaMap := make(map[string]string)
+		for k, v := range userMetaJSON.Map() {
+			userMetaMap[k] = v.String()
+		}
+		mapVal, d := types.MapValueFrom(ctx, types.StringType, userMetaMap)
+		diags.Append(d...)
+		state.UserMetadata = mapVal
+	} else {
+		state.UserMetadata = types.MapNull(types.StringType)
+	}
 }
