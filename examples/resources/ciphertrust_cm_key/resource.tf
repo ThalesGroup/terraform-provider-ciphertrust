@@ -40,8 +40,8 @@ resource "ciphertrust_cm_key" "sample_key" {
   # Name of the key
   name="terraform"
 
-  # Cryptographic algorithm this key is used with. Defaults to 'aes'.
-  algorithm="aes"
+  # Cryptographic algorithm this key is used with. Must be uppercase (e.g., "AES", "HMAC-SHA256").
+  algorithm="AES"
 
   # Bit length for the key.
   size=256
