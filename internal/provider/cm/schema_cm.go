@@ -36,10 +36,13 @@ type CMCertificateAuthoritiesListModelTFSDK struct {
 
 type CMGroupJSON struct {
 	Name           string                 `json:"name"`
+	Description    string                 `json:"description"`
+	Connection     string                 `json:"connection,omitempty"`
+	AllDomainUsers *bool                  `json:"allDomainUsers,omitempty"`
 	AppMetadata    map[string]interface{} `json:"app_metadata"`
 	ClientMetadata map[string]interface{} `json:"client_metadata"`
-	Description    string                 `json:"description"`
 	UserMetadata   map[string]interface{} `json:"user_metadata"`
+	Users          []string               `json:"users,omitempty"`
 }
 
 type CMGroupsListModelTFSDK struct {
@@ -54,10 +57,15 @@ type CMGroupsDataSourceModelTFSDK struct {
 type CMGroupTFSDK struct {
 	ID             types.String `tfsdk:"id"`
 	Name           types.String `tfsdk:"name"`
+	Description    types.String `tfsdk:"description"`
+	Connection     types.String `tfsdk:"connection"`
+	AllDomainUsers types.Bool   `tfsdk:"all_domain_users"`
 	AppMetadata    types.Map    `tfsdk:"app_metadata"`
 	ClientMetadata types.Map    `tfsdk:"client_metadata"`
-	Description    types.String `tfsdk:"description"`
 	UserMetadata   types.Map    `tfsdk:"user_metadata"`
+	Users          types.List   `tfsdk:"users"`
+	CreatedAt      types.String `tfsdk:"created_at"`
+	UpdatedAt      types.String `tfsdk:"updated_at"`
 }
 
 type CMKeysListTFSDK struct {
