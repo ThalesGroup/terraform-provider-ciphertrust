@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -50,17 +51,20 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"app_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"app_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
-			"client_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"client_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
 			},
-			"user_metadata": schema.MapNestedAttribute{
-				Optional: true,
+			"user_metadata": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -69,16 +73,31 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 	}
 }
 
-// setGroupState maps API response fields into Terraform state for a CM group.
-// Only scalar fields (id, name, description) are updated from the response;
-// map fields (app_metadata, client_metadata, user_metadata) are left unchanged
-// because schema.MapNestedAttribute without NestedObject has an indeterminate
-// element type that would cause State.Set to fail if overwritten.
-func setGroupState(_ context.Context, response string, state *CMGroupTFSDK, _ *diag.Diagnostics) {
+// setGroupState maps all API response fields into Terraform state for a CM group.
+func setGroupState(_ context.Context, response string, state *CMGroupTFSDK, diags *diag.Diagnostics) {
 	name := gjson.Get(response, "name").String()
 	state.ID = types.StringValue(name)
 	state.Name = types.StringValue(name)
 	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.AppMetadata = gjsonToStringMap(gjson.Get(response, "app_metadata"), diags)
+	state.ClientMetadata = gjsonToStringMap(gjson.Get(response, "client_metadata"), diags)
+	state.UserMetadata = gjsonToStringMap(gjson.Get(response, "user_metadata"), diags)
+}
+
+// gjsonToStringMap converts a gjson map result to a types.Map of strings.
+// Returns null map when the field is absent or null in the API response.
+func gjsonToStringMap(result gjson.Result, diags *diag.Diagnostics) types.Map {
+	if !result.Exists() || result.Type == gjson.Null {
+		return types.MapNull(types.StringType)
+	}
+	m := make(map[string]attr.Value, len(result.Map()))
+	result.ForEach(func(k, v gjson.Result) bool {
+		m[k.String()] = types.StringValue(v.String())
+		return true
+	})
+	mapVal, d := types.MapValue(types.StringType, m)
+	diags.Append(d...)
+	return mapVal
 }
 
 // Create creates the resource and sets the initial Terraform state.
