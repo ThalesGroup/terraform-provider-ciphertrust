@@ -72,7 +72,8 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed",
 						"aria",
 						"opaque",
-						"AES", "EC", "RSA"}...),
+						"AES", "EC", "RSA",
+						"HMAC-SHA1", "HMAC-SHA256", "HMAC-SHA384", "HMAC-SHA512"}...),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
@@ -1066,6 +1067,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
+	if strings.HasPrefix(strings.ToLower(plan.Algorithm.ValueString()), "hmac-") {
+		plan.Algorithm = types.StringValue(strings.ToUpper(plan.Algorithm.ValueString()))
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -1076,6 +1081,36 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "Key not found, removing from state [resource_cm_key.go -> Read]["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError(
+			"Error reading key from CipherTrust Manager",
+			err.Error(),
+		)
+		return
+	}
+
+	state.Algorithm = types.StringValue(gjson.Get(response, "algorithm").String())
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
