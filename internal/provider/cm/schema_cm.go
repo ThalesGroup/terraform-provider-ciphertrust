@@ -35,11 +35,16 @@ type CMCertificateAuthoritiesListModelTFSDK struct {
 }
 
 type CMGroupJSON struct {
-	Name           string                 `json:"name"`
-	AppMetadata    map[string]interface{} `json:"app_metadata"`
-	ClientMetadata map[string]interface{} `json:"client_metadata"`
-	Description    string                 `json:"description"`
-	UserMetadata   map[string]interface{} `json:"user_metadata"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	AppMetadata map[string]interface{} `json:"app_metadata"`
+	Description string                 `json:"description"`
+	UserMetadata map[string]interface{} `json:"user_metadata"`
+	Connection  string                 `json:"connection,omitempty"`
+	ClientId    string                 `json:"clientId,omitempty"`
+	CreatedAt   string                 `json:"createdAt,omitempty"`
+	UpdatedAt   string                 `json:"updatedAt,omitempty"`
+	AllClients  bool                   `json:"allClients,omitempty"`
 }
 
 type CMGroupsListModelTFSDK struct {
@@ -52,12 +57,16 @@ type CMGroupsDataSourceModelTFSDK struct {
 }
 
 type CMGroupTFSDK struct {
-	ID             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	AppMetadata    types.Map    `tfsdk:"app_metadata"`
-	ClientMetadata types.Map    `tfsdk:"client_metadata"`
-	Description    types.String `tfsdk:"description"`
-	UserMetadata   types.Map    `tfsdk:"user_metadata"`
+	ID          types.String `tfsdk:"id"`
+	Name        types.String `tfsdk:"name"`
+	AppMetadata types.Map    `tfsdk:"app_metadata"`
+	Description types.String `tfsdk:"description"`
+	UserMetadata types.Map   `tfsdk:"user_metadata"`
+	Connection  types.String `tfsdk:"connection"`
+	ClientId    types.String `tfsdk:"client_id"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	UpdatedAt   types.String `tfsdk:"updated_at"`
+	AllClients  types.Bool   `tfsdk:"all_clients"`
 }
 
 type CMKeysListTFSDK struct {
