@@ -13,6 +13,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -84,7 +85,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 							Optional:    true,
 							Description: "An alias for a key name.",
 						},
-						"index": schema.StringAttribute{
+						"index": schema.Int64Attribute{
 							Optional:    true,
 							Description: "Index associated with alias. Each alias within an object has a unique index.",
 						},
@@ -1076,6 +1077,171 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if state.ID.IsNull() || state.ID.ValueString() == "" {
+		return
+	}
+
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError("Error reading key on CipherTrust Manager", err.Error())
+		return
+	}
+
+	// Populate scalar Saved=Yes fields from the API response.
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Algorithm = types.StringValue(gjson.Get(response, "algorithm").String())
+	state.State = types.StringValue(gjson.Get(response, "state").String())
+	state.UsageMask = types.Int64Value(gjson.Get(response, "usageMask").Int())
+	state.UnExportable = types.BoolValue(gjson.Get(response, "unexportable").Bool())
+	state.UnDeletable = types.BoolValue(gjson.Get(response, "undeletable").Bool())
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.ActivationDate = types.StringValue(gjson.Get(response, "activationDate").String())
+	state.DeactivationDate = types.StringValue(gjson.Get(response, "deactivationDate").String())
+	state.ArchiveDate = types.StringValue(gjson.Get(response, "archiveDate").String())
+	state.ProcessStartDate = types.StringValue(gjson.Get(response, "processStartDate").String())
+	state.ProtectStopDate = types.StringValue(gjson.Get(response, "protectStopDate").String())
+	state.RotationFrequencyDays = types.StringValue(gjson.Get(response, "rotationFrequencyDays").String())
+	// Mirror the existing swapped JSON struct tags on CMKeyJSON.RevocationReason/RevocationMessage.
+	state.RevocationReason = types.StringValue(gjson.Get(response, "revocationMessage").String())
+	state.RevocationMessage = types.StringValue(gjson.Get(response, "revocationReason").String())
+	state.CompromiseOccurrenceDate = types.StringValue(gjson.Get(response, "compromiseOccurrenceDate").String())
+	state.Curveid = types.StringValue(gjson.Get(response, "curveid").String())
+	state.ObjectType = types.StringValue(gjson.Get(response, "objectType").String())
+	state.Size = types.Int64Value(gjson.Get(response, "size").Int())
+	state.XTS = types.BoolValue(gjson.Get(response, "xts").Bool())
+	state.CertType = types.StringValue(gjson.Get(response, "certType").String())
+	state.IDSize = types.Int64Value(gjson.Get(response, "idSize").Int())
+	state.DestroyDate = types.StringValue(gjson.Get(response, "destroyDate").String())
+	state.CompromiseDate = types.StringValue(gjson.Get(response, "compromiseDate").String())
+	state.DefaultIV = types.StringValue(gjson.Get(response, "defaultIV").String())
+
+	// Populate aliases.
+	aliasResults := gjson.Get(response, "aliases").Array()
+	if len(aliasResults) > 0 {
+		aliases := make([]*KeyAliasTFSDK, 0, len(aliasResults))
+		for _, elem := range aliasResults {
+			aliases = append(aliases, &KeyAliasTFSDK{
+				Alias: types.StringValue(elem.Get("alias").String()),
+				Index: types.Int64Value(elem.Get("index").Int()),
+				Type:  types.StringValue(elem.Get("type").String()),
+			})
+		}
+		state.Aliases = aliases
+	} else {
+		state.Aliases = nil
+	}
+
+	// Populate labels map.
+	labelsResult := gjson.Get(response, "labels")
+	if labelsResult.Exists() && labelsResult.IsObject() {
+		entries := make(map[string]attr.Value)
+		for k, v := range labelsResult.Map() {
+			entries[k] = types.StringValue(v.String())
+		}
+		labelsMap, labelsDiags := types.MapValue(types.StringType, entries)
+		resp.Diagnostics.Append(labelsDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsMap
+	} else {
+		state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+	}
+
+	// Populate meta nested struct.
+	metaResult := gjson.Get(response, "meta")
+	if metaResult.Exists() && metaResult.IsObject() {
+		if state.Metadata == nil {
+			state.Metadata = &KeyMetadataTFSDK{}
+		}
+		state.Metadata.OwnerId = types.StringValue(gjson.Get(response, "meta.owner_id").String())
+
+		permsResult := gjson.Get(response, "meta.permissions")
+		if permsResult.Exists() && permsResult.IsObject() {
+			if state.Metadata.Permissions == nil {
+				state.Metadata.Permissions = &KeyMetadataPermissionsTFSDK{}
+			}
+			toStringSlice := func(results []gjson.Result) []types.String {
+				out := make([]types.String, 0, len(results))
+				for _, elem := range results {
+					out = append(out, types.StringValue(elem.String()))
+				}
+				return out
+			}
+			state.Metadata.Permissions.DecryptWithKey = toStringSlice(gjson.Get(response, "meta.permissions.DecryptWithKey").Array())
+			state.Metadata.Permissions.EncryptWithKey = toStringSlice(gjson.Get(response, "meta.permissions.EncryptWithKey").Array())
+			state.Metadata.Permissions.ExportKey = toStringSlice(gjson.Get(response, "meta.permissions.ExportKey").Array())
+			state.Metadata.Permissions.MACVerifyWithKey = toStringSlice(gjson.Get(response, "meta.permissions.MACVerifyWithKey").Array())
+			state.Metadata.Permissions.MACWithKey = toStringSlice(gjson.Get(response, "meta.permissions.MACWithKey").Array())
+			state.Metadata.Permissions.ReadKey = toStringSlice(gjson.Get(response, "meta.permissions.ReadKey").Array())
+			state.Metadata.Permissions.SignVerifyWithKey = toStringSlice(gjson.Get(response, "meta.permissions.SignVerifyWithKey").Array())
+			state.Metadata.Permissions.SignWithKey = toStringSlice(gjson.Get(response, "meta.permissions.SignWithKey").Array())
+			state.Metadata.Permissions.UseKey = toStringSlice(gjson.Get(response, "meta.permissions.UseKey").Array())
+		}
+
+		cteResult := gjson.Get(response, "meta.cte")
+		if cteResult.Exists() {
+			if state.Metadata.CTE == nil {
+				state.Metadata.CTE = &KeyMetadataCTETFSDK{}
+			}
+			state.Metadata.CTE.PersistentOnClient = types.BoolValue(gjson.Get(response, "meta.cte.persistent_on_client").Bool())
+			state.Metadata.CTE.EncryptionMode = types.StringValue(gjson.Get(response, "meta.cte.encryption_mode").String())
+			state.Metadata.CTE.CTEVersioned = types.BoolValue(gjson.Get(response, "meta.cte.cte_versioned").Bool())
+		}
+	}
+
+	// Populate public_key_parameters nested struct.
+	pkpResult := gjson.Get(response, "publicKeyParameters")
+	if pkpResult.Exists() {
+		if state.PublicKeyParameters == nil {
+			state.PublicKeyParameters = &PublicKeyParametersTFSDK{}
+		}
+		state.PublicKeyParameters.Name = types.StringValue(gjson.Get(response, "publicKeyParameters.name").String())
+		state.PublicKeyParameters.State = types.StringValue(gjson.Get(response, "publicKeyParameters.state").String())
+		state.PublicKeyParameters.UsageMask = types.Int64Value(gjson.Get(response, "publicKeyParameters.usageMask").Int())
+		state.PublicKeyParameters.UnExportable = types.BoolValue(gjson.Get(response, "publicKeyParameters.unexportable").Bool())
+		state.PublicKeyParameters.UnDeletable = types.BoolValue(gjson.Get(response, "publicKeyParameters.undeletable").Bool())
+		state.PublicKeyParameters.ActivationDate = types.StringValue(gjson.Get(response, "publicKeyParameters.activationDate").String())
+		state.PublicKeyParameters.DeactivationDate = types.StringValue(gjson.Get(response, "publicKeyParameters.deactivationDate").String())
+		state.PublicKeyParameters.ArchiveDate = types.StringValue(gjson.Get(response, "publicKeyParameters.archiveDate").String())
+
+		pkpAliasResults := gjson.Get(response, "publicKeyParameters.aliases").Array()
+		if len(pkpAliasResults) > 0 {
+			pkpAliases := make([]KeyAliasTFSDK, 0, len(pkpAliasResults))
+			for _, elem := range pkpAliasResults {
+				pkpAliases = append(pkpAliases, KeyAliasTFSDK{
+					Alias: types.StringValue(elem.Get("alias").String()),
+					Index: types.Int64Value(elem.Get("index").Int()),
+					Type:  types.StringValue(elem.Get("type").String()),
+				})
+			}
+			state.PublicKeyParameters.Aliases = pkpAliases
+		} else {
+			state.PublicKeyParameters.Aliases = nil
+		}
+	}
+
+	// All Saved=No fields (material, password, encoding, format, etc.) remain at
+	// their prior-state values loaded above — no explicit assignment needed.
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
