@@ -100,8 +100,18 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 	}
 }
 
-// Read refreshes the Terraform state with the latest data.
+// Read preserves state as-is. SSH key upload is a bootstrap-only action (POST /v1/system/ssh/keys)
+// with no corresponding GET endpoint, so there is no remote state to refresh.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMSSHKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

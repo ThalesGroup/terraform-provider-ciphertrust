@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -171,8 +172,68 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
+
 	var state CMRegTokenTFSDK
 	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tokenResponse, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
+	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "RegToken not found on CipherTrust Manager, removing from state: "+state.ID.ValueString())
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust RegToken",
+			"Could not read CipherTrust RegToken "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var regToken CMRegTokenJSON
+	if err := json.Unmarshal([]byte(tokenResponse), &regToken); err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust RegToken",
+			"Could not parse CipherTrust RegToken response: "+err.Error(),
+		)
+		return
+	}
+
+	// Update state with refreshed values from API
+	state.ID = types.StringValue(regToken.ID)
+	state.Token = types.StringValue(regToken.Token)
+
+	// Optional string fields: only update if API returned non-empty or user previously set them
+	if regToken.CAID != "" || !state.CAID.IsNull() {
+		state.CAID = types.StringValue(regToken.CAID)
+	}
+	if regToken.ClientManagementProfileID != "" || !state.ClientManagementProfileID.IsNull() {
+		state.ClientManagementProfileID = types.StringValue(regToken.ClientManagementProfileID)
+	}
+	// lifetime is a write-only creation parameter; the API converts it to
+	// valid_until and returns null for lifetime on GET. Preserve the state value.
+	if regToken.NamePrefix != "" || !state.NamePrefix.IsNull() {
+		state.NamePrefix = types.StringValue(regToken.NamePrefix)
+	}
+
+	// Optional int fields: only update if API returned a meaningful value or user previously set them.
+	// The API uses 0 and -1 as sentinel values meaning "not set" / "unlimited".
+	if regToken.CertDuration > 0 || !state.CertDuration.IsNull() {
+		state.CertDuration = types.Int64Value(regToken.CertDuration)
+	}
+	if regToken.MaxClients > 0 || !state.MaxClients.IsNull() {
+		state.MaxClients = types.Int64Value(regToken.MaxClients)
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

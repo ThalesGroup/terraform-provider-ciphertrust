@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -135,6 +136,56 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	groupResponse, err := r.client.GetById(ctx, id, state.Name.ValueString(), common.URL_GROUP)
+	if err != nil {
+		// If the group no longer exists on CM, remove it from state
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "Group not found on CipherTrust Manager, removing from state: "+state.Name.ValueString())
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not read CipherTrust group "+state.Name.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var group CMGroupJSON
+	if err := json.Unmarshal([]byte(groupResponse), &group); err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not parse CipherTrust group response: "+err.Error(),
+		)
+		return
+	}
+
+	// Update state with refreshed values from API
+	state.Name = types.StringValue(group.Name)
+	state.ID = types.StringValue(group.Name)
+	// Update description if the API returned a non-empty value OR the user
+	// previously set it in config
+	if group.Description != "" || !state.Description.IsNull() {
+		state.Description = types.StringValue(group.Description)
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
