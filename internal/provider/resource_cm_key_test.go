@@ -70,3 +70,60 @@ resource "ciphertrust_cm_key" "cte_key" {
 		},
 	})
 }
+
+func TestAccCMKey_HMACAlgorithmNoDrift(t *testing.T) {
+	hmacKeyConfig := providerConfig + `
+resource "ciphertrust_cm_key" "hmac_key" {
+  name         = "terraform-hmac-nodrift"
+  algorithm    = "hmac-sha256"
+  usage_mask   = 28
+  undeletable  = false
+  unexportable = false
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hmacKeyConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.hmac_key", "id"),
+				),
+			},
+			{
+				Config:             hmacKeyConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func TestAccCMKey_HMACAlgorithmUppercaseInState(t *testing.T) {
+	hmacKeyConfig := providerConfig + `
+resource "ciphertrust_cm_key" "hmac_key512" {
+  name         = "terraform-hmac-uppercase"
+  algorithm    = "hmac-sha512"
+  usage_mask   = 28
+  undeletable  = false
+  unexportable = false
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hmacKeyConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.hmac_key512", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.hmac_key512", "algorithm", "HMAC-SHA512"),
+				),
+			},
+			{
+				Config:             hmacKeyConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
