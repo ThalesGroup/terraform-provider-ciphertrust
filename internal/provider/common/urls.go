@@ -5,6 +5,7 @@ const (
 	URL_KEY_MANAGEMENT        = "api/v1/vault/keys2"
 	URL_SIGNIN                = "api/v1/auth/tokens"
 	URL_GROUP                 = "api/v1/usermgmt/groups"
+	URL_CM_GROUPS             = "api/v1/usermgmt/groups"
 	URL_DOMAIN                = "api/v1/domains"
 	URL_INTERFACE             = "api/v1/configs/interfaces"
 	URL_CTE_PROCESS_SET       = "api/v1/transparent-encryption/processsets"

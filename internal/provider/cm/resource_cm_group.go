@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -15,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCMGroup{}
@@ -56,6 +60,12 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional: true,
 			},
 			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"users_count": schema.Int64Attribute{
 				Computed: true,
 			},
 		},
@@ -135,6 +145,42 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	groupName := state.Name.ValueString()
+	response, err := r.client.GetById(ctx, id, groupName, common.URL_CM_GROUPS)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "[resource_cm_group.go -> Read]["+id+"] Group not found, removing from state")
+			resp.Diagnostics.AddWarning(
+				"Group Not Found",
+				"Group "+groupName+" was not found and will be removed from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not read group "+groupName+": "+err.Error(),
+		)
+		return
+	}
+
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.ID = state.Name
+	state.Description = types.StringValue(gjson.Get(response, "description").String())
+	state.UsersCount = types.Int64Value(gjson.Get(response, "users_count").Int())
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
