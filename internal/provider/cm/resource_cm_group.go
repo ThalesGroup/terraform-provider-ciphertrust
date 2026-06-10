@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -15,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCMGroup{}
@@ -43,20 +47,23 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"app_metadata": schema.MapNestedAttribute{
+			"app_metadata": schema.StringAttribute{
 				Optional: true,
 			},
-			"client_metadata": schema.MapNestedAttribute{
+			"client_metadata": schema.StringAttribute{
 				Optional: true,
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
 			},
-			"user_metadata": schema.MapNestedAttribute{
+			"user_metadata": schema.StringAttribute{
 				Optional: true,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -84,23 +91,15 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 		payload.Description = plan.Description.ValueString()
 	}
 
-	appMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.AppMetadata.Elements() {
-		appMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.AppMetadata.IsNull() && !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &payload.AppMetadata)
 	}
-	payload.AppMetadata = appMetadataPayload
-
-	clientMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.ClientMetadata.Elements() {
-		clientMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &payload.ClientMetadata)
 	}
-	payload.ClientMetadata = clientMetadataPayload
-
-	userMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.UserMetadata.Elements() {
-		userMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &payload.UserMetadata)
 	}
-	payload.UserMetadata = userMetadataPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -135,6 +134,69 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+
+	var state CMGroupTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	groupID := state.ID.ValueString()
+
+	response, err := r.client.GetById(ctx, id, groupID, common.URL_GROUP)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "Group not found, removing from state [resource_cm_group.go -> Read]["+groupID+"]")
+			resp.Diagnostics.AddWarning(
+				"CipherTrust Group Not Found",
+				"Group "+groupID+" was not found and will be removed from state: "+err.Error(),
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group",
+			"Could not read group "+groupID+": "+err.Error(),
+		)
+		return
+	}
+
+	state.ID = types.StringValue(gjson.Get(response, "name").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+
+	descResult := gjson.Get(response, "description")
+	if descResult.Type == gjson.String {
+		state.Description = types.StringValue(descResult.String())
+	} else {
+		state.Description = types.StringNull()
+	}
+
+	appMetaResult := gjson.Get(response, "app_metadata")
+	if appMetaResult.Type == gjson.JSON {
+		state.AppMetadata = types.StringValue(appMetaResult.Raw)
+	} else {
+		state.AppMetadata = types.StringNull()
+	}
+
+	clientMetaResult := gjson.Get(response, "client_metadata")
+	if clientMetaResult.Type == gjson.JSON {
+		state.ClientMetadata = types.StringValue(clientMetaResult.Raw)
+	} else {
+		state.ClientMetadata = types.StringNull()
+	}
+
+	userMetaResult := gjson.Get(response, "user_metadata")
+	if userMetaResult.Type == gjson.JSON {
+		state.UserMetadata = types.StringValue(userMetaResult.Raw)
+	} else {
+		state.UserMetadata = types.StringNull()
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -156,23 +218,15 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		payload.Description = plan.Description.ValueString()
 	}
 
-	appMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.AppMetadata.Elements() {
-		appMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.AppMetadata.IsNull() && !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &payload.AppMetadata)
 	}
-	payload.AppMetadata = appMetadataPayload
-
-	clientMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.ClientMetadata.Elements() {
-		clientMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &payload.ClientMetadata)
 	}
-	payload.ClientMetadata = clientMetadataPayload
-
-	userMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.UserMetadata.Elements() {
-		userMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
+		_ = json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &payload.UserMetadata)
 	}
-	payload.UserMetadata = userMetadataPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {

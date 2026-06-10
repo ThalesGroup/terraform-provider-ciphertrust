@@ -1093,7 +1093,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-			ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
+				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
 			},
 		},
 	})
@@ -1230,7 +1230,7 @@ func TestCckmAWSKeyImportMaterialResourceWithExpiry(t *testing.T) {
 					resource.TestCheckResourceAttr(reimportResource, "origin", "EXTERNAL"),
 					resource.TestCheckResourceAttr(reimportResource, "key_state", "Enabled"),
 					resource.TestCheckResourceAttr(reimportResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-				testCheckAttributeContains(reimportResource, "valid_to", []string{validTo[:10]}, true),
+					testCheckAttributeContains(reimportResource, "valid_to", []string{validTo[:10]}, true),
 				),
 			},
 		},
