@@ -13,6 +13,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -1076,6 +1077,235 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var state CMKeyTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END, map[string]interface{}{
+			"error":  err.Error(),
+			"method": "resourceCMKey.Read",
+			"id":     id,
+		})
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Key",
+			"Could not read key "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	var keyData CMKeyJSON
+	if err := json.Unmarshal([]byte(response), &keyData); err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END, map[string]interface{}{
+			"error":  err.Error(),
+			"method": "resourceCMKey.Read",
+			"id":     id,
+		})
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Key",
+			"Could not unmarshal key response "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	// String fields — guard on non-empty to avoid null→"" spurious diffs
+	if keyData.Name != "" {
+		state.Name = types.StringValue(keyData.Name)
+	}
+	if keyData.Algorithm != "" {
+		state.Algorithm = types.StringValue(keyData.Algorithm)
+	}
+	if keyData.State != "" {
+		state.State = types.StringValue(keyData.State)
+	}
+	if keyData.Curveid != "" {
+		state.Curveid = types.StringValue(keyData.Curveid)
+	}
+	if keyData.ObjectType != "" {
+		state.ObjectType = types.StringValue(keyData.ObjectType)
+	}
+	if keyData.ActivationDate != "" {
+		state.ActivationDate = types.StringValue(keyData.ActivationDate)
+	}
+	if keyData.DeactivationDate != "" {
+		state.DeactivationDate = types.StringValue(keyData.DeactivationDate)
+	}
+	if keyData.ArchiveDate != "" {
+		state.ArchiveDate = types.StringValue(keyData.ArchiveDate)
+	}
+	if keyData.DestroyDate != "" {
+		state.DestroyDate = types.StringValue(keyData.DestroyDate)
+	}
+	if keyData.CompromiseDate != "" {
+		state.CompromiseDate = types.StringValue(keyData.CompromiseDate)
+	}
+	if keyData.CompromiseOccurrenceDate != "" {
+		state.CompromiseOccurrenceDate = types.StringValue(keyData.CompromiseOccurrenceDate)
+	}
+	if keyData.ProcessStartDate != "" {
+		state.ProcessStartDate = types.StringValue(keyData.ProcessStartDate)
+	}
+	if keyData.ProtectStopDate != "" {
+		state.ProtectStopDate = types.StringValue(keyData.ProtectStopDate)
+	}
+	if keyData.Description != "" {
+		state.Description = types.StringValue(keyData.Description)
+	}
+	if keyData.UUID != "" {
+		state.UUID = types.StringValue(keyData.UUID)
+	}
+	if keyData.MUID != "" {
+		state.MUID = types.StringValue(keyData.MUID)
+	}
+	if keyData.KeyId != "" {
+		state.KeyId = types.StringValue(keyData.KeyId)
+	}
+	if keyData.RotationFrequencyDays != "" {
+		state.RotationFrequencyDays = types.StringValue(keyData.RotationFrequencyDays)
+	}
+	if keyData.DefaultIV != "" {
+		state.DefaultIV = types.StringValue(keyData.DefaultIV)
+	}
+	if keyData.Encoding != "" {
+		state.Encoding = types.StringValue(keyData.Encoding)
+	}
+	if keyData.Format != "" {
+		state.Format = types.StringValue(keyData.Format)
+	}
+	if keyData.CertType != "" {
+		state.CertType = types.StringValue(keyData.CertType)
+	}
+	if keyData.TemplateID != "" {
+		state.TemplateID = types.StringValue(keyData.TemplateID)
+	}
+	if keyData.SecretDataLink != "" {
+		state.SecretDataLink = types.StringValue(keyData.SecretDataLink)
+	}
+	if keyData.SecretDataEncoding != "" {
+		state.SecretDataEncoding = types.StringValue(keyData.SecretDataEncoding)
+	}
+
+	// Int64 fields — guard on non-zero to avoid null→0 spurious diffs
+	if keyData.UsageMask != 0 {
+		state.UsageMask = types.Int64Value(keyData.UsageMask)
+	}
+	if keyData.Size != 0 {
+		state.Size = types.Int64Value(keyData.Size)
+	}
+	if keyData.IDSize != 0 {
+		state.IDSize = types.Int64Value(keyData.IDSize)
+	}
+
+	// Bool fields — use gjson.Exists() to avoid null→false spurious diffs
+	if gjson.Get(response, "unexportable").Exists() {
+		state.UnExportable = types.BoolValue(keyData.UnExportable)
+	}
+	if gjson.Get(response, "undeletable").Exists() {
+		state.UnDeletable = types.BoolValue(keyData.UnDeletable)
+	}
+	if gjson.Get(response, "xts").Exists() {
+		state.XTS = types.BoolValue(keyData.XTS)
+	}
+	if gjson.Get(response, "padded").Exists() {
+		state.Padded = types.BoolValue(keyData.Padded)
+	}
+	if gjson.Get(response, "emptyMaterial").Exists() {
+		state.EmptyMaterial = types.BoolValue(keyData.EmptyMaterial)
+	}
+	if gjson.Get(response, "generateKeyId").Exists() {
+		state.GenerateKeyId = types.BoolValue(keyData.GenerateKeyId)
+	}
+
+	// Aliases
+	var aliases []*KeyAliasTFSDK
+	for _, a := range keyData.Aliases {
+		aliases = append(aliases, &KeyAliasTFSDK{
+			Alias: types.StringValue(a.Alias),
+			Index: types.Int64Value(a.Index),
+			Type:  types.StringValue(a.Type),
+		})
+	}
+	state.Aliases = aliases
+
+	// Labels — only hydrate if API returned a non-nil map
+	if keyData.Labels != nil {
+		labelsAttrs := make(map[string]attr.Value)
+		for k, v := range keyData.Labels {
+			labelsAttrs[k] = types.StringValue(fmt.Sprintf("%v", v))
+		}
+		state.Labels = types.MapValueMust(types.StringType, labelsAttrs)
+	}
+
+	// Metadata
+	if keyData.Metadata != nil {
+		meta := &KeyMetadataTFSDK{
+			OwnerId: types.StringValue(keyData.Metadata.OwnerId),
+		}
+		if keyData.Metadata.Permissions != nil {
+			p := keyData.Metadata.Permissions
+			perms := &KeyMetadataPermissionsTFSDK{}
+			for _, s := range p.DecryptWithKey {
+				perms.DecryptWithKey = append(perms.DecryptWithKey, types.StringValue(s))
+			}
+			for _, s := range p.EncryptWithKey {
+				perms.EncryptWithKey = append(perms.EncryptWithKey, types.StringValue(s))
+			}
+			for _, s := range p.ExportKey {
+				perms.ExportKey = append(perms.ExportKey, types.StringValue(s))
+			}
+			for _, s := range p.MACVerifyWithKey {
+				perms.MACVerifyWithKey = append(perms.MACVerifyWithKey, types.StringValue(s))
+			}
+			for _, s := range p.MACWithKey {
+				perms.MACWithKey = append(perms.MACWithKey, types.StringValue(s))
+			}
+			for _, s := range p.ReadKey {
+				perms.ReadKey = append(perms.ReadKey, types.StringValue(s))
+			}
+			for _, s := range p.SignVerifyWithKey {
+				perms.SignVerifyWithKey = append(perms.SignVerifyWithKey, types.StringValue(s))
+			}
+			for _, s := range p.SignWithKey {
+				perms.SignWithKey = append(perms.SignWithKey, types.StringValue(s))
+			}
+			for _, s := range p.UseKey {
+				perms.UseKey = append(perms.UseKey, types.StringValue(s))
+			}
+			meta.Permissions = perms
+		}
+		if keyData.Metadata.CTE != nil {
+			meta.CTE = &KeyMetadataCTETFSDK{
+				PersistentOnClient: types.BoolValue(keyData.Metadata.CTE.PersistentOnClient),
+				EncryptionMode:     types.StringValue(keyData.Metadata.CTE.EncryptionMode),
+				CTEVersioned:       types.BoolValue(keyData.Metadata.CTE.CTEVersioned),
+			}
+		}
+		state.Metadata = meta
+	}
+
+	// Saved=No fields are already loaded from prior state via req.State.Get above.
+	// Do not overwrite: Material, Password, RevocationReason, RevocationMessage,
+	// MacSignBytes, MacSignKeyIdentifier, MacSignKeyIdentifierType,
+	// WrapKeyName, WrapKeyIDType, WrapPublicKey, WrapPublicKeyPadding,
+	// WrappingEncryptionAlgo, WrappingHashAlgo, WrappingMethod, SigningAlgo,
+	// HKDFCreateParameters, HKDFWrap, PBEWrap, RSAAESWrap,
+	// PublicKeyParameters, AssignSelfAsOwner, AllVersions, RemoveFromStateOnDestroy.
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
