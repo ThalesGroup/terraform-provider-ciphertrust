@@ -70,3 +70,32 @@ resource "ciphertrust_cm_key" "cte_key" {
 		},
 	})
 }
+
+func TestAccCMKey_RevocationFields(t *testing.T) {
+	cfg := providerConfig + `
+resource "ciphertrust_cm_key" "revoc_key" {
+  name               = "terraform-revoc-test"
+  algorithm          = "aes"
+  key_size           = 256
+  revocation_reason  = "KeyCompromise"
+  revocation_message = "test revocation message"
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.revoc_key", "revocation_reason", "KeyCompromise"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.revoc_key", "revocation_message", "test revocation message"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

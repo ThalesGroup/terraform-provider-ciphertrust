@@ -328,8 +328,8 @@ type CMKeyJSON struct {
 	Password                 string                   `json:"password,omitempty"`
 	ProcessStartDate         string                   `json:"processStartDate,omitempty"`
 	ProtectStopDate          string                   `json:"protectStopDate,omitempty"`
-	RevocationReason         string                   `json:"revocationMessage,omitempty"`
-	RevocationMessage        string                   `json:"revocationReason,omitempty"`
+	RevocationReason         string                   `json:"revocationReason,omitempty"`
+	RevocationMessage        string                   `json:"revocationMessage,omitempty"`
 	RotationFrequencyDays    string                   `json:"rotationFrequencyDays,omitempty"`
 	SecretDataEncoding       string                   `json:"secretDataEncoding,omitempty"`
 	SecretDataLink           string                   `json:"secretDataLink,omitempty"`
