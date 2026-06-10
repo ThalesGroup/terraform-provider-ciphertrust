@@ -1101,7 +1101,18 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
+	// nullableStr returns StringNull for absent/empty server fields so that unset
+	// Optional attributes in config don't produce a spurious "" -> null diff.
+	nullableStr := func(s string) types.String {
+		if s == "" {
+			return types.StringNull()
+		}
+		return types.StringValue(s)
+	}
+
 	// Populate scalar Saved=Yes fields from the API response.
+	// Core identity fields are always present; optional/server-computed fields use
+	// nullableStr to avoid spurious diffs when the server returns an empty string.
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Algorithm = types.StringValue(gjson.Get(response, "algorithm").String())
@@ -1109,26 +1120,26 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.UsageMask = types.Int64Value(gjson.Get(response, "usageMask").Int())
 	state.UnExportable = types.BoolValue(gjson.Get(response, "unexportable").Bool())
 	state.UnDeletable = types.BoolValue(gjson.Get(response, "undeletable").Bool())
-	state.Description = types.StringValue(gjson.Get(response, "description").String())
-	state.ActivationDate = types.StringValue(gjson.Get(response, "activationDate").String())
-	state.DeactivationDate = types.StringValue(gjson.Get(response, "deactivationDate").String())
-	state.ArchiveDate = types.StringValue(gjson.Get(response, "archiveDate").String())
-	state.ProcessStartDate = types.StringValue(gjson.Get(response, "processStartDate").String())
-	state.ProtectStopDate = types.StringValue(gjson.Get(response, "protectStopDate").String())
-	state.RotationFrequencyDays = types.StringValue(gjson.Get(response, "rotationFrequencyDays").String())
+	state.Description = nullableStr(gjson.Get(response, "description").String())
+	state.ActivationDate = nullableStr(gjson.Get(response, "activationDate").String())
+	state.DeactivationDate = nullableStr(gjson.Get(response, "deactivationDate").String())
+	state.ArchiveDate = nullableStr(gjson.Get(response, "archiveDate").String())
+	state.ProcessStartDate = nullableStr(gjson.Get(response, "processStartDate").String())
+	state.ProtectStopDate = nullableStr(gjson.Get(response, "protectStopDate").String())
+	state.RotationFrequencyDays = nullableStr(gjson.Get(response, "rotationFrequencyDays").String())
 	// Mirror the existing swapped JSON struct tags on CMKeyJSON.RevocationReason/RevocationMessage.
-	state.RevocationReason = types.StringValue(gjson.Get(response, "revocationMessage").String())
-	state.RevocationMessage = types.StringValue(gjson.Get(response, "revocationReason").String())
-	state.CompromiseOccurrenceDate = types.StringValue(gjson.Get(response, "compromiseOccurrenceDate").String())
-	state.Curveid = types.StringValue(gjson.Get(response, "curveid").String())
-	state.ObjectType = types.StringValue(gjson.Get(response, "objectType").String())
+	state.RevocationReason = nullableStr(gjson.Get(response, "revocationMessage").String())
+	state.RevocationMessage = nullableStr(gjson.Get(response, "revocationReason").String())
+	state.CompromiseOccurrenceDate = nullableStr(gjson.Get(response, "compromiseOccurrenceDate").String())
+	state.Curveid = nullableStr(gjson.Get(response, "curveid").String())
+	state.ObjectType = nullableStr(gjson.Get(response, "objectType").String())
 	state.Size = types.Int64Value(gjson.Get(response, "size").Int())
 	state.XTS = types.BoolValue(gjson.Get(response, "xts").Bool())
-	state.CertType = types.StringValue(gjson.Get(response, "certType").String())
+	state.CertType = nullableStr(gjson.Get(response, "certType").String())
 	state.IDSize = types.Int64Value(gjson.Get(response, "idSize").Int())
-	state.DestroyDate = types.StringValue(gjson.Get(response, "destroyDate").String())
-	state.CompromiseDate = types.StringValue(gjson.Get(response, "compromiseDate").String())
-	state.DefaultIV = types.StringValue(gjson.Get(response, "defaultIV").String())
+	state.DestroyDate = nullableStr(gjson.Get(response, "destroyDate").String())
+	state.CompromiseDate = nullableStr(gjson.Get(response, "compromiseDate").String())
+	state.DefaultIV = nullableStr(gjson.Get(response, "defaultIV").String())
 
 	// Populate aliases.
 	aliasResults := gjson.Get(response, "aliases").Array()

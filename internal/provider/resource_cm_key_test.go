@@ -239,15 +239,16 @@ resource "ciphertrust_cm_key" "test" {
 						return
 					}
 					traceID := uuid.New().String()
-					fullURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_KEY_MANAGEMENT, capturedID)
-					_, _ = client.DeleteByID(context.Background(), "DELETE", traceID, fullURL, []byte{})
+					_, _ = client.DeleteByID(context.Background(), "DELETE", traceID, common.URL_KEY_MANAGEMENT+"/"+capturedID, []byte{})
 				},
 				RefreshState: true,
 				Check: checkStep(t, "resource removed from state after OOB delete",
 					func(s *terraform.State) error {
-						_, ok := s.RootModule().Resources[resourceAddr]
-						if ok {
-							return fmt.Errorf("expected resource %s to be absent from state after OOB delete, but it is still present", resourceAddr)
+						// testAccListResourceAttributes asserts zero attributes: when RemoveResource
+						// was called the resource is absent from state, so the helper returns an
+						// error ("did not find resource…") — that absence is the expected outcome.
+						if err := testAccListResourceAttributes(resourceAddr)(s); err == nil {
+							return fmt.Errorf("expected resource %s to have zero attributes (absent from state) after OOB delete", resourceAddr)
 						}
 						return nil
 					},
