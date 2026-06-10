@@ -1,0 +1,6 @@
+provider_installation {
+  dev_overrides {
+    "thalesgroup.com/oss/ciphertrust" = "/home/zubeen/terraform-agent/workspaces/TFIN-286"
+  }
+  direct {}
+}
