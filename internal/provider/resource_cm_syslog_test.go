@@ -38,7 +38,7 @@ func TestAccCMSyslog_NullGuardDrift(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Step 1: Create without optional fields. The CM API sets server-side defaults
 			// (message_format="rfc5424", port=514). With Optional+Computed schema these
-			// defaults are captured in state — verify they are present.
+			// defaults are captured in state -- verify they are present.
 			{
 				Config: syslogConfig(host, "udp", "", 0),
 				Check: checkStep(t, "create without optional fields",
@@ -57,9 +57,10 @@ func TestAccCMSyslog_NullGuardDrift(t *testing.T) {
 					},
 				),
 			},
-			// Step 2: OOB mutation — change message_format to "cef" (different from the
-			// default "rfc5424" that is in state). After Read(), the refreshed state differs
-			// from the planned state → drift is detected.
+			// Step 2: OOB mutation -- change message_format to "cef" via the CM API.
+			// The config explicitly specifies "rfc5424", so after Read() returns "cef"
+			// the plan diff (config "rfc5424" vs refreshed state "cef") is non-empty,
+			// confirming that Read() unconditionally surfaces OOB changes.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
@@ -73,13 +74,12 @@ func TestAccCMSyslog_NullGuardDrift(t *testing.T) {
 						[]byte(`{"messageFormat":"cef"}`),
 					)
 				},
-				Config:             syslogConfig(host, "udp", "", 0),
+				Config:             syslogConfig(host, "udp", "rfc5424", 514),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
 			// Step 3: Apply config with an explicit message_format that differs from the
-			// TF state value ("rfc5424") so that Update() actually sends the API call and
-			// overwrites the OOB "cef" value left on the server by Step 2.
+			// OOB "cef" value left on the server by Step 2.
 			{
 				Config: syslogConfig(host, "udp", "plain_message", 514),
 				Check: checkStep(t, "apply with explicit optional fields",
@@ -87,7 +87,7 @@ func TestAccCMSyslog_NullGuardDrift(t *testing.T) {
 					resource.TestCheckResourceAttr(syslogResource, "port", "514"),
 				),
 			},
-			// Step 4: No-drift check — same config, plan must be empty.
+			// Step 4: No-drift check -- same config, plan must be empty.
 			{
 				Config:             syslogConfig(host, "udp", "plain_message", 514),
 				PlanOnly:           true,
