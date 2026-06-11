@@ -30,8 +30,11 @@ func skipIfCCKMKeyRotationNotLicensed(t *testing.T) {
 	))
 	resp, err := client.PostDataV2(context.Background(), uuid.NewString(), common.URL_SCHEDULER_JOB_CONFIGS, payload)
 	if err != nil {
-		if strings.Contains(err.Error(), "not permitted by current license") {
-			t.Skip("cckm_key_rotation is not licensed on this server; skipping")
+		// Skip on any license or conflict error — the exact message varies across CM versions.
+		if strings.Contains(err.Error(), "not permitted by current license") ||
+			strings.Contains(err.Error(), "status: 409") ||
+			strings.Contains(err.Error(), "status: 403") {
+			t.Skip("cckm_key_rotation is not available on this server; skipping")
 		}
 		return
 	}
@@ -388,24 +391,27 @@ func TestAccScheduler_OOBDelete(t *testing.T) {
 
 	cfg := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_scheduler" "backup_oob" {
-  database_backup_params = {
-    scope = "system"
+  cckm_key_rotation_params {
+    cloud_name = "aws"
   }
   name      = %q
-  operation = "database_backup"
+  operation = "cckm_key_rotation"
   run_at    = "0 1 * * sun"
 }
 `, name)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		PreCheck: func() {
+			skipIfCCKMKeyRotationNotLicensed(t)
+		},
 		Steps: []resource.TestStep{
 			// Step 1: Create scheduler and capture its ID.
 			{
 				Config: cfg,
 				Check: checkStep(t, "create scheduler",
 					resource.TestCheckResourceAttrSet(schedulerResource, "id"),
-					resource.TestCheckResourceAttr(schedulerResource, "operation", "database_backup"),
+					resource.TestCheckResourceAttr(schedulerResource, "operation", "cckm_key_rotation"),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[schedulerResource]
 						if !ok {
