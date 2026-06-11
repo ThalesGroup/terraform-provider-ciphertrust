@@ -388,7 +388,7 @@ func TestAccScheduler_OOBDelete(t *testing.T) {
 
 	cfg := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_scheduler" "backup_oob" {
-  database_backup_params {
+  database_backup_params = {
     scope = "system"
   }
   name      = %q
