@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -140,6 +141,10 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_CM_PROXY)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error reading Proxy information on CipherTrust Manager: ",
 			"Could not read Proxy information: unexpected error: "+err.Error(),

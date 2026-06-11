@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -162,6 +163,10 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 	err := r.readTrialLicenseFromAPI(ctx, state.ID.ValueString(), &state)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error reading trial license on CipherTrust Manager: ",
 			"Could not read trial license id : "+state.ID.ValueString()+"unexpected error: "+err.Error(),

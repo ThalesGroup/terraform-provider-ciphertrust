@@ -9,6 +9,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/tidwall/gjson"
 )
 
@@ -374,6 +375,67 @@ func TestCckmSchedulersRotationResource(t *testing.T) {
 				},
 			},
 		})
+	})
+}
+
+// TestAccScheduler_OOBDelete verifies that when a scheduler is deleted out-of-band via
+// the CM API, Read() detects the 404, removes the resource from state, and the next plan
+// shows a non-empty diff (Terraform will recreate the resource).
+func TestAccScheduler_OOBDelete(t *testing.T) {
+	schedulerResource := "ciphertrust_scheduler.backup_oob"
+	name := "tf-oob-delete-" + uuid.New().String()[:8]
+	var capturedID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "backup_oob" {
+  database_backup_params {
+    scope = "system"
+  }
+  name      = %q
+  operation = "database_backup"
+  run_at    = "0 1 * * sun"
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create scheduler and capture its ID.
+			{
+				Config: cfg,
+				Check: checkStep(t, "create scheduler",
+					resource.TestCheckResourceAttrSet(schedulerResource, "id"),
+					resource.TestCheckResourceAttr(schedulerResource, "operation", "database_backup"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[schedulerResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", schedulerResource)
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Delete the scheduler OOB via CM API, then run a plan-only refresh.
+			// Read() should detect the 404, call RemoveResource, and the plan diff should
+			// show the resource needs to be recreated.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(
+						context.Background(),
+						uuid.NewString(),
+						common.URL_SCHEDULER_JOB_CONFIGS+"/"+capturedID,
+					)
+				},
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
 	})
 }
 
