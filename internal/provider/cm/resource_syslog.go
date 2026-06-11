@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -61,14 +62,22 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"message_format": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("rfc5424", "plain_message", "cef", "leef"),
 				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"port": schema.Int64Attribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"account": schema.StringAttribute{
 				Computed: true,
@@ -144,11 +153,15 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	if !plan.MessageFormat.IsNull() {
-		plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
+	if r := gjson.Get(response, "messageFormat"); r.Exists() {
+		plan.MessageFormat = types.StringValue(r.String())
+	} else {
+		plan.MessageFormat = types.StringNull()
 	}
-	if !plan.Port.IsNull() {
-		plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
+	if r := gjson.Get(response, "port"); r.Exists() {
+		plan.Port = types.Int64Value(r.Int())
+	} else {
+		plan.Port = types.Int64Null()
 	}
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
@@ -190,11 +203,15 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	} else {
 		state.CACert = types.StringNull()
 	}
-	if !state.MessageFormat.IsNull() {
-		state.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
+	if r := gjson.Get(response, "messageFormat"); r.Exists() {
+		state.MessageFormat = types.StringValue(r.String())
+	} else {
+		state.MessageFormat = types.StringNull()
 	}
-	if !state.Port.IsNull() {
-		state.Port = types.Int64Value(gjson.Get(response, "port").Int())
+	if r := gjson.Get(response, "port"); r.Exists() {
+		state.Port = types.Int64Value(r.Int())
+	} else {
+		state.Port = types.Int64Null()
 	}
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
@@ -286,11 +303,15 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 			plan.CACert = types.StringValue(caCert.String())
 		}
 	}
-	if !plan.MessageFormat.IsNull() {
-		plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
+	if r := gjson.Get(response, "messageFormat"); r.Exists() {
+		plan.MessageFormat = types.StringValue(r.String())
+	} else {
+		plan.MessageFormat = types.StringNull()
 	}
-	if !plan.Port.IsNull() {
-		plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
+	if r := gjson.Get(response, "port"); r.Exists() {
+		plan.Port = types.Int64Value(r.Int())
+	} else {
+		plan.Port = types.Int64Null()
 	}
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

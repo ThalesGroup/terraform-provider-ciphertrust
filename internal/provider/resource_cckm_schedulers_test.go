@@ -1,13 +1,107 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/tidwall/gjson"
 )
+
+// skipIfCCKMKeyRotationNotLicensed probes whether the test server permits
+// cckm_key_rotation scheduler creation. If the server returns "not permitted by
+// current license" (HTTP 409), the test is skipped. On a successful probe the
+// created scheduler is deleted before this function returns.
+func skipIfCCKMKeyRotationNotLicensed(t *testing.T) {
+	t.Helper()
+	client, ok := createCMClient()
+	if !ok {
+		return // let the test attempt and fail with a real error
+	}
+	probeName := "__tf_probe_" + uuid.NewString()[:8]
+	payload := []byte(fmt.Sprintf(
+		`{"name":%q,"operation":"cckm_key_rotation","run_at":"0 0 1 1 *","cckm_key_rotation_params":{"cloud_name":"aws"}}`,
+		probeName,
+	))
+	resp, err := client.PostDataV2(context.Background(), uuid.NewString(), common.URL_SCHEDULER_JOB_CONFIGS, payload)
+	if err != nil {
+		if strings.Contains(err.Error(), "not permitted by current license") {
+			t.Skip("cckm_key_rotation is not licensed on this server; skipping")
+		}
+		return
+	}
+	// Clean up the probe scheduler.
+	id := gjson.Get(resp, "id").String()
+	if id != "" {
+		_, _ = client.DeleteByURL(context.Background(), uuid.NewString(), common.URL_SCHEDULER_JOB_CONFIGS+"/"+id)
+	}
+}
+
+// TestAccScheduler_CCKMKeyRotationParamsDrift verifies that cckm_key_rotation_params
+// round-trips into state without perpetual drift after create and update.
+func TestAccScheduler_CCKMKeyRotationParamsDrift(t *testing.T) {
+	schedulerResource := "ciphertrust_scheduler.rotation_drift"
+	name := "tf-rot-drift-" + uuid.New().String()[:8]
+
+	cfgWith := func(expiration string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "rotation_drift" {
+  cckm_key_rotation_params {
+    cloud_name = "aws"
+    expiration = %q
+  }
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 9 * * fri"
+}
+`, expiration, name)
+	}
+
+	expiration1 := "30d"
+	expiration2 := "60d"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			cleanupCckmAwsKMS()
+			skipIfCCKMKeyRotationNotLicensed(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with cckm_key_rotation_params; verify values in state.
+			{
+				Config: cfgWith(expiration1),
+				Check: checkStep(t, "create with cckm_key_rotation_params",
+					resource.TestCheckResourceAttrSet(schedulerResource, "id"),
+					resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.0.cloud_name", "aws"),
+					resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.0.expiration", expiration1),
+				),
+			},
+			// Step 2: No-drift check after create — plan must be empty.
+			{
+				Config:             cfgWith(expiration1),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Update expiration; verify new value in state.
+			{
+				Config: cfgWith(expiration2),
+				Check: checkStep(t, "update expiration",
+					resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.0.expiration", expiration2),
+				),
+			},
+			// Step 4: No-drift check after update — plan must be empty.
+			{
+				Config:             cfgWith(expiration2),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
 
 // blockImportIgnore lists the block attributes that are stored as empty lists
 // when not configured, but arrive as null after import+Read. ImportStateVerify
