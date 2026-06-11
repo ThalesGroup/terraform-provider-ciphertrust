@@ -1,10 +1,15 @@
 package provider
 
 import (
+	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"os"
 	"testing"
+
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func TestResourceGCPConnection(t *testing.T) {
@@ -71,3 +76,109 @@ func TestResourceGCPConnection(t *testing.T) {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+const gcpConnectionResourceName = "ciphertrust_gcp_connection.gcp_conn_oob"
+
+func gcpConnectionOOBConfig(name, keyFile string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "gcp_conn_oob" {
+  name       = %q
+  key_file   = %q
+  cloud_name = "gcp"
+}
+`, name, keyFile)
+}
+
+func TestAccGCPConnection_OOBDelete(t *testing.T) {
+	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
+	if gcpKeyFile == "" {
+		t.Skip("CCKM_GOOGLE_KEY_FILE not set")
+	}
+
+	var capturedID string
+	connName := "TFTestGCPConnOOB"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: gcpConnectionOOBConfig(connName, gcpKeyFile),
+				Check: checkStep(t, "oob delete: create",
+					resource.TestCheckResourceAttrSet(gcpConnectionResourceName, "id"),
+					resource.TestCheckResourceAttr(gcpConnectionResourceName, "name", connName),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[gcpConnectionResourceName]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Out-of-band deletion; Read() should remove from state and next plan proposes re-create.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(
+						context.Background(),
+						uuid.NewString(),
+						common.URL_GCP_CONNECTION+"/"+capturedID,
+					)
+				},
+				Config:             gcpConnectionOOBConfig(connName, gcpKeyFile),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func TestAccGCPConnection_DeleteOOBThenDestroy(t *testing.T) {
+	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
+	if gcpKeyFile == "" {
+		t.Skip("CCKM_GOOGLE_KEY_FILE not set")
+	}
+
+	var capturedID string
+	connName := "TFTestGCPConnOOBDestroy"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: gcpConnectionOOBConfig(connName, gcpKeyFile),
+				Check: checkStep(t, "oob destroy: create",
+					resource.TestCheckResourceAttrSet(gcpConnectionResourceName, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[gcpConnectionResourceName]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Out-of-band deletion followed by terraform destroy: Delete() 404 guard must suppress error.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(
+						context.Background(),
+						uuid.NewString(),
+						common.URL_GCP_CONNECTION+"/"+capturedID,
+					)
+				},
+				Config:  gcpConnectionOOBConfig(connName, gcpKeyFile),
+				Destroy: true,
+			},
+		},
+	})
+}

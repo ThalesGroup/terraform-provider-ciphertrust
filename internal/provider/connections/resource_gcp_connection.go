@@ -205,10 +205,15 @@ func (r *resourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_GCP_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_gcp_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_gcp_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading GCP Connection on CipherTrust Manager: ",
-			"Could not read gcp connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust GCP Connection",
+			"Could not read GCP Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
@@ -320,9 +325,12 @@ func (r *resourceGCPConnection) Delete(ctx context.Context, req resource.DeleteR
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_gcp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust GCP Connection",
-			"Could not delete gcp connection, unexpected error: "+err.Error(),
+			"Could not delete GCP Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}

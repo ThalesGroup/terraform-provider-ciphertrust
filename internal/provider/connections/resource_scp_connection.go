@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -293,10 +294,15 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCP_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_scp_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading SCP Connection on CipherTrust Manager: ",
-			"Could not read scp connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust SCP Connection",
+			"Could not read SCP Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
@@ -432,9 +438,12 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust SCP Connection",
-			"Could not delete scp connection, unexpected error: "+err.Error(),
+			"Could not delete SCP Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}

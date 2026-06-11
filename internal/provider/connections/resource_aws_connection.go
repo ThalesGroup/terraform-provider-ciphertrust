@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -309,10 +310,15 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_aws_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading AWS Connection on CipherTrust Manager: ",
-			"Could not read AWS Connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust AWS Connection",
+			"Could not read AWS Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
@@ -455,9 +461,12 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			return
+		}
 		resp.Diagnostics.AddError(
-			"Error Deleting AWS Connection",
-			"Could not delete AWS Connection, unexpected error: "+err.Error(),
+			"Error Deleting CipherTrust AWS Connection",
+			"Could not delete AWS Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
