@@ -75,12 +75,12 @@ func TestCckmAWSKeyMinimalConfig(t *testing.T) {
 				%s
 			EOT
 		}
-		resource "ciphertrust_groups" "acl_group" {
+		resource "ciphertrust_cm_group" "acl_group" {
 			name = "%s"
 		}
 		resource "ciphertrust_aws_acl" "acl" {
 			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.acl_group.id
+			group   = ciphertrust_cm_group.acl_group.id
 			actions = ["view"]
 		}
 		resource "ciphertrust_cm_key" "cm_key" {

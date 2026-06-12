@@ -22,7 +22,7 @@ func TestCckmAWSAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_aws_acl" "user_acl" {
@@ -32,7 +32,7 @@ func TestCckmAWSAcl(t *testing.T) {
 		}
 		resource "ciphertrust_aws_acl" "group_acl" {
 			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.group.id
+			group   = ciphertrust_cm_group.group.id
 			actions = ["keyupdate", "keydelete"]
 		}
 		data "ciphertrust_aws_kms_list" "kms_ds" {
@@ -48,7 +48,7 @@ func TestCckmAWSAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_aws_acl" "user_acl" {
@@ -58,7 +58,7 @@ func TestCckmAWSAcl(t *testing.T) {
 		}
 		resource "ciphertrust_aws_acl" "group_acl" {
 			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.group.id
+			group   = ciphertrust_cm_group.group.id
 			actions = ["keycreate", "keyupdate", "keydelete"]
 		}
 		data "ciphertrust_aws_kms_list" "kms_ds" {
@@ -74,7 +74,7 @@ func TestCckmAWSAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_aws_acl" "user_acl" {

@@ -95,12 +95,12 @@ func TestCckmOCIMinimalConfig(t *testing.T) {
 			cckm_key_id   = ciphertrust_oci_byok_key.byok_key.id
 			source_key_id = ciphertrust_cm_key.cm_key.id
 		}
-		resource "ciphertrust_groups" "acl_group" {
+		resource "ciphertrust_cm_group" "acl_group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_groups.acl_group.id
+			group    = ciphertrust_cm_group.acl_group.id
 			actions  = ["view"]
 		}`
 

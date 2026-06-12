@@ -30,7 +30,7 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_aws_acl" "user1_acl" {
@@ -40,7 +40,7 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 		}
 		resource "ciphertrust_aws_acl" "group1_acl" {
 			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.group.id
+			group   = ciphertrust_cm_group.group.id
 			actions = ["keyupdate", "keydelete"]
 		}
 		resource "ciphertrust_aws_acl" "user2_acl" {
@@ -50,7 +50,7 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 		}
 		resource "ciphertrust_aws_acl" "group2_acl" {
 			kms_id  = ciphertrust_aws_kms.kms_two.id
-			group   = ciphertrust_groups.group.id
+			group   = ciphertrust_cm_group.group.id
 			actions = ["keyupdate", "keydelete"]
 		}`
 	aclsConfigStr := fmt.Sprintf(acls, "tf-"+uuid.New().String()[:8], "tf-"+uuid.New().String()[:8])

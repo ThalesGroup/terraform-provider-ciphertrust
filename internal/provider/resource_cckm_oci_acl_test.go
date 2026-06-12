@@ -58,7 +58,7 @@ func TestCckmOCIAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
@@ -68,7 +68,7 @@ func TestCckmOCIAcl(t *testing.T) {
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_groups.group.id
+			group    = ciphertrust_cm_group.group.id
 			actions  = ["view", "keyupdate", "keydelete"]
 		}
 		data "ciphertrust_oci_vault_list" "vault_ds" {
@@ -84,7 +84,7 @@ func TestCckmOCIAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
@@ -94,7 +94,7 @@ func TestCckmOCIAcl(t *testing.T) {
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_groups.group.id
+			group    = ciphertrust_cm_group.group.id
 			actions  = ["view", "keycreate", "keyupdate", "keydelete"]
 		}
 		data "ciphertrust_oci_vault_list" "vault_ds" {
@@ -113,7 +113,7 @@ func TestCckmOCIAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
@@ -134,7 +134,7 @@ func TestCckmOCIAcl(t *testing.T) {
 			username = "%s"
 			password = "LongPassword1234++"
 		}
-		resource "ciphertrust_groups" "group" {
+		resource "ciphertrust_cm_group" "group" {
 			name = "%s"
 		}
 		resource "ciphertrust_oci_acl" "user_acl" {
@@ -144,7 +144,7 @@ func TestCckmOCIAcl(t *testing.T) {
 		}
 		resource "ciphertrust_oci_acl" "group_acl" {
 			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_groups.group.id
+			group    = ciphertrust_cm_group.group.id
 			actions  = ["view", "keycreate", "keydelete"]
 		}`
 
@@ -199,7 +199,7 @@ func TestCckmOCIAcl(t *testing.T) {
 					resource.TestCheckResourceAttr(userACLResourceName, "actions.#", "2"),
 					resource.TestCheckResourceAttrSet(groupACLResourceName, "id"),
 					resource.TestCheckResourceAttrPair(groupACLResourceName, "vault_id", vaultResourceName, "id"),
-					resource.TestCheckResourceAttrPair(groupACLResourceName, "group", "ciphertrust_groups.group", "id"),
+					resource.TestCheckResourceAttrPair(groupACLResourceName, "group", "ciphertrust_cm_group.group", "id"),
 					resource.TestCheckResourceAttr(groupACLResourceName, "actions.#", "3"),
 					resource.TestCheckResourceAttr(vaultDatasourceName, "vaults.#", "1"),
 					resource.TestCheckResourceAttr(vaultDatasourceName, "vaults.0.acls.#", "2"),
