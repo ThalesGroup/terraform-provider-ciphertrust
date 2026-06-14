@@ -123,11 +123,12 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 
 	// API does not return id, use host as the identifier
 	plan.ID = types.StringValue(plan.Host.ValueString())
-	// Populate key_type from the create response so Computed state is set immediately.
+	plan.Host = types.StringValue(gjson.Get(response, "host").String())
+	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
+		plan.Key = types.StringValue(keyVal.String())
+	}
 	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		plan.KeyType = types.StringValue(keyTypeVal.String())
-	} else {
-		plan.KeyType = types.StringNull()
 	}
 
 	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
