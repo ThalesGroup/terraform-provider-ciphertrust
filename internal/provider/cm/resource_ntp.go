@@ -60,6 +60,7 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"key_type": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"MD5",
@@ -110,7 +111,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+	_, err = r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -119,15 +120,28 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
+
+	// Read back the full server state so Computed attributes (like key_type) are resolved.
+	response, err := r.client.ReadDataByParam(ctx, id, plan.Host.ValueString(), common.URL_NTP)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust NTP",
+			"Could not read NTP "+plan.Host.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	// API does not return id, use host as the identifier
 	plan.ID = types.StringValue(plan.Host.ValueString())
-	// key and key_type are only returned by API if user provided them
 	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
 		plan.Key = types.StringValue(keyVal.String())
 	}
 	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		plan.KeyType = types.StringValue(keyTypeVal.String())
+	} else {
+		plan.KeyType = types.StringNull()
 	}
 
 	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
@@ -171,6 +185,8 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		state.KeyType = types.StringValue(keyTypeVal.String())
+	} else {
+		state.KeyType = types.StringNull()
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
