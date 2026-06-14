@@ -111,7 +111,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	_, err = r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+	response, err := r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -121,23 +121,9 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	// Read back the full server state so Computed attributes (like key_type) are resolved.
-	response, err := r.client.ReadDataByParam(ctx, id, plan.Host.ValueString(), common.URL_NTP)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error Reading CipherTrust NTP",
-			"Could not read NTP "+plan.Host.ValueString()+": "+err.Error(),
-		)
-		return
-	}
-
-	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	// API does not return id, use host as the identifier
 	plan.ID = types.StringValue(plan.Host.ValueString())
-	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
-		plan.Key = types.StringValue(keyVal.String())
-	}
+	// Populate key_type from the create response so Computed state is set immediately.
 	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		plan.KeyType = types.StringValue(keyTypeVal.String())
 	} else {

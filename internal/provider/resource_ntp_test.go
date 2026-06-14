@@ -12,19 +12,24 @@ func TestAccCMNTP_KeyTypeComputedAndStable(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				// key must be set so the CM API returns a key_type default (SHA-256).
+				// key_type is intentionally omitted to validate the Computed: true behaviour.
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
   host = "time1.google.com"
+  key  = "1"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_ntp.test", "key_type"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "key_type", "SHA-256"),
 				),
 			},
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
   host = "time1.google.com"
+  key  = "1"
 }
 `,
 				PlanOnly:           true,
