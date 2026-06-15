@@ -221,9 +221,11 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 	state.Policy = types.StringValue(gjson.Get(response, "policy").String())
 
-	// jurisdiction is Optional-only (not Computed), so preserve user's config value
-	// Do not overwrite with server response to avoid false drift
-	// if user didn't set it, leave it null; if they did, keep their value
+	if r := gjson.Get(response, "jurisdiction"); r.Exists() {
+		state.Jurisdiction = types.StringValue(r.String())
+	} else {
+		state.Jurisdiction = types.StringNull()
+	}
 
 	m := make(map[string]attr.Value)
 	for k, v := range gjson.Get(response, "principalSelector").Map() {
@@ -322,7 +324,7 @@ func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.Up
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS, payloadJSON)
+	response, err := r.client.UpdateDataV2(ctx, uuid.New().String(), fmt.Sprintf("%s/%s", common.URL_CM_POLICY_ATTACHMENTS, state.ID.ValueString()), payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(

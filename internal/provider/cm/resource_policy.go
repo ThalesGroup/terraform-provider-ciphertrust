@@ -397,7 +397,7 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICIES, payloadJSON)
+	response, err := r.client.UpdateDataV2(ctx, uuid.New().String(), fmt.Sprintf("%s/%s", common.URL_CM_POLICIES, state.ID.ValueString()), payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
