@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -120,6 +121,18 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		payload.Jurisdiction = plan.Jurisdiction.ValueString()
 	}
 
+	var actions []string
+	for _, v := range plan.Actions.Elements() {
+		actions = append(actions, v.(types.String).ValueString())
+	}
+	payload.Actions = actions
+
+	var resources []string
+	for _, v := range plan.Resources.Elements() {
+		resources = append(resources, v.(types.String).ValueString())
+	}
+	payload.Resources = resources
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Create]["+id+"]")
@@ -147,11 +160,27 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	if plan.Actions.IsUnknown() {
+
+	actElems := gjson.Get(response, "actions").Array()
+	if len(actElems) == 0 {
 		plan.Actions = types.ListNull(types.StringType)
+	} else {
+		var elems []attr.Value
+		for _, v := range actElems {
+			elems = append(elems, types.StringValue(v.String()))
+		}
+		plan.Actions = types.ListValueMust(types.StringType, elems)
 	}
-	if plan.Resources.IsUnknown() {
+
+	resElems := gjson.Get(response, "resources").Array()
+	if len(resElems) == 0 {
 		plan.Resources = types.ListNull(types.StringType)
+	} else {
+		var elems []attr.Value
+		for _, v := range resElems {
+			elems = append(elems, types.StringValue(v.String()))
+		}
+		plan.Resources = types.ListValueMust(types.StringType, elems)
 	}
 
 	tflog.Debug(ctx, "[resource_policy_attachments.go -> Create Output]["+response+"]")
@@ -190,6 +219,45 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
+	state.Policy = types.StringValue(gjson.Get(response, "policy").String())
+
+	// jurisdiction is Optional-only (not Computed), so preserve user's config value
+	// Do not overwrite with server response to avoid false drift
+	// if user didn't set it, leave it null; if they did, keep their value
+
+	m := make(map[string]attr.Value)
+	for k, v := range gjson.Get(response, "principalSelector").Map() {
+		m[k] = types.StringValue(v.String())
+	}
+	ps, psdiags := types.MapValue(types.StringType, m)
+	resp.Diagnostics.Append(psdiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.PrincipalSelector = ps
+
+	actElems := gjson.Get(response, "actions").Array()
+	if len(actElems) == 0 {
+		state.Actions = types.ListNull(types.StringType)
+	} else {
+		var elems []attr.Value
+		for _, v := range actElems {
+			elems = append(elems, types.StringValue(v.String()))
+		}
+		state.Actions = types.ListValueMust(types.StringType, elems)
+	}
+
+	resElems := gjson.Get(response, "resources").Array()
+	if len(resElems) == 0 {
+		state.Resources = types.ListNull(types.StringType)
+	} else {
+		var elems []attr.Value
+		for _, v := range resElems {
+			elems = append(elems, types.StringValue(v.String()))
+		}
+		state.Resources = types.ListValueMust(types.StringType, elems)
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -201,7 +269,80 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating Policy is not supported", "Unsupported Operation")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Update]["+id+"]")
+
+	var plan CMPolicyAttachmentTFSDK
+	var state CMPolicyAttachmentTFSDK
+	var payload CMPolicyAttachmentJSON
+
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	payload.Policy = plan.Policy.ValueString()
+
+	selectorsPayload := make(map[string]interface{})
+	for k, v := range plan.PrincipalSelector.Elements() {
+		selectorsPayload[k] = v.(types.String).ValueString()
+	}
+	payload.PrincipalSelector = selectorsPayload
+
+	if plan.Jurisdiction.ValueString() != "" && plan.Jurisdiction.ValueString() != types.StringNull().ValueString() {
+		payload.Jurisdiction = plan.Jurisdiction.ValueString()
+	}
+
+	var actions []string
+	for _, v := range plan.Actions.Elements() {
+		actions = append(actions, v.(types.String).ValueString())
+	}
+	payload.Actions = actions
+
+	var resources []string
+	for _, v := range plan.Resources.Elements() {
+		resources = append(resources, v.(types.String).ValueString())
+	}
+	payload.Resources = resources
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: Policy Attachment Update",
+			err.Error(),
+		)
+		return
+	}
+
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS, payloadJSON)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Updating CipherTrust Policy Attachment",
+			"Could not update policy attachment "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Update]["+id+"]")
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

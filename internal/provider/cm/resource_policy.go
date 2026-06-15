@@ -11,6 +11,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -82,7 +83,11 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.",
 			},
 			"include_descendant_accounts": schema.BoolAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 				Description: "When false, only the resources in the principal's account can be accessed if the policy allows it.",
 			},
 			"name": schema.StringAttribute{
@@ -94,9 +99,24 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
 			},
-			"uri":        schema.StringAttribute{Computed: true},
-			"account":    schema.StringAttribute{Computed: true},
-			"created_at": schema.StringAttribute{Computed: true},
+			"uri": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"account": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"created_at": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 		},
 	}
 }
@@ -193,6 +213,12 @@ func (r *resourceCMPolicy) Create(ctx context.Context, req resource.CreateReques
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	plan.Effect = types.StringValue(gjson.Get(response, "effect").String())
+	if gjson.Get(response, "include_descendant_accounts").Exists() {
+		plan.IncludeDescendantAccounts = types.BoolValue(gjson.Get(response, "include_descendant_accounts").Bool())
+	} else {
+		plan.IncludeDescendantAccounts = types.BoolNull()
+	}
 
 	tflog.Debug(ctx, "[resource_policy.go -> Create Output]["+response+"]")
 
@@ -229,7 +255,12 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
+
+	if gjson.Get(response, "name").String() != "" {
+		state.Name = types.StringValue(gjson.Get(response, "name").String())
+	} else {
+		state.Name = types.StringNull()
+	}
 
 	arrResources := gjson.Get(response, "resources").Array()
 	var resources []types.String
@@ -245,8 +276,37 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	state.Actions = actions
 
-	state.Allow = types.BoolValue(gjson.Get(response, "allow").Bool())
+	if gjson.Get(response, "allow").Exists() {
+		state.Allow = types.BoolValue(gjson.Get(response, "allow").Bool())
+	} else {
+		state.Allow = types.BoolNull()
+	}
 	state.Effect = types.StringValue(gjson.Get(response, "effect").String())
+
+	if gjson.Get(response, "include_descendant_accounts").Exists() {
+		state.IncludeDescendantAccounts = types.BoolValue(gjson.Get(response, "include_descendant_accounts").Bool())
+	} else {
+		state.IncludeDescendantAccounts = types.BoolNull()
+	}
+
+	var conditions []CMPolicyConditionTFSDK
+	for _, c := range gjson.Get(response, "conditions").Array() {
+		var cond CMPolicyConditionTFSDK
+		if c.Get("negate").Exists() {
+			cond.Negate = types.BoolValue(c.Get("negate").Bool())
+		} else {
+			cond.Negate = types.BoolNull()
+		}
+		cond.Op = types.StringValue(c.Get("op").String())
+		cond.Path = types.StringValue(c.Get("path").String())
+		var vals []types.String
+		for _, v := range c.Get("values").Array() {
+			vals = append(vals, types.StringValue(v.String()))
+		}
+		cond.Values = vals
+		conditions = append(conditions, cond)
+	}
+	state.Conditions = conditions
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -259,7 +319,111 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating Policy is not supported", "Unsupported Operation")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy.go -> Update]["+id+"]")
+
+	var plan CMPolicyTFSDK
+	var state CMPolicyTFSDK
+	var payload CMPolicyJSON
+
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var actions []string
+	for _, str := range plan.Actions {
+		actions = append(actions, str.ValueString())
+	}
+	payload.Actions = actions
+
+	if plan.Allow.ValueBool() != types.BoolNull().ValueBool() {
+		payload.Allow = plan.Allow.ValueBool()
+	}
+
+	var conditions []CMPolicyConditionJSON
+	for _, condition := range plan.Conditions {
+		var conditionJSON CMPolicyConditionJSON
+		if condition.Negate.ValueBool() != types.BoolNull().ValueBool() {
+			conditionJSON.Negate = condition.Negate.ValueBool()
+		}
+		if condition.Op.ValueString() != "" && condition.Op.ValueString() != types.StringNull().ValueString() {
+			conditionJSON.Op = condition.Op.ValueString()
+		}
+		if condition.Path.ValueString() != "" && condition.Path.ValueString() != types.StringNull().ValueString() {
+			conditionJSON.Path = condition.Path.ValueString()
+		}
+		var values []string
+		for _, str := range condition.Values {
+			values = append(values, str.ValueString())
+		}
+		conditionJSON.Values = values
+		conditions = append(conditions, conditionJSON)
+	}
+	payload.Conditions = conditions
+
+	if plan.Effect.ValueString() != "" && plan.Effect.ValueString() != types.StringNull().ValueString() {
+		payload.Effect = plan.Effect.ValueString()
+	}
+
+	if plan.IncludeDescendantAccounts.ValueBool() != types.BoolNull().ValueBool() {
+		payload.IncludeDescendantAccounts = plan.IncludeDescendantAccounts.ValueBool()
+	}
+
+	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+		payload.Name = plan.Name.ValueString()
+	}
+
+	var resources []string
+	for _, str := range plan.Resources {
+		resources = append(resources, str.ValueString())
+	}
+	payload.Resources = resources
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: Policy Update",
+			err.Error(),
+		)
+		return
+	}
+
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICIES, payloadJSON)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Updating CipherTrust Policy",
+			"Could not update policy "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	plan.Effect = types.StringValue(gjson.Get(response, "effect").String())
+	if gjson.Get(response, "include_descendant_accounts").Exists() {
+		plan.IncludeDescendantAccounts = types.BoolValue(gjson.Get(response, "include_descendant_accounts").Bool())
+	} else {
+		plan.IncludeDescendantAccounts = types.BoolNull()
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Update]["+id+"]")
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
