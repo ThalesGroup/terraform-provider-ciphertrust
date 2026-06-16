@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -88,6 +89,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "Name of the cloud. Options are: \n" +
 					"aws (default) \n" +
 					"aws-us-gov \n" +
@@ -309,14 +311,20 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_aws_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading AWS Connection on CipherTrust Manager: ",
-			"Could not read AWS Connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust AWS Connection",
+			"Could not read AWS Connection id: "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
+	// Computed / server-generated fields
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
@@ -324,8 +332,6 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	state.Description = types.StringValue(gjson.Get(response, "description").String())
 	state.Category = types.StringValue(gjson.Get(response, "category").String())
 	state.Service = types.StringValue(gjson.Get(response, "service").String())
 	state.ResourceURL = types.StringValue(gjson.Get(response, "resource_url").String())
@@ -333,7 +339,41 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	state.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 
+	// User-configurable fields confirmed in the GET swagger response — refreshed for drift detection.
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	// cloud_name is Optional+Computed: CM always returns a value (default "aws").
+	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
+	// Optional-only fields: only update when non-empty to avoid null → "" phantom drift.
+	if v := gjson.Get(response, "description").String(); v != "" {
+		state.Description = types.StringValue(v)
+	}
+	if v := gjson.Get(response, "assume_role_arn").String(); v != "" {
+		state.AssumeRoleARN = types.StringValue(v)
+	}
+	if v := gjson.Get(response, "assume_role_external_id").String(); v != "" {
+		state.AssumeRoleExternalID = types.StringValue(v)
+	}
+	// aws_region, aws_sts_regional_endpoints, is_role_anywhere, iam_role_anywhere are
+	// CREATE-body-only fields per the API spec: not returned by GET. Plan/state values
+	// are preserved as-is; out-of-band drift for these fields cannot be detected via the API.
+	state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
+	state.Meta = common.ParseMap(response, &resp.Diagnostics, "meta")
+	// products: preserve null for unconfigured; empty slice for explicitly-configured empty list.
+	if gjson.Get(response, "products").IsArray() {
+		var products []types.String
+		gjson.Get(response, "products").ForEach(func(_, v gjson.Result) bool {
+			products = append(products, types.StringValue(v.String()))
+			return true
+		})
+		if products == nil {
+			products = []types.String{}
+		}
+		state.Products = products
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

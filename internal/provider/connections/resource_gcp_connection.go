@@ -381,8 +381,6 @@ func getGcpParamsFromResponse(response string, diag *diag.Diagnostics, data *GCP
 	data.PrivateKeyID = types.StringValue(gjson.Get(response, "private_key_id").String())
 	data.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
-	data.ClientEmail = types.StringValue(gjson.Get(response, "client_email").String())
-	data.PrivateKeyID = types.StringValue(gjson.Get(response, "private_key_id").String())
 	data.Labels = common.ParseMap(response, diag, "labels")
 	data.Meta = common.ParseMap(response, diag, "meta")
 	data.Products = common.ParseArray(response, "products")
