@@ -839,7 +839,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if alias.Alias.ValueString() != "" && alias.Alias.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Alias = alias.Alias.ValueString()
 		}
-		if alias.Index.ValueString() != "" && alias.Index.ValueString() != types.StringNull().ValueString() {
+		if !alias.Index.IsNull() && alias.Index.ValueString() != "" {
 			if idx, err := strconv.ParseInt(alias.Index.ValueString(), 10, 64); err == nil {
 				aliasJSON.Index = idx
 			}
@@ -973,7 +973,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 			if pubKeyAlias.Alias.ValueString() != "" && pubKeyAlias.Alias.ValueString() != types.StringNull().ValueString() {
 				pubKeyAliasJSON.Alias = pubKeyAlias.Alias.ValueString()
 			}
-			if pubKeyAlias.Index.ValueString() != "" && pubKeyAlias.Index.ValueString() != types.StringNull().ValueString() {
+			if !pubKeyAlias.Index.IsNull() && pubKeyAlias.Index.ValueString() != "" {
 				if idx, err := strconv.ParseInt(pubKeyAlias.Index.ValueString(), 10, 64); err == nil {
 					pubKeyAliasJSON.Index = idx
 				}
@@ -1258,20 +1258,16 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		plan.TemplateID = types.StringNull()
 	}
 
-	if !plan.UnDeletable.IsNull() {
-		if r := gjson.Get(apiResp, "undeletable"); r.Exists() {
-			plan.UnDeletable = types.BoolValue(r.Bool())
-		} else {
-			plan.UnDeletable = types.BoolNull()
-		}
+	if r := gjson.Get(apiResp, "undeletable"); r.Exists() {
+		plan.UnDeletable = types.BoolValue(r.Bool())
+	} else {
+		plan.UnDeletable = types.BoolNull()
 	}
 
-	if !plan.UnExportable.IsNull() {
-		if r := gjson.Get(apiResp, "unexportable"); r.Exists() {
-			plan.UnExportable = types.BoolValue(r.Bool())
-		} else {
-			plan.UnExportable = types.BoolNull()
-		}
+	if r := gjson.Get(apiResp, "unexportable"); r.Exists() {
+		plan.UnExportable = types.BoolValue(r.Bool())
+	} else {
+		plan.UnExportable = types.BoolNull()
 	}
 
 	if r := gjson.Get(apiResp, "usageMask"); r.Exists() {
@@ -1288,12 +1284,10 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 	}
 
-	if !plan.XTS.IsNull() {
-		if r := gjson.Get(apiResp, "xts"); r.Exists() {
-			plan.XTS = types.BoolValue(r.Bool())
-		} else {
-			plan.XTS = types.BoolNull()
-		}
+	if r := gjson.Get(apiResp, "xts"); r.Exists() {
+		plan.XTS = types.BoolValue(r.Bool())
+	} else {
+		plan.XTS = types.BoolNull()
 	}
 
 	labelsResult := gjson.Get(apiResp, "labels")
@@ -1307,12 +1301,23 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		plan.Labels = types.MapNull(types.StringType)
 	}
 
-	// top-level aliases: server-managed field (index assigned by API).
-	// Preserve whatever was already in prior state (loaded above) unchanged
-	// to prevent perpetual drift when user has not explicitly set aliases in config.
+	aliasesResult := gjson.Get(apiResp, "aliases")
+	if aliasesResult.IsArray() && len(aliasesResult.Array()) > 0 {
+		var aliases []*KeyAliasTFSDK
+		for _, el := range aliasesResult.Array() {
+			aliases = append(aliases, &KeyAliasTFSDK{
+				Alias: types.StringValue(el.Get("alias").String()),
+				Index: types.StringValue(el.Get("index").String()),
+				Type:  types.StringValue(el.Get("type").String()),
+			})
+		}
+		plan.Aliases = aliases
+	} else {
+		plan.Aliases = nil
+	}
 
 	metaResult := gjson.Get(apiResp, "meta")
-	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
+	if metaResult.Exists() && metaResult.Type != gjson.Null {
 		var metadata KeyMetadataTFSDK
 		if r := gjson.Get(apiResp, "meta.owner_id"); r.Exists() {
 			metadata.OwnerId = types.StringValue(r.String())
@@ -1462,7 +1467,7 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		if alias.Alias.ValueString() != "" && alias.Alias.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Alias = alias.Alias.ValueString()
 		}
-		if alias.Index.ValueString() != "" && alias.Index.ValueString() != types.StringNull().ValueString() {
+		if !alias.Index.IsNull() && alias.Index.ValueString() != "" {
 			if idx, err := strconv.ParseInt(alias.Index.ValueString(), 10, 64); err == nil {
 				aliasJSON.Index = idx
 			}

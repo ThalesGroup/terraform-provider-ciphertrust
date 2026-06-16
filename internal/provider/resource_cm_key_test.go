@@ -13,13 +13,17 @@ import (
 func cmKeyConfig(name, description string) string {
 	return providerConfig + `
 resource "ciphertrust_cm_key" "test_key" {
-  name        = "` + name + `"
-  algorithm   = "aes"
-  key_size    = 256
-  usage_mask  = 12
-  undeletable = false
+  name         = "` + name + `"
+  algorithm    = "aes"
+  key_size     = 256
+  usage_mask   = 12
+  undeletable  = false
   unexportable = false
-  description = "` + description + `"
+  description  = "` + description + `"
+
+  lifecycle {
+    ignore_changes = [aliases]
+  }
 }
 `
 }
@@ -27,11 +31,17 @@ resource "ciphertrust_cm_key" "test_key" {
 func cmKeyMaterialConfig(name, material string) string {
 	return providerConfig + `
 resource "ciphertrust_cm_key" "test_key" {
-  name      = "` + name + `"
-  algorithm = "aes"
-  key_size  = 128
-  material  = "` + material + `"
-  usage_mask = 12
+  name         = "` + name + `"
+  algorithm    = "aes"
+  key_size     = 128
+  material     = "` + material + `"
+  usage_mask   = 12
+  undeletable  = false
+  unexportable = false
+
+  lifecycle {
+    ignore_changes = [aliases]
+  }
 }
 `
 }
