@@ -1026,6 +1026,8 @@ type CMPolicyAttachmentJSON struct {
 	Policy            string                 `json:"policy"`
 	PrincipalSelector map[string]interface{} `json:"principalSelector"`
 	Jurisdiction      string                 `json:"jurisdiction"`
+	Actions           []string               `json:"actions,omitempty"`
+	Resources         []string               `json:"resources,omitempty"`
 	URI               string                 `json:"uri"`
 	Account           string                 `json:"account"`
 	CreatedAt         string                 `json:"createdAt"`

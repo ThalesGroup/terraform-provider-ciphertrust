@@ -100,9 +100,24 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
 			},
-			"uri":        schema.StringAttribute{Computed: true},
-			"account":    schema.StringAttribute{Computed: true},
-			"created_at": schema.StringAttribute{Computed: true},
+			"uri": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"account": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"created_at": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 		},
 	}
 }
@@ -251,8 +266,39 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	state.Actions = actions
 
-	state.Allow = types.BoolValue(gjson.Get(response, "allow").Bool())
+	if r := gjson.Get(response, "allow"); r.Exists() {
+		state.Allow = types.BoolValue(r.Bool())
+	} else {
+		state.Allow = types.BoolNull()
+	}
 	state.Effect = types.StringValue(gjson.Get(response, "effect").String())
+
+	arrConditions := gjson.Get(response, "conditions").Array()
+	var conditions []CMPolicyConditionTFSDK
+	for _, elem := range arrConditions {
+		var values []types.String
+		for _, v := range elem.Get("values").Array() {
+			values = append(values, types.StringValue(v.String()))
+		}
+		var negate types.Bool
+		if elem.Get("negate").Bool() {
+			negate = types.BoolValue(true)
+		} else {
+			negate = types.BoolNull()
+		}
+		conditions = append(conditions, CMPolicyConditionTFSDK{
+			Negate: negate,
+			Op:     types.StringValue(elem.Get("op").String()),
+			Path:   types.StringValue(elem.Get("path").String()),
+			Values: values,
+		})
+	}
+	state.Conditions = conditions
+
+	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
+		state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
+	}
+	// else: keep state.IncludeDescendantAccounts from prior state (API omits the field when false/default)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -265,7 +311,148 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating Policy is not supported", "Unsupported Operation")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy.go -> Update]["+id+"]")
+
+	var state CMPolicyTFSDK
+	var plan CMPolicyTFSDK
+	var payload CMPolicyJSON
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var actions []string
+	for _, str := range plan.Actions {
+		actions = append(actions, str.ValueString())
+	}
+	payload.Actions = actions
+
+	if !plan.Allow.IsNull() && !plan.Allow.IsUnknown() {
+		payload.Allow = plan.Allow.ValueBool()
+	}
+
+	var conditions []CMPolicyConditionJSON
+	for _, condition := range plan.Conditions {
+		var conditionJSON CMPolicyConditionJSON
+		conditionJSON.Negate = condition.Negate.ValueBool()
+		conditionJSON.Op = condition.Op.ValueString()
+		conditionJSON.Path = condition.Path.ValueString()
+		var values []string
+		for _, str := range condition.Values {
+			values = append(values, str.ValueString())
+		}
+		conditionJSON.Values = values
+		conditions = append(conditions, conditionJSON)
+	}
+	payload.Conditions = conditions
+
+	if !plan.Effect.IsNull() && plan.Effect.ValueString() != "" {
+		payload.Effect = plan.Effect.ValueString()
+	}
+
+	if !plan.IncludeDescendantAccounts.IsNull() && !plan.IncludeDescendantAccounts.IsUnknown() {
+		payload.IncludeDescendantAccounts = plan.IncludeDescendantAccounts.ValueBool()
+	}
+
+	if !plan.Name.IsNull() && plan.Name.ValueString() != "" {
+		payload.Name = plan.Name.ValueString()
+	}
+
+	var resources []string
+	for _, str := range plan.Resources {
+		resources = append(resources, str.ValueString())
+	}
+	payload.Resources = resources
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: Policy Update",
+			err.Error(),
+		)
+		return
+	}
+
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICIES, payloadJSON)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Updating CipherTrust Policy",
+			"Could not update policy "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	plan.Name = types.StringValue(gjson.Get(response, "name").String())
+
+	arrResources := gjson.Get(response, "resources").Array()
+	var planResources []types.String
+	for _, res := range arrResources {
+		planResources = append(planResources, types.StringValue(res.String()))
+	}
+	plan.Resources = planResources
+
+	arrActions := gjson.Get(response, "actions").Array()
+	var planActions []types.String
+	for _, act := range arrActions {
+		planActions = append(planActions, types.StringValue(act.String()))
+	}
+	plan.Actions = planActions
+
+	if r := gjson.Get(response, "allow"); r.Exists() {
+		plan.Allow = types.BoolValue(r.Bool())
+	} else {
+		plan.Allow = types.BoolNull()
+	}
+	plan.Effect = types.StringValue(gjson.Get(response, "effect").String())
+
+	arrConditions := gjson.Get(response, "conditions").Array()
+	var planConditions []CMPolicyConditionTFSDK
+	for _, elem := range arrConditions {
+		var values []types.String
+		for _, v := range elem.Get("values").Array() {
+			values = append(values, types.StringValue(v.String()))
+		}
+		var negate types.Bool
+		if elem.Get("negate").Bool() {
+			negate = types.BoolValue(true)
+		} else {
+			negate = types.BoolNull()
+		}
+		planConditions = append(planConditions, CMPolicyConditionTFSDK{
+			Negate: negate,
+			Op:     types.StringValue(elem.Get("op").String()),
+			Path:   types.StringValue(elem.Get("path").String()),
+			Values: values,
+		})
+	}
+	plan.Conditions = planConditions
+
+	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
+		plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
+	}
+	// else: keep plan.IncludeDescendantAccounts from plan (API omits the field when false/default)
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Update]["+id+"]")
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

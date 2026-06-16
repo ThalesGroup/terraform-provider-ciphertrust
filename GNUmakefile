@@ -18,7 +18,7 @@ fmt:
 	gofmt -s -w -e .
 
 test:
-	go test -v -cover -timeout=120s -parallel=10 ./...
+	TF_ACC= TF_ACC_TERRAFORM_PATH=$(shell which terraform 2>/dev/null || echo /home/falcons/terraform) go test -v -cover -timeout=120s -parallel=10 ./...
 
 JUNIT_FILE ?=
 

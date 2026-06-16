@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -66,13 +67,11 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
 				ElementType: types.StringType,
 			},
 			"resources": schema.ListAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
 			},
@@ -126,6 +125,18 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		payload.Jurisdiction = plan.Jurisdiction.ValueString()
 	}
 
+	var actions []string
+	for _, elem := range plan.Actions.Elements() {
+		actions = append(actions, elem.(types.String).ValueString())
+	}
+	payload.Actions = actions
+
+	var resources []string
+	for _, elem := range plan.Resources.Elements() {
+		resources = append(resources, elem.(types.String).ValueString())
+	}
+	payload.Resources = resources
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Create]["+id+"]")
@@ -153,12 +164,9 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	if plan.Actions.IsUnknown() {
-		plan.Actions = types.ListNull(types.StringType)
-	}
-	if plan.Resources.IsUnknown() {
-		plan.Resources = types.ListNull(types.StringType)
-	}
+
+	// actions/resources: API POST response does not echo back these values.
+	// plan.Actions and plan.Resources already hold the user-provided values from req.Plan.Get.
 
 	tflog.Debug(ctx, "[resource_policy_attachments.go -> Create Output]["+response+"]")
 
@@ -196,6 +204,40 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
+	// policy: API returns the full URI (e.g. kylo:kylo:admin:policies:name-uuid), but the user
+	// provides only the policy name. Keep the prior state value to avoid constant drift from
+	// API URI normalization. OOB policy changes are not detectable with this field.
+	if state.Policy.IsNull() || state.Policy.ValueString() == "" {
+		state.Policy = types.StringValue(gjson.Get(response, "policy").String())
+	}
+
+	psResult := gjson.Get(response, "principalSelector")
+	if psResult.Exists() {
+		elems := make(map[string]attr.Value)
+		for k, v := range psResult.Map() {
+			elems[k] = types.StringValue(v.String())
+		}
+		state.PrincipalSelector = types.MapValueMust(types.StringType, elems)
+	} else {
+		state.PrincipalSelector = types.MapNull(types.StringType)
+	}
+
+	// jurisdiction: API assigns a server-side default (e.g. "kylo:kylo:admin:accounts:kylo").
+	// Only hydrate if the user previously set a jurisdiction value (to detect OOB changes to
+	// user-configured values). When user left it null, keep null to avoid drift from the default.
+	if !state.Jurisdiction.IsNull() {
+		if r := gjson.Get(response, "jurisdiction"); r.Exists() && r.String() != "" {
+			state.Jurisdiction = types.StringValue(r.String())
+		} else {
+			state.Jurisdiction = types.StringNull()
+		}
+	}
+
+	// actions/resources: The CM API returns the parent policy's actions rather than the
+	// attachment-level actions, making it unreliable for hydration. Keep the prior state
+	// value so user-provided actions/resources round-trip without drift. Changes trigger
+	// resource replacement (RequiresReplace), so OOB drift for these fields is out of scope.
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -207,7 +249,98 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating Policy is not supported", "Unsupported Operation")
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Update]["+id+"]")
+
+	var state CMPolicyAttachmentTFSDK
+	var plan CMPolicyAttachmentTFSDK
+	var payload CMPolicyAttachmentJSON
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	payload.Policy = plan.Policy.ValueString()
+
+	selectorsPayload := make(map[string]interface{})
+	for k, v := range plan.PrincipalSelector.Elements() {
+		selectorsPayload[k] = v.(types.String).ValueString()
+	}
+	payload.PrincipalSelector = selectorsPayload
+
+	if !plan.Jurisdiction.IsNull() && plan.Jurisdiction.ValueString() != "" {
+		payload.Jurisdiction = plan.Jurisdiction.ValueString()
+	}
+
+	var updateActions []string
+	for _, elem := range plan.Actions.Elements() {
+		updateActions = append(updateActions, elem.(types.String).ValueString())
+	}
+	payload.Actions = updateActions
+
+	var updateResources []string
+	for _, elem := range plan.Resources.Elements() {
+		updateResources = append(updateResources, elem.(types.String).ValueString())
+	}
+	payload.Resources = updateResources
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: Policy Attachment Update",
+			err.Error(),
+		)
+		return
+	}
+
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS, payloadJSON)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Updating CipherTrust Policy Attachment",
+			"Could not update policy attachment "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
+	plan.Account = types.StringValue(gjson.Get(response, "account").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	// policy: API returns a full URI; plan.Policy already has the user-provided name from
+	// req.Plan.Get. Keep plan value to avoid drift from API URI normalization.
+
+	psResult := gjson.Get(response, "principalSelector")
+	if psResult.Exists() {
+		elems := make(map[string]attr.Value)
+		for k, v := range psResult.Map() {
+			elems[k] = types.StringValue(v.String())
+		}
+		plan.PrincipalSelector = types.MapValueMust(types.StringType, elems)
+	} else {
+		plan.PrincipalSelector = types.MapNull(types.StringType)
+	}
+	// jurisdiction: plan.Jurisdiction already has the user-provided value from req.Plan.Get.
+	// Keep plan value; API may return a server-assigned or transformed value.
+
+	// actions/resources: PATCH response may return pre-patch values (stale). Keep plan values
+	// from req.Plan.Get (the intended post-update state). No hydration needed.
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Update]["+id+"]")
+	diags = resp.State.Set(ctx, plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
