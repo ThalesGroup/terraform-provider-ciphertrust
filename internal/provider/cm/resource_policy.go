@@ -281,8 +281,8 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 			values = append(values, types.StringValue(v.String()))
 		}
 		var negate types.Bool
-		if elem.Get("negate").Bool() {
-			negate = types.BoolValue(true)
+		if r := elem.Get("negate"); r.Exists() {
+			negate = types.BoolValue(r.Bool())
 		} else {
 			negate = types.BoolNull()
 		}
@@ -295,10 +295,12 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	state.Conditions = conditions
 
+	// include_descendant_accounts: CM GET never returns this field (omits it even when
+	// set to true). Keep prior state so the value round-trips correctly. Update() sets
+	// state from the plan value, so post-apply refreshes stay clean.
 	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
 		state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
 	}
-	// else: keep state.IncludeDescendantAccounts from prior state (API omits the field when false/default)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -428,8 +430,8 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 			values = append(values, types.StringValue(v.String()))
 		}
 		var negate types.Bool
-		if elem.Get("negate").Bool() {
-			negate = types.BoolValue(true)
+		if r := elem.Get("negate"); r.Exists() {
+			negate = types.BoolValue(r.Bool())
 		} else {
 			negate = types.BoolNull()
 		}

@@ -233,10 +233,11 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 		}
 	}
 
-	// actions/resources: The CM API returns the parent policy's actions rather than the
-	// attachment-level actions, making it unreliable for hydration. Keep the prior state
-	// value so user-provided actions/resources round-trip without drift. Changes trigger
-	// resource replacement (RequiresReplace), so OOB drift for these fields is out of scope.
+	// actions/resources: CM GET /policy-attachments/{id} returns the parent policy's
+	// action list, not the attachment-specific values. Hydrating from the API causes
+	// perpetual drift (e.g. after updating to ["DeleteKey"], GET returns ["CreateKey"]
+	// from the parent policy). Keep prior state so user-provided values round-trip
+	// cleanly. OOB drift for these fields is undetectable due to this CM API behaviour.
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Read]["+id+"]")
 	// Set refreshed state
