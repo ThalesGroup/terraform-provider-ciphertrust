@@ -6,6 +6,69 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+func TestAccCMPasswordPolicy_DriftDetection(t *testing.T) {
+	RequireCM(t)
+	const policyName = "testAccDriftDetectionPolicy"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "test" {
+    policy_name        = "` + policyName + `"
+    inclusive_min_digits = 1
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "1"),
+					resource.TestCheckResourceAttrPair("ciphertrust_password_policy.test", "id", "ciphertrust_password_policy.test", "policy_name"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "test" {
+    policy_name        = "` + policyName + `"
+    inclusive_min_digits = 2
+}
+`,
+				Check: checkStep(t, "step2",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "2"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccCMPasswordPolicy_NoPerpetualDiff(t *testing.T) {
+	RequireCM(t)
+	const policyName = "testAccNoPerpDiffPolicy"
+	config := providerConfig + `
+resource "ciphertrust_password_policy" "test" {
+    policy_name        = "` + policyName + `"
+    inclusive_min_digits = 3
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "3"),
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.test", "id"),
+				),
+			},
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 func TestResourceCMPassordPolicy(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{

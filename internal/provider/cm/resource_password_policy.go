@@ -264,22 +264,93 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 	}
 
 	state.Name = types.StringValue(gjson.Get(response, "policy_name").String())
-	state.InclusiveMaxTotalLength = types.Int64Value(gjson.Get(response, "inclusive_max_total_length").Int())
-	state.InclusiveMinDigits = types.Int64Value(gjson.Get(response, "inclusive_min_digits").Int())
-	state.InclusiveMinLowerCase = types.Int64Value(gjson.Get(response, "inclusive_min_lower_case").Int())
-	state.InclusiveMinOther = types.Int64Value(gjson.Get(response, "inclusive_min_other").Int())
-	state.InclusiveMinTotalLength = types.Int64Value(gjson.Get(response, "inclusive_min_total_length").Int())
-	state.InclusiveMinUpperCase = types.Int64Value(gjson.Get(response, "inclusive_min_upper_case").Int())
-	state.PasswordChangeMinDays = types.Int64Value(gjson.Get(response, "password_change_min_days").Int())
-	state.PasswordHistoryThreshold = types.Int64Value(gjson.Get(response, "password_history_threshold").Int())
-	state.PasswordLifetime = types.Int64Value(gjson.Get(response, "password_lifetime").Int())
+	state.ID = types.StringValue(gjson.Get(response, "policy_name").String())
 
-	thresholdsData := gjson.Get(response, "failed_logins_lockout_thresholds").Array()
-	var thresholds []types.Int64
-	for _, threshold := range thresholdsData {
-		thresholds = append(thresholds, types.Int64Value(threshold.Int()))
+	// For Optional-only Int64 fields: only refresh state when the field was
+	// previously set (non-null). This prevents the CM API's always-present zero
+	// values from creating perpetual drift for unmanaged fields.
+	if !state.InclusiveMaxTotalLength.IsNull() {
+		if gjson.Get(response, "inclusive_max_total_length").Exists() {
+			state.InclusiveMaxTotalLength = types.Int64Value(gjson.Get(response, "inclusive_max_total_length").Int())
+		} else {
+			state.InclusiveMaxTotalLength = types.Int64Null()
+		}
 	}
-	state.FailedLoginsLockoutThresholds = thresholds
+	if !state.InclusiveMinDigits.IsNull() {
+		if gjson.Get(response, "inclusive_min_digits").Exists() {
+			state.InclusiveMinDigits = types.Int64Value(gjson.Get(response, "inclusive_min_digits").Int())
+		} else {
+			state.InclusiveMinDigits = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinLowerCase.IsNull() {
+		if gjson.Get(response, "inclusive_min_lower_case").Exists() {
+			state.InclusiveMinLowerCase = types.Int64Value(gjson.Get(response, "inclusive_min_lower_case").Int())
+		} else {
+			state.InclusiveMinLowerCase = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinOther.IsNull() {
+		if gjson.Get(response, "inclusive_min_other").Exists() {
+			state.InclusiveMinOther = types.Int64Value(gjson.Get(response, "inclusive_min_other").Int())
+		} else {
+			state.InclusiveMinOther = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinTotalLength.IsNull() {
+		if gjson.Get(response, "inclusive_min_total_length").Exists() {
+			state.InclusiveMinTotalLength = types.Int64Value(gjson.Get(response, "inclusive_min_total_length").Int())
+		} else {
+			state.InclusiveMinTotalLength = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinUpperCase.IsNull() {
+		if gjson.Get(response, "inclusive_min_upper_case").Exists() {
+			state.InclusiveMinUpperCase = types.Int64Value(gjson.Get(response, "inclusive_min_upper_case").Int())
+		} else {
+			state.InclusiveMinUpperCase = types.Int64Null()
+		}
+	}
+	if !state.PasswordChangeMinDays.IsNull() {
+		if gjson.Get(response, "password_change_min_days").Exists() {
+			state.PasswordChangeMinDays = types.Int64Value(gjson.Get(response, "password_change_min_days").Int())
+		} else {
+			state.PasswordChangeMinDays = types.Int64Null()
+		}
+	}
+	if !state.PasswordHistoryThreshold.IsNull() {
+		if gjson.Get(response, "password_history_threshold").Exists() {
+			state.PasswordHistoryThreshold = types.Int64Value(gjson.Get(response, "password_history_threshold").Int())
+		} else {
+			state.PasswordHistoryThreshold = types.Int64Null()
+		}
+	}
+	if !state.PasswordLifetime.IsNull() {
+		if gjson.Get(response, "password_lifetime").Exists() {
+			state.PasswordLifetime = types.Int64Value(gjson.Get(response, "password_lifetime").Int())
+		} else {
+			state.PasswordLifetime = types.Int64Null()
+		}
+	}
+
+	// For the list: only refresh if it was previously set (non-nil). Three-branch
+	// form handles absent, empty, and populated API responses.
+	if state.FailedLoginsLockoutThresholds != nil {
+		if v := gjson.Get(response, "failed_logins_lockout_thresholds"); !v.Exists() {
+			state.FailedLoginsLockoutThresholds = nil
+		} else {
+			arr := v.Array()
+			if len(arr) == 0 {
+				state.FailedLoginsLockoutThresholds = []types.Int64{}
+			} else {
+				thresholds := make([]types.Int64, 0, len(arr))
+				for _, el := range arr {
+					thresholds = append(thresholds, types.Int64Value(el.Int()))
+				}
+				state.FailedLoginsLockoutThresholds = thresholds
+			}
+		}
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Read]["+id+"]")
 	// Set refreshed state
