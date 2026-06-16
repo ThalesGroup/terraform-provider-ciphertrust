@@ -70,3 +70,48 @@ resource "ciphertrust_scp_connection" "scp_connection" {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+func TestAccSCPConnection_NameRequiresReplace(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scp_connection" "scp_connection_rr" {
+  name        = "TestSCPConnectionRR"
+  host        = "test-host"
+  username    = "test-user"
+  auth_method = "key"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
+  path_to     = "/home/testUser/data/"
+  port        = 22
+  protocol    = "scp"
+  products    = ["backup/restore"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection_rr", "name", "TestSCPConnectionRR"),
+				),
+			},
+			{
+				// Changing name must trigger a destroy-and-recreate plan (RequiresReplace).
+				Config: providerConfig + `
+resource "ciphertrust_scp_connection" "scp_connection_rr" {
+  name        = "TestSCPConnectionRR-renamed"
+  host        = "test-host"
+  username    = "test-user"
+  auth_method = "key"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
+  path_to     = "/home/testUser/data/"
+  port        = 22
+  protocol    = "scp"
+  products    = ["backup/restore"]
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

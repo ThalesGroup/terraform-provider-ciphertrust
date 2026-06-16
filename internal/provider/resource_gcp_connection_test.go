@@ -71,3 +71,50 @@ func TestResourceGCPConnection(t *testing.T) {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+func TestAccGCPConnection_NameRequiresReplace(t *testing.T) {
+	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
+	if gcpKeyFile == "" {
+		t.Skip("Skipping GCP RequiresReplace test: CCKM_GOOGLE_KEY_FILE not set")
+	}
+
+	createConfig := fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "gcp_connection_rr" {
+  name       = "test-gcp-connection-rr"
+  products   = ["cckm"]
+  key_file   = <<-EOT
+    %s
+  EOT
+  cloud_name = "gcp"
+}
+`, gcpKeyFile)
+
+	renameConfig := fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "gcp_connection_rr" {
+  name       = "test-gcp-connection-rr-renamed"
+  products   = ["cckm"]
+  key_file   = <<-EOT
+    %s
+  EOT
+  cloud_name = "gcp"
+}
+`, gcpKeyFile)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + createConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection_rr", "name", "test-gcp-connection-rr"),
+				),
+			},
+			{
+				// Changing name must trigger a destroy-and-recreate plan (RequiresReplace).
+				Config:             providerConfig + renameConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

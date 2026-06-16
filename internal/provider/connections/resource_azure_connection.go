@@ -66,6 +66,9 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Unique connection name.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"tenant_id": schema.StringAttribute{
 				Optional:    true,

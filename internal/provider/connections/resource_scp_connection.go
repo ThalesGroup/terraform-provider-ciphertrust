@@ -107,6 +107,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Unique connection name.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"path_to": schema.StringAttribute{
 				Required:    true,

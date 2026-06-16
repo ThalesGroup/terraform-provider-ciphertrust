@@ -68,3 +68,41 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+func TestAccAzureConnection_NameRequiresReplace(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_azure_connection" "azure_connection_rr" {
+  name          = "TestAzureConnectionRR"
+  client_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
+  tenant_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  client_secret = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  cloud_name    = "AzureCloud"
+  products      = ["cckm"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection_rr", "name", "TestAzureConnectionRR"),
+				),
+			},
+			{
+				// Changing name must trigger a destroy-and-recreate plan (RequiresReplace).
+				Config: providerConfig + `
+resource "ciphertrust_azure_connection" "azure_connection_rr" {
+  name          = "TestAzureConnectionRR-renamed"
+  client_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
+  tenant_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  client_secret = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  cloud_name    = "AzureCloud"
+  products      = ["cckm"]
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
