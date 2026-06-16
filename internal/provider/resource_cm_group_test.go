@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -87,6 +88,44 @@ func TestAccCMGroup_driftDetection(t *testing.T) {
 				Config:             cmGroupConfig(testGroupName+"Drift", "Drift test", ""),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func TestAccCMGroup_RenameError(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig("TFTestGroupRename", "Rename test", ""),
+				Check: resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", "TFTestGroupRename"),
+			},
+			{
+				Config:      cmGroupConfig("TFTestGroupRenameNew", "Rename test", ""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Attribute 'name' cannot be changed after creation"),
+			},
+		},
+	})
+}
+
+func TestAccCMGroup_UpdateInPlace(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig("TFTestGroupInplace", "initial", ""),
+				Check: resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "initial"),
+			},
+			{
+				Config: cmGroupConfig("TFTestGroupInplace", "updated", ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "updated"),
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", "TFTestGroupInplace"),
+				),
 			},
 		},
 	})

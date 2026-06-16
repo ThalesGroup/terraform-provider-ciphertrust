@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -47,7 +46,7 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 			"name": schema.StringAttribute{
 				Optional: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					ImmutableString(),
 				},
 				Description: "Name of property",
 			},
@@ -175,6 +174,13 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
+	var state CMPropertyTFSDK
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Value = plan.Value.ValueString()
 
 	payloadJSON, err := json.Marshal(payload)
@@ -190,7 +196,7 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 	response, err := r.client.UpdateDataFullURL(
 		ctx,
 		plan.Name.ValueString(),
-		common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString(),
+		common.URL_CM_PROPERTIES+"/"+state.Name.ValueString(),
 		payloadJSON,
 		"name")
 	tflog.Debug(ctx, "[resource_property.go -> Update -> Response]["+response+"]")
@@ -204,7 +210,7 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// Read back the property to get the description and other computed fields
-	readResponse, err := r.client.ReadDataByParam(ctx, id, plan.Name.ValueString(), common.URL_CM_PROPERTIES)
+	readResponse, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

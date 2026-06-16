@@ -42,7 +42,7 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"name": schema.StringAttribute{
 				Required: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					ImmutableString(),
 				},
 			},
 			"app_metadata": schema.StringAttribute{
@@ -215,6 +215,13 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	var state CMGroupTFSDK
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
 		payload.Name = plan.Name.ValueString()
 	}
@@ -253,7 +260,7 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_GROUP, payloadJSON, "name")
+	response, err := r.client.UpdateData(ctx, state.Name.ValueString(), common.URL_GROUP, payloadJSON, "name")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Update]["+plan.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
