@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/tidwall/gjson"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -837,8 +839,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if alias.Alias.ValueString() != "" && alias.Alias.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Alias = alias.Alias.ValueString()
 		}
-		if alias.Index.ValueInt64() != types.Int64Null().ValueInt64() {
-			aliasJSON.Index = alias.Index.ValueInt64()
+		if alias.Index.ValueString() != "" && alias.Index.ValueString() != types.StringNull().ValueString() {
+			if idx, err := strconv.ParseInt(alias.Index.ValueString(), 10, 64); err == nil {
+				aliasJSON.Index = idx
+			}
 		}
 		if alias.Type.ValueString() != "" && alias.Type.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Type = alias.Type.ValueString()
@@ -969,8 +973,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 			if pubKeyAlias.Alias.ValueString() != "" && pubKeyAlias.Alias.ValueString() != types.StringNull().ValueString() {
 				pubKeyAliasJSON.Alias = pubKeyAlias.Alias.ValueString()
 			}
-			if pubKeyAlias.Index.ValueInt64() != types.Int64Null().ValueInt64() {
-				pubKeyAliasJSON.Index = pubKeyAlias.Index.ValueInt64()
+			if pubKeyAlias.Index.ValueString() != "" && pubKeyAlias.Index.ValueString() != types.StringNull().ValueString() {
+				if idx, err := strconv.ParseInt(pubKeyAlias.Index.ValueString(), 10, 64); err == nil {
+					pubKeyAliasJSON.Index = idx
+				}
 			}
 			if pubKeyAlias.Type.ValueString() != "" && pubKeyAlias.Type.ValueString() != types.StringNull().ValueString() {
 				pubKeyAliasJSON.Type = pubKeyAlias.Type.ValueString()
@@ -1076,6 +1082,363 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
+
+	var plan CMKeyTFSDK
+	diags := req.State.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	apiResp, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_KEY_MANAGEMENT)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Key",
+			"Could not read key "+plan.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	plan.ID = types.StringValue(gjson.Get(apiResp, "id").String())
+
+	if !plan.ActivationDate.IsNull() {
+		if r := gjson.Get(apiResp, "activationDate"); r.Exists() {
+			plan.ActivationDate = types.StringValue(r.String())
+		} else {
+			plan.ActivationDate = types.StringNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "algorithm"); r.Exists() {
+		plan.Algorithm = types.StringValue(strings.ToLower(r.String()))
+	} else {
+		plan.Algorithm = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "archiveDate"); r.Exists() {
+		plan.ArchiveDate = types.StringValue(r.String())
+	} else {
+		plan.ArchiveDate = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "certType"); r.Exists() {
+		plan.CertType = types.StringValue(r.String())
+	} else {
+		plan.CertType = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "compromiseDate"); r.Exists() {
+		plan.CompromiseDate = types.StringValue(r.String())
+	} else {
+		plan.CompromiseDate = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "compromiseOccurrenceDate"); r.Exists() {
+		plan.CompromiseOccurrenceDate = types.StringValue(r.String())
+	} else {
+		plan.CompromiseOccurrenceDate = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "curveid"); r.Exists() {
+		plan.Curveid = types.StringValue(r.String())
+	} else {
+		plan.Curveid = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "deactivationDate"); r.Exists() {
+		plan.DeactivationDate = types.StringValue(r.String())
+	} else {
+		plan.DeactivationDate = types.StringNull()
+	}
+
+	if !plan.DefaultIV.IsNull() {
+		if r := gjson.Get(apiResp, "defaultIV"); r.Exists() {
+			plan.DefaultIV = types.StringValue(r.String())
+		} else {
+			plan.DefaultIV = types.StringNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "description"); r.Exists() {
+		plan.Description = types.StringValue(r.String())
+	} else {
+		plan.Description = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "destroyDate"); r.Exists() {
+		plan.DestroyDate = types.StringValue(r.String())
+	} else {
+		plan.DestroyDate = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "keyId"); r.Exists() {
+		plan.KeyId = types.StringValue(r.String())
+	} else {
+		plan.KeyId = types.StringNull()
+	}
+
+	if !plan.MUID.IsNull() {
+		if r := gjson.Get(apiResp, "muid"); r.Exists() {
+			plan.MUID = types.StringValue(r.String())
+		} else {
+			plan.MUID = types.StringNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "name"); r.Exists() {
+		plan.Name = types.StringValue(r.String())
+	} else {
+		plan.Name = types.StringNull()
+	}
+
+	if !plan.ObjectType.IsNull() {
+		if r := gjson.Get(apiResp, "objectType"); r.Exists() {
+			plan.ObjectType = types.StringValue(r.String())
+		} else {
+			plan.ObjectType = types.StringNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "processStartDate"); r.Exists() {
+		plan.ProcessStartDate = types.StringValue(r.String())
+	} else {
+		plan.ProcessStartDate = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "protectStopDate"); r.Exists() {
+		plan.ProtectStopDate = types.StringValue(r.String())
+	} else {
+		plan.ProtectStopDate = types.StringNull()
+	}
+
+	// Note: inverted tags — TF revocation_reason ↔ JSON revocationMessage
+	if r := gjson.Get(apiResp, "revocationMessage"); r.Exists() {
+		plan.RevocationReason = types.StringValue(r.String())
+	} else {
+		plan.RevocationReason = types.StringNull()
+	}
+
+	// Note: inverted tags — TF revocation_message ↔ JSON revocationReason
+	if r := gjson.Get(apiResp, "revocationReason"); r.Exists() {
+		plan.RevocationMessage = types.StringValue(r.String())
+	} else {
+		plan.RevocationMessage = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "rotationFrequencyDays"); r.Exists() {
+		plan.RotationFrequencyDays = types.StringValue(r.String())
+	} else {
+		plan.RotationFrequencyDays = types.StringNull()
+	}
+
+	if r := gjson.Get(apiResp, "size"); r.Exists() {
+		plan.Size = types.Int64Value(r.Int())
+	} else {
+		plan.Size = types.Int64Null()
+	}
+
+	if !plan.State.IsNull() {
+		if r := gjson.Get(apiResp, "state"); r.Exists() {
+			plan.State = types.StringValue(r.String())
+		} else {
+			plan.State = types.StringNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "templateId"); r.Exists() {
+		plan.TemplateID = types.StringValue(r.String())
+	} else {
+		plan.TemplateID = types.StringNull()
+	}
+
+	if !plan.UnDeletable.IsNull() {
+		if r := gjson.Get(apiResp, "undeletable"); r.Exists() {
+			plan.UnDeletable = types.BoolValue(r.Bool())
+		} else {
+			plan.UnDeletable = types.BoolNull()
+		}
+	}
+
+	if !plan.UnExportable.IsNull() {
+		if r := gjson.Get(apiResp, "unexportable"); r.Exists() {
+			plan.UnExportable = types.BoolValue(r.Bool())
+		} else {
+			plan.UnExportable = types.BoolNull()
+		}
+	}
+
+	if r := gjson.Get(apiResp, "usageMask"); r.Exists() {
+		plan.UsageMask = types.Int64Value(r.Int())
+	} else {
+		plan.UsageMask = types.Int64Null()
+	}
+
+	if !plan.UUID.IsNull() {
+		if r := gjson.Get(apiResp, "uuid"); r.Exists() {
+			plan.UUID = types.StringValue(r.String())
+		} else {
+			plan.UUID = types.StringNull()
+		}
+	}
+
+	if !plan.XTS.IsNull() {
+		if r := gjson.Get(apiResp, "xts"); r.Exists() {
+			plan.XTS = types.BoolValue(r.Bool())
+		} else {
+			plan.XTS = types.BoolNull()
+		}
+	}
+
+	labelsResult := gjson.Get(apiResp, "labels")
+	if labelsResult.Exists() && labelsResult.Type != gjson.Null {
+		labelsMap := make(map[string]attr.Value)
+		for k, v := range labelsResult.Map() {
+			labelsMap[k] = types.StringValue(v.String())
+		}
+		plan.Labels = types.MapValueMust(types.StringType, labelsMap)
+	} else {
+		plan.Labels = types.MapNull(types.StringType)
+	}
+
+	// top-level aliases: schema declares index as StringAttribute but the Go struct
+	// uses types.Int64 — a pre-existing mismatch that prevents safe API hydration.
+	// Preserve whatever was already in prior state (loaded above) unchanged.
+
+	metaResult := gjson.Get(apiResp, "meta")
+	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
+		var metadata KeyMetadataTFSDK
+		if r := gjson.Get(apiResp, "meta.owner_id"); r.Exists() {
+			metadata.OwnerId = types.StringValue(r.String())
+		} else {
+			metadata.OwnerId = types.StringNull()
+		}
+
+		permResult := gjson.Get(apiResp, "meta.permissions")
+		if permResult.Exists() && permResult.Type != gjson.Null {
+			var perms KeyMetadataPermissionsTFSDK
+			permNames := []struct {
+				key  string
+				dest *[]types.String
+			}{
+				{"DecryptWithKey", &perms.DecryptWithKey},
+				{"EncryptWithKey", &perms.EncryptWithKey},
+				{"ExportKey", &perms.ExportKey},
+				{"MACVerifyWithKey", &perms.MACVerifyWithKey},
+				{"MACWithKey", &perms.MACWithKey},
+				{"ReadKey", &perms.ReadKey},
+				{"SignVerifyWithKey", &perms.SignVerifyWithKey},
+				{"SignWithKey", &perms.SignWithKey},
+				{"UseKey", &perms.UseKey},
+			}
+			for _, p := range permNames {
+				for _, el := range gjson.Get(apiResp, "meta.permissions."+p.key).Array() {
+					*p.dest = append(*p.dest, types.StringValue(el.String()))
+				}
+			}
+			metadata.Permissions = &perms
+		} else {
+			metadata.Permissions = nil
+		}
+
+		cteResult := gjson.Get(apiResp, "meta.cte")
+		if cteResult.Exists() && cteResult.Type != gjson.Null {
+			var cte KeyMetadataCTETFSDK
+			if r := gjson.Get(apiResp, "meta.cte.persistent_on_client"); r.Exists() {
+				cte.PersistentOnClient = types.BoolValue(r.Bool())
+			} else {
+				cte.PersistentOnClient = types.BoolNull()
+			}
+			if r := gjson.Get(apiResp, "meta.cte.encryption_mode"); r.Exists() {
+				cte.EncryptionMode = types.StringValue(r.String())
+			} else {
+				cte.EncryptionMode = types.StringNull()
+			}
+			if r := gjson.Get(apiResp, "meta.cte.cte_versioned"); r.Exists() {
+				cte.CTEVersioned = types.BoolValue(r.Bool())
+			} else {
+				cte.CTEVersioned = types.BoolNull()
+			}
+			metadata.CTE = &cte
+		} else {
+			metadata.CTE = nil
+		}
+		plan.Metadata = &metadata
+	} else {
+		plan.Metadata = nil
+	}
+
+	pkpResult := gjson.Get(apiResp, "publicKeyParameters")
+	if pkpResult.Exists() && pkpResult.Type != gjson.Null {
+		var pkp PublicKeyParametersTFSDK
+		if r := gjson.Get(apiResp, "publicKeyParameters.activationDate"); r.Exists() {
+			pkp.ActivationDate = types.StringValue(r.String())
+		} else {
+			pkp.ActivationDate = types.StringNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.archiveDate"); r.Exists() {
+			pkp.ArchiveDate = types.StringValue(r.String())
+		} else {
+			pkp.ArchiveDate = types.StringNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.deactivationDate"); r.Exists() {
+			pkp.DeactivationDate = types.StringValue(r.String())
+		} else {
+			pkp.DeactivationDate = types.StringNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.name"); r.Exists() {
+			pkp.Name = types.StringValue(r.String())
+		} else {
+			pkp.Name = types.StringNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.state"); r.Exists() {
+			pkp.State = types.StringValue(r.String())
+		} else {
+			pkp.State = types.StringNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.undeletable"); r.Exists() {
+			pkp.UnDeletable = types.BoolValue(r.Bool())
+		} else {
+			pkp.UnDeletable = types.BoolNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.unexportable"); r.Exists() {
+			pkp.UnExportable = types.BoolValue(r.Bool())
+		} else {
+			pkp.UnExportable = types.BoolNull()
+		}
+		if r := gjson.Get(apiResp, "publicKeyParameters.usageMask"); r.Exists() {
+			pkp.UsageMask = types.Int64Value(r.Int())
+		} else {
+			pkp.UsageMask = types.Int64Null()
+		}
+		pkpAliasesResult := gjson.Get(apiResp, "publicKeyParameters.aliases")
+		if pkpAliasesResult.IsArray() && len(pkpAliasesResult.Array()) > 0 {
+			var pkpAliases []KeyAliasTFSDK
+			for _, el := range pkpAliasesResult.Array() {
+				pkpAliases = append(pkpAliases, KeyAliasTFSDK{
+					Alias: types.StringValue(el.Get("alias").String()),
+					Index: types.StringValue(el.Get("index").String()),
+					Type:  types.StringValue(el.Get("type").String()),
+				})
+			}
+			pkp.Aliases = pkpAliases
+		} else {
+			pkp.Aliases = nil
+		}
+		plan.PublicKeyParameters = &pkp
+	} else {
+		plan.PublicKeyParameters = nil
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+plan.ID.ValueString()+"]")
+	diags = resp.State.Set(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -1099,8 +1462,10 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		if alias.Alias.ValueString() != "" && alias.Alias.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Alias = alias.Alias.ValueString()
 		}
-		if alias.Index.ValueInt64() != types.Int64Null().ValueInt64() {
-			aliasJSON.Index = alias.Index.ValueInt64()
+		if alias.Index.ValueString() != "" && alias.Index.ValueString() != types.StringNull().ValueString() {
+			if idx, err := strconv.ParseInt(alias.Index.ValueString(), 10, 64); err == nil {
+				aliasJSON.Index = idx
+			}
 		}
 		if alias.Type.ValueString() != "" && alias.Type.ValueString() != types.StringNull().ValueString() {
 			aliasJSON.Type = alias.Type.ValueString()
@@ -1277,6 +1642,9 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			return
+		}
 		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
 			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
 				"key id: "+state.ID.ValueString(),

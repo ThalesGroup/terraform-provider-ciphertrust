@@ -120,7 +120,7 @@ type KeyMetadataTFSDK struct {
 
 type KeyAliasTFSDK struct {
 	Alias types.String `tfsdk:"alias"`
-	Index types.Int64  `tfsdk:"index"`
+	Index types.String `tfsdk:"index"`
 	Type  types.String `tfsdk:"type"`
 }
 
