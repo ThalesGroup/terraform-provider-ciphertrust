@@ -510,7 +510,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 									Required:    true,
 									Description: "An alias for a key name.",
 								},
-								"index": schema.Int64Attribute{
+								"index": schema.StringAttribute{
 									Required:    true,
 									Description: "Index associated with alias. Each alias within an object has a unique index.",
 								},
@@ -1307,9 +1307,9 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		plan.Labels = types.MapNull(types.StringType)
 	}
 
-	// top-level aliases: schema declares index as StringAttribute but the Go struct
-	// uses types.Int64 — a pre-existing mismatch that prevents safe API hydration.
-	// Preserve whatever was already in prior state (loaded above) unchanged.
+	// top-level aliases: server-managed field (index assigned by API).
+	// Preserve whatever was already in prior state (loaded above) unchanged
+	// to prevent perpetual drift when user has not explicitly set aliases in config.
 
 	metaResult := gjson.Get(apiResp, "meta")
 	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
