@@ -309,7 +309,7 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 	tflog.Debug(ctx, "resource_scp_connection.go: response :"+response)
 
 	getParamsFromResponse(response, &resp.Diagnostics, &state)
-	// required parameters are fetched separately
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.AuthMethod = types.StringValue(gjson.Get(response, "auth_method").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.PathTo = types.StringValue(gjson.Get(response, "path_to").String())

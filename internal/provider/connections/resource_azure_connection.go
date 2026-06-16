@@ -535,6 +535,10 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
 	data.ExternalCertificateUsed = types.BoolValue(gjson.Get(response, "external_certificate_used").Bool())
+	// is_certificate_used is Optional-only: only update when non-null to avoid null→false phantom drift.
+	if !data.IsCertificateUsed.IsNull() {
+		data.IsCertificateUsed = types.BoolValue(gjson.Get(response, "is_certificate_used").Bool())
+	}
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
 	data.TenantID = types.StringValue(gjson.Get(response, "tenant_id").String())
 	data.ClientID = types.StringValue(gjson.Get(response, "client_id").String())
