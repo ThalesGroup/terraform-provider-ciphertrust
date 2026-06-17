@@ -3,12 +3,12 @@
 page_title: "ciphertrust_interface Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a service endpoint interface (NAE, KMIP, or SNMP) on the CipherTrust Manager appliance, controlling the port, TLS settings, authentication mode, and network binding. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_interface (Resource)
 
-
+Manages a service endpoint interface (NAE, KMIP, or SNMP) on the CipherTrust Manager appliance, controlling the port, TLS settings, authentication mode, and network binding. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 

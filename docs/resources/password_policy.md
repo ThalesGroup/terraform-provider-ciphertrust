@@ -3,12 +3,12 @@
 page_title: "ciphertrust_password_policy Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager user password policy (failed-login lockout thresholds, password complexity rules, password lifetime, and password history). Only available on CipherTrust Manager — not supported on CDSPaaS, where password policy is managed by the platform.
 ---
 
 # ciphertrust_password_policy (Resource)
 
-
+Manages a CipherTrust Manager user password policy (failed-login lockout thresholds, password complexity rules, password lifetime, and password history). **Only available on CipherTrust Manager — not supported on CDSPaaS, where password policy is managed by the platform.**
 
 ## Example Usage
 
@@ -101,3 +101,7 @@ output "custom_pwd_policy_id" {
 - `password_history_threshold` (Number) Determines the number of past passwords a user cannot reuse. Even with value 0, the user will not be able to change their password to the same password.
 - `password_lifetime` (Number) The maximum lifetime of the password in days. Value 0 is ignored.
 - `policy_name` (String) The name for the custom password policy.
+
+### Read-Only
+
+- `id` (String) The ID of this resource.

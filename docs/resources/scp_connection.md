@@ -3,12 +3,12 @@
 page_title: "ciphertrust_scp_connection Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages an SCP/SFTP connection used for backup/restore on the CipherTrust Manager appliance. Only available on CipherTrust Manager — not supported on CDSPaaS, where backup/restore is managed by the platform.
 ---
 
 # ciphertrust_scp_connection (Resource)
 
-
+Manages an SCP/SFTP connection used for backup/restore on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS, where backup/restore is managed by the platform.**
 
 ## Example Usage
 
@@ -113,10 +113,10 @@ output "scp_connection_name" {
 
 ### Required
 
-- `auth_method` (String) Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'.
+- `auth_method` (String) Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'
 - `host` (String) Hostname or FQDN of SCP/SFTP remote machine.
 - `name` (String) Unique connection name.
-- `path_to` (String) A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'.
+- `path_to` (String) A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'
 - `public_key` (String) Public key of destination host machine. It will be used to verify the host's identity by verifying key fingerprint. You can find it in /etc/ssh/ at host machine.
 - `username` (String) Username for accessing SCP/SFTP server.
 
@@ -168,7 +168,7 @@ To remove a key/value pair, pass value null to the particular key
         Luna connections
     "csm" for:
         Akeyless connections
-- `protocol` (String) Use 'sftp' or 'scp'. 'sftp' is the default value.
+- `protocol` (String) Use 'sftp' or 'scp'. 'sftp' is the default value
 
 ### Read-Only
 

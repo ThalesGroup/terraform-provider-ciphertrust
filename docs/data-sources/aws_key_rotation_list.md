@@ -21,8 +21,17 @@ Note: This list is only available for CipherTrust Manager version 2.20 and great
 ## Example Usage
 
 ```terraform
+# List rotation history for a specific AWS key
 data "ciphertrust_aws_key_rotation_list" "rotation_list" {
-  key_id = ciphertrust_aws_key.key.key_id
+  key_id = "77b4acd3-80e4-4270-81b5-11bb13b8053a"
+}
+
+# List rotation history with filters
+data "ciphertrust_aws_key_rotation_list" "rotation_list_filtered" {
+  key_id = "77b4acd3-80e4-4270-81b5-11bb13b8053a"
+  filters = {
+    limit = "-1"
+  }
 }
 ```
 
@@ -31,7 +40,7 @@ data "ciphertrust_aws_key_rotation_list" "rotation_list" {
 
 ### Required
 
-- `key_id` (String) CipherTrust Manger resource ID of an AWS key.
+- `key_id` (String) CipherTrust Manager ID of an AWS key.
 
 ### Optional
 
@@ -50,13 +59,13 @@ Read-Only:
 - `account` (String) The account which owns this resource.
 - `aws_params` (Attributes) AWS key-material attributes. (see [below for nested schema](#nestedatt--rotations--aws_params))
 - `created_at` (String) Date and time the CipherTrust Manager resource for this rotation was created.
-- `id` (String) The CipherTrust Manager resource ID for this rotation.
+- `id` (String) The CipherTrust Manager ID for this rotation.
 - `key_material_origin` (String) The origin of the key material.
 - `key_source` (String) The CipherTrust Manager key source.
 - `key_source_container_id` (String) CipherTrust Manager ID of the key source container.
 - `key_source_container_name` (String) Name of the CipherTrust Manager key source container.
-- `kms_id` (String) CipherTrust Manager AWS KMS resource ID.
-- `source_key_id` (String) The CipherTrust Manager resource ID of the key used for the key material.
+- `kms_id` (String) CipherTrust Manager AWS KMS ID.
+- `source_key_id` (String) The CipherTrust Manager ID of the key used for the key material.
 - `source_key_name` (String) The name of CipherTrust Manager key used for the key material.
 - `updated_at` (String) Date and time the CipherTrust Manager resource for this rotation was updated.
 - `uri` (String) CipherTrust Manager's unique identifier for the resource.

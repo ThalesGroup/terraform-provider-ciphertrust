@@ -19,48 +19,48 @@ resource "ciphertrust_aws_kms" "kms" {
 # Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CM as key source
 # key should be unexportable, undeletable, symmetric AES 256 key
 resource "ciphertrust_cm_key" "cm_aes_key" {
-  name                         = "aes-key-name"
-  algorithm                    = "AES"
-  usage_mask                   = 60
-  unexportable                 = true
-  undeletable                  = true
+  name         = "aes-key-name"
+  algorithm    = "AES"
+  usage_mask   = 60
+  unexportable = true
+  undeletable  = true
   # Setting remove_from_state_on_destroy to true will allow the key to be deleted from terraform state on destroy however, it will remain in CipherTrust Manager.
   remove_from_state_on_destroy = true
 }
 
 # Define unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity
-resource "ciphertrust_aws_custom_keystore" "external_custom_keystor" {
+resource "ciphertrust_aws_custom_keystore" "external_custom_keystore" {
   name                        = "keystore-name"
   region                      = ciphertrust_aws_kms.kms.regions[0]
-  kms                         = ciphertrust_aws_kms.kms.name
+  kms_id                      = ciphertrust_aws_kms.kms.id
   linked_state                = false
   connect_disconnect_keystore = "CONNECT_KEYSTORE"
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
-  aws_param {
+  aws_param = {
     xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
     custom_key_store_type  = "EXTERNAL_KEY_STORE"
   }
 }
 
-# Define an unlinked cloudhsm custom keystore
+# Define an unlinked CloudHSM custom keystore
 resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
   connect_disconnect_keystore = "CONNECT_KEYSTORE"
   name                        = "keystore-name"
   region                      = ciphertrust_aws_kms.kms.regions[0]
-  kms                         = ciphertrust_aws_kms.kms.name
+  kms_id                      = ciphertrust_aws_kms.kms.id
   linked_state                = false
   enable_success_audit_event  = true
-  local_hosted_params {
+  local_hosted_params = {
     blocked         = false
     max_credentials = 8
   }
-  aws_param {
+  aws_param = {
     cloud_hsm_cluster_id     = "cluster-qxq7s6inshi"
     custom_key_store_type    = "AWS_CLOUDHSM"
     key_store_password       = "kmsuser-password"
@@ -92,13 +92,13 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
 
 # An example resource for importing an existing external custom key store
 resource "ciphertrust_aws_custom_keystore" "imported_external_custom_keystore" {
-  aws_param {
+  aws_param = {
     custom_key_store_type  = "EXTERNAL_KEY_STORE"
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
     xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
   }
-  kms = "e5a912a6-53b3-436d-a9d9-1fb3a3c86f36"
-  local_hosted_params {
+  kms_id = "e5a912a6-53b3-436d-a9d9-1fb3a3c86f36"
+  local_hosted_params = {
     health_check_key_id = "b9698199e923444d88a5436064dcde9134c5b0de06bf4975989430a2fab3ce60"
     max_credentials     = 8
   }

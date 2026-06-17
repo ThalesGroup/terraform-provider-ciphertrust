@@ -21,12 +21,7 @@ description: |-
 
 ### Optional
 
-- `order_number` (Number) Precedence order of the rule in the parent policy.
-- `rule` (Attributes List) LDT Key rule to be updated in the parent policy. (see [below for nested schema](#nestedatt--rule))
-
-### Read-Only
-
-- `rule_id` (String) ID of the LDT Key Rule created in the parent policy
+- `rule` (Attributes) LDT Key rule to be updated in the parent policy. (see [below for nested schema](#nestedatt--rule))
 
 <a id="nestedatt--rule"></a>
 ### Nested Schema for `rule`
@@ -35,8 +30,13 @@ Optional:
 
 - `current_key` (Attributes) Properties of the current key. (see [below for nested schema](#nestedatt--rule--current_key))
 - `is_exclusion_rule` (Boolean) Whether this is an exclusion rule. If enabled, no need to specify the transformation rule.
+- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `resource_set_id` (String) ID of the resource set to link with the rule.
 - `transformation_key` (Attributes) Properties of the transformation key. (see [below for nested schema](#nestedatt--rule--transformation_key))
+
+Read-Only:
+
+- `id` (String) Identifier of the key rule.
 
 <a id="nestedatt--rule--current_key"></a>
 ### Nested Schema for `rule.current_key`

@@ -3,12 +3,12 @@
 page_title: "ciphertrust_hsm_root_of_trust_setup Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (luna), Luna PCIe (lunapci), Luna T-Series (lunatct), ProtectServer HSM (protectserver), AWS CloudHSM (aws), DPoD (dpod), Entrust nShield Connect (nshield), and IBM HPCS (ibmhpcs). Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_hsm_root_of_trust_setup (Resource)
 
-
+Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (`luna`), Luna PCIe (`lunapci`), Luna T-Series (`lunatct`), ProtectServer HSM (`protectserver`), AWS CloudHSM (`aws`), DPoD (`dpod`), Entrust nShield Connect (`nshield`), and IBM HPCS (`ibmhpcs`). **Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data.** **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 

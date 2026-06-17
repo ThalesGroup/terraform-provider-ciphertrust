@@ -13,153 +13,84 @@ Creates a new job configuration. The 'database_backup_params', 'cckm_synchroniza
 ## Example Usage
 
 ```terraform
-# Specify the Terraform block to define required providers and their versions.
-terraform {
-  # Define the required providers for the configuration
-  required_providers {
-    # CipherTrust provider for managing CipherTrust resources
-    ciphertrust = {
-      # The source of the provider
-      source = "ThalesGroup/CipherTrust"
-      # Version of the provider to use
-      version = "1.0.0-pre3"
-    }
-  }
-}
-
-# Configure the CipherTrust provider for authentication
-provider "ciphertrust" {
-  # The address of the CipherTrust appliance (replace with the actual address)
-  address = "https://10.10.10.10"
-
-  # Username for authenticating with the CipherTrust appliance
-  username = "admin"
-
-  # Password for authenticating with the CipherTrust appliance
-  password = "ChangeMe101!"
-}
-
-
 # Define an SCP connection resource with CipherTrust
 resource "ciphertrust_scp_connection" "scp_connection" {
-  # Name of the SCP connection (unique identifier)
   name = "scp-connection"
-
-  # List of products associated with this SCP connection
-  # In this case, it's related to backup/restore operations
   products = [
     "backup/restore"
   ]
-
-  # Description of the SCP connection
   description = "a description of the connection"
-
-  # Host IP address or domain of the SCP server
-  host = "10.10.10.10"
-
-  # Port used for SCP communication (default SCP port is 22)
-  port = 22
-
-  # Username for authentication on the SCP server
-  username = "user"
-
-  # Authentication method to be used, here it's set to "Password"
+  host        = "10.10.10.10"
+  port        = 22
+  username    = "user"
   auth_method = "Password"
-
-  # Password for the SCP server authentication
-  password = "password"
-
-  # Path on the remote server to store or retrieve files
-  path_to = "/home/path/to/directory/"
-
-  # Protocol used for SCP connection (can be sftp, scp, etc.)
-  protocol = "sftp"
-
-  # Public SSH key for authentication, if using key-based authentication
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
-
-  # Labels for categorizing the SCP connection
+  password    = "password"
+  path_to     = "/home/path/to/directory/"
+  protocol    = "sftp"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
   labels = {
     "environment" = "devenv"
   }
-
-  # Custom metadata for the SCP connection
-  # This can be used to store additional information related to the SCP connection
   meta = {
-    "custom_meta_key1"   = "custom_value1" # Example custom metadata key-value pair
-    "customer_meta_key2" = "custom_value2" # Another custom metadata entry
+    "custom_meta_key1"   = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
   }
 }
 
-
-# Define a resource block to configure a scheduler in CipherTrust.
+# Database backup scheduler
 resource "ciphertrust_scheduler" "scheduler" {
-  # Name of the scheduler.
-  name = "db_backup1-terraform"
-  # Type of operation the scheduler will perform.
-  operation = "database_backup"
-  # Description of the scheduler.
-  description = "This is to backup db updated cancelleed"
-  # Specify when the scheduler should run (e.g., "any" for no specific conditions).
-  run_on = "any"
-  # Cron-style schedule specifying when the job should run. Refer to the schema description to know more about the cron-style
-  run_at = "*/15 * * * *"
+  name        = "db_backup1-terraform"
+  operation   = "database_backup"
+  description = "This is to backup db"
+  run_on      = "any"
+  run_at      = "*/15 * * * *"
 
-  # Configuration for the database backup parameters.
   database_backup_params = {
-    # Backup ID for the database backup.
-    backup_key = "d370535b-a035-4251-9780-e608f713be77"
-    # SCP Connection ID for the backup operation.
-    connection = ciphertrust_scp_connection.scp_connection.id
-    # Description of the backup job.
+    backup_key  = "d370535b-a035-4251-9780-e608f713be77"
+    connection  = ciphertrust_scp_connection.scp_connection.id
     description = "sample description"
-    # Indicates if SCP should be used for the backup (true in this case).
-    do_scp = true
-    # Scope of the backup (e.g., "system","domain").
-    scope = "system"
-    # Indicates if the backup is tied to an HSM (false in this case).
+    do_scp      = true
+    scope       = "system"
     tied_to_hsm = false
   }
 }
 
-# Output block to display details of the created scheduler resource.
 output "scheduler" {
-  # Outputs all attributes of the scheduler resource.
   value = ciphertrust_scheduler.scheduler
 }
 
-# AWS Scheduled Key Rotation
+# AWS scheduled key rotation
 resource "ciphertrust_scheduler" "aws_scheduled_rotation_job" {
   end_date = "2030-12-07T14:24:00Z"
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name       = "aws"
-    aws_retain_alias = true # Apply "gravestone alias" to the "rotated-from" key"
-    rotation_after   = "6d" # Number of days after which the keys will be rotated
-    rotate_material  = true # Rotate key material during the key rotation job
+    aws_retain_alias = true
+    rotation_after   = "6d"
+    rotate_material  = true
   }
   name       = "aws-scheduled-rotation"
   operation  = "cckm_key_rotation"
   run_at     = "0 9 * * sat"
   run_on     = "any"
-  start_date = "20226-01-01T14:24:00Z"
+  start_date = "2026-01-01T14:24:00Z"
 }
 
-# XKS Credential Rotation
+# XKS credential rotation
 resource "ciphertrust_scheduler" "xks_credential_rotation" {
   cckm_xks_credential_rotation_params = {
     cloud_name = "aws"
   }
-  name      = "aws-xks-credential-roration"
+  name      = "aws-xks-credential-rotation"
   operation = "cckm_xks_credential_rotation"
   run_at    = "0 9 * * fri"
 }
 
-#  OCI Scheduled Key Rotation
+# OCI scheduled key rotation
 resource "ciphertrust_scheduler" "oci" {
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name = "oci"
-    expiration = "365d" # Expiration time of the new key
-    expire_in  = "10d"  # Rotate keys expiring in this period
+    expiration = "365d"
+    expire_in  = "10d"
   }
   name      = "oci-key-rotation"
   operation = "cckm_key_rotation"
@@ -184,8 +115,8 @@ For example:
 
 ### Optional
 
-- `cckm_key_rotation_params` (Block List) Specifies cloud key rotation parameters (see [below for nested schema](#nestedblock--cckm_key_rotation_params))
-- `cckm_synchronization_params` (Block List) Cloud key synchronization parameters. (see [below for nested schema](#nestedblock--cckm_synchronization_params))
+- `cckm_key_rotation_params` (Attributes) Specifies cloud key rotation parameters. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
+- `cckm_synchronization_params` (Attributes) Cloud key synchronization parameters. (see [below for nested schema](#nestedatt--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
 - `description` (String) Description for the job configuration.
@@ -204,7 +135,7 @@ For example:
 - `updated_at` (String)
 - `uri` (String)
 
-<a id="nestedblock--cckm_key_rotation_params"></a>
+<a id="nestedatt--cckm_key_rotation_params"></a>
 ### Nested Schema for `cckm_key_rotation_params`
 
 Required:
@@ -220,7 +151,7 @@ Optional:
 - `rotation_after` (String) Number of days after which the keys will be rotated. Specify Xd for x days. The first key rotation will happen after x days of key creation. Subsequent key rotations will happen after every x days of the last rotation date. For example, if you set rotation_after to 6d, the first key rotation will happen after six days of key creation. Subsequently, the keys will be rotated after every six days. To remove the setting, set to an empty string.
 
 
-<a id="nestedblock--cckm_synchronization_params"></a>
+<a id="nestedatt--cckm_synchronization_params"></a>
 ### Nested Schema for `cckm_synchronization_params`
 
 Required:
@@ -237,7 +168,7 @@ Optional:
 <a id="nestedatt--cckm_xks_credential_rotation_params"></a>
 ### Nested Schema for `cckm_xks_credential_rotation_params`
 
-Optional:
+Required:
 
 - `cloud_name` (String) Name of the cloud in which the Rotation operation will be triggered. The only supported value is 'aws'.
 

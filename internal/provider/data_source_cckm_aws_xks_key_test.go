@@ -28,14 +28,14 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
 			name    = "%s"
 			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms     = ciphertrust_aws_kms.kms.name
+			kms_id  = ciphertrust_aws_kms.kms.id
 			linked_state = false
-			local_hosted_params {
+			local_hosted_params = {
 				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
 				max_credentials = 8
 				source_key_tier = "local"
 			}
-			aws_param {
+			aws_param = {
 				xks_proxy_uri_endpoint = "%s"
 				xks_proxy_connectivity = "PUBLIC_ENDPOINT"
 				custom_key_store_type = "EXTERNAL_KEY_STORE"
@@ -52,8 +52,10 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 
 	createXKSKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "xks_key" {
-			alias        = [local.alias]
-			local_hosted_params {
+			aws_param = {
+				alias = [local.alias]
+			}
+			local_hosted_params = {
 				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
 				blocked = false
 				linked  = false
@@ -63,36 +65,14 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 		}`
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + createXKSKeyConfig
 
-	// Only by_id is exercisable for an unlinked key. The remaining filters are commented out:
-	//   by_alias               - alias not applied/returned for unlinked keys; Read resets alias to empty set.
-	//   by_aws_key_id          - aws_key_id is empty for unlinked keys (no AWS-side key exists until linked).
-	//   by_ciphertrust_key_id  - key_id IS set for unlinked keys; this filter COULD be un-commented.
-	//   by_key_id_and_region   - requires aws_key_id (empty for unlinked).
-	//   by_key_id_region_and_alias - requires both aws_key_id (empty) and alias (empty) for unlinked keys.
+	// Only by_name is exercisable for an unlinked key because alias and aws_key_id
+	// are not populated until the key is linked.
 	datasourceConfig := `
-		data "ciphertrust_aws_xks_key" "by_id" {
-			id = ciphertrust_aws_xks_key.xks_key.id
-		}
-		/*
-		data "ciphertrust_aws_xks_key" "by_alias" {
-			alias = [local.alias]
-		}
-		data "ciphertrust_aws_xks_key" "by_aws_key_id" {
-			aws_key_id = ciphertrust_aws_xks_key.xks_key.aws_key_id
-		}
-		data "ciphertrust_aws_xks_key" "by_ciphertrust_key_id" {
-			key_id = ciphertrust_aws_xks_key.xks_key.key_id
-		}
-		data "ciphertrust_aws_xks_key" "by_key_id_and_region" {
-			aws_key_id = ciphertrust_aws_xks_key.xks_key.aws_key_id
-			region     = ciphertrust_aws_xks_key.xks_key.region
-		}
-		data "ciphertrust_aws_xks_key" "by_key_id_region_and_alias" {
-			alias = [local.alias]
-			aws_key_id = ciphertrust_aws_xks_key.xks_key.aws_key_id
-			region     = ciphertrust_aws_xks_key.xks_key.region
-		}*/`
+		data "ciphertrust_aws_xks_keys_list" "by_name" {
+			filters = { "id" = ciphertrust_aws_xks_key.xks_key.id }
+		}`
 	dataSourceConfigStr := awsConnectionResource + createKeyStoreConfigStr + createXKSKeyConfig + datasourceConfig
+	dsByName := "data.ciphertrust_aws_xks_keys_list.by_name"
 
 	keyResource := "ciphertrust_aws_xks_key.xks_key"
 	resource.Test(t, resource.TestCase{
@@ -103,32 +83,27 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 				Config: createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "kms_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "custom_key_store_id"),
 					resource.TestCheckResourceAttr(keyResource, "blocked", "false"),
 					resource.TestCheckResourceAttr(keyResource, "linked", "false"),
-					// key_source, labels, tags are safe to verify for unlinked keys
 					resource.TestCheckResourceAttr(keyResource, "key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "0"),
 				),
 			},
 			{
 				Config: dataSourceConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					// by_id is the only filter that works for unlinked keys
-					resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_id", "key_id"),
-					resource.TestCheckResourceAttrPair(keyResource, "blocked", "data.ciphertrust_aws_xks_key.by_id", "blocked"),
-					resource.TestCheckResourceAttrPair(keyResource, "linked", "data.ciphertrust_aws_xks_key.by_id", "linked"),
-					resource.TestCheckResourceAttrPair(keyResource, "kms_id", "data.ciphertrust_aws_xks_key.by_id", "kms_id"),
-					resource.TestCheckResourceAttr("data.ciphertrust_aws_xks_key.by_id", "labels.%", "0"),
-					resource.TestCheckResourceAttr("data.ciphertrust_aws_xks_key.by_id", "tags.%", "0"),
-					//resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_alias", "key_id"),
-					//resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_aws_key_id", "key_id"),
-					//resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_ciphertrust_key_id", "key_id"),
-					//resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_key_id_and_region", "key_id"),
-					//resource.TestCheckResourceAttrPair(keyResource, "key_id", "data.ciphertrust_aws_xks_key.by_key_id_region_and_alias", "key_id"),
+					resource.TestCheckResourceAttr(dsByName, "matched", "1"),
+					resource.TestCheckResourceAttrPair(keyResource, "blocked", dsByName, "keys.0.blocked"),
+					resource.TestCheckResourceAttrPair(keyResource, "linked", dsByName, "keys.0.linked"),
+					resource.TestCheckResourceAttrPair(keyResource, "kms_id", dsByName, "keys.0.kms_id"),
+
+					resource.TestCheckResourceAttr(dsByName, "keys.0.labels.%", "0"),
+					// aws_param block - alias and tags are empty for unlinked keys
+					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.alias.#", "0"),
+					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.tags.%", "0"),
 				),
 			},
 		},

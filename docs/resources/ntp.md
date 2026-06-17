@@ -3,12 +3,12 @@
 page_title: "ciphertrust_ntp Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Configures an NTP server on the CipherTrust Manager appliance. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_ntp (Resource)
 
-
+Configures an NTP server on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 
@@ -69,4 +69,4 @@ output "ntp_server_host" {
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `id` (String) The unique identifier for the NTP server (same as host)

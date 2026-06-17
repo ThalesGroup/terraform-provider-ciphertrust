@@ -31,7 +31,6 @@ CipherTrust Transparent Encryption (CTE) delivers data-at-rest encryption with c
 ### Required
 
 - `name` (String) Name to uniquely identify the client. This name will be visible on the CipherTrust Manager.
-- `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
 
 ### Optional
 
@@ -50,6 +49,7 @@ CipherTrust Transparent Encryption (CTE) delivers data-at-rest encryption with c
 - `max_num_cache_log` (Number) Maximum number of logs to cache.
 - `max_space_cache_log` (Number) Maximum space for the cached logs.
 - `password` (String) Password for the client. Required when password_creation_method is MANUAL.
+- `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
 - `profile_id` (String) ID of the profile that contains logger, logging, and QOS configuration.
 - `profile_identifier` (String) Identifier of the Client Profile to be associated with the client. If not provided, the default profile will be linked.
 - `protection_mode` (String) Update protection mode for windows client. This change is irreversible. The valid value is "CTE RWP"
@@ -60,3 +60,4 @@ CipherTrust Transparent Encryption (CTE) delivers data-at-rest encryption with c
 ### Read-Only
 
 - `id` (String) Identifier of a CTE client to be generated on successful creation of Client
+- `profile_name` (String) Name of the Client Profile to be associated with the client. If not provided, the default profile will be linked.

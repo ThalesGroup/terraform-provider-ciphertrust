@@ -32,16 +32,16 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
   name                        = "keystore-name"
   region                      = "us-west-1"
-  kms                         = ciphertrust_aws_kms.kms.name
+  kms_id                      = ciphertrust_aws_kms.kms.id
   linked_state                = false
   connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
-  aws_param {
+  aws_param = {
     xks_proxy_uri_endpoint = "https://demo-xksproxy.thalescpl.io"
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
     custom_key_store_type  = "EXTERNAL_KEY_STORE"
@@ -51,19 +51,21 @@ resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
 # Define an unlinked XKS key with CipherTrust Manager as key source in above unlinked external key store
 # Keys can only be linked once the keystore is linked
 resource "ciphertrust_aws_xks_key" "xks_key" {
-  alias = ["key-name"]
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     custom_key_store_id = ciphertrust_aws_custom_keystore.custom_keystore.id
     linked              = false
     source_key_id       = ciphertrust_cm_key.cm_aes_key.id
     source_key_tier     = "local"
   }
+  aws_param = {
+    alias = ["key-name"]
+  }
 }
 
 # An example resource for importing an existing xks key
 resource "ciphertrust_aws_xks_key" "imported_xks_key" {
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     custom_key_store_id = "0813e489-6930-4c4f-a9ab-85ff275f9122"
     linked              = false

@@ -120,7 +120,11 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 						},
 						"connection_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "CipherTrust Manager OCI connection ID or connection name.",
+							Description: "The connection ID of this vault.",
+						},
+						"connection_name": schema.StringAttribute{
+							Computed:    true,
+							Description: "The connection name of this vault.",
 						},
 						"created_at": schema.StringAttribute{
 							Computed:    true,
@@ -261,6 +265,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 
 	for ndx, vault := range vaults.Resources {
 		vaultTFSDK := models.VaultTFSDK{
+			ConnectionID: types.StringValue(vault.Connection),
 			VaultCommonTFSDK: models.VaultCommonTFSDK{
 				ID:                  types.StringValue(vault.ID),
 				URI:                 types.StringValue(vault.URI),
@@ -274,7 +279,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 				ManagementEndpoint:  types.StringValue(vault.ManagementEndpoint),
 				TimeCreated:         types.StringValue(vault.TimeCreated),
 				CloudName:           types.StringValue(vault.CloudName),
-				Connection:          types.StringValue(vault.Connection),
+				ConnectionName:      types.StringValue(vault.Connection),
 				VaultType:           types.StringValue(vault.VaultType),
 				WrappingkeyID:       types.StringValue(vault.WrappingkeyID),
 				RestoredFromVaultID: types.StringValue(vault.RestoredFromVaultID),

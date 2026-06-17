@@ -1,0 +1,33 @@
+---
+page_title: "{{.Type}} {{.Name}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}} "{{.Name}}" ({{.ProviderName}})
+
+{{ .Description | trimspace }}
+{{- if .HasExample }}
+
+## Example Usage
+
+{{ tffile .ExampleFile }}
+{{- end }}
+{{ .SchemaMarkdown | trimspace }}
+
+### Updates
+
+Attributes not marked as `(Updatable)` cannot be modified after resource creation. To change these attributes, the resource must be recreated.
+
+## Import
+
+This resource does not support import.
+
+`ciphertrust_aws_key_rotation` represents a one-time key material rotation
+request. Once the rotation is fired, there is no API endpoint that returns
+the original `trigger` value used to create the resource - so any imported
+resource would cause a permanent plan diff on every subsequent apply.
+
+To view the rotation history of an AWS key, use the
+`ciphertrust_aws_key_rotation_list` data source instead.

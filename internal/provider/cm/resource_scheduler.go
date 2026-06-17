@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"regexp"
 	"strings"
 	"time"
@@ -224,96 +222,94 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"updated_at":  schema.StringAttribute{Computed: true},
 			"application": schema.StringAttribute{Computed: true},
 			"dev_account": schema.StringAttribute{Computed: true},
-		},
-		Blocks: map[string]schema.Block{
-			"cckm_key_rotation_params": schema.ListNestedBlock{
-				Description: "Specifies cloud key rotation parameters",
-				Validators: []validator.List{
-					listvalidator.SizeAtMost(1),
+			"cckm_key_rotation_params": schema.SingleNestedAttribute{
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Object{
+					common.NewObjectUseStateForUnknown(),
 				},
-				NestedObject: schema.NestedBlockObject{
-					Attributes: map[string]schema.Attribute{
-						"aws_retain_alias": schema.BoolAttribute{
-							Optional: true,
-							Description: "Retain the alias and timestamp on the archived key after rotation. " +
-								"Applicable only to AWS key rotation.",
-							Computed: true,
+				Description: "Specifies cloud key rotation parameters.",
+				Attributes: map[string]schema.Attribute{
+					"aws_retain_alias": schema.BoolAttribute{
+						Optional: true,
+						Description: "Retain the alias and timestamp on the archived key after rotation. " +
+							"Applicable only to AWS key rotation.",
+						Computed: true,
+					},
+					"rotate_material": schema.BoolAttribute{
+						Optional:    true,
+						Description: "If true, rotate the key material during the key rotation job. The attribute is only valid for CipherTrustManager version 2.21 or later.",
+						Computed:    true,
+					},
+					"cloud_name": schema.StringAttribute{
+						Required:    true,
+						Description: "Name of the cloud for which to schedule the key rotation. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
+						Validators: []validator.String{
+							stringvalidator.OneOf(cckmRotationClouds...),
 						},
-						"rotate_material": schema.BoolAttribute{
-							Optional:    true,
-							Description: "If true, rotate the key material during the key rotation job. The attribute is only valid for CipherTrustManager version 2.21 or later.",
-							Computed:    true,
-						},
-						"cloud_name": schema.StringAttribute{
-							Required:    true,
-							Description: "Name of the cloud for which to schedule the key rotation. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
-							Validators: []validator.String{
-								stringvalidator.OneOf(cckmRotationClouds...),
-							},
-						},
-						"expiration": schema.StringAttribute{
-							Optional: true,
-							Description: "Expiration time of the new key. If not specified, the new key material never expires. " +
-								"For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, " +
-								"set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
-								"To remove the setting, set to an empty string.",
-							Computed: true,
-						},
-						"expire_in": schema.StringAttribute{
-							Optional: true,
-							Description: "Period during which certain keys are going to expire. " +
-								"The scheduler rotates the keys that are expiring in this period. " +
-								"If not specified, the scheduler rotates all the keys. " +
-								"For example, if you want the scheduler to rotate the keys that are expiring " +
-								"within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
-								"To remove the setting, set to an empty string.",
-							Computed: true,
-						},
-						"rotation_after": schema.StringAttribute{
-							Optional: true,
-							Description: "Number of days after which the keys will be rotated. Specify Xd for x days. " +
-								"The first key rotation will happen after x days of key creation. " +
-								"Subsequent key rotations will happen after every x days of the last rotation date. " +
-								"For example, if you set rotation_after to 6d, the first key rotation will happen after six days of key creation. " +
-								"Subsequently, the keys will be rotated after every six days. " +
-								"To remove the setting, set to an empty string.",
-							Computed: true,
-						},
+					},
+					"expiration": schema.StringAttribute{
+						Optional: true,
+						Description: "Expiration time of the new key. If not specified, the new key material never expires. " +
+							"For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, " +
+							"set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
+							"To remove the setting, set to an empty string.",
+						Computed: true,
+					},
+					"expire_in": schema.StringAttribute{
+						Optional: true,
+						Description: "Period during which certain keys are going to expire. " +
+							"The scheduler rotates the keys that are expiring in this period. " +
+							"If not specified, the scheduler rotates all the keys. " +
+							"For example, if you want the scheduler to rotate the keys that are expiring " +
+							"within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
+							"To remove the setting, set to an empty string.",
+						Computed: true,
+					},
+					"rotation_after": schema.StringAttribute{
+						Optional: true,
+						Description: "Number of days after which the keys will be rotated. Specify Xd for x days. " +
+							"The first key rotation will happen after x days of key creation. " +
+							"Subsequent key rotations will happen after every x days of the last rotation date. " +
+							"For example, if you set rotation_after to 6d, the first key rotation will happen after six days of key creation. " +
+							"Subsequently, the keys will be rotated after every six days. " +
+							"To remove the setting, set to an empty string.",
+						Computed: true,
 					},
 				},
 			},
-			"cckm_synchronization_params": schema.ListNestedBlock{
-				Description: "Cloud key synchronization parameters.",
-				Validators: []validator.List{
-					listvalidator.SizeAtMost(1),
+			"cckm_synchronization_params": schema.SingleNestedAttribute{
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Object{
+					common.NewObjectUseStateForUnknown(),
 				},
-				NestedObject: schema.NestedBlockObject{
-					Attributes: map[string]schema.Attribute{
-						"cloud_name": schema.StringAttribute{
-							Required:    true,
-							Description: "Specify the cloud that will be synchronized on schedule. Options are: " + strings.Join(cckmSyncClouds, ",") + ".",
-							Validators: []validator.String{
-								stringvalidator.OneOf(cckmSyncClouds...),
-							},
+				Description: "Cloud key synchronization parameters.",
+				Attributes: map[string]schema.Attribute{
+					"cloud_name": schema.StringAttribute{
+						Required:    true,
+						Description: "Specify the cloud that will be synchronized on schedule. Options are: " + strings.Join(cckmSyncClouds, ",") + ".",
+						Validators: []validator.String{
+							stringvalidator.OneOf(cckmSyncClouds...),
 						},
-						"kms": schema.SetAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
-							ElementType: types.StringType,
-						},
-						"oci_vaults": schema.SetAttribute{
-							Optional:    true,
-							Computed:    true,
-							Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
-							ElementType: types.StringType,
-						},
-						"synchronize_all": schema.BoolAttribute{
-							Computed:    true,
-							Default:     booldefault.StaticBool(false),
-							Optional:    true,
-							Description: "Set true to synchronize all keys.",
-						},
+					},
+					"kms": schema.SetAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
+						ElementType: types.StringType,
+					},
+					"oci_vaults": schema.SetAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
+						ElementType: types.StringType,
+					},
+					"synchronize_all": schema.BoolAttribute{
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Optional:    true,
+						Description: "Set true to synchronize all keys.",
 					},
 				},
 			},
@@ -730,14 +726,8 @@ func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK) *Database
 }
 
 func getCckmKeyRotationOperationParams(ctx context.Context, plan CreateJobConfigParamsTFSDK, state *CreateJobConfigParamsTFSDK, diags *diag.Diagnostics) *CCKMKeyRotationParamsJSON {
-	if len(plan.CCKMKeyRotationParams.Elements()) != 0 {
-		var rotationParams CCKMKeyRotationParamsTFSDK
-		for _, v := range plan.CCKMKeyRotationParams.Elements() {
-			diags.Append(tfsdk.ValueAs(ctx, v, &rotationParams)...)
-			if diags.HasError() {
-				return nil
-			}
-		}
+	if plan.CCKMKeyRotationParams != nil {
+		rotationParams := plan.CCKMKeyRotationParams
 		awsParams := CCKMRotationAwsParamsJSON{
 			RetainAlias:    rotationParams.RetainAlias.ValueBool(),
 			RotateMaterial: rotationParams.RotateMaterial.ValueBool(),
@@ -746,28 +736,23 @@ func getCckmKeyRotationOperationParams(ctx context.Context, plan CreateJobConfig
 			CloudName:                 rotationParams.CloudName.ValueString(),
 			CCKMRotationAwsParamsJSON: awsParams,
 		}
-		var stateRotationParams CCKMKeyRotationParamsTFSDK
+		var stateRotationParams *CCKMKeyRotationParamsTFSDK
 		if state != nil {
-			for _, v := range state.CCKMKeyRotationParams.Elements() {
-				diags.Append(tfsdk.ValueAs(ctx, v, &stateRotationParams)...)
-				if diags.HasError() {
-					return nil
-				}
-			}
+			stateRotationParams = state.CCKMKeyRotationParams
 		}
 		if rotationParams.Expiration.ValueString() != "" {
 			rotationParamsJSON.Expiration = rotationParams.Expiration.ValueStringPointer()
-		} else if state != nil && stateRotationParams.Expiration.ValueString() != "" {
+		} else if stateRotationParams != nil && stateRotationParams.Expiration.ValueString() != "" {
 			rotationParamsJSON.Expiration = rotationParams.Expiration.ValueStringPointer()
 		}
 		if rotationParams.ExpireIn.ValueString() != "" {
 			rotationParamsJSON.ExpireIn = rotationParams.ExpireIn.ValueStringPointer()
-		} else if state != nil && stateRotationParams.ExpireIn.ValueString() != "" {
+		} else if stateRotationParams != nil && stateRotationParams.ExpireIn.ValueString() != "" {
 			rotationParamsJSON.ExpireIn = rotationParams.ExpireIn.ValueStringPointer()
 		}
 		if rotationParams.RotationAfter.ValueString() != "" {
 			rotationParamsJSON.RotationAfter = rotationParams.RotationAfter.ValueStringPointer()
-		} else if state != nil && stateRotationParams.RotationAfter.ValueString() != "" {
+		} else if stateRotationParams != nil && stateRotationParams.RotationAfter.ValueString() != "" {
 			rotationParamsJSON.RotationAfter = rotationParams.RotationAfter.ValueStringPointer()
 		}
 		return &rotationParamsJSON
@@ -776,14 +761,8 @@ func getCckmKeyRotationOperationParams(ctx context.Context, plan CreateJobConfig
 }
 
 func getCckmSyncParams(ctx context.Context, plan CreateJobConfigParamsTFSDK, diags *diag.Diagnostics) *CCKMSynchronizationParamsJSON {
-	if len(plan.CCKMSynchronizationParams.Elements()) != 0 {
-		var syncParams CCKMSynchronizationParamsTFSDK
-		for _, v := range plan.CCKMSynchronizationParams.Elements() {
-			diags.Append(tfsdk.ValueAs(ctx, v, &syncParams)...)
-			if diags.HasError() {
-				return nil
-			}
-		}
+	if plan.CCKMSynchronizationParams != nil {
+		syncParams := plan.CCKMSynchronizationParams
 		syncParamsJSON := CCKMSynchronizationParamsJSON{
 			CloudName:      syncParams.CloudName.ValueString(),
 			SynchronizeAll: syncParams.SyncAll.ValueBoolPointer(),
@@ -858,7 +837,7 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		dbParams.Filters = filters
 		plan.DatabaseBackupParams = dbParams
 	case "cckm_key_rotation":
-		cckmParams := &CCKMKeyRotationParamsTFSDK{
+		plan.CCKMKeyRotationParams = &CCKMKeyRotationParamsTFSDK{
 			CloudName:      types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
 			RetainAlias:    types.BoolValue(gjson.Get(response, "job_config_params.aws_param.retain_alias").Bool()),
 			RotateMaterial: types.BoolValue(gjson.Get(response, "job_config_params.aws_param.rotate_material").Bool()),
@@ -866,28 +845,11 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 			ExpireIn:       types.StringValue(gjson.Get(response, "job_config_params.expire_in").String()),
 			RotationAfter:  types.StringValue(gjson.Get(response, "job_config_params.rotation_after").String()),
 		}
-		cckmParamsList := types.ListNull(types.ObjectType{
-			AttrTypes: map[string]attr.Type{
-				"cloud_name":       types.StringType,
-				"aws_retain_alias": types.BoolType,
-				"expiration":       types.StringType,
-				"expire_in":        types.StringType,
-				"rotate_material":  types.BoolType,
-				"rotation_after":   types.StringType,
-			},
-		})
-		diags.Append(tfsdk.ValueFrom(ctx, []CCKMKeyRotationParamsTFSDK{*cckmParams}, cckmParamsList.Type(ctx), &cckmParamsList)...)
-		if diags.HasError() {
-			return
-		}
-		plan.CCKMKeyRotationParams = cckmParamsList
 	case "cckm_synchronization":
-
 		cckmParams := &CCKMSynchronizationParamsTFSDK{
 			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
 			SyncAll:   types.BoolValue(gjson.Get(response, "job_config_params.synchronize_all").Bool()),
 		}
-
 		var awsContainers []string
 		for _, kms := range gjson.Get(response, "job_config_params.kms").Array() {
 			awsContainers = append(awsContainers, kms.String())
@@ -897,7 +859,6 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		} else {
 			cckmParams.Kms = types.SetValueMust(types.StringType, []attr.Value{})
 		}
-
 		var ociContainers []string
 		for _, vault := range gjson.Get(response, "job_config_params.oci_vaults").Array() {
 			ociContainers = append(ociContainers, vault.String())
@@ -907,13 +868,7 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		} else {
 			cckmParams.OCIVaults = types.SetValueMust(types.StringType, []attr.Value{})
 		}
-
-		cckmParamsList := types.ListNull(types.ObjectType{AttrTypes: CCKMSynchronizationParamsAttribs})
-		diags.Append(tfsdk.ValueFrom(ctx, []CCKMSynchronizationParamsTFSDK{*cckmParams}, cckmParamsList.Type(ctx), &cckmParamsList)...)
-		if diags.HasError() {
-			return
-		}
-		plan.CCKMSynchronizationParams = cckmParamsList
+		plan.CCKMSynchronizationParams = cckmParams
 	case "cckm_xks_credential_rotation":
 		cckmParams := &CCKMXksRotateCredentialsParamsTFSDK{
 			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),

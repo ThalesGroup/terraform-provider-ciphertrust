@@ -21,7 +21,7 @@ import (
 func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	keyID string, versionID string, versionOpLabel string, diags *diag.Diagnostics) string {
 
-	keyJSON := getOciKey(ctx, id, client, "", keyID, "reading", diags)
+	keyJSON, _ := getOciKey(ctx, id, client, "", keyID, "reading", diags)
 	if diags.HasError() || keyJSON == "" {
 		return "" // parent key not found or error - version kept in state
 	}
@@ -187,20 +187,7 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 
 	keyVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
-	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyVersionState != expectedState; retry++ {
-		if time.Since(tStart).Seconds() > refreshTokenSeconds {
-			if err = client.RefreshToken(ctx, id); err != nil {
-				msg := "Error refreshing authentication token."
-				details := utils.ApiError(msg, map[string]interface{}{
-					"error":  err.Error(),
-					"key_id": keyID,
-				})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-		}
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
 		response, err = client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 		if err != nil {

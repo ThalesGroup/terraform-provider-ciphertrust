@@ -435,7 +435,10 @@ func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequ
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	response := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
+	response, preserveState := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
+	if preserveState {
+		return // vault gone - preserve existing state until vault is recovered
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -478,7 +481,7 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	preCheckResponse := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
+	preCheckResponse, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -572,7 +575,21 @@ func (r *resourceCCKMOCIByokKey) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 
 	if plan.Vault != state.Vault {
-		changed = append(changed, "vault")
+		vaultCMID := state.Vault.ValueString()
+		if vaultCMID != "" {
+			id := uuid.New().String()
+			_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
+			if err != nil && strings.Contains(err.Error(), notFoundError) {
+				msg := "Previous OCI vault was not found, allowing vault update."
+				details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				changed = append(changed, "vault")
+			}
+		} else {
+			changed = append(changed, "vault")
+		}
 	}
 
 	if len(changed) > 0 {
