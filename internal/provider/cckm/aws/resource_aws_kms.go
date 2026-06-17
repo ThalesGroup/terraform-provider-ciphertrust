@@ -68,7 +68,6 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"account_id": schema.StringAttribute{
 				Required:    true,
-				Computed:    true,
 				Description: "ID of the AWS account.",
 			},
 			"acls": schema.SetNestedAttribute{
