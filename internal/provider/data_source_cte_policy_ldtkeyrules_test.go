@@ -9,11 +9,6 @@ import (
 )
 
 func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
-	// TODO: CDSPaaS ACL model prevents key deletion when meta.permissions is set
-	// (even with undeletable=false). LDT policies additionally require cte_versioned=true
-	// which triggers async cleanup on CDSPaaS; the key delete races with the policy
-	// reference teardown and returns 403. Needs a CDSPaaS-aware retry/wait strategy
-	// in the key Delete function before re-enabling here.
 	RequireCM(t)
 
 	policyName := "tf-policy-ldt-" + uuid.New().String()[:8]
@@ -29,6 +24,12 @@ resource "ciphertrust_cm_key" "ldt_key" {
 	unexportable = false
 	xts          = false
 	meta = {
+		permissions = {
+			decrypt_with_key = ["CTE Clients"]
+			encrypt_with_key = ["CTE Clients"]
+			export_key       = ["CTE Clients"]
+			read_key         = ["CTE Clients"]
+		}
 		cte = {
 			persistent_on_client = true
 			encryption_mode      = "CBC"

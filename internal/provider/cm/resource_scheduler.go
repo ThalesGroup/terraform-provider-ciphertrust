@@ -699,21 +699,22 @@ func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK) *Database
 			databaseBackupParams.RetentionCount = plan.DatabaseBackupParams.RetentionCount.ValueInt64()
 		}
 
-		if len(plan.DatabaseBackupParams.Filters) != 0 {
+		if !plan.DatabaseBackupParams.Filters.IsNull() && !plan.DatabaseBackupParams.Filters.IsUnknown() && len(plan.DatabaseBackupParams.Filters.Elements()) != 0 {
 			var filters []BackupFilterJSON
-			for _, filter := range plan.DatabaseBackupParams.Filters {
-				if !filter.ResourceType.IsNull() {
-					newFilter := BackupFilterJSON{
-						ResourceType: filter.ResourceType.ValueString(),
-					}
-					if !filter.ResourceQuery.IsNull() {
-						// Parse the JSON string into a map
-						var resourceQuery map[string]interface{}
-						err := json.Unmarshal([]byte(filter.ResourceQuery.ValueString()), &resourceQuery)
+			for _, elem := range plan.DatabaseBackupParams.Filters.Elements() {
+				obj := elem.(types.Object)
+				attrs := obj.Attributes()
+				resourceType := attrs["resource_type"].(types.String).ValueString()
+				if resourceType != "" {
+					newFilter := BackupFilterJSON{ResourceType: resourceType}
+					resourceQuery := attrs["resource_query"].(types.String).ValueString()
+					if resourceQuery != "" {
+						var rq map[string]interface{}
+						err := json.Unmarshal([]byte(resourceQuery), &rq)
 						if err != nil {
 							tflog.Error(context.Background(), "Invalid resource_query JSON: "+err.Error())
 						}
-						newFilter.ResourceQuery = resourceQuery
+						newFilter.ResourceQuery = rq
 					}
 					filters = append(filters, newFilter)
 				}
@@ -827,14 +828,25 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 
 		// Parse filters
 		filtersArray := gjson.Get(response, "job_config_params.filters").Array()
-		var filters []BackupFilterTFSDK
+		filterObjs := make([]attr.Value, 0, len(filtersArray))
 		for _, filter := range filtersArray {
-			filters = append(filters, BackupFilterTFSDK{
-				ResourceType:  types.StringValue(filter.Get("resourceType").String()),
-				ResourceQuery: types.StringValue(filter.Get("resourceQuery").Raw),
+			obj, objDiags := types.ObjectValue(BackupFilterElemType.AttrTypes, map[string]attr.Value{
+				"resource_type":  types.StringValue(filter.Get("resourceType").String()),
+				"resource_query": types.StringValue(filter.Get("resourceQuery").Raw),
 			})
+			if objDiags.HasError() {
+				tflog.Error(context.Background(), "Error building filters object: "+objDiags[0].Detail())
+				continue
+			}
+			filterObjs = append(filterObjs, obj)
 		}
-		dbParams.Filters = filters
+		filtersList, listDiags := types.ListValue(BackupFilterElemType, filterObjs)
+		if listDiags.HasError() {
+			tflog.Error(context.Background(), "Error building filters list: "+listDiags[0].Detail())
+			dbParams.Filters = types.ListValueMust(BackupFilterElemType, []attr.Value{})
+		} else {
+			dbParams.Filters = filtersList
+		}
 		plan.DatabaseBackupParams = dbParams
 	case "cckm_key_rotation":
 		plan.CCKMKeyRotationParams = &CCKMKeyRotationParamsTFSDK{

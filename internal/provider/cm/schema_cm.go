@@ -924,20 +924,23 @@ type JobConfigParamsTFSDK struct {
 	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK       `tfsdk:"cckm_synchronization_params"`
 }
 
-type DatabaseBackupParamsTFSDK struct {
-	TiedToHSM      types.Bool          `tfsdk:"tied_to_hsm"`
-	Description    types.String        `tfsdk:"description"`
-	BackupKey      types.String        `tfsdk:"backup_key"`
-	Scope          types.String        `tfsdk:"scope"`
-	Filters        []BackupFilterTFSDK `tfsdk:"filters"`
-	RetentionCount types.Int64         `tfsdk:"retention_count"`
-	DoSCP          types.Bool          `tfsdk:"do_scp"`
-	Connection     types.String        `tfsdk:"connection"`
+// BackupFilterElemType is the object type for a single filters list element.
+var BackupFilterElemType = types.ObjectType{
+	AttrTypes: map[string]attr.Type{
+		"resource_type":  types.StringType,
+		"resource_query": types.StringType,
+	},
 }
 
-type BackupFilterTFSDK struct {
-	ResourceType  types.String `tfsdk:"resource_type"`
-	ResourceQuery types.String `tfsdk:"resource_query"`
+type DatabaseBackupParamsTFSDK struct {
+	TiedToHSM      types.Bool   `tfsdk:"tied_to_hsm"`
+	Description    types.String `tfsdk:"description"`
+	BackupKey      types.String `tfsdk:"backup_key"`
+	Scope          types.String `tfsdk:"scope"`
+	Filters        types.List   `tfsdk:"filters"`
+	RetentionCount types.Int64  `tfsdk:"retention_count"`
+	DoSCP          types.Bool   `tfsdk:"do_scp"`
+	Connection     types.String `tfsdk:"connection"`
 }
 
 type CreateJobConfigParamsListJSON struct {
