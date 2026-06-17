@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,9 +52,17 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
+	// CM_ADDRESS may not be set when CIPHERTRUST_ADDRESS is used directly; fall back.
 	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	if proxyURIEndpoint == "" {
+		proxyURIEndpoint = os.Getenv("CIPHERTRUST_ADDRESS")
+	}
 	if os.Getenv("CDSPAAS") == "true" {
-		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
+		const scheme = "https://"
+		if !strings.HasPrefix(proxyURIEndpoint, scheme) {
+			t.Skipf("CDSPAAS=true but CM_ADDRESS/CIPHERTRUST_ADDRESS (%q) does not start with %q; skipping XKS test", proxyURIEndpoint, scheme)
+		}
+		proxyURIEndpoint = scheme + "xks." + proxyURIEndpoint[len(scheme):]
 	}
 	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig, cmKeyName, keyStoreName, proxyURIEndpoint)
 

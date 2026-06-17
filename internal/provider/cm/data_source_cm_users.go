@@ -171,13 +171,15 @@ func (d *dataSourceUsers) Configure(ctx context.Context, req datasource.Configur
 	d.client = client
 }
 
-func convertMetadata(m map[string]string) types.Map {
+func convertMetadata(m map[string]json.RawMessage) types.Map {
 	if len(m) == 0 {
 		return types.MapValueMust(types.StringType, map[string]attr.Value{})
 	}
 	result := make(map[string]attr.Value)
 	for k, v := range m {
-		result[k] = types.StringValue(v)
+		// Store each value as its compact JSON string so any nested objects
+		// (e.g. CDSPaaS current_domain) are preserved without unmarshal errors.
+		result[k] = types.StringValue(string(v))
 	}
 	return types.MapValueMust(types.StringType, result)
 }

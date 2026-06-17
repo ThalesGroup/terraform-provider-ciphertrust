@@ -67,6 +67,7 @@ func NewCMClientBoot(ctx context.Context, uuid string, address *string, insecure
 	tflog.Trace(ctx, MSG_METHOD_START+"[client.go -> NewCMClientBoot]["+uuid+"]")
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
+		Proxy:           http.ProxyFromEnvironment,
 	}
 
 	c := CMClientBootstrap{
@@ -95,6 +96,7 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 	tflog.Trace(ctx, MSG_METHOD_START+"[client.go -> NewClient]["+uuid+"]")
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
+		Proxy:           http.ProxyFromEnvironment,
 	}
 
 	// Create the token refresh transport (client back-reference set below).

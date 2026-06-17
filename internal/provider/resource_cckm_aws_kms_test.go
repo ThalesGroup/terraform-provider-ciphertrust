@@ -169,6 +169,10 @@ func TestCckmAWSKms(t *testing.T) {
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
 		t.Skip("AWS credentials not set")
 	}
+	// On CDSPaaS pipelines ambient AWS credentials are ECR-only (no EC2/KMS permissions).
+	if os.Getenv(envCDSPaaS) == "true" && os.Getenv("CCKM_AWS_TEST") != "true" {
+		t.Skip("skipping: CDSPaaS pipeline AWS credentials lack ec2:DescribeRegions; set CCKM_AWS_TEST=true to force")
+	}
 	uid := "tf-" + uuid.New().String()[:8]
 	updatedConnName := uid + "-upd"
 

@@ -74,6 +74,11 @@ func initCckmAwsTest(timeout ...int) (string, bool) {
 	if awsAccessKeyID == "" || awsSecretAccessKey == "" {
 		return "", false
 	}
+	// On CDSPaaS pipelines ambient AWS credentials are ECR-only (no EC2/KMS permissions).
+	// Skip CCKM AWS tests unless CCKM_AWS_TEST=true is explicitly set to opt in.
+	if os.Getenv(envCDSPaaS) == "true" && os.Getenv("CCKM_AWS_TEST") != "true" {
+		return "", false
+	}
 	operationTimeout := defaultAwsOperationTimeout
 	if len(timeout) > 0 {
 		operationTimeout = timeout[0]

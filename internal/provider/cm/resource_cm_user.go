@@ -138,19 +138,12 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if len(plan.Metadata.Elements()) != 0 {
-		metadata := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+		strMeta := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &strMeta, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-	if len(plan.Metadata.Elements()) != 0 {
-		metadata := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(strMeta)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -318,13 +311,12 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	// 	}
 	// }
 	if !plan.Metadata.IsNull() && !plan.Metadata.IsUnknown() {
-		metadata := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+		strMeta := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &strMeta, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		// Convert map[string]string to map[string]interface{}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(strMeta)
 	}
 
 	payloadJSON, err := json.Marshal(payload)

@@ -290,6 +290,9 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
+	// cloud_name is Optional+Computed — always populate from the POST response so
+	// Terraform does not see an unknown value after apply (required for Computed fields).
+	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
