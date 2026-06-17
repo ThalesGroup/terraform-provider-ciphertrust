@@ -68,6 +68,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"account_id": schema.StringAttribute{
 				Required:    true,
+				Computed:    true,
 				Description: "ID of the AWS account.",
 			},
 			"acls": schema.SetNestedAttribute{
@@ -405,7 +406,11 @@ func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.Modify
 
 	var changed []string
 
-	if plan.AccountID != state.AccountID {
+	// Skip the immutable check when plan.AccountID is Unknown — this happens when the
+	// data source that supplies account_id hasn't been evaluated yet (e.g. because a
+	// dependency is in a pending-update state). A genuine user-supplied change will
+	// always be a known value and will still be caught.
+	if !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
 		changed = append(changed, "account_id")
 	}
 	if plan.Name != state.Name {

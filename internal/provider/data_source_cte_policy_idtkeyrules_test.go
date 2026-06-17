@@ -28,12 +28,6 @@ resource "ciphertrust_cm_key" "idt_key" {
 	unexportable = false
 	xts          = true
 	meta = {
-		permissions = {
-			decrypt_with_key     = ["CTE Clients"]
-			encrypt_with_key     = ["CTE Clients"]
-			export_key           = ["CTE Clients"]
-			read_key             = ["CTE Clients"]
-		}
 		cte = {
 			persistent_on_client = true
 			encryption_mode      = "XTS"
