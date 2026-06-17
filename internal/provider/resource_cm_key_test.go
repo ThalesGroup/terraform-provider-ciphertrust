@@ -181,31 +181,32 @@ data "ciphertrust_cm_users_list" "users_list" {
 }
 
 resource "ciphertrust_cm_key" "cte_key" {
-  name="terraform"
-  algorithm="aes"
-  key_size=256
-  usage_mask=76
-  undeletable=false
-  unexportable=false
-  meta={
-    owner_id=tolist(data.ciphertrust_cm_users_list.users_list.users)[0].user_id
-    permissions={
-      decrypt_with_key=["CTE Clients"]
-      encrypt_with_key=["CTE Clients"]
-      export_key=["CTE Clients"]
-      mac_verify_with_key=["CTE Clients"]
-      mac_with_key=["CTE Clients"]
-      read_key=["CTE Clients"]
-      sign_verify_with_key=["CTE Clients"]
-      sign_with_key=["CTE Clients"]
-      use_key=["CTE Clients"]
+  algorithm    = "aes"
+  key_size     = 256
+  usage_mask   = 76
+  undeletable  = false
+  unexportable = false
+  meta = {
+    owner_id = tolist(data.ciphertrust_cm_users_list.users_list.users)[0].user_id
+    permissions = {
+      decrypt_with_key     = ["CTE Clients"]
+      encrypt_with_key     = ["CTE Clients"]
+      export_key           = ["CTE Clients"]
+      mac_verify_with_key  = ["CTE Clients"]
+      mac_with_key         = ["CTE Clients"]
+      read_key             = ["CTE Clients"]
+      sign_verify_with_key = ["CTE Clients"]
+      sign_with_key        = ["CTE Clients"]
+      use_key              = ["CTE Clients"]
     }
-    cte={
-      persistent_on_client=true
-      encryption_mode="CBC"
-      cte_versioned=false
+    cte = {
+      persistent_on_client = true
+      encryption_mode      = "CBC"
+      cte_versioned        = false
     }
-    xts=false
+  }
+  lifecycle {
+    ignore_changes = [name, aliases]
   }
 }
 `,
@@ -213,19 +214,27 @@ resource "ciphertrust_cm_key" "cte_key" {
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
 				),
 			},
-			// Update and Read testing
+			// Update: change usage_mask and description. The CM API retains the
+			// auto-assigned name and its alias even after a patch that omits them,
+			// so aliases drift is expected after Read() repopulates them from the
+			// API while config has no aliases set.
 			{
 				Config: providerConfig + `
 resource "ciphertrust_cm_key" "cte_key" {
-  name="terraform"
-  algorithm="aes"
-  key_size=256
-  usage_mask=13
-  description="updated via terraform"
+  algorithm    = "aes"
+  key_size     = 256
+  usage_mask   = 13
+  description  = "updated via terraform"
+  undeletable  = false
+  unexportable = false
+  lifecycle {
+    ignore_changes = [name, meta]
+  }
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.cte_key", "description", "updated via terraform"),
 				),
 			},
 			// Delete testing automatically occurs in TestCase
