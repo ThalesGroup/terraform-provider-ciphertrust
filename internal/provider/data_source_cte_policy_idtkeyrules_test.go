@@ -15,52 +15,52 @@ func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
 	keyName := "tf-key-idt-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`
-resource "ciphertrust_cm_key" "idt_key" {
-	name         = "%s"
-	algorithm    = "aes"
-	key_size     = 256
-	usage_mask   = 76
-	undeletable  = false
-	unexportable = false
-	xts          = true
-	meta = {
-		permissions = {
-			decrypt_with_key = ["CTE Clients"]
-			encrypt_with_key = ["CTE Clients"]
-			export_key       = ["CTE Clients"]
-			read_key         = ["CTE Clients"]
+		resource "ciphertrust_cm_key" "idt_key" {
+			name         = "%s"
+			algorithm    = "aes"
+			key_size     = 256
+			usage_mask   = 76
+			undeletable  = false
+			unexportable = false
+			xts          = true
+			meta = {
+				permissions = {
+					decrypt_with_key     = ["CTE Clients"]
+					encrypt_with_key     = ["CTE Clients"]
+					export_key           = ["CTE Clients"]
+					read_key             = ["CTE Clients"]
+				}
+				cte = {
+					persistent_on_client = true
+					encryption_mode      = "XTS"
+					cte_versioned        = false
+				}
+			}
 		}
-		cte = {
-			persistent_on_client = true
-			encryption_mode      = "XTS"
-			cte_versioned        = false
-		}
-	}
-}
 
-resource "ciphertrust_cte_policy" "test_policy" {
-	name        = "%s"
-	description = "Created for CTE policy idt key rules data source test"
-	policy_type = "IDT"
-	security_rules = [
-		{
-			action = "all_ops"
-			effect = "permit,audit"
+		resource "ciphertrust_cte_policy" "test_policy" {
+			name        = "%s"
+			description = "Created for CTE policy idt key rules data source test"
+			policy_type = "IDT"
+			security_rules = [
+				{
+					action = "all_ops"
+					effect = "permit,audit"
+				}
+			]
+			idt_key_rules = [
+				{
+					current_key        = "clear_key"
+					transformation_key = ciphertrust_cm_key.idt_key.name
+				}
+			]
 		}
-	]
-	idt_key_rules = [
-		{
-			current_key        = "clear_key"
-			transformation_key = ciphertrust_cm_key.idt_key.name
-		}
-	]
-}
 
-data "ciphertrust_cte_policy_idt_key_rules" "ds" {
-	depends_on = [ciphertrust_cte_policy.test_policy]
-	policy     = ciphertrust_cte_policy.test_policy.id
-}
-`, keyName, policyName)
+		data "ciphertrust_cte_policy_idt_key_rules" "ds" {
+			depends_on = [ciphertrust_cte_policy.test_policy]
+			policy     = ciphertrust_cte_policy.test_policy.id
+		}
+	`, keyName, policyName)
 
 	datasourceName := "data.ciphertrust_cte_policy_idt_key_rules.ds"
 	resourceName := "ciphertrust_cte_policy.test_policy"

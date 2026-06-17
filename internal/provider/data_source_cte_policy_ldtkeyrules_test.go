@@ -15,56 +15,56 @@ func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
 	keyName := "tf-key-ldt-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`
-resource "ciphertrust_cm_key" "ldt_key" {
-	name         = "%s"
-	algorithm    = "aes"
-	key_size     = 256
-	usage_mask   = 76
-	undeletable  = false
-	unexportable = false
-	xts          = false
-	meta = {
-		permissions = {
-			decrypt_with_key = ["CTE Clients"]
-			encrypt_with_key = ["CTE Clients"]
-			export_key       = ["CTE Clients"]
-			read_key         = ["CTE Clients"]
-		}
-		cte = {
-			persistent_on_client = true
-			encryption_mode      = "CBC"
-			cte_versioned        = true
-		}
-	}
-}
-
-resource "ciphertrust_cte_policy" "test_policy" {
-	name        = "%s"
-	description = "Created for CTE policy ldt key rules data source test"
-	policy_type = "LDT"
-	security_rules = [
-		{
-			action = "read"
-			effect = "permit"
-		}
-	]
-	ldt_key_rules = [
-		{
-			current_key = {
-				key_id = "clear_key"
-			}
-			transformation_key = {
-				key_id = ciphertrust_cm_key.ldt_key.name
+		resource "ciphertrust_cm_key" "ldt_key" {
+			name         = "%s"
+			algorithm    = "aes"
+			key_size     = 256
+			usage_mask   = 76
+			undeletable  = false
+			unexportable = false
+			xts          = false
+			meta = {
+				permissions = {
+					decrypt_with_key     = ["CTE Clients"]
+					encrypt_with_key     = ["CTE Clients"]
+					export_key           = ["CTE Clients"]
+					read_key             = ["CTE Clients"]
+				}
+				cte = {
+					persistent_on_client = true
+					encryption_mode      = "CBC"
+					cte_versioned        = true
+				}
 			}
 		}
-	]
-}
 
-data "ciphertrust_cte_policy_ldt_key_rules" "ds" {
-	depends_on = [ciphertrust_cte_policy.test_policy]
-	policy     = ciphertrust_cte_policy.test_policy.id
-}
-`, keyName, policyName)
+		resource "ciphertrust_cte_policy" "test_policy" {
+			name        = "%s"
+			description = "Created for CTE policy ldt key rules data source test"
+			policy_type = "LDT"
+			security_rules = [
+				{
+					action = "read"
+					effect = "permit"
+				}
+			]
+			ldt_key_rules = [
+				{
+					current_key = {
+						key_id = "clear_key"
+					}
+					transformation_key = {
+						key_id = ciphertrust_cm_key.ldt_key.name
+					}
+				}
+			]
+		}
+
+		data "ciphertrust_cte_policy_ldt_key_rules" "ds" {
+			depends_on = [ciphertrust_cte_policy.test_policy]
+			policy     = ciphertrust_cte_policy.test_policy.id
+		}
+	`, keyName, policyName)
 
 	datasourceName := "data.ciphertrust_cte_policy_ldt_key_rules.ds"
 	resourceName := "ciphertrust_cte_policy.test_policy"
