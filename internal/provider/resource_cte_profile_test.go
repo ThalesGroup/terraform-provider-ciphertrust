@@ -1,21 +1,25 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEProfile(t *testing.T) {
+	name := "testProfile1-" + uuid.New().String()[:8]
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 
 			// Step 1: Create
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_profile" "profile" {
-  name        = "testProfile1"
+  name        = %q
   description = "Initial profile"
 
   concise_logging = true
@@ -33,7 +37,7 @@ resource "ciphertrust_cte_profile" "profile" {
     max_old_files = 5
   }
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_profile.profile", "id"),
 				),
@@ -41,9 +45,9 @@ resource "ciphertrust_cte_profile" "profile" {
 
 			// Step 2: Update
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_profile" "profile" {
-  name        = "testProfile1"
+  name        = %q
   description = "Updated profile"
 
   concise_logging = false
@@ -66,7 +70,7 @@ resource "ciphertrust_cte_profile" "profile" {
     suppress_threshold = 5
   }
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_profile.profile", "id"),
 				),

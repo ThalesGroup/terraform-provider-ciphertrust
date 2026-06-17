@@ -1,25 +1,32 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEClientGroup(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	groupName := "testClientGroup1-" + suffix
+	client1Name := "client1-" + suffix
+	client2Name := "client2-" + suffix
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 
 			// Step 1: Create
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_client_group" "cg" {
-  name         = "testClientGroup1"
+  name         = %q
   cluster_type = "NON-CLUSTER"
   description  = "Initial create"
 }
-`,
+`, groupName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_client_group.cg",
@@ -30,9 +37,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 
 			// Step 2: Update basic fields
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 			resource "ciphertrust_cte_client_group" "cg" {
-			  name         = "testClientGroup1"
+			  name         = %q
 			  cluster_type = "NON-CLUSTER"
 			  description  = "Updated via TF"
 
@@ -40,7 +47,7 @@ resource "ciphertrust_cte_client_group" "cg" {
 			  communication_enabled = true
 			  client_locked         = true
 			}
-			`,
+			`, groupName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_client_group.cg",
@@ -51,9 +58,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 
 			// Step 3: Add clients
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_client" "c1" {
-  name                     = "client1"
+  name                     = %q
   password_creation_method = "GENERATE"
   registration_allowed     = true
     communication_enabled = true
@@ -61,7 +68,7 @@ resource "ciphertrust_cte_client" "c1" {
 }
 
 resource "ciphertrust_cte_client" "c2" {
-  name                     = "client2"
+  name                     = %q
   password_creation_method = "GENERATE"
   registration_allowed     = true
     communication_enabled = true
@@ -69,7 +76,7 @@ resource "ciphertrust_cte_client" "c2" {
 }
 
 resource "ciphertrust_cte_client_group" "cg" {
-  name         = "testClientGroup1"
+  name         = %q
   cluster_type = "NON-CLUSTER"
   description  = "Updated via TF"
   communication_enabled = true
@@ -84,7 +91,7 @@ resource "ciphertrust_cte_client_group" "cg" {
 
   inherit_attributes = true
 }
-`,
+`, client1Name, client2Name, groupName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_client_group.cg",
@@ -102,9 +109,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 
 			// Step 4: Remove clients
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_client" "c1" {
-  name                     = "client1"
+  name                     = %q
   password_creation_method = "GENERATE"
   registration_allowed     = true
     communication_enabled = true
@@ -112,7 +119,7 @@ resource "ciphertrust_cte_client" "c1" {
 }
 
 resource "ciphertrust_cte_client" "c2" {
-  name                     = "client2"
+  name                     = %q
   password_creation_method = "GENERATE"
   registration_allowed     = true
     communication_enabled = true
@@ -120,7 +127,7 @@ resource "ciphertrust_cte_client" "c2" {
 }
 
 resource "ciphertrust_cte_client_group" "cg" {
-  name         = "testClientGroup1"
+  name         = %q
   cluster_type = "NON-CLUSTER"
   description  = "Updated via TF"
   communication_enabled = true
@@ -129,7 +136,7 @@ resource "ciphertrust_cte_client_group" "cg" {
   op_type     = "remove-client"
   client_list = []
 }
-`,
+`, client1Name, client2Name, groupName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_client_group.cg",

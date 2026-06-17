@@ -1,17 +1,23 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCMKey(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	keyName := "terraform-" + suffix
+	keyNameUpd := "terraform-upd-" + suffix
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 data "ciphertrust_cm_users_list" "users_list" {
   filters = {
     username = "admin"
@@ -19,7 +25,7 @@ data "ciphertrust_cm_users_list" "users_list" {
 }
 
 resource "ciphertrust_cm_key" "cte_key" {
-  name="terraform"
+  name=%q
   algorithm="aes"
   key_size=256
   usage_mask=76
@@ -46,22 +52,22 @@ resource "ciphertrust_cm_key" "cte_key" {
     xts=false
   }
 }
-`,
+`, keyName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
 				),
 			},
 			// Update and Read testing
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "cte_key" {
-  name="terraform_upd"
+  name=%q
   algorithm="aes"
   key_size=256
   usage_mask=13
   description="updated via terraform"
 }
-`,
+`, keyNameUpd),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.cte_key", "id"),
 				),

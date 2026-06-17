@@ -1,20 +1,24 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEPolicy(t *testing.T) {
+	name := "TestPolicy-" + uuid.New().String()[:8]
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 
 resource "ciphertrust_cte_policy" "cte_policy" {
-  name = "TestPolicy"
+  name = %q
   policy_type = "Standard"
   never_deny = false
   security_rules = [
@@ -25,16 +29,16 @@ resource "ciphertrust_cte_policy" "cte_policy" {
     }
   ]
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy.cte_policy", "id"),
 				),
 			},
 			// Update and Read testing
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_policy" "cte_policy" {
-  name = "TestPolicy"
+  name = %q
   policy_type = "Standard"
   security_rules = [
     {
@@ -45,7 +49,7 @@ resource "ciphertrust_cte_policy" "cte_policy" {
   ]
   description="updated via TF"
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy.cte_policy", "id"),
 				),
