@@ -1284,10 +1284,12 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 	}
 
-	if r := gjson.Get(apiResp, "xts"); r.Exists() {
-		plan.XTS = types.BoolValue(r.Bool())
-	} else {
-		plan.XTS = types.BoolNull()
+	if !plan.XTS.IsNull() {
+		if r := gjson.Get(apiResp, "xts"); r.Exists() {
+			plan.XTS = types.BoolValue(r.Bool())
+		} else {
+			plan.XTS = types.BoolNull()
+		}
 	}
 
 	labelsResult := gjson.Get(apiResp, "labels")
@@ -1301,23 +1303,25 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		plan.Labels = types.MapNull(types.StringType)
 	}
 
-	aliasesResult := gjson.Get(apiResp, "aliases")
-	if aliasesResult.IsArray() && len(aliasesResult.Array()) > 0 {
-		var aliases []*KeyAliasTFSDK
-		for _, el := range aliasesResult.Array() {
-			aliases = append(aliases, &KeyAliasTFSDK{
-				Alias: types.StringValue(el.Get("alias").String()),
-				Index: types.StringValue(el.Get("index").String()),
-				Type:  types.StringValue(el.Get("type").String()),
-			})
+	if plan.Aliases != nil {
+		aliasesResult := gjson.Get(apiResp, "aliases")
+		if aliasesResult.IsArray() && len(aliasesResult.Array()) > 0 {
+			var aliases []*KeyAliasTFSDK
+			for _, el := range aliasesResult.Array() {
+				aliases = append(aliases, &KeyAliasTFSDK{
+					Alias: types.StringValue(el.Get("alias").String()),
+					Index: types.StringValue(el.Get("index").String()),
+					Type:  types.StringValue(el.Get("type").String()),
+				})
+			}
+			plan.Aliases = aliases
+		} else {
+			plan.Aliases = nil
 		}
-		plan.Aliases = aliases
-	} else {
-		plan.Aliases = nil
 	}
 
 	metaResult := gjson.Get(apiResp, "meta")
-	if metaResult.Exists() && metaResult.Type != gjson.Null {
+	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
 		var metadata KeyMetadataTFSDK
 		if r := gjson.Get(apiResp, "meta.owner_id"); r.Exists() {
 			metadata.OwnerId = types.StringValue(r.String())
