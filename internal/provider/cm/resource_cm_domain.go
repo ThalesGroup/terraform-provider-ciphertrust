@@ -295,19 +295,28 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 
-	// Read admins list
+	// Read admins list — overwrite prior state from API response.
+	// When the field is absent (not returned by CM), set nil so a Required field
+	// removed server-side is reflected as null in state rather than silently
+	// preserving a stale prior value.
 	adminsResult := gjson.Get(response, "admins")
 	if adminsResult.Exists() && adminsResult.IsArray() {
-		var admins []types.String
-		for _, admin := range adminsResult.Array() {
-			admins = append(admins, types.StringValue(admin.String()))
+		arr := adminsResult.Array()
+		if len(arr) > 0 {
+			var admins []types.String
+			for _, admin := range arr {
+				admins = append(admins, types.StringValue(admin.String()))
+			}
+			state.Admins = admins
 		}
-		state.Admins = admins
+		// empty array — keep prior state.Admins
 	} else {
 		state.Admins = nil
 	}
 
-	// Read meta_data map
+	// Read meta_data map. An empty object returned by CM (meta: {}) means all metadata
+	// keys were removed server-side; reflect that as null in state, consistent with the
+	// absent/null case, so drift is surfaced rather than silently preserved.
 	metaResult := gjson.Get(response, "meta")
 	if metaResult.Exists() && metaResult.Type != gjson.Null {
 		metaMap := make(map[string]string)
@@ -315,11 +324,15 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 			metaMap[key.String()] = value.String()
 			return true
 		})
-		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
-		if diags2.HasError() {
-			resp.Diagnostics.Append(diags2...)
+		if len(metaMap) > 0 {
+			mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
+			if diags2.HasError() {
+				resp.Diagnostics.Append(diags2...)
+			} else {
+				state.Meta = mapValue
+			}
 		} else {
-			state.Meta = mapValue
+			state.Meta = types.MapNull(types.StringType)
 		}
 	} else {
 		state.Meta = types.MapNull(types.StringType)
@@ -374,6 +387,18 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		hasChanges = true
 	}
 
+	// Check admins list
+	if len(plan.Admins) != len(state.Admins) {
+		hasChanges = true
+	} else {
+		for i, a := range plan.Admins {
+			if !a.Equal(state.Admins[i]) {
+				hasChanges = true
+				break
+			}
+		}
+	}
+
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
 		tflog.Debug(ctx, "[resource_cm_domain.go -> Update] No changes detected, preserving state")
@@ -393,6 +418,11 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		val := plan.AllowUserManagement.ValueBool()
 		payload.AllowUserManagement = &val
 	}
+	var adminsPayload []string
+	for _, str := range plan.Admins {
+		adminsPayload = append(adminsPayload, str.ValueString())
+	}
+	payload.Admins = adminsPayload
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metadataPayload[k] = v.(types.String).ValueString()
@@ -473,12 +503,15 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 			metaMap[key.String()] = value.String()
 			return true
 		})
-		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
-		if diags2.HasError() {
-			resp.Diagnostics.Append(diags2...)
-		} else {
-			plan.Meta = mapValue
+		if len(metaMap) > 0 {
+			mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
+			if diags2.HasError() {
+				resp.Diagnostics.Append(diags2...)
+			} else {
+				plan.Meta = mapValue
+			}
 		}
+		// empty object — keep plan.Meta from user config (null if not configured)
 	} else {
 		plan.Meta = types.MapNull(types.StringType)
 	}

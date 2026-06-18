@@ -242,9 +242,9 @@ resource "ciphertrust_domain" "test" {
 				),
 			},
 			{
-				// Step 2: delete the domain out-of-band before Terraform destroy.
-				// Without the 404 guard, DeleteByID returns a 404 error and the
-				// destroy step fails. With the guard it completes successfully.
+				// Step 2: delete the domain out-of-band, then apply an empty config so
+				// Terraform plans and executes a destroy. Delete() receives 404 from CM
+				// because the domain no longer exists; the 404 guard must let it succeed.
 				PreConfig: func() {
 					if capturedID == "" {
 						return
@@ -256,7 +256,10 @@ resource "ciphertrust_domain" "test" {
 					url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, capturedID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", capturedID, url, nil)
 				},
-				Destroy: true,
+				Config: providerConfig, // empty — no resource → Terraform plans destroy
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testVerifyResourceDeleted(resourceName),
+				),
 			},
 		},
 	})
