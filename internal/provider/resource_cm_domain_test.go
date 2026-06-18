@@ -36,7 +36,7 @@ func requireDomainLicenseOrSkip(t *testing.T) {
 		// Any other error (e.g. 409 name conflict) means domains are supported — continue.
 		return
 	}
-	// Probe succeeded — delete the transient domain (best-effort).
+	// Probe succeeded — delete the transient domain (best-effort cleanup — a leaked probe domain is benign).
 	if domainID := gjson.Get(resp, "id").String(); domainID != "" {
 		url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 		_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, url, nil)
