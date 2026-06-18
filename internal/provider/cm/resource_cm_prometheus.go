@@ -88,7 +88,7 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
 		resp.Diagnostics.AddError(
-			fmt.Sprintf("Error occured during prometheus %s", status),
+			fmt.Sprintf("Error occurred during prometheus %s", status),
 			"unexpected error: "+err.Error(),
 		)
 		return

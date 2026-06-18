@@ -248,7 +248,7 @@ func (r *resourceCTEPolicySignatureRule) Update(ctx context.Context, req resourc
 	// Handle indices present in BOTH state and plan
 	// ------------------------------------------------------------
 
-	commonLen := min(planLen, stateLen)
+	commonLen := minInt(planLen, stateLen)
 
 	for i := 0; i < commonLen; i++ {
 
@@ -469,7 +469,7 @@ func parseconfig(response string) []string {
 	}
 	return ids
 }
-func min(a, b int) int {
+func minInt(a, b int) int { //nolint:predeclared
 	if a < b {
 		return a
 	}

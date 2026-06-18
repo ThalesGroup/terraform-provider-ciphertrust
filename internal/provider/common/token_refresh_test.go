@@ -111,7 +111,7 @@ func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 func TestRoundTrip_SkipsRefreshForAuthEndpoint(t *testing.T) {
 	base := &countingTransport{}
 	client := &Client{
-		Token: makeJWT(time.Now().Add(-1 * time.Minute).Unix()), // expired token
+		Token:    makeJWT(time.Now().Add(-1 * time.Minute).Unix()), // expired token
 		AuthData: AuthStruct{Username: "admin", Password: "pass"},
 	}
 	tr := &TokenRefreshTransport{Base: base, client: client}
@@ -174,7 +174,7 @@ func TestMaybeRefresh_ExpiringToken_TriggersRefresh(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate CM returning a new token
 		resp := AuthResponse{Token: newJWT}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer ts.Close()
 
@@ -231,12 +231,12 @@ func TestDoRefresh_PasswordFallback_WhenNoRefreshToken(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify it's a password grant
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body["grant_type"] != nil && body["grant_type"] != "password" {
 			http.Error(w, "expected password grant", 400)
 			return
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		_ = json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
 	}))
 	defer ts.Close()
 
@@ -267,11 +267,11 @@ func TestDoRefresh_RefreshTokenGrant_UsedFirst(t *testing.T) {
 
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 		if gt, ok := body["grant_type"].(string); ok {
 			grantTypeUsed = gt
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		_ = json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
 	}))
 	defer ts.Close()
 
@@ -309,7 +309,7 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		_ = json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
 	}))
 	defer ts.Close()
 
@@ -328,7 +328,7 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			req := makeRequest(expiringSoon)
-			tr.RoundTrip(req)
+			_, _ = tr.RoundTrip(req)
 		}()
 	}
 	wg.Wait()

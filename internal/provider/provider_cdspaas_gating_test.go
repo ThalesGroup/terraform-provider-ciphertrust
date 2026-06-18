@@ -54,7 +54,7 @@ func fakeCDSPaaSAuthServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		// Build the response body at runtime to avoid placing a JWT-shaped
 		// literal in this source file.
-		fmt.Fprintf(w, `{%q:%q}`, "jwt", testPlaceholder())
+		_, _ = fmt.Fprintf(w, `{%q:%q}`, "jwt", testPlaceholder())
 	})
 	return httptest.NewServer(mux)
 }

@@ -387,7 +387,7 @@ func (r *resourceCCKMAWSAcl) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	if acl != nil {
-		response = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true)
+		response = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true) //nolint:ineffassign
 		if resp.Diagnostics.HasError() {
 			return
 		}

@@ -247,7 +247,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	}
 	payload.Products = productsArr
 
-	// Backwards compatability
+	// Backwards compatibility
 	if payload.SecretAccessKey == "" {
 		payload.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
 	}

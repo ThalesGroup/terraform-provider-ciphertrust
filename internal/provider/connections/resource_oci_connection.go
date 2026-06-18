@@ -432,7 +432,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	connectionID := gjson.Get(response, "id").String()
-	response, err = r.client.UpdateDataV2(ctx, connectionID, common.URL_OCI_CONNECTION, payloadJSON)
+	response, err = r.client.UpdateDataV2(ctx, connectionID, common.URL_OCI_CONNECTION, payloadJSON) //nolint:ineffassign
 	if err != nil {
 		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Update]["+plan.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(

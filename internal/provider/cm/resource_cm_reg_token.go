@@ -46,7 +46,7 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"token": schema.StringAttribute{
 				Computed:    true,
-				Description: "Set the token recieved from the API call to the state.",
+				Description: "Set the token received from the API call to the state.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

@@ -9,7 +9,7 @@ import (
 
 type VaultTFSDK struct {
 	VaultCommonTFSDK
-	ConnectionID    types.String `tfsdk:"connection_id"`
+	ConnectionID types.String `tfsdk:"connection_id"`
 	BucketParamsTFSDK
 	FreeformTags types.Map `tfsdk:"freeform_tags"`
 	DefinedTags  types.Set `tfsdk:"defined_tags"`

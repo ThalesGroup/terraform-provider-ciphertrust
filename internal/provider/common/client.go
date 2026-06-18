@@ -167,7 +167,7 @@ func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, 
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequest]["+uuid+"]")
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer res.Body.Close() //nolint:errcheck
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
@@ -199,7 +199,7 @@ func (c *CMClientBootstrap) doRequestBootstrap(ctx context.Context, uuid string,
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequestBootstrap]["+uuid+"]")
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer res.Body.Close() //nolint:errcheck
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {

@@ -20,9 +20,9 @@ import (
 const (
 	providerConfig = `
 provider "ciphertrust" {
-	address = "https://192.168.2.135"
+	address = "https://10.171.98.28"
 	username = "admin"
-	password = "ChangeIt01!"
+	password = "Asdf@1234"
 	bootstrap = "no"
 	domain = "root"
 	auth_domain = "root"
@@ -179,7 +179,7 @@ func testCheckListContainsName(resourceName string, listAttr string, subAttr str
 			return fmt.Errorf("error: %s.%s.# not found in state", resourceName, listAttr)
 		}
 		count := 0
-		fmt.Sscanf(countStr, "%d", &count)
+		_, _ = fmt.Sscanf(countStr, "%d", &count)
 		for i := 0; i < count; i++ {
 			key := fmt.Sprintf("%s.%d.%s", listAttr, i, subAttr)
 			if rs.Primary.Attributes[key] == expectedValue {

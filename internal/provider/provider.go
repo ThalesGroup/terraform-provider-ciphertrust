@@ -177,7 +177,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
 
 	file, _ := os.Open(configFileName)
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

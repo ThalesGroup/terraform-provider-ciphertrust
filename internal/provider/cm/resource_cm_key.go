@@ -109,7 +109,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"cert_type": schema.StringAttribute{
 				Optional:    true,
-				Description: "This specifies the type of certificate object that is being created. Valid values are 'x509-pem' and 'x509-der'. At present, we only support x.509 certificates. The cerfificate data is passed in via the 'material' field. The certificate type is infered from the material if it is left blank.",
+				Description: "This specifies the type of certificate object that is being created. Valid values are 'x509-pem' and 'x509-der'. At present, we only support x.509 certificates. The cerfificate data is passed in via the 'material' field. The certificate type is inferred from the material if it is left blank.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"x509-pem",
 						"x509-der"}...),

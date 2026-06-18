@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -162,15 +163,17 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	// Add labels to payload
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
-		metadataPayload[k] = v.(types.String).ValueString()
+		if sv, ok := v.(types.String); ok {
+			metadataPayload[k] = sv.ValueString()
+		}
 	}
 	payload.Meta = metadataPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Invalid data input: Domain Creation",
+			"Error Creating CipherTrust Domain",
 			err.Error(),
 		)
 		return
@@ -178,10 +181,10 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_DOMAIN, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error creating domain on CipherTrust Manager: ",
-			"Could not create domain, unexpected error: "+err.Error(),
+			"Error Creating CipherTrust Domain",
+			"Could not create domain: "+err.Error(),
 		)
 		return
 	}
@@ -237,12 +240,21 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "CipherTrust Domain not found, removing from state [resource_cm_domain.go -> Read]["+state.ID.ValueString()+"]")
+			resp.Diagnostics.AddWarning(
+				"CipherTrust Domain Not Found",
+				"Domain "+state.ID.ValueString()+" was not found on CipherTrust Manager and will be removed from state. "+err.Error(),
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
-			"Error reading CM Domain on CipherTrust Manager: ",
-			"Could not read CM Domain id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust Domain",
+			"Could not read domain "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
@@ -306,7 +318,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Read]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -380,7 +392,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	}
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
-		metadataPayload[k] = v.(types.String).ValueString()
+		if sv, ok := v.(types.String); ok {
+			metadataPayload[k] = sv.ValueString()
+		}
 	}
 	payload.Meta = metadataPayload
 
@@ -388,29 +402,29 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Invalid data input: Domain Update",
-			err.Error(),
+			"Error Updating CipherTrust Domain",
+			"Could not marshal domain update payload: "+err.Error(),
 		)
 		return
 	}
 
-	_, err = r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	_, err = r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_DOMAIN, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+plan.Name.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
-			"Error updating domain on CipherTrust Manager: ",
-			"Could not update domain, unexpected error: "+err.Error(),
+			"Error Updating CipherTrust Domain",
+			"Could not update domain "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
 	// Read back the domain to get all computed fields with current values
-	readResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
+	readResponse, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading CM Domain on CipherTrust Manager after update: ",
-			"Could not read CM Domain id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
+			"Error Updating CipherTrust Domain",
+			"Could not read domain "+state.ID.ValueString()+" after update: "+err.Error(),
 		)
 		return
 	}
@@ -464,14 +478,18 @@ func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.Name.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.ID.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "CipherTrust Domain not found during delete, removing from state [resource_cm_domain.go -> Delete]["+state.ID.ValueString()+"]")
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Delete]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Domain",
-			"Could not delete domain, unexpected error: "+err.Error(),
+			"Could not delete domain "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}

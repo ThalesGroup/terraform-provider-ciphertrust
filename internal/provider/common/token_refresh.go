@@ -135,7 +135,7 @@ func (t *TokenRefreshTransport) callAuthTokens(body AuthStruct) (jwt string, ref
 	if err != nil {
 		return "", "", fmt.Errorf("auth request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
