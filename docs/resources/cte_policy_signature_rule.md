@@ -25,4 +25,4 @@ description: |-
 
 ### Read-Only
 
-- `ids` (List of String) IDs of the signature rules created.
+- `id` (String) ID of the Signature Rule created in the parent policy

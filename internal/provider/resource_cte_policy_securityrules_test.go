@@ -1,16 +1,12 @@
 package provider
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEPolicySecurityRule(t *testing.T) {
-	name := "test-policy-secrule-" + uuid.New().String()[:8]
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 
@@ -18,9 +14,9 @@ func TestResourceCTEPolicySecurityRule(t *testing.T) {
 
 			// CREATE + READ
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_policy" "policy" {
-  name        = %q
+  name        = "test-policy-securityrule"
   policy_type = "Standard"
     security_rules = [{
     effect = "permit,audit"
@@ -37,7 +33,7 @@ resource "ciphertrust_cte_policy_security_rule" "secrule" {
     partial_match  = true
   }
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_policy_security_rule.secrule",
@@ -48,9 +44,9 @@ resource "ciphertrust_cte_policy_security_rule" "secrule" {
 
 			// UPDATE + READ
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_policy" "policy" {
-  name        = %q
+  name        = "test-policy-securityrule"
   policy_type = "Standard"
     security_rules = [{
     effect = "permit,audit"
@@ -67,7 +63,7 @@ resource "ciphertrust_cte_policy_security_rule" "secrule" {
     partial_match         = false
   }
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(
 						"ciphertrust_cte_policy_security_rule.secrule",

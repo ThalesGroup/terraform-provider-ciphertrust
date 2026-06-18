@@ -71,7 +71,7 @@ output "username" {
 
 ### Required
 
-- `password` (String, Sensitive)
+- `password` (String)
 - `username` (String)
 
 ### Optional

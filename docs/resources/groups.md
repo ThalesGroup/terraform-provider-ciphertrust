@@ -65,11 +65,22 @@ output "group_name" {
 
 ### Optional
 
-- `app_metadata` (String)
-- `client_metadata` (String)
+- `app_metadata` (Attributes Map) (see [below for nested schema](#nestedatt--app_metadata))
+- `client_metadata` (Attributes Map) (see [below for nested schema](#nestedatt--client_metadata))
 - `description` (String)
-- `user_metadata` (String)
+- `user_metadata` (Attributes Map) (see [below for nested schema](#nestedatt--user_metadata))
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+
+<a id="nestedatt--app_metadata"></a>
+### Nested Schema for `app_metadata`
+
+
+<a id="nestedatt--client_metadata"></a>
+### Nested Schema for `client_metadata`
+
+
+<a id="nestedatt--user_metadata"></a>
+### Nested Schema for `user_metadata`

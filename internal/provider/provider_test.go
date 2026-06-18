@@ -44,9 +44,10 @@ var providerConfig = func() string {
 
 	cfg := fmt.Sprintf(`
 provider "ciphertrust" {
-  address  = %q
-  username = %q
-  password = %q
+  address   = %q
+  username  = %q
+  password  = %q
+  bootstrap = "no"
 `, address, username, password)
 
 	if tenant != "" {

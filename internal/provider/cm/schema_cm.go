@@ -444,9 +444,7 @@ type CMUserJSON struct {
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
 	PasswordChangeRequired bool               `json:"password_change_required"`
-	// user_metadata values can be strings, objects, or other JSON types depending
-	// on the CM/CDSPaaS version; use json.RawMessage to accept any JSON value.
-	Metadata               map[string]json.RawMessage `json:"user_metadata,omitempty"`
+	Metadata               map[string]string  `json:"user_metadata,omitempty"`
 }
 
 type CMSSHKeyTFSDK struct {
@@ -914,8 +912,8 @@ type CreateJobConfigParamsTFSDKCommon struct {
 
 type CreateJobConfigParamsTFSDK struct {
 	CreateJobConfigParamsTFSDKCommon
-	CCKMKeyRotationParams     *CCKMKeyRotationParamsTFSDK     `tfsdk:"cckm_key_rotation_params"`
-	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK `tfsdk:"cckm_synchronization_params"`
+	CCKMKeyRotationParams     types.List `tfsdk:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams types.List `tfsdk:"cckm_synchronization_params"`
 }
 
 type JobConfigParamsTFSDK struct {
@@ -1221,14 +1219,3 @@ type CCKMXksRotateCredentialsParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
 
-// stringsToRawJSON converts a map[string]string into map[string]json.RawMessage
-// so string values can be assigned to CMUserJSON.Metadata (which accepts any
-// JSON value, including nested objects returned by CDSPaaS).
-func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {
-	out := make(map[string]json.RawMessage, len(m))
-	for k, v := range m {
-		b, _ := json.Marshal(v)
-		out[k] = json.RawMessage(b)
-	}
-	return out
-}

@@ -7,7 +7,6 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -139,12 +138,19 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	if len(plan.Metadata.Elements()) != 0 {
-		strMeta := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &strMeta, false)...)
+		metadata := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		payload.Metadata = stringsToRawJSON(strMeta)
+	}
+	if len(plan.Metadata.Elements()) != 0 {
+		metadata := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		payload.Metadata = metadata
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -244,20 +250,11 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		state.Nickname = types.StringValue("")
 	}
 	if user.Metadata != nil {
-		elems := make(map[string]attr.Value, len(user.Metadata))
-		for k, v := range user.Metadata {
-			// Unmarshal JSON strings back to plain strings so a config value
-			// "test" round-trips as "test", not as the JSON-quoted "\"test\"".
-			// Non-string values (objects, arrays) are stored as raw JSON so
-			// CDSPaaS fields like current_domain are preserved without error.
-			var s string
-			if json.Unmarshal(v, &s) == nil {
-				elems[k] = types.StringValue(s)
-			} else {
-				elems[k] = types.StringValue(string(v))
-			}
+		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-		state.Metadata = types.MapValueMust(types.StringType, elems)
 	} else {
 		state.Metadata = types.MapNull(types.StringType)
 	}
@@ -321,12 +318,13 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	// 	}
 	// }
 	if !plan.Metadata.IsNull() && !plan.Metadata.IsUnknown() {
-		strMeta := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &strMeta, false)...)
+		metadata := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		payload.Metadata = stringsToRawJSON(strMeta)
+		// Convert map[string]string to map[string]interface{}
+		payload.Metadata = metadata
 	}
 
 	payloadJSON, err := json.Marshal(payload)

@@ -312,14 +312,22 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 					default:
 						resourceQueryStr = fmt.Sprintf("%v", query)
 					}
-					obj, _ := types.ObjectValue(BackupFilterElemType.AttrTypes, map[string]attr.Value{
+					obj, objDiags := types.ObjectValue(BackupFilterElemType.AttrTypes, map[string]attr.Value{
 						"resource_type":  types.StringValue(filter.ResourceType),
 						"resource_query": types.StringValue(resourceQueryStr),
 					})
+					if objDiags.HasError() {
+						diags.Append(objDiags...)
+						continue
+					}
 					filterObjs = append(filterObjs, obj)
 				}
 			}
-			list, _ := types.ListValue(BackupFilterElemType, filterObjs)
+			list, listDiags := types.ListValue(BackupFilterElemType, filterObjs)
+			if listDiags.HasError() {
+				diags.Append(listDiags...)
+				return types.ListValueMust(BackupFilterElemType, []attr.Value{})
+			}
 			return list
 		}(),
 	}

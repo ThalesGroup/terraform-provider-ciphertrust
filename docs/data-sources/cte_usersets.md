@@ -32,7 +32,6 @@ Read-Only:
 - `created_at` (String)
 - `description` (String)
 - `id` (String)
-- `labels` (Map of String)
 - `name` (String)
 - `updated_at` (String)
 - `uri` (String)

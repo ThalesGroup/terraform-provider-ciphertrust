@@ -1,23 +1,19 @@
 package provider
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEUserSet(t *testing.T) {
-	name := "testUserSet1-" + uuid.New().String()[:8]
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_user_set" "user_set" {
-  name = %q
+  name = "testUserSet1"
   users = [
     {
       uname="user1"
@@ -26,16 +22,23 @@ resource "ciphertrust_cte_user_set" "user_set" {
     }
   ]
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_user_set.user_set", "id"),
 				),
 			},
+			// ImportState testing
+			//{
+			//	ResourceName:      "ciphertrust_cm_reg_token.reg_token",
+			//	ImportState:       true,
+			//	ImportStateVerify: true,
+			//	ImportStateVerifyIgnore: []string{"last_updated"},
+			//},
 			// Update and Read testing
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_user_set" "user_set" {
-  name = %q
+  name = "testUserSet1"
   description = "Updated via TF"
   users = [
     {
@@ -50,7 +53,7 @@ resource "ciphertrust_cte_user_set" "user_set" {
     }
   ]
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_user_set.user_set", "id"),
 				),

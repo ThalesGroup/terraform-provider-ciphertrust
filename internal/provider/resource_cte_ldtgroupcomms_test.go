@@ -1,28 +1,24 @@
 package provider
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTELDTGroupComm(t *testing.T) {
-	name := "testLDTGroup1-" + uuid.New().String()[:8]
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 
 			// Step 1: Create
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_ldtgroupcomms" "ldt" {
-  name        = %q
+  name        = "testLDTGroup1"
   description = "Initial LDT group comm service"
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_ldtgroupcomms.ldt", "id"),
 				),
@@ -30,12 +26,12 @@ resource "ciphertrust_cte_ldtgroupcomms" "ldt" {
 
 			// Step 2: Update
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_ldtgroupcomms" "ldt" {
-  name        = %q
+  name        = "testLDTGroup1"
   description = "Updated LDT group comm service"
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_ldtgroupcomms.ldt", "id"),
 				),

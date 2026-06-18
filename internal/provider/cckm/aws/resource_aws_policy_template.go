@@ -108,14 +108,10 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 				ElementType: types.StringType,
 				Description: "(Updatable) Key users - roles.",
 			},
-			"kms_id": schema.StringAttribute{
+			"kms": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
-			},
-			"kms_name": schema.StringAttribute{
-				Computed:    true,
-				Description: "Name of the KMS to which the template belongs.",
+				Description: "Name or ID of the KMS to which the template belongs, 'account_id', 'external_accounts' or 'kms' must be provided.",
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -158,7 +154,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	}
 	payload := PolicyTemplatePayloadJSON{
 		AccountID:           plan.AccountID.ValueString(),
-		KmsID:               plan.KmsID.ValueString(),
+		Kms:                 plan.Kms.ValueString(),
 		Name:                plan.Name.ValueString(),
 		KeyPolicyParamsJSON: *keyPolicyParams,
 	}
@@ -368,10 +364,10 @@ func (r *resourceAWSPolicyTemplate) ModifyPlan(ctx context.Context, req resource
 	if !plan.AccountID.IsNull() && !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
 		changed = append(changed, "account_id")
 	}
-	// Guard against false positives when kms_id is not set in config (null in plan)
+	// Guard against false positives when kms is not set in config (null in plan)
 	// but has a value in state (set by the API after create).
-	if !plan.KmsID.IsNull() && !plan.KmsID.IsUnknown() && plan.KmsID != state.KmsID {
-		changed = append(changed, "kms_id")
+	if !plan.Kms.IsNull() && !plan.Kms.IsUnknown() && plan.Kms != state.Kms {
+		changed = append(changed, "kms")
 	}
 	if plan.Name != state.Name {
 		changed = append(changed, "name")
@@ -513,8 +509,7 @@ func (r *resourceAWSPolicyTemplate) getUpdatePolicyTemplateParams(ctx context.Co
 // setPolicyTemplateState populates Terraform state for an AWS key policy template from an API response JSON string.
 func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, response string, state *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
-	state.KmsID = types.StringValue(gjson.Get(response, "kms").String())
-	state.KmsName = types.StringValue(gjson.Get(response, "kms_name").String())
+	state.Kms = types.StringValue(gjson.Get(response, "kms").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	externalAccounts := gjson.Get(response, "external_accounts").Array()
 	if len(externalAccounts) != 0 {

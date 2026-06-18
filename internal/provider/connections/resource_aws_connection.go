@@ -290,9 +290,6 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
-	// cloud_name is Optional+Computed — always populate from the POST response so
-	// Terraform does not see an unknown value after apply (required for Computed fields).
-	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -359,16 +356,8 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	// aws_region, aws_sts_regional_endpoints, is_role_anywhere, iam_role_anywhere are
 	// CREATE-body-only fields per the API spec: not returned by GET. Plan/state values
 	// are preserved as-is; out-of-band drift for these fields cannot be detected via the API.
-	// Only overwrite labels/meta when the API returns a non-empty map. Writing an
-	// empty map ({}) when config has null creates meta={} → null phantom drift that
-	// triggers a planned update, which then cascades to mark all Computed fields
-	// (including id dependencies) as unknown — breaking downstream data sources.
-	if apiLabels := gjson.Get(response, "labels"); apiLabels.IsObject() && len(apiLabels.Map()) > 0 {
-		state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
-	}
-	if apiMeta := gjson.Get(response, "meta"); apiMeta.IsObject() && len(apiMeta.Map()) > 0 {
-		state.Meta = common.ParseMap(response, &resp.Diagnostics, "meta")
-	}
+	state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
+	state.Meta = common.ParseMap(response, &resp.Diagnostics, "meta")
 	// products: preserve null for unconfigured; empty slice for explicitly-configured empty list.
 	if gjson.Get(response, "products").IsArray() {
 		var products []types.String

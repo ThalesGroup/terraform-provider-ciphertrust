@@ -39,7 +39,7 @@ resource "ciphertrust_aws_kms" "kms" {
 
 ### Required
 
-- `connection_id` (String) Name or ID of the AWS connection.
+- `aws_connection` (String) Name or ID of the AWS connection.
 
 ### Optional
 

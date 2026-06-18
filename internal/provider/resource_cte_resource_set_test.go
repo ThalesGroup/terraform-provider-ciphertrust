@@ -1,23 +1,19 @@
 package provider
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEResourceSet(t *testing.T) {
-	name := "testResourceSet-" + uuid.New().String()[:8]
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_resource_set" "resource_set" {
-  name = %q
+  name = "testResourceSet"
   resources = [
     {
       directory="/tmp"
@@ -28,16 +24,23 @@ resource "ciphertrust_cte_resource_set" "resource_set" {
   ]
   type="Directory"
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_resource_set.resource_set", "id"),
 				),
 			},
+			// ImportState testing
+			//{
+			//	ResourceName:      "ciphertrust_cm_reg_token.reg_token",
+			//	ImportState:       true,
+			//	ImportStateVerify: true,
+			//	ImportStateVerifyIgnore: []string{"last_updated"},
+			//},
 			// Update and Read testing
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_cte_resource_set" "resource_set" {
-  name = %q
+  name = "testResourceSet"
   description = "Updated via TF"
   resources = [
     {
@@ -54,7 +57,7 @@ resource "ciphertrust_cte_resource_set" "resource_set" {
     }
   ]
 }
-`, name),
+`,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_resource_set.resource_set", "id"),
 				),

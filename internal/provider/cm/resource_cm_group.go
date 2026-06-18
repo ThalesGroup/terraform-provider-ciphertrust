@@ -320,15 +320,13 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 // fails it returns s unchanged — keeps JSON round-trips safe when the server
 // returns pretty-printed JSON and the config stores compact JSON.
 func compactJSONString(s string) string {
-	var buf strings.Builder
-	var any interface{}
-	if err := json.Unmarshal([]byte(s), &any); err != nil {
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
 		return s
 	}
-	b, err := json.Marshal(any)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return s
 	}
-	buf.Write(b)
-	return buf.String()
+	return string(b)
 }

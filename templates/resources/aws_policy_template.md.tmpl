@@ -1,0 +1,192 @@
+---
+page_title: "{{.Type}} {{.Name}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}} "{{.Name}}" ({{.ProviderName}})
+
+{{ .Description | trimspace }}
+{{- if .HasExample }}
+
+## Example Usage
+
+{{ tffile .ExampleFile }}
+{{- end }}
+{{ .SchemaMarkdown | trimspace }}
+
+### Updates
+
+Attributes not marked as `(Updatable)` cannot be modified after resource creation. To change these attributes, the resource must be recreated.
+
+## Import
+
+An AWS key policy template can be imported using its CipherTrust Manager
+resource ID. The resource ID is returned in the API response body as the `id`
+field and is also visible in the CCKM interface.
+
+### Important: Behaviour after import
+
+After import, Terraform will attempt to make the policy template match your
+resource configuration.
+
+If updateable attributes are missing or incorrect they may be updated or
+removed during `terraform apply`.
+
+The following attributes require particular attention after import:
+
+**`name`** - uses `RequiresReplace`. If the value in your resource
+configuration does not exactly match the imported template's name, Terraform
+will destroy the existing template and create a new one. Always inspect the
+imported state with `terraform state show ciphertrust_aws_policy_template.example`
+and confirm the name is correct before running `terraform apply`.
+
+**`kms`** - the API stores and returns the KMS name. If your resource
+configuration references the KMS by its UUID (for example
+`kms = ciphertrust_aws_kms.my_kms.id`), Terraform will see a permanent diff
+because the stored value is a name, not a UUID. Use the KMS name instead (for
+example `kms = ciphertrust_aws_kms.my_kms.name`).
+
+**`policy` vs. set fields** - `policy` is mutually exclusive with
+`external_accounts`, `key_admins`, `key_admins_roles`, `key_users`, and
+`key_users_roles`. After import you must choose one approach and configure
+only the corresponding attributes.
+
+**`external_accounts`, `key_admins`, `key_admins_roles`, `key_users`,
+`key_users_roles`** - these set attributes are updatable. Omitting any of
+them from your resource configuration when they contain values in state will
+clear them on the next `terraform apply`. Configure all relevant set fields
+to their current values, or use `ignore_changes`, before running
+`terraform apply`.
+
+**`auto_push`** - set to `false` after import. When set to `true` on apply,
+any policy changes are automatically pushed to all keys associated with the
+template. Leave it as `false` until you are ready to propagate changes.
+
+**Deletion note** - the template cannot be deleted while any keys are
+associated with it, including keys that are scheduled for deletion. All
+associated keys must be removed or fully deleted before Terraform can destroy
+the template.
+
+To avoid unintended changes, do one of the following:
+
+**Option 1 - Configure the resource block to match the template's current
+state** before running `terraform apply`. Set `name`, `kms`, and all relevant
+policy attributes (`key_admins`, `key_users`, etc. or `policy`) to their
+current values so that Terraform detects no diff.
+
+**Option 2 - Use `lifecycle { ignore_changes }` to suppress diffs** on
+attributes you are not yet ready for Terraform to manage:
+
+```terraform
+lifecycle {
+  ignore_changes = [
+    external_accounts,
+    key_admins,
+    key_admins_roles,
+    key_users,
+    key_users_roles,
+    policy,
+  ]
+}
+```
+
+The recommended approach (temporary use of `ignore_changes`):
+
+1. Add the `lifecycle { ignore_changes }` block to the resource
+2. Run `terraform apply` (or use `terraform import` for Terraform versions earlier than v1.5.0)
+3. Run `terraform state show ciphertrust_aws_policy_template.example` to inspect the imported values
+4. Update your resource configuration to match the imported state, paying particular attention to `name`, `kms`, and the policy attributes
+5. Remove `ignore_changes` so Terraform manages the attributes going forward
+
+You can import a resource into Terraform in two ways.
+
+### 1. Import using an import block and terraform apply
+
+Only available for Terraform v1.5.0 and later.
+
+When Terraform processes the `import` block it:
+
+1. Reads the template from the API using the provided ID and stores the current values as state
+2. Compares that state to your resource block configuration
+3. Applies any differences as updates to the template (immediately during the same apply)
+
+All three steps happen within a single `terraform apply` run.
+
+**Step 1 - Import with `ignore_changes`** (safe starting point):
+
+```terraform
+import {
+  to = ciphertrust_aws_policy_template.example
+  id = "abc12345-1234-1234-1234-123456789012"
+}
+
+resource "ciphertrust_aws_policy_template" "example" {
+  name = "<template-name>"
+  lifecycle {
+    ignore_changes = [
+      external_accounts,
+      key_admins,
+      key_admins_roles,
+      key_users,
+      key_users_roles,
+      policy,
+    ]
+  }
+}
+```
+
+**Step 2 - Final config after inspecting state** (remove `ignore_changes` once
+values are correct). Choose one of the two mutually exclusive policy
+configuration approaches:
+
+**Using structured policy fields:**
+
+```terraform
+resource "ciphertrust_aws_policy_template" "example" {
+  name              = "<template-name>"
+  kms               = ciphertrust_aws_kms.my_kms.name   # use name, not id
+  key_admins        = ["arn:aws:iam::<account-id>:user/<admin-user>"]
+  key_admins_roles  = ["arn:aws:iam::<account-id>:role/<admin-role>"]
+  key_users         = ["arn:aws:iam::<account-id>:user/<key-user>"]
+  key_users_roles   = ["arn:aws:iam::<account-id>:role/<key-role>"]
+  external_accounts = ["<external-account-id>"]
+  auto_push         = false
+}
+```
+
+**Using a raw policy JSON string:**
+
+```terraform
+resource "ciphertrust_aws_policy_template" "example" {
+  name      = "<template-name>"
+  kms       = ciphertrust_aws_kms.my_kms.name   # use name, not id
+  auto_push = false
+  policy    = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [
+      # set values from terraform state show output
+    ]
+  })
+}
+```
+
+Include only the attributes that apply to your template - for example, omit
+`external_accounts` if the template has none, or omit `kms` if it is not
+scoped to a specific KMS.
+
+### 2. Import using the terraform import command
+
+When `terraform import` is run it:
+
+1. Reads the template from the API using the provided ID and stores the current values as state
+2. Writes the imported state to the state file - no plan or apply is performed
+
+Before running `terraform apply`, apply Option 1 or Option 2 above to avoid
+unintended changes. Run `terraform plan` first to review exactly what would be
+applied.
+
+```shell
+terraform import ciphertrust_aws_policy_template.example abc12345-1234-1234-1234-123456789012
+```

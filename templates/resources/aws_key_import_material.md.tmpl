@@ -1,0 +1,36 @@
+---
+page_title: "{{.Type}} {{.Name}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}} "{{.Name}}" ({{.ProviderName}})
+
+{{ .Description | trimspace }}
+{{- if .HasExample }}
+
+## Example Usage
+
+{{ tffile .ExampleFile }}
+{{- end }}
+{{ .SchemaMarkdown | trimspace }}
+
+### Updates
+
+Attributes not marked as `(Updatable)` cannot be modified after resource creation. To change these attributes, the resource must be recreated.
+
+## Import
+
+This resource does not support import.
+
+`ciphertrust_aws_key_import_material` represents a one-time key material import
+operation applied to an existing EXTERNAL AWS key. The operation's input
+parameters (source key identifier, import type, key material description) are
+write-only and are not returned by the API. There is no way to reconstruct them
+from the key's current state, so importing this resource would leave all import
+parameters absent from state and cause permanent plan diffs.
+
+To bring an existing key and its imported material under Terraform management,
+use the `import_key_material` block within the `ciphertrust_aws_key` resource
+and manage the key and its material together as a single resource.

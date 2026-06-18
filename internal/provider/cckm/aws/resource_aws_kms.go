@@ -10,14 +10,12 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -107,14 +105,9 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:    true,
 				Description: "(Updatable) External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
 			},
-			"connection_id": schema.StringAttribute{
+			"aws_connection": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager AWS connection ID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
-			},
-			"connection_name": schema.StringAttribute{
-				Computed:    true,
-				Description: "The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.",
+				Description: "(Updatable) Name or ID of the connection in which the account is managed.",
 			},
 			"auto_added": schema.BoolAttribute{
 				Computed:    true,
@@ -174,7 +167,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	payload.AccountID = common.TrimString(plan.AccountID.String())
-	payload.Connection = common.TrimString(plan.ConnectionID.String())
+	payload.Connection = common.TrimString(plan.Connection.String())
 	payload.Name = common.TrimString(plan.Name.String())
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
 	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
@@ -213,9 +206,6 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	r.resolveConnectionName(ctx, id, response, &plan)
-	// Preserve the user-supplied connection_id (name or UUID); connection_name holds the API value.
-	plan.ConnectionID = types.StringValue(common.TrimString(plan.ConnectionID.String()))
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -230,8 +220,8 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	kmsID := state.ID.ValueString()
-	// Preserve the user-supplied connection_id before setKmsState populates connection_name.
-	priorConnID := state.ConnectionID.ValueString()
+	// Save the prior connection value before setKmsState overwrites it.
+	priorConn := state.Connection.ValueString()
 	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -253,11 +243,19 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.resolveConnectionName(ctx, id, response, &state)
-	// connection_id is left untouched so it always reflects the user-supplied value;
-	// any out-of-band connection change is visible via connection_name drifting.
-	if priorConnID != "" {
-		state.ConnectionID = types.StringValue(priorConnID)
+	// Preserve the user-supplied aws_connection form (name or UUID) when it resolves
+	// to the same connection that the API reports, so configs using either form do
+	// not produce spurious plan drift after every refresh.
+	// Only overwrite when the connection has genuinely changed out-of-band.
+	apiConnName := gjson.Get(response, "connection").String()
+	if priorConn != "" && priorConn != apiConnName {
+		connResp, connErr := r.client.GetById(ctx, id, priorConn, common.URL_AWS_CONNECTION)
+		if connErr == nil && gjson.Get(connResp, "name").String() == apiConnName {
+			// Same connection, different representation - restore the prior value so
+			// that users who specify a UUID do not see spurious drift.
+			state.Connection = types.StringValue(priorConn)
+		}
+		// else: genuine out-of-band change - keep the API name that setKmsState set.
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -307,8 +305,8 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
 		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
 	}
-	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
-		payload.Connection = common.TrimString(plan.ConnectionID.String())
+	if plan.Connection.ValueString() != "" && plan.Connection.ValueString() != types.StringNull().ValueString() {
+		payload.Connection = common.TrimString(plan.Connection.String())
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -343,10 +341,6 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	r.resolveConnectionName(ctx, id, response, &plan)
-	// connection_id is left untouched so it always reflects the user-supplied value;
-	// any out-of-band connection change is visible via connection_name drifting.
-	plan.ConnectionID = types.StringValue(common.TrimString(plan.ConnectionID.String()))
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -405,11 +399,7 @@ func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.Modify
 
 	var changed []string
 
-	// Skip the immutable check when plan.AccountID is Unknown — this happens when the
-	// data source that supplies account_id hasn't been evaluated yet (e.g. because a
-	// dependency is in a pending-update state). A genuine user-supplied change will
-	// always be a known value and will still be caught.
-	if !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
+	if plan.AccountID != state.AccountID {
 		changed = append(changed, "account_id")
 	}
 	if plan.Name != state.Name {
@@ -436,28 +426,7 @@ func (r *resourceCCKMAWSKMS) ImportState(ctx context.Context, req resource.Impor
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// resolveConnectionName looks up the human-readable name of the connection whose ID is stored
-// in the API response "connection" field and writes it into state.ConnectionName.
-// If the lookup fails (e.g. permissions, network), ConnectionName is left unchanged.
-func (r *resourceCCKMAWSKMS) resolveConnectionName(ctx context.Context, reqID string, apiResponse string, state *KMSModelTFSDK) {
-	connUUID := gjson.Get(apiResponse, "connection").String()
-	if connUUID == "" {
-		return
-	}
-	connResp, err := r.client.GetById(ctx, reqID, connUUID, common.URL_AWS_CONNECTION)
-	if err != nil {
-		return
-	}
-	name := gjson.Get(connResp, "name").String()
-	if name != "" {
-		state.ConnectionName = types.StringValue(name)
-	}
-}
-
 // setKmsState populates the Terraform state for an AWS KMS from an API response JSON string.
-// connection_id is NOT set here - it is preserved as the user-supplied value by the caller.
-// connection_name is initially set to the raw connection UUID from the API; callers should
-// follow up with resolveConnectionName to replace it with the human-readable name.
 func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
@@ -465,7 +434,7 @@ func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, response string, s
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.Arn = types.StringValue(gjson.Get(response, "arn").String())
 	state.AutoAdded = types.BoolValue(gjson.Get(response, "auto_added").Bool())
-	state.ConnectionName = types.StringValue(gjson.Get(response, "connection").String())
+	state.Connection = types.StringValue(gjson.Get(response, "connection").String())
 	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
