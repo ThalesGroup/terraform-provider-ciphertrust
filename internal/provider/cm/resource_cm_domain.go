@@ -248,11 +248,6 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			tflog.Debug(ctx, "[resource_cm_domain.go -> Read] domain not found (404), leaving state unchanged["+id+"]")
-			resp.Diagnostics.AddWarning(
-				"CipherTrust Domain Not Found",
-				"Domain "+state.ID.ValueString()+" was not found in CM and has been kept in Terraform state. "+
-					"If it was intentionally deleted, run `terraform state rm` before the next apply.",
-			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
@@ -309,7 +304,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		}
 		state.Admins = admins
 	} else {
-		state.Admins = []types.String{}
+		state.Admins = nil
 	}
 
 	// Read meta_data map
