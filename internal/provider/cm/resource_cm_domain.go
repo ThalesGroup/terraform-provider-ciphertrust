@@ -295,10 +295,10 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 
-	// Read admins list — overwrite prior state from API response.
-	// When the field is absent (not returned by CM), set nil so a Required field
-	// removed server-side is reflected as null in state rather than silently
-	// preserving a stale prior value.
+	// Read admins list from API response. The CM API does not return the admins
+	// field on GET /domains/{id}, so when it is absent we preserve the prior
+	// state to avoid perpetual drift for a Required field the user always
+	// supplies. Only overwrite if the API actually returns a non-empty array.
 	adminsResult := gjson.Get(response, "admins")
 	if adminsResult.Exists() && adminsResult.IsArray() {
 		arr := adminsResult.Array()
@@ -309,10 +309,9 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 			}
 			state.Admins = admins
 		}
-		// empty array — keep prior state.Admins
-	} else {
-		state.Admins = nil
+		// empty array — preserve prior state.Admins
 	}
+	// absent — preserve prior state.Admins (API does not return this field)
 
 	// Read meta_data map. An empty object returned by CM (meta: {}) means all metadata
 	// keys were removed server-side; reflect that as null in state, consistent with the
@@ -377,11 +376,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		hasChanges = true
 	}
 
-	// Check allow_user_management
-	if !plan.AllowUserManagement.Equal(state.AllowUserManagement) {
-		hasChanges = true
-	}
-
 	// Check metadata
 	if !plan.Meta.Equal(state.Meta) {
 		hasChanges = true
@@ -414,15 +408,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if plan.HSMConnectionId.ValueString() != "" && plan.HSMConnectionId.ValueString() != types.StringNull().ValueString() {
 		payload.HSMConnectionId = plan.HSMConnectionId.ValueString()
 	}
-	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
-		val := plan.AllowUserManagement.ValueBool()
-		payload.AllowUserManagement = &val
-	}
-	var adminsPayload []string
-	for _, str := range plan.Admins {
-		adminsPayload = append(adminsPayload, str.ValueString())
-	}
-	payload.Admins = adminsPayload
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metadataPayload[k] = v.(types.String).ValueString()
@@ -510,8 +495,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 			} else {
 				plan.Meta = mapValue
 			}
+		} else {
+			plan.Meta = types.MapNull(types.StringType)
 		}
-		// empty object — keep plan.Meta from user config (null if not configured)
 	} else {
 		plan.Meta = types.MapNull(types.StringType)
 	}
