@@ -15,6 +15,11 @@ import (
 // without needing to reach apply.
 type NameImmutableModifier struct{}
 
+// IsRoleAnywhereImmutableModifier prevents the 'is_role_anywhere' attribute from
+// being changed after a connection resource is created. The CM API does not support
+// updating this field; attempting to do so returns a 422 error.
+type IsRoleAnywhereImmutableModifier struct{}
+
 func (m NameImmutableModifier) Description(_ context.Context) string {
 	return "Connection name is immutable after creation."
 }
@@ -41,6 +46,50 @@ func (m NameImmutableModifier) PlanModifyString(_ context.Context, req planmodif
 			req.StateValue.ValueString(),
 		),
 	)
+}
+
+func (m IsRoleAnywhereImmutableModifier) Description(_ context.Context) string {
+	return "is_role_anywhere is immutable after creation."
+}
+
+func (m IsRoleAnywhereImmutableModifier) MarkdownDescription(_ context.Context) string {
+	return "is_role_anywhere is immutable after creation."
+}
+
+// PlanModifyBool errors when the planned is_role_anywhere differs from the state value,
+// i.e. when the resource already exists and the user is trying to change it.
+func (m IsRoleAnywhereImmutableModifier) PlanModifyBool(_ context.Context, req planmodifier.BoolRequest, resp *planmodifier.BoolResponse) {
+	// State is null on initial create — allow.
+	// Values are equal — no change, allow.
+	if req.StateValue.IsNull() || req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"is_role_anywhere cannot be changed",
+		fmt.Sprintf(
+			"The 'is_role_anywhere' field is immutable after creation. "+
+				"Current value on CipherTrust Manager: %v. "+
+				"To change this field, remove this resource from Terraform state "+
+				"(terraform state rm) and recreate it with the desired value.",
+			req.StateValue.ValueBool(),
+		),
+	)
+}
+
+// derefString returns a types.String with the dereferenced value, or types.StringValue("") if nil.
+func derefString(s *string) types.String {
+	if s == nil {
+		return types.StringValue("")
+	}
+	return types.StringValue(*s)
+}
+
+// derefBool returns a types.Bool with the dereferenced value, or types.BoolValue(false) if nil.
+func derefBool(b *bool) types.Bool {
+	if b == nil {
+		return types.BoolValue(false)
+	}
+	return types.BoolValue(*b)
 }
 
 type IAMRoleAnywhereTFSDK struct {
@@ -85,20 +134,20 @@ type AWSConnectionModelJSON struct {
 	Application             types.String           `tfsdk:"application"`
 	DevAccount              types.String           `tfsdk:"dev_account"`
 	ID                      string                 `json:"id"`
-	Name                    string                 `json:"name"`
-	Description             string                 `json:"description"`
-	AccessKeyID             string                 `json:"access_key_id"`
-	AssumeRoleARN           string                 `json:"assume_role_arn"`
-	AssumeRoleExternalID    string                 `json:"assume_role_external_id"`
-	AWSRegion               string                 `json:"aws_region"`
-	AWSSTSRegionalEndpoints string                 `json:"aws_sts_regional_endpoints"`
-	CloudName               string                 `json:"cloud_name"`
-	IsRoleAnywhere          bool                   `json:"is_role_anywhere"`
-	IAMRoleAnywhere         *IAMRoleAnywhereJSON   `json:"iam_role_anywhere"`
+	Name                    *string                `json:"name,omitempty"`
+	Description             *string                `json:"description,omitempty"`
+	AccessKeyID             *string                `json:"access_key_id,omitempty"`
+	AssumeRoleARN           *string                `json:"assume_role_arn,omitempty"`
+	AssumeRoleExternalID    *string                `json:"assume_role_external_id,omitempty"`
+	AWSRegion               *string                `json:"aws_region,omitempty"`
+	AWSSTSRegionalEndpoints *string                `json:"aws_sts_regional_endpoints,omitempty"`
+	CloudName               *string                `json:"cloud_name,omitempty"`
+	IsRoleAnywhere          *bool                  `json:"is_role_anywhere,omitempty"`
+	IAMRoleAnywhere         *IAMRoleAnywhereJSON   `json:"iam_role_anywhere,omitempty"`
 	Labels                  map[string]interface{} `json:"labels"`
 	Meta                    interface{}            `json:"meta"`
 	Products                []string               `json:"products"`
-	SecretAccessKey         string                 `json:"secret_access_key"`
+	SecretAccessKey         *string                `json:"secret_access_key,omitempty"`
 }
 
 type CMScpConnectionTFSDK struct {

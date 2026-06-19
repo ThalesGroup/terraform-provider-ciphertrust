@@ -59,6 +59,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Unique connection name",
+				PlanModifiers: []planmodifier.String{
+					NameImmutableModifier{},
+				},
 			},
 			"access_key_id": schema.StringAttribute{
 				Optional:    true,
@@ -126,6 +129,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			"is_role_anywhere": schema.BoolAttribute{
 				Optional:    true,
 				Description: "Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.",
+				PlanModifiers: []planmodifier.Bool{
+					IsRoleAnywhereImmutableModifier{},
+				},
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -175,28 +181,36 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	payload.Name = common.TrimString(plan.Name.String())
+	v := common.TrimString(plan.Name.String())
+	payload.Name = &v
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		vDesc := common.TrimString(plan.Description.String())
+		payload.Description = &vDesc
 	}
 	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+		vAKID := common.TrimString(plan.AccessKeyID.String())
+		payload.AccessKeyID = &vAKID
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		vARN := common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = &vARN
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		vExtID := common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = &vExtID
 	}
 	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+		vRegion := common.TrimString(plan.AWSRegion.String())
+		payload.AWSRegion = &vRegion
 	}
 	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+		vSTS := common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+		payload.AWSSTSRegionalEndpoints = &vSTS
 	}
 	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+		vCloud := common.TrimString(plan.CloudName.String())
+		payload.CloudName = &vCloud
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -219,12 +233,14 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
 
-	if plan.IsRoleAnywhere.ValueBool() != types.BoolNull().ValueBool() {
-		payload.IsRoleAnywhere = plan.IsRoleAnywhere.ValueBool()
+	if !plan.IsRoleAnywhere.IsNull() && !plan.IsRoleAnywhere.IsUnknown() {
+		vBool := plan.IsRoleAnywhere.ValueBool()
+		payload.IsRoleAnywhere = &vBool
 	}
 
 	if plan.SecretAccessKey.ValueString() != "" && plan.SecretAccessKey.ValueString() != types.StringNull().ValueString() {
-		payload.SecretAccessKey = common.TrimString(plan.SecretAccessKey.String())
+		vSAK := common.TrimString(plan.SecretAccessKey.String())
+		payload.SecretAccessKey = &vSAK
 	}
 
 	// Add labels to payload
@@ -248,11 +264,15 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	payload.Products = productsArr
 
 	// Backwards compatability
-	if payload.SecretAccessKey == "" {
-		payload.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if payload.SecretAccessKey == nil {
+		if vEnv := os.Getenv("AWS_SECRET_ACCESS_KEY"); vEnv != "" {
+			payload.SecretAccessKey = &vEnv
+		}
 	}
-	if payload.AccessKeyID == "" {
-		payload.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
+	if payload.AccessKeyID == nil {
+		if vEnv := os.Getenv("AWS_ACCESS_KEY_ID"); vEnv != "" {
+			payload.AccessKeyID = &vEnv
+		}
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -348,25 +368,32 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		vDesc := common.TrimString(plan.Description.String())
+		payload.Description = &vDesc
 	}
 	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+		vAKID := common.TrimString(plan.AccessKeyID.String())
+		payload.AccessKeyID = &vAKID
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		vARN := common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = &vARN
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		vExtID := common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = &vExtID
 	}
 	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+		vRegion := common.TrimString(plan.AWSRegion.String())
+		payload.AWSRegion = &vRegion
 	}
 	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+		vSTS := common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+		payload.AWSSTSRegionalEndpoints = &vSTS
 	}
 	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+		vCloud := common.TrimString(plan.CloudName.String())
+		payload.CloudName = &vCloud
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -390,7 +417,8 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	if plan.SecretAccessKey.ValueString() != "" && plan.SecretAccessKey.ValueString() != types.StringNull().ValueString() {
-		payload.SecretAccessKey = common.TrimString(plan.SecretAccessKey.String())
+		vSAK := common.TrimString(plan.SecretAccessKey.String())
+		payload.SecretAccessKey = &vSAK
 	}
 
 	// Add labels to payload
@@ -432,7 +460,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		)
 		return
 	}
-	plan.ID = types.StringValue(response)
+	plan.UpdatedAt = types.StringValue(response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
