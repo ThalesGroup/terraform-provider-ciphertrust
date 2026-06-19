@@ -98,7 +98,7 @@ resource "ciphertrust_log_forwarder" "test" {
 						},
 					}
 					payloadJSON, _ := json.Marshal(payload)
-					_, _ = client.UpdateDataV2(context.Background(), uuid.NewString(), common.URL_CM_LOG_FORWARDS+"/"+capturedID, payloadJSON)
+					_, _ = client.UpdateDataV2(context.Background(), capturedID, common.URL_CM_LOG_FORWARDS, payloadJSON)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -169,7 +169,7 @@ resource "ciphertrust_log_forwarder" "test" {
 						},
 					}
 					payloadJSON, _ := json.Marshal(payload)
-					_, _ = client.UpdateDataV2(context.Background(), uuid.NewString(), common.URL_CM_LOG_FORWARDS+"/"+capturedID, payloadJSON)
+					_, _ = client.UpdateDataV2(context.Background(), capturedID, common.URL_CM_LOG_FORWARDS, payloadJSON)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -237,7 +237,7 @@ resource "ciphertrust_log_forwarder" "test" {
 						},
 					}
 					payloadJSON, _ := json.Marshal(payload)
-					_, _ = client.UpdateDataV2(context.Background(), uuid.NewString(), common.URL_CM_LOG_FORWARDS+"/"+capturedID, payloadJSON)
+					_, _ = client.UpdateDataV2(context.Background(), capturedID, common.URL_CM_LOG_FORWARDS, payloadJSON)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
