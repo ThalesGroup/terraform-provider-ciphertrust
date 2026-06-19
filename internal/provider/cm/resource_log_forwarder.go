@@ -310,7 +310,106 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	state.ConnectionID = types.StringValue(gjson.Get(response, "connection_id").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+
+	if gjson.Get(response, "elasticsearch_params").Exists() {
+		var esBlock CMLogForwardersESTFSDK
+		if gjson.Get(response, "elasticsearch_params.indices").Exists() {
+			var esIndices CMLogForwardersESOrLokiParamsTFSDK
+			if r := gjson.Get(response, "elasticsearch_params.indices.activity_kmip"); r.Exists() {
+				esIndices.ActivityKMIP = types.StringValue(r.String())
+			} else {
+				esIndices.ActivityKMIP = types.StringNull()
+			}
+			if r := gjson.Get(response, "elasticsearch_params.indices.activity_nae"); r.Exists() {
+				esIndices.ActivityNAE = types.StringValue(r.String())
+			} else {
+				esIndices.ActivityNAE = types.StringNull()
+			}
+			if r := gjson.Get(response, "elasticsearch_params.indices.client_audit_records"); r.Exists() {
+				esIndices.ClientAuditRecords = types.StringValue(r.String())
+			} else {
+				esIndices.ClientAuditRecords = types.StringNull()
+			}
+			if r := gjson.Get(response, "elasticsearch_params.indices.server_audit_records"); r.Exists() {
+				esIndices.ServerAuditRecords = types.StringValue(r.String())
+			} else {
+				esIndices.ServerAuditRecords = types.StringNull()
+			}
+			esBlock.Indices = &esIndices
+		} else {
+			esBlock.Indices = nil
+		}
+		state.ElasticsearchParams = &esBlock
+	} else {
+		state.ElasticsearchParams = nil
+	}
+
+	if gjson.Get(response, "loki_params").Exists() {
+		var lokiBlock CMLogForwardersLokiTFSDK
+		if gjson.Get(response, "loki_params.labels").Exists() {
+			var lokiLabels CMLogForwardersESOrLokiParamsTFSDK
+			if r := gjson.Get(response, "loki_params.labels.activity_kmip"); r.Exists() {
+				lokiLabels.ActivityKMIP = types.StringValue(r.String())
+			} else {
+				lokiLabels.ActivityKMIP = types.StringNull()
+			}
+			if r := gjson.Get(response, "loki_params.labels.activity_nae"); r.Exists() {
+				lokiLabels.ActivityNAE = types.StringValue(r.String())
+			} else {
+				lokiLabels.ActivityNAE = types.StringNull()
+			}
+			if r := gjson.Get(response, "loki_params.labels.client_audit_records"); r.Exists() {
+				lokiLabels.ClientAuditRecords = types.StringValue(r.String())
+			} else {
+				lokiLabels.ClientAuditRecords = types.StringNull()
+			}
+			if r := gjson.Get(response, "loki_params.labels.server_audit_records"); r.Exists() {
+				lokiLabels.ServerAuditRecords = types.StringValue(r.String())
+			} else {
+				lokiLabels.ServerAuditRecords = types.StringNull()
+			}
+			lokiBlock.Labels = &lokiLabels
+		} else {
+			lokiBlock.Labels = nil
+		}
+		state.LokiParams = &lokiBlock
+	} else {
+		state.LokiParams = nil
+	}
+
+	if gjson.Get(response, "syslog_params").Exists() {
+		var syslogBlock CMLogForwardersSyslogTFSDK
+		if gjson.Get(response, "syslog_params.syslog_params").Exists() {
+			var syslogInner CMLogForwardersSyslogParamsTFSDK
+			if r := gjson.Get(response, "syslog_params.syslog_params.activity_kmip"); r.Exists() {
+				syslogInner.ActivityKMIP = types.BoolValue(r.Bool())
+			} else {
+				syslogInner.ActivityKMIP = types.BoolNull()
+			}
+			if r := gjson.Get(response, "syslog_params.syslog_params.activity_nae"); r.Exists() {
+				syslogInner.ActivityNAE = types.BoolValue(r.Bool())
+			} else {
+				syslogInner.ActivityNAE = types.BoolNull()
+			}
+			if r := gjson.Get(response, "syslog_params.syslog_params.client_audit_records"); r.Exists() {
+				syslogInner.ClientAuditRecords = types.BoolValue(r.Bool())
+			} else {
+				syslogInner.ClientAuditRecords = types.BoolNull()
+			}
+			if r := gjson.Get(response, "syslog_params.syslog_params.server_audit_records"); r.Exists() {
+				syslogInner.ServerAuditRecords = types.BoolValue(r.Bool())
+			} else {
+				syslogInner.ServerAuditRecords = types.BoolNull()
+			}
+			syslogBlock.SyslogParams = &syslogInner
+		} else {
+			syslogBlock.SyslogParams = nil
+		}
+		state.SyslogParams = &syslogBlock
+	} else {
+		state.SyslogParams = nil
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_log_forwarder.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -446,10 +545,13 @@ func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.Delet
 	}
 
 	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_POLICIES, state.ID.ValueString())
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_LOG_FORWARDS, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_log_forwarder.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CM Log Forwarder",
 			"Could not delete Log Forwarder, unexpected error: "+err.Error(),
