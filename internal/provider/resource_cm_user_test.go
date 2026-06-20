@@ -24,7 +24,7 @@ resource "ciphertrust_user" "testUser" {
   name     = "%s"
   email    = "%s@local"
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge01!@#ABC123"
 }
 `, username, username, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -38,7 +38,7 @@ resource "ciphertrust_user" "testUser" {
   name     = "john"
   email    = "john@local"
   username = "%s"
-  password = "UPdate02!@"
+  password = "UPdate02!@#DEF456"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -64,7 +64,7 @@ func TestResourceCMUserUpdateWithoutName(t *testing.T) {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUserNoName" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge01!@#ABC123"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -76,7 +76,7 @@ resource "ciphertrust_user" "testUserNoName" {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUserNoName" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge01!@#ABC123"
   email    = "noname@local"
 }
 `, username),
@@ -126,7 +126,7 @@ func TestCMUserOutOfBandDeletion(t *testing.T) {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test_oob" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge01!@#ABC123"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -146,7 +146,7 @@ resource "ciphertrust_user" "test_oob" {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test_oob" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge01!@#ABC123"
 }
 `, username),
 				PlanOnly:           true,
@@ -171,7 +171,7 @@ func TestAccCMUser_DriftName(t *testing.T) {
 resource "ciphertrust_user" "test" {
   username = "%s"
   name     = "Alice Example"
-  password = "CHAnge012!@#"
+  password = "CHAnge012!@#XYZ"
 }
 `, username),
 				Check: func(s *terraform.State) error {
@@ -209,12 +209,13 @@ func TestAccCMUser_DriftNickname(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Step 1: Create user without setting nickname in config.
-			// CM will assign a default value. Capture the resource ID for OOB ops.
+			// The API will assign a default value (typically the username).
+			// Capture the resource ID for OOB ops.
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test" {
   username = "%s"
-  password = "CHAnge012!@#"
+  password = "CHAnge012!@#XYZ"
 }
 `, username),
 				Check: func(s *terraform.State) error {
@@ -222,24 +223,25 @@ resource "ciphertrust_user" "test" {
 					return nil
 				},
 			},
-			// Step 2: OOB PATCH nickname to a new value.
+			// Step 2: OOB PATCH nickname to "UpdatedNickname".
 			// RefreshState: true triggers Read(). Read() must unconditionally store
 			// the new API value in state. With the fix, state is always updated to
 			// match the API, ensuring any OOB changes to nickname are detected.
-			// The old guard would have prevented updates in certain conditions,
-			// leaving state stale and drift invisible.
+			// The old guard "if nickname != "" && nickname != username" would have
+			// prevented the update in Step 1 (when nickname equals username) and any
+			// subsequent changes would be invisible because state would be stale.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						t.Skip("CM client not available")
 					}
-					// Patch nickname to a test value to simulate OOB change
-					payload, _ := json.Marshal(map[string]interface{}{"nickname": "ChangedOOB"})
+					// Patch nickname to a new value, simulating the OOB change
+					payload, _ := json.Marshal(map[string]interface{}{"nickname": "UpdatedNickname"})
 					client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id")
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
