@@ -196,11 +196,10 @@ resource "ciphertrust_user" "test" {
 }
 
 // TestAccCMUser_DriftNickname verifies that Read() detects drift when the
-// user's nickname is changed out-of-band via the CM API. The test specifically
-// verifies that Read() unconditionally stores the nickname value from the API,
-// even when nickname equals username. Without the fix, the old guard that checks
-// "if nickname != "" && nickname != username" would skip the assignment,
-// preventing drift detection.
+// user's nickname is changed out-of-band via the CM API. The test verifies that
+// Read() unconditionally stores the nickname value from the API response, without
+// the protective guard "if nickname != "" && nickname != username" that would
+// skip the update in certain conditions and cause drift to be invisible.
 func TestAccCMUser_DriftNickname(t *testing.T) {
 	RequireCM(t)
 	username := fmt.Sprintf("driftuser%d", time.Now().Unix())
@@ -209,7 +208,8 @@ func TestAccCMUser_DriftNickname(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: Create user without setting nickname. CM assigns nickname = username.
+			// Step 1: Create user without setting nickname in config.
+			// CM will assign a default value. Capture the resource ID for OOB ops.
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test" {
@@ -222,20 +222,20 @@ resource "ciphertrust_user" "test" {
 					return nil
 				},
 			},
-			// Step 2: OOB PATCH nickname to equal username (CM's default assignment).
+			// Step 2: OOB PATCH nickname to a new value.
 			// RefreshState: true triggers Read(). Read() must unconditionally store
-			// the API value (nickname = username) in state. Without the fix, the old
-			// guard "if nickname != "" && nickname != username" would skip the
-			// assignment when nickname equals username, preventing state from being
-			// updated. With the fix, state is correctly updated and remains consistent
-			// with the config.
+			// the new API value in state. With the fix, state is always updated to
+			// match the API, ensuring any OOB changes to nickname are detected.
+			// The old guard would have prevented updates in certain conditions,
+			// leaving state stale and drift invisible.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						t.Skip("CM client not available")
 					}
-					payload, _ := json.Marshal(map[string]interface{}{"nickname": username})
+					// Patch nickname to a test value to simulate OOB change
+					payload, _ := json.Marshal(map[string]interface{}{"nickname": "ChangedOOB"})
 					client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id")
 				},
 				RefreshState:       true,
