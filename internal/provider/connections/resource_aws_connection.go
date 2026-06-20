@@ -20,8 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-const notFoundError = "status: 404"
-
 var (
 	_ resource.Resource              = &resourceCCKMAWSConnection{}
 	_ resource.ResourceWithConfigure = &resourceCCKMAWSConnection{}
@@ -535,7 +533,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON)
+	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "id")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+plan.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -544,7 +542,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		)
 		return
 	}
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	plan.ID = types.StringValue(response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
