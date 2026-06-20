@@ -19,8 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-const notFoundError = "status: 404"
-
 var (
 	_ resource.Resource                   = &resourceCMDomain{}
 	_ resource.ResourceWithConfigure      = &resourceCMDomain{}
