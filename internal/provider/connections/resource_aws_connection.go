@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -18,6 +19,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCCKMAWSConnection{}
@@ -307,16 +310,22 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading AWS Connection on CipherTrust Manager: ",
-			"Could not read AWS Connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Error Reading CipherTrust AWS Connection",
+			"Could not read AWS Connection id "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
+	// Computed-only fields — always hydrate unconditionally from API response.
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
@@ -324,16 +333,119 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	state.Description = types.StringValue(gjson.Get(response, "description").String())
-	state.Category = types.StringValue(gjson.Get(response, "category").String())
 	state.Service = types.StringValue(gjson.Get(response, "service").String())
+	state.Category = types.StringValue(gjson.Get(response, "category").String())
 	state.ResourceURL = types.StringValue(gjson.Get(response, "resource_url").String())
 	state.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	state.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	state.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+
+	// Optional string fields — use Exists guard to avoid false drift when CM omits the field.
+	if v := gjson.Get(response, "description"); v.Exists() {
+		state.Description = types.StringValue(v.String())
+	} else {
+		state.Description = types.StringNull()
+	}
+	if v := gjson.Get(response, "access_key_id"); v.Exists() {
+		state.AccessKeyID = types.StringValue(v.String())
+	} else {
+		state.AccessKeyID = types.StringNull()
+	}
+	if v := gjson.Get(response, "assume_role_arn"); v.Exists() {
+		state.AssumeRoleARN = types.StringValue(v.String())
+	} else {
+		state.AssumeRoleARN = types.StringNull()
+	}
+	if v := gjson.Get(response, "assume_role_external_id"); v.Exists() {
+		state.AssumeRoleExternalID = types.StringValue(v.String())
+	} else {
+		state.AssumeRoleExternalID = types.StringNull()
+	}
+	if v := gjson.Get(response, "aws_region"); v.Exists() {
+		state.AWSRegion = types.StringValue(v.String())
+	} else {
+		state.AWSRegion = types.StringNull()
+	}
+	if v := gjson.Get(response, "aws_sts_regional_endpoints"); v.Exists() {
+		state.AWSSTSRegionalEndpoints = types.StringValue(v.String())
+	} else {
+		state.AWSSTSRegionalEndpoints = types.StringNull()
+	}
+	if v := gjson.Get(response, "cloud_name"); v.Exists() {
+		state.CloudName = types.StringValue(v.String())
+	} else {
+		state.CloudName = types.StringNull()
+	}
+
+	// is_role_anywhere — Optional-only; CM returns a non-nullable boolean even when not
+	// configured, so guard with !state.IsRoleAnywhere.IsNull() to avoid writing false into
+	// state for unconfigured fields.
+	if !state.IsRoleAnywhere.IsNull() {
+		if v := gjson.Get(response, "is_role_anywhere"); v.Exists() {
+			state.IsRoleAnywhere = types.BoolValue(v.Bool())
+		} else {
+			state.IsRoleAnywhere = types.BoolNull()
+		}
+	}
+
+	// labels — absent or JSON null → MapNull; present non-null (including empty {}) → map value.
+	labelsResult := gjson.Get(response, "labels")
+	if labelsResult.Exists() && labelsResult.Type != gjson.Null {
+		state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
+	} else {
+		state.Labels = types.MapNull(types.StringType)
+	}
+	// meta — same pattern as labels.
+	metaResult := gjson.Get(response, "meta")
+	if metaResult.Exists() && metaResult.Type != gjson.Null {
+		state.Meta = common.ParseMap(response, &resp.Diagnostics, "meta")
+	} else {
+		state.Meta = types.MapNull(types.StringType)
+	}
+
+	// products — three-branch: absent → nil (null), empty → empty slice, else iterate.
+	productsResult := gjson.Get(response, "products")
+	if !productsResult.Exists() {
+		state.Products = nil
+	} else if len(productsResult.Array()) == 0 {
+		state.Products = []types.String{}
+	} else {
+		var products []types.String
+		for _, p := range productsResult.Array() {
+			products = append(products, types.StringValue(p.String()))
+		}
+		state.Products = products
+	}
+
+	// iam_role_anywhere — hydrate from API response; preserve write-only private_key from prior state.
+	iamResult := gjson.Get(response, "iam_role_anywhere")
+	if iamResult.Exists() {
+		iam := &IAMRoleAnywhereTFSDK{
+			AnywhereRoleARN: types.StringValue(iamResult.Get("anywhere_role_arn").String()),
+			Certificate:     types.StringValue(iamResult.Get("certificate").String()),
+			ProfileARN:      types.StringValue(iamResult.Get("profile_arn").String()),
+			TrustAnchorARN:  types.StringValue(iamResult.Get("trust_anchor_arn").String()),
+		}
+		if state.IAMRoleAnywhere != nil {
+			iam.PrivateKey = state.IAMRoleAnywhere.PrivateKey
+		} else {
+			iam.PrivateKey = types.StringNull()
+		}
+		state.IAMRoleAnywhere = iam
+	} else {
+		state.IAMRoleAnywhere = nil
+	}
+
+	// secret_access_key is write-only — CM never returns it; preserve from prior state.
+	// (already preserved: state was loaded from req.State.Get above)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Read]["+id+"]")
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -423,16 +535,16 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "updatedAt")
+	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+plan.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
-			"Error updating AWS Connection on CipherTrust Manager: ",
+			"Error Updating CipherTrust AWS Connection",
 			"Could not update AWS Connection, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	plan.ID = types.StringValue(response)
+	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -450,14 +562,17 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 		return
 	}
 
-	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_AWS_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Delete]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
-			"Error Deleting AWS Connection",
-			"Could not delete AWS Connection, unexpected error: "+err.Error(),
+			"Error Deleting CipherTrust AWS Connection",
+			"Could not delete AWS Connection id "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
