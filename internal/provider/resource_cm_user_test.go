@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -150,6 +151,95 @@ resource "ciphertrust_user" "test_oob" {
 `, username),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCMUser_DriftName verifies that Read() detects drift when the user's
+// name is cleared out-of-band via the CM API.
+func TestAccCMUser_DriftName(t *testing.T) {
+	RequireCM(t)
+	username := fmt.Sprintf("namefixuser%d", time.Now().Unix())
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = "%s"
+  name     = "Alice Example"
+  password = "CHAnge012!@#"
+}
+`, username),
+				Check: func(s *terraform.State) error {
+					capturedID = s.RootModule().Resources["ciphertrust_user.test"].Primary.ID
+					return nil
+				},
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM client not available")
+					}
+					payload, _ := json.Marshal(map[string]interface{}{"name": ""})
+					client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id")
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCMUser_DriftNickname verifies that Read() detects drift when the
+// user's nickname is changed out-of-band via the CM API. The test specifically
+// verifies that Read() unconditionally stores the nickname value from the API,
+// even when nickname equals username. Without the fix, the old guard that checks
+// "if nickname != "" && nickname != username" would skip the assignment,
+// preventing drift detection.
+func TestAccCMUser_DriftNickname(t *testing.T) {
+	RequireCM(t)
+	username := fmt.Sprintf("driftuser%d", time.Now().Unix())
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create user without setting nickname. CM assigns nickname = username.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = "%s"
+  password = "CHAnge012!@#"
+}
+`, username),
+				Check: func(s *terraform.State) error {
+					capturedID = s.RootModule().Resources["ciphertrust_user.test"].Primary.ID
+					return nil
+				},
+			},
+			// Step 2: OOB PATCH nickname to equal username (CM's default assignment).
+			// RefreshState: true triggers Read(). Read() must unconditionally store
+			// the API value (nickname = username) in state. Without the fix, the old
+			// guard "if nickname != "" && nickname != username" would skip the
+			// assignment when nickname equals username, preventing state from being
+			// updated. With the fix, state is correctly updated and remains consistent
+			// with the config.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM client not available")
+					}
+					payload, _ := json.Marshal(map[string]interface{}{"nickname": username})
+					client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id")
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
