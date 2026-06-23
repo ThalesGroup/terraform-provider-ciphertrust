@@ -73,7 +73,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 		}`
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
 	if os.Getenv("CDSPAAS") == "true" {
 		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
 	}
@@ -338,7 +338,7 @@ func TestCckmAWSXksKeyMinimalConfig(t *testing.T) {
 	// ciphertrust_aws_xks_key with the minimal required attributes.
 	// An AES CM key is created for the health-check key ID (the existing cm_key
 	// is RSA and cannot be used for an XKS health check).
-	// CM_ADDRESS must be set to the CipherTrust Manager HTTPS address so that
+	// CIPHERTRUST_ADDRESS must be set to the CipherTrust Manager HTTPS address so that
 	// the XKS proxy URI endpoint passes API validation; the test is skipped when it is absent.
 	customKeystoreConfig := `
 		resource "ciphertrust_cm_key" "cm_aes_key" {
@@ -374,7 +374,7 @@ func TestCckmAWSXksKeyMinimalConfig(t *testing.T) {
 			}
 		}`
 
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
 	if os.Getenv("CDSPAAS") == "true" {
 		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
 	}

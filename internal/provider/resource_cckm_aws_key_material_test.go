@@ -2144,3 +2144,39 @@ func TestCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 		},
 	})
 }
+
+// TestCckmAWSKeyMaterialCDSPaaSNotSupported verifies that creating a
+// ciphertrust_aws_key_material resource against CDSPaaS fails at plan time
+// with "Resource not supported on CDSPaaS".
+func TestCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
+	if os.Getenv("CDSPAAS") != "true" {
+		t.Skip("Skipping: only runs on CDSPaaS")
+	}
+
+	// Config uses dummy kms_id/region - the plan fails at ValidateConfig on
+	// ciphertrust_aws_key_material before any API call is attempted.
+	config := `
+		resource "ciphertrust_aws_byok_key" "ext_key" {
+			kms_id = "dummy-kms-id"
+			region = "us-east-1"
+			aws_param = {}
+		}
+		resource "ciphertrust_aws_key_material" "km" {
+			aws_key_id = ciphertrust_aws_byok_key.ext_key.aws_param.key_id
+			key_material = [{
+				source_key_identifier = "dummy-source-key-id"
+				source_key_tier       = "local"
+			}]
+		}`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Resource not supported on CDSPaaS`),
+			},
+		},
+	})
+}

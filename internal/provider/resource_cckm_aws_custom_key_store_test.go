@@ -90,7 +90,7 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
 	if os.Getenv("CDSPAAS") == "true" {
 		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
 	}
@@ -253,7 +253,7 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 		t.Skip()
 	}
 	// Step 1: aws_param block is entirely absent.
-	absentConfig := `
+	createConfig := `
 		resource "ciphertrust_cm_key" "cm_aes_key" {
 			name         = "%s"
 			algorithm    = "AES"
@@ -267,15 +267,19 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 			name    = "tf-test-no-aws-param"
 			region  = ciphertrust_aws_kms.kms.regions[0]
 			kms_id  = ciphertrust_aws_kms.kms.id
+			enable_success_audit_event = %s
 			local_hosted_params = {
 				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
 				max_credentials = 8
 				source_key_tier = "local"
 			}
 		}`
+
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	resourceName := "ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore"
-	createConfig := fmt.Sprintf(absentConfig, cmKeyName)
+	createConfigStr := fmt.Sprintf(createConfig, cmKeyName, "false")
+	updateConfigStr := fmt.Sprintf(createConfig, cmKeyName, "true")
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -284,7 +288,7 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 				// Verify the resource is created successfully without an aws_param block.
 				// The provider populates aws_param from the API response on Read, so the
 				// attributes below confirm that the server auto-filled sensible defaults.
-				Config: awsConnectionResource + createConfig,
+				Config: awsConnectionResource + createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Top-level attributes.
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
@@ -294,6 +298,48 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "cloud_name", "aws"),
 					resource.TestCheckResourceAttr(resourceName, "connect_disconnect_keystore", "DISCONNECT_KEYSTORE"),
 					resource.TestCheckResourceAttr(resourceName, "enable_success_audit_event", "false"),
+					resource.TestCheckResourceAttr(resourceName, "linked_state", "false"),
+					resource.TestCheckResourceAttr(resourceName, "type", "LOCAL"),
+					resource.TestCheckResourceAttr(resourceName, "labels.%", "0"),
+					// aws_param attributes - auto-populated by the server even though the
+					// aws_param block was omitted from the config.
+					resource.TestCheckResourceAttr(resourceName, "aws_param.custom_key_store_type", "EXTERNAL_KEY_STORE"),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.custom_key_store_name", "tf-test-no-aws-param"),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.connection_state", "DISCONNECTED"),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.xks_proxy_connectivity", "PUBLIC_ENDPOINT"),
+					// Server generates the XKS proxy URI path from the resource ID.
+					resource.TestCheckResourceAttrSet(resourceName, "aws_param.xks_proxy_uri_path"),
+					// Write-only and unset fields are returned as empty strings.
+					resource.TestCheckResourceAttr(resourceName, "aws_param.key_store_password", ""),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.xks_proxy_uri_endpoint", ""),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.cloud_hsm_cluster_id", ""),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.trust_anchor_certificate", ""),
+					resource.TestCheckResourceAttr(resourceName, "aws_param.xks_proxy_vpc_endpoint_service_name", ""),
+					// local_hosted_params attributes.
+					resource.TestCheckResourceAttr(resourceName, "local_hosted_params.blocked", "false"),
+					resource.TestCheckResourceAttr(resourceName, "local_hosted_params.max_credentials", "8"),
+					resource.TestCheckResourceAttr(resourceName, "local_hosted_params.source_key_tier", "local"),
+					resource.TestCheckResourceAttr(resourceName, "local_hosted_params.source_container_type", "local"),
+					resource.TestCheckResourceAttr(resourceName, "local_hosted_params.linked_state", "false"),
+					resource.TestCheckResourceAttrSet(resourceName, "local_hosted_params.health_check_key_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "local_hosted_params.health_check_ciphertext"),
+					resource.TestCheckResourceAttrSet(resourceName, "local_hosted_params.health_check_uri_path"),
+				),
+			},
+			{
+				// Verify the resource is created successfully without an aws_param block.
+				// The provider populates aws_param from the API response on Read, so the
+				// attributes below confirm that the server auto-filled sensible defaults.
+				Config: awsConnectionResource + updateConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					// Top-level attributes.
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "kms_id"),
+					resource.TestCheckResourceAttrSet(resourceName, "kms_name"),
+					resource.TestCheckResourceAttr(resourceName, "name", "tf-test-no-aws-param"),
+					resource.TestCheckResourceAttr(resourceName, "cloud_name", "aws"),
+					resource.TestCheckResourceAttr(resourceName, "connect_disconnect_keystore", "DISCONNECT_KEYSTORE"),
+					resource.TestCheckResourceAttr(resourceName, "enable_success_audit_event", "true"),
 					resource.TestCheckResourceAttr(resourceName, "linked_state", "false"),
 					resource.TestCheckResourceAttr(resourceName, "type", "LOCAL"),
 					resource.TestCheckResourceAttr(resourceName, "labels.%", "0"),

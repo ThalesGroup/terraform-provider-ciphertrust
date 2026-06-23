@@ -10,10 +10,9 @@ import (
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
-	"github.com/tidwall/gjson"
-
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/tidwall/gjson"
 )
 
 // cleanupCckmAwsKMS lists all CCKM AWS KMS registrations in CipherTrust Manager and deletes each one.
@@ -201,6 +200,40 @@ func TestCckmAWSKms(t *testing.T) {
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKMSTwoKmsOverlappingRegions verifies that creating two KMS registrations for the
+// same account with overlapping regions results in an error. The second KMS uses regions[0]
+// which is already registered by the KMS created in awsConnectionResource.
+func TestCckmAWSKMSTwoKmsOverlappingRegions(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	kmsTwoConfig := `
+		resource "ciphertrust_aws_kms" "kms_two" {
+			account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+			connection_id = ciphertrust_aws_connection.aws_connection.id
+			name          = "%s"
+			regions = [
+				data.ciphertrust_aws_account_details.account_details.regions[0],
+			]
+		}`
+	kmsTwoConfigStr := fmt.Sprintf(kmsTwoConfig, "tf-"+uuid.New().String()[:8])
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// kms (from awsConnectionResource) and kms_two both claim regions[0].
+				// Terraform applies them concurrently; one will fail with an API error
+				// because the region is already registered to this account.
+				Config:      awsConnectionResource + kmsTwoConfigStr,
+				ExpectError: regexp.MustCompile(`Error creating AWS KMS`),
 			},
 		},
 	})

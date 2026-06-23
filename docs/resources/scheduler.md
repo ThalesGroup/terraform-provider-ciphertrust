@@ -122,7 +122,7 @@ For example:
 - `description` (String) Description for the job configuration.
 - `disabled` (Boolean) By default, the job configuration starts in an active state. True disables the job configuration.
 - `end_date` (String) Date the job configuration becomes inactive. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
-- `run_on` (String) Default is 'any'. For database_backup, the default will be the current node if in a cluster.
+- `run_on` (String) Default is 'any'. For database_backup, the default will be the current node if in a cluster. This attribute is not supported in CDSPaaS.
 - `start_date` (String) Date the job configuration becomes active. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
 
 ### Read-Only
@@ -198,7 +198,7 @@ Optional:
 
 - `resource_query` (String) A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
 
-For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the “Users” page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
+For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the "Users" page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
 
 For Customer fragments, valid resourceQuery parameter values are 'ids' and 'names' of Customer fragments. To backup specific customer fragments using ids, use {"ids":["370c4373-2675-4aa1-8cc7-07a9f95a5861", "4e1b9dec-2e38-40d7-b4d6-244043200546"]}. To backup specific customer fragments using names, use {"names":["customerFragment1", "customerFragment2"]}.
 

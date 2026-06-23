@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -173,6 +174,19 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+	if connErr != nil {
+		msg := "Error creating AWS KMS, failed to read AWS connection."
+		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	connAccount := gjson.Get(connResponse, "account").String()
+	mutexKey := fmt.Sprintf("aws-kms-%s", connAccount)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+
 	payload.AccountID = common.TrimString(plan.AccountID.String())
 	payload.Connection = common.TrimString(plan.ConnectionID.String())
 	payload.Name = common.TrimString(plan.Name.String())
@@ -281,7 +295,8 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	kmsID := state.ID.ValueString()
-	if _, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS); kmsErr != nil {
+	kmsResponse, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	if kmsErr != nil {
 		if strings.Contains(kmsErr.Error(), notFoundError) {
 			msg := "AWS KMS was not found. It will be removed from state."
 			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
@@ -296,6 +311,11 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	kmsAccount := gjson.Get(kmsResponse, "account").String()
+	mutexKey := fmt.Sprintf("aws-kms-%s", kmsAccount)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
 	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
 	if resp.Diagnostics.HasError() {

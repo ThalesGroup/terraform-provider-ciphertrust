@@ -2,6 +2,8 @@ package provider
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -453,5 +455,35 @@ func TestCckmSchedulersSyncResource(t *testing.T) {
 				},
 			},
 		})
+	})
+}
+
+// TestCckmSchedulersInvalidAttribs verifies that providing run_on on a
+// CDSPaaS instance fails at plan time with an error indicating run_on
+// is not supported on CDSPaaS.
+func TestCckmSchedulersInvalidAttribs(t *testing.T) {
+	if os.Getenv("CDSPAAS") != "true" {
+		t.Skip("Skipping: only runs on CDSPaaS")
+	}
+	schedulerName := "tf-invalid-" + uuid.New().String()[:8]
+	config := fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "key_rotation" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_on     = "578625d8a573489d873674c277f550e7"
+			run_at     = "0 9 * * fri"
+		}`, schedulerName)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`is not supported on CDSPaaS`),
+			},
+		},
 	})
 }

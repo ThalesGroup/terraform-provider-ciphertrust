@@ -3,17 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
-
 	"net/url"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/tidwall/gjson"
-
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/tidwall/gjson"
 )
 
 // cleanupCckmOCIVaults lists all CCKM OCI vault registrations in CipherTrust Manager and deletes each one.

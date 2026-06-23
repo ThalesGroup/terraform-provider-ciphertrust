@@ -1146,7 +1146,6 @@ func stringSlicesEqual(a, b []types.String) bool {
 	}
 	return true
 }
-
 func (r *resourceCTEClientGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup.go -> ImportState]["+id+"]")

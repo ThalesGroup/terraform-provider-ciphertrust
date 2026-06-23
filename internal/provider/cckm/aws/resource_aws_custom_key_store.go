@@ -167,9 +167,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				Description: "A list of key:value pairs associated with the key.",
 			},
 			"aws_param": schema.SingleNestedAttribute{
-				//Required:    true,
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Object{
+					nullOrStateForUnknownObject{},
+				},
 				Description: "Parameters related to AWS interaction with a custom key store.",
 				Attributes: map[string]schema.Attribute{
 					"cloud_hsm_cluster_id": schema.StringAttribute{
@@ -254,8 +256,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				},
 			},
 			"local_hosted_params": schema.SingleNestedAttribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Object{
+					nullOrStateForUnknownObject{},
+				},
 				Description: "Parameters related to local hosting of a custom key store.",
 				Attributes: map[string]schema.Attribute{
 					"blocked": schema.BoolAttribute{
@@ -638,9 +643,11 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 
 	var awsParamJSON AWSParamJSON
 	var planAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
-	if d := plan.AWSParams.As(ctx, &planAWSParamTFSDK, basetypes.ObjectAsOptions{}); d.HasError() {
-		resp.Diagnostics.Append(d...)
-		return
+	if !plan.AWSParams.IsNull() && !plan.AWSParams.IsUnknown() {
+		if d := plan.AWSParams.As(ctx, &planAWSParamTFSDK, basetypes.ObjectAsOptions{}); d.HasError() {
+			resp.Diagnostics.Append(d...)
+			return
+		}
 	}
 	var stateAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
 	if !state.AWSParams.IsNull() && !state.AWSParams.IsUnknown() {

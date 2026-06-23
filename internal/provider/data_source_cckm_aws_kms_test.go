@@ -2,9 +2,9 @@ package provider
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -19,8 +19,8 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			regions = [
-				data.ciphertrust_aws_account_details.account_details.regions[3],
-				data.ciphertrust_aws_account_details.account_details.regions[4],
+				data.ciphertrust_aws_account_details.account_details.regions[6],
+				data.ciphertrust_aws_account_details.account_details.regions[7],
 			]
 		}`
 	kmsTwoConfigStr := fmt.Sprintf(kmsTwoConfig, "tf-"+uuid.New().String()[:8])

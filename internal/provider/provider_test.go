@@ -247,9 +247,9 @@ func testVerifyResourceDeleted(resourceName string) resource.TestCheckFunc {
 // for a resource to stdout. It is not called by any test but is kept here because
 // it is very useful when writing or diagnosing new tests.
 // NOTE: calls to this function must not be left in committed source code.
-func testAccListResourceAttributes(resourceName string) resource.TestCheckFunc {
+func testAccListResourceAttributes(step string, resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		fmt.Printf("\n************ %s attributes\n", resourceName)
+		fmt.Printf("\n************ %s %s attributes\n", step, resourceName)
 		for rn, rs := range s.RootModule().Resources {
 			if rn != resourceName {
 				continue
@@ -265,7 +265,7 @@ func testAccListResourceAttributes(resourceName string) resource.TestCheckFunc {
 			for _, k := range keys {
 				fmt.Printf("k:%s v:%v\n", k, rs.Primary.Attributes[k])
 			}
-			fmt.Printf("**************** end %s attributes\n\n", resourceName)
+			fmt.Printf("**************** end %s %s attributes\n\n", step, resourceName)
 			return nil
 		}
 		return fmt.Errorf("error: did not find resource %s so can't list attributes", resourceName)
