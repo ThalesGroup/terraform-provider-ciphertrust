@@ -17,7 +17,7 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store-" + uuid.New().String()[:8]
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
 	if os.Getenv("CDSPAAS") == "true" {
 		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
 	}

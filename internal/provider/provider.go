@@ -88,16 +88,16 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 		Attributes: map[string]schema.Attribute{
 			"address": schema.StringAttribute{
 				Optional:    true,
-				Description: "HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "address", "CM_ADDRESS"),
+				Description: "HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "address", "CIPHERTRUST_ADDRESS"),
 			},
 			"username": schema.StringAttribute{
 				Optional:    true,
-				Description: "Username of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "username", "CM_USERNAME"),
+				Description: "Username of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "username", "CIPHERTRUST_USERNAME"),
 			},
 			"password": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Password of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "password", "CM_PASSWORD"),
+				Description: "Password of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "password", "CIPHERTRUST_PASSWORD"),
 			},
 			"bootstrap": schema.StringAttribute{
 				Optional:    true,

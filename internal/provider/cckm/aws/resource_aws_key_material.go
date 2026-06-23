@@ -27,10 +27,11 @@ import (
 )
 
 var (
-	_ resource.Resource                = &resourceAWSKeyMaterial{}
-	_ resource.ResourceWithConfigure   = &resourceAWSKeyMaterial{}
-	_ resource.ResourceWithImportState = &resourceAWSKeyMaterial{}
-	_ resource.ResourceWithModifyPlan  = &resourceAWSKeyMaterial{}
+	_ resource.Resource                   = &resourceAWSKeyMaterial{}
+	_ resource.ResourceWithConfigure      = &resourceAWSKeyMaterial{}
+	_ resource.ResourceWithImportState    = &resourceAWSKeyMaterial{}
+	_ resource.ResourceWithModifyPlan     = &resourceAWSKeyMaterial{}
+	_ resource.ResourceWithValidateConfig = &resourceAWSKeyMaterial{}
 )
 
 const (
@@ -49,6 +50,10 @@ type resourceAWSKeyMaterial struct {
 
 func (r *resourceAWSKeyMaterial) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aws_key_material"
+}
+
+func (r *resourceAWSKeyMaterial) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_aws_key_material", resp)
 }
 
 func (r *resourceAWSKeyMaterial) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

@@ -111,7 +111,7 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 - `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true.
 - `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) (Updatable) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
-- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
+- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.
 
 ### Read-Only
 

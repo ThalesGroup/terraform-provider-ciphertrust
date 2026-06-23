@@ -92,10 +92,11 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.",
+				Description: "(Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.",
 				Default:     int64default.StaticInt64(7),
 				Validators: []validator.Int64{
 					int64validator.AtLeast(7),
+					int64validator.AtMost(30),
 				},
 			},
 			"cloud_name": schema.StringAttribute{

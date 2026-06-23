@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -29,6 +30,7 @@ var (
 	_ resource.Resource                = &resourceScheduler{}
 	_ resource.ResourceWithConfigure   = &resourceScheduler{}
 	_ resource.ResourceWithImportState = &resourceScheduler{}
+	_ resource.ResourceWithModifyPlan  = &resourceScheduler{}
 
 	runAt = `Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
 
@@ -41,7 +43,7 @@ For example:
 	filterDescription        = `A set of selection criteria to specify what resources to include in the backup. Only applicable to domain-scoped backups. By default, no filters are applied and the backup includes all keys. For example, to back up all keys with a name containing 'enc-key', set the filters to [{"resourceType": "Keys", "resourceQuery":{"name":"*enc-key*"}}].`
 	resourceQueryDescription = `A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
 
-For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the “Users” page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
+For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the "Users" page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
 
 For Customer fragments, valid resourceQuery parameter values are 'ids' and 'names' of Customer fragments. To backup specific customer fragments using ids, use {"ids":["370c4373-2675-4aa1-8cc7-07a9f95a5861", "4e1b9dec-2e38-40d7-b4d6-244043200546"]}. To backup specific customer fragments using names, use {"names":["customerFragment1", "customerFragment2"]}.
 
@@ -109,7 +111,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"run_on": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "Default is 'any'. For database_backup, the default will be the current node if in a cluster.",
+				Description: "Default is 'any'. For database_backup, the default will be the current node if in a cluster. This attribute is not supported in CDSPaaS.",
 			},
 			"disabled": schema.BoolAttribute{
 				Optional:    true,
@@ -657,6 +659,28 @@ func (r *resourceScheduler) ImportState(ctx context.Context, req resource.Import
 	)
 
 	tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> ImportState]["+id+"]")
+}
+
+// ModifyPlan blocks plan execution if run_on is set on a CDSPaaS deployment.
+// CDSPaaS does not support clustering, so run_on is not a valid attribute there.
+func (r *resourceScheduler) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil {
+		return
+	}
+	var runOn types.String
+	diags := req.Config.GetAttribute(ctx, path.Root("run_on"), &runOn)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if r.client.IsCDSPaaS && !runOn.IsNull() && !runOn.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("run_on"),
+			"'run_on' is not supported on CDSPaaS",
+			"The 'run_on' attribute is only supported on on-premises CipherTrust Manager clusters. "+
+				"CDSPaaS does not support clustering, so this attribute must be omitted.",
+		)
+	}
 }
 
 func (r *resourceScheduler) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

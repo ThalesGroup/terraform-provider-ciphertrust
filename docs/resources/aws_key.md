@@ -119,7 +119,7 @@ resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
 - `kms_id` (String) ID of the KMS to use when creating the key. Required unless replicating a multi-region key.
 - `primary_region` (String) (Updatable) Updates the primary region of a multi-region key.
 - `replicate_key` (Attributes) Replicate key parameters. (see [below for nested schema](#nestedatt--replicate_key))
-- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is 7.
+- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.
 
 ### Read-Only
 

@@ -149,7 +149,7 @@ resource "ciphertrust_aws_byok_key" "with_rotation" {
 - `kms_id` (String) CipherTrust Manager ID of the KMS to create the key in. Required unless replicating a multi-region key.
 - `primary_region` (String) (Updatable) Updates the primary region of a multi-region key. Only valid during updates.
 - `replicate_key` (Attributes) Replicate a primary EXTERNAL multi-region key to a new region. Key material will be imported from the primary key. (see [below for nested schema](#nestedatt--replicate_key))
-- `schedule_for_deletion_days` (Number) (Updatable) Days before key is deleted after destroy. Default is 7.
+- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.
 - `source_key_identifier` (String) CipherTrust Manager key ID to upload to AWS as BYOK material. Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. Populated on read from the API once material has been imported.
 - `source_key_tier` (String) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). Leave blank when not importing key material.
 

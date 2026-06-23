@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -229,6 +230,19 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	connResponse, connErr := r.client.GetById(ctx, id, plan.ConnectionID.ValueString(), common.URL_OCI_CONNECTION)
+	if connErr != nil {
+		msg := "Error adding OCI vault, failed to read OCI connection."
+		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	connAccount := gjson.Get(connResponse, "account").String()
+	mutexKey := fmt.Sprintf("oci-vault-%s", connAccount)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
 
 	payload := models.AddVaultsPayloadJSON{
 		Connection: plan.ConnectionID.ValueString(),

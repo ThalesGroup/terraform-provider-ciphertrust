@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// Ensure regexp is used (referenced in TestCckmOCIKeysAndVersionsNative ModifyPlan steps).
 var _ = regexp.MustCompile
 
 // deleteOciVaultOOB removes a CipherTrust Manager OCI vault registration out-of-band
@@ -159,6 +158,159 @@ func initCckmOCITest(t *testing.T) string {
 	resourceStr := fmt.Sprintf(config,
 		vaultOCID, region, cmKeyUsageCryptoOps, keyFile, name, pubKeyFP, region, tenancyOCID, userOCID)
 	return resourceStr
+}
+
+// TestCckmOCIKeyImmutabilityAndUpdate verifies that:
+//   - Changing immutable attributes (algorithm, length) produces a plan-time error
+//     and does NOT destroy and recreate the key.
+//   - After a rejected plan, RefreshState confirms the OCI key is still ENABLED and unchanged.
+//   - Valid updates (name, enable_key, freeform_tags) are applied correctly.
+func TestCckmOCIKeyImmutabilityAndUpdate(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyNameUpdated := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+
+	// createConfig: the baseline key used throughout the test.
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// badAlgorithmConfig: tries to change algorithm - immutable, should error at plan time.
+	badAlgorithmConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "AES"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// badLengthConfig: tries to change length - immutable, should error at plan time.
+	badLengthConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 512
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// updateConfig: valid update - new name, disable key, add freeform tag.
+	updateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = false
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				freeform_tags   = { env = "test" }
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyNameUpdated)
+
+	// restoreConfig: re-enable the key, remove freeform tag.
+	restoreConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				freeform_tags   = {}
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyNameUpdated)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create - verify key is ENABLED.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 2: attempting to change algorithm should fail at plan time - key must NOT be destroyed.
+				Config:      badAlgorithmConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			{
+				// Step 3: re-apply valid config to confirm key is still ENABLED and algorithm unchanged.
+				// (RefreshState cannot be used here because the previous PlanOnly step leaves the bad
+				// config in the working directory, which would trigger ModifyPlan again.)
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 4: attempting to change length should fail at plan time - key must NOT be destroyed.
+				Config:      badLengthConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			{
+				// Step 5: re-apply valid config to confirm key is still ENABLED and length unchanged.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 6: valid update - disable key, update name, add freeform tag.
+				Config: updateConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "DISABLED"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.env", "test"),
+				),
+			},
+			{
+				// Step 7: re-enable key and remove freeform tag.
+				Config: restoreConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+		},
+	})
 }
 
 func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
