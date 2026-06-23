@@ -32,7 +32,7 @@ resource "ciphertrust_groups" "testGroup" {
 // TestAccCMGroup_nameImmutable verifies that changing the group name is blocked at plan
 // time with a clear error, leaving the original group untouched on CM.
 func TestAccCMGroup_nameImmutable(t *testing.T) {
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -54,7 +54,7 @@ func TestAccCMGroup_nameImmutable(t *testing.T) {
 func TestAccCMGroup_basicCreate(t *testing.T) {
 	name := "TFTestGroup-" + uuid.New().String()[:8]
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -80,7 +80,7 @@ func TestAccCMGroup_driftDetection(t *testing.T) {
 	name := "TFTestGroupDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -122,7 +122,7 @@ func TestAccCMGroup_attributeDrift(t *testing.T) {
 	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{

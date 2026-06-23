@@ -96,7 +96,7 @@ func TestAccCipherTrustPasswordPolicy_drift(t *testing.T) {
 	policyName := "TFTestPwdDrift-" + uuid.New().String()[:8]
 	var capturedName string
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -150,7 +150,7 @@ func TestAccCipherTrustPasswordPolicy_noDefaultDrift(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdNoDrift-" + uuid.New().String()[:8]
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -179,7 +179,7 @@ func TestAccCipherTrustPasswordPolicy_oobDelete(t *testing.T) {
 	policyName := "TFTestPwdOOBDel-" + uuid.New().String()[:8]
 	var capturedName string
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{

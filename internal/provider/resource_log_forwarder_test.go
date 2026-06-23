@@ -33,7 +33,7 @@ func TestCMLogForwarderCRUD(t *testing.T) {
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	rNameUpdated := rName + "-upd"
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -73,7 +73,7 @@ func TestCMLogForwarderTypeImmutable(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{

@@ -14,7 +14,7 @@ import (
 func TestResourceCMUser(t *testing.T) {
 	username := fmt.Sprintf("testuser%d", time.Now().Unix())
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -55,7 +55,7 @@ resource "ciphertrust_user" "testUser" {
 func TestResourceCMUserUpdateWithoutName(t *testing.T) {
 	username := fmt.Sprintf("testuser_noname%d", time.Now().Unix())
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Step 1: Create user with only required fields (no name)
@@ -114,7 +114,7 @@ func TestCMUserOutOfBandDeletion(t *testing.T) {
 		}
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Step 1: Create the user, then delete it from CM directly.

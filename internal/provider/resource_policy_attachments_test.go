@@ -93,7 +93,7 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 		}
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Step 1: Create the attachment, then delete it from CM directly.

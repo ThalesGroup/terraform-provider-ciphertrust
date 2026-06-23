@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -76,81 +77,77 @@ var (
 	}
 )
 
-// cipherTrustVersion caches the result of getCipherTrustVersion so that the API
-// is called at most once per test run. A value of 0 means not yet fetched.
-var cipherTrustVersion int
-
 // devCMVersionValue is a sentinel returned by getCipherTrustVersion when the
 // server reports version "Development", or when the CIPHERTRUST_* environment
 // variables needed to reach the test target are not set.
 const devCMVersionValue = 9999
+
+// cipherTrustVersionOnce ensures getCipherTrustVersion's API call is made at
+// most once per test binary execution, even when tests run in parallel.
+var (
+	cipherTrustVersionOnce  sync.Once
+	cipherTrustVersionValue int
+)
 
 // getCipherTrustVersion returns an integer encoding of the CipherTrust Manager
 // version at the test target, used by tests that conditionally check behaviour
 // introduced in a specific release. The encoding concatenates the major and minor
 // version digits: e.g. 2.24.0-beta7+51895 -> 224, 2.21.2 -> 221.
 //
-// The result is cached after the first successful call so that multiple tests in
-// the same run do not repeat the API round-trip.
+// The result is cached after the first call via sync.Once so that multiple
+// parallel tests do not repeat the API round-trip or cause a data race.
 //
-// Returns devCMVersionValue if the version cannot be determined due to a connection
-// or parse error.
+// Returns devCMVersionValue if the version cannot be determined due to a
+// connection or parse error.
 func getCipherTrustVersion() int {
-	if cipherTrustVersion != 0 {
-		fmt.Printf("Test System Version: %d\n", cipherTrustVersion)
-		return cipherTrustVersion
-	}
-	cipherTrustVersion = devCMVersionValue
-	if os.Getenv("CDSPAAS") == "true" {
-		fmt.Printf("CDSPAAS is true, returning %d\n", cipherTrustVersion)
-		return cipherTrustVersion
-	}
-	var (
-		err      error
-		client   *common.Client
-		response string
-	)
-	address := os.Getenv("CIPHERTRUST_ADDRESS")
-	username := os.Getenv("CIPHERTRUST_USERNAME")
-	password := os.Getenv("CIPHERTRUST_PASSWORD")
-	domain := "root"
-	if address == "" || username == "" || password == "" {
-		fmt.Printf("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME and CIPHERTRUST_PASSWORD environment variables must be set to get the system version, returning %d\n", devCMVersionValue)
-		return devCMVersionValue
-	}
-	client, err = common.NewClient(context.Background(), uuid.NewString(), &address, &domain, &domain, &username, &password, nil, true, 180)
-	if err != nil {
-		fmt.Printf("** Failed to create client, returning %d. err: %s\n", cipherTrustVersion, err.Error())
-		return cipherTrustVersion
-	}
-	response, err = client.GetById(context.Background(), "", "", common.URL_SYSTEMINFO)
-	if err != nil {
-		fmt.Printf("** Failed get system info, returning %d. err: %s\n", cipherTrustVersion, err.Error())
-		return cipherTrustVersion
-	}
-
-	version := gjson.Get(response, "version").String()
-	fmt.Printf("SysInfo Version: %v\n", version)
-	if version == "" {
-		fmt.Printf("** System version is empty, returning %d\n", cipherTrustVersion)
-		return cipherTrustVersion
-	}
-	if version == "Development" {
-		fmt.Printf("** System version is Development, returning %d\n", devCMVersionValue)
-		return devCMVersionValue
-	}
-	versions := strings.Split(version, ".")
-	if len(versions) < 2 {
-		fmt.Printf("** Unable to determine system version from '%s', returning %d\n", version, cipherTrustVersion)
-		return cipherTrustVersion
-	}
-	cipherTrustVersion, err = strconv.Atoi(versions[0] + versions[1])
-	if err != nil {
-		fmt.Printf("** Failed to convert %s to int, returning %d. Error: %s\n", versions[0]+versions[1], devCMVersionValue, err.Error())
-		return devCMVersionValue
-	}
-	fmt.Printf("Test System Version: %d\n", cipherTrustVersion)
-	return cipherTrustVersion
+	cipherTrustVersionOnce.Do(func() {
+		cipherTrustVersionValue = devCMVersionValue
+		if os.Getenv("CDSPAAS") == "true" {
+			fmt.Printf("CDSPAAS is true, returning %d\n", cipherTrustVersionValue)
+			return
+		}
+		address := os.Getenv("CIPHERTRUST_ADDRESS")
+		username := os.Getenv("CIPHERTRUST_USERNAME")
+		password := os.Getenv("CIPHERTRUST_PASSWORD")
+		domain := "root"
+		if address == "" || username == "" || password == "" {
+			fmt.Printf("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME and CIPHERTRUST_PASSWORD environment variables must be set to get the system version, returning %d\n", devCMVersionValue)
+			return
+		}
+		client, err := common.NewClient(context.Background(), uuid.NewString(), &address, &domain, &domain, &username, &password, nil, true, 180)
+		if err != nil {
+			fmt.Printf("** Failed to create client, returning %d. err: %s\n", cipherTrustVersionValue, err.Error())
+			return
+		}
+		response, err := client.GetById(context.Background(), "", "", common.URL_SYSTEMINFO)
+		if err != nil {
+			fmt.Printf("** Failed get system info, returning %d. err: %s\n", cipherTrustVersionValue, err.Error())
+			return
+		}
+		version := gjson.Get(response, "version").String()
+		fmt.Printf("SysInfo Version: %v\n", version)
+		if version == "" {
+			fmt.Printf("** System version is empty, returning %d\n", cipherTrustVersionValue)
+			return
+		}
+		if version == "Development" {
+			fmt.Printf("** System version is Development, returning %d\n", devCMVersionValue)
+			return
+		}
+		versions := strings.Split(version, ".")
+		if len(versions) < 2 {
+			fmt.Printf("** Unable to determine system version from '%s', returning %d\n", version, cipherTrustVersionValue)
+			return
+		}
+		v, err := strconv.Atoi(versions[0] + versions[1])
+		if err != nil {
+			fmt.Printf("** Failed to convert %s to int, returning %d. Error: %s\n", versions[0]+versions[1], devCMVersionValue, err.Error())
+			return
+		}
+		cipherTrustVersionValue = v
+		fmt.Printf("Test System Version: %d\n", cipherTrustVersionValue)
+	})
+	return cipherTrustVersionValue
 }
 
 // testCheckAttributeContains verifies that a single string attribute on a resource
