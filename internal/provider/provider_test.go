@@ -17,18 +17,57 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const (
-	providerConfig = `
+// providerConfig is the HCL provider block injected at the front of every
+// acceptance-test config. It is built once from CIPHERTRUST_* environment
+// variables so that no sed-based source-file patching is needed in CI.
+// Hardcoded fallbacks preserve backward compatibility for local dev machines
+// that do not export these variables.
+//
+// CDSPaaS mode (CIPHERTRUST_TENANT set): includes `tenant`; omits
+// domain/auth_domain (they are irrelevant and provoke a provider warning).
+//
+// CM mode (CIPHERTRUST_TENANT empty): includes domain + auth_domain.
+var providerConfig = func() string {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	if address == "" {
+		address = "https://192.168.2.135"
+	}
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	if username == "" {
+		username = "admin"
+	}
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	if password == "" {
+		password = "ChangeIt01!"
+	}
+	tenant := os.Getenv("CIPHERTRUST_TENANT")
+
+	cfg := fmt.Sprintf(`
 provider "ciphertrust" {
-	address = "https://192.168.2.135"
-	username = "admin"
-	password = "ChangeIt01!"
-	bootstrap = "no"
-	domain = "root"
-	auth_domain = "root"
-}
-`
-)
+  address  = %q
+  username = %q
+  password = %q
+`, address, username, password)
+
+	if tenant != "" {
+		// CDSPaaS: tenant drives auth_domain_path; domain/auth_domain unused.
+		cfg += fmt.Sprintf("  tenant = %q\n", tenant)
+	} else {
+		// On-prem CM: explicit domain and auth_domain.
+		domain := os.Getenv("CIPHERTRUST_DOMAIN")
+		if domain == "" {
+			domain = "root"
+		}
+		authDomain := os.Getenv("CIPHERTRUST_AUTH_DOMAIN")
+		if authDomain == "" {
+			authDomain = "root"
+		}
+		cfg += fmt.Sprintf("  domain      = %q\n", domain)
+		cfg += fmt.Sprintf("  auth_domain = %q\n", authDomain)
+	}
+	cfg += "}\n"
+	return cfg
+}()
 
 var (
 	testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){

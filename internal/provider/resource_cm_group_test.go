@@ -11,8 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-const testGroupName = "TFTestGroup"
-
 func cmGroupConfig(name, description, appMeta string) string {
 	cfg := fmt.Sprintf(`
 resource "ciphertrust_groups" "testGroup" {
@@ -29,21 +27,23 @@ resource "ciphertrust_groups" "testGroup" {
 }
 
 func TestAccCMGroup_basicCreate(t *testing.T) {
+	name := "TFTestGroup-" + uuid.New().String()[:8]
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: cmGroupConfig(testGroupName, "Created via TF", `{"env":"test"}`),
+				Config: cmGroupConfig(name, "Created via TF", `{"env":"test"}`),
 				Check: checkStep(t, "basic create",
 				resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "id"),
-				resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", testGroupName),
+				resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", name),
 				resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "Created via TF"),
 				resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "app_metadata"),
 				),
 			},
 			// Verify no drift on a subsequent plan.
 			{
-				Config:             cmGroupConfig(testGroupName, "Created via TF", `{"env":"test"}`),
+				Config:             cmGroupConfig(name, "Created via TF", `{"env":"test"}`),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -52,13 +52,14 @@ func TestAccCMGroup_basicCreate(t *testing.T) {
 }
 
 func TestAccCMGroup_driftDetection(t *testing.T) {
+	name := "TFTestGroupDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: cmGroupConfig(testGroupName+"Drift", "Drift test", ""),
+				Config: cmGroupConfig(name, "Drift test", ""),
 			Check: checkStep(t, "drift detection: create",
 				resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "id"),
 				func(s *terraform.State) error {
@@ -84,7 +85,7 @@ func TestAccCMGroup_driftDetection(t *testing.T) {
 						common.URL_GROUP+"/"+capturedID,
 					)
 				},
-				Config:             cmGroupConfig(testGroupName+"Drift", "Drift test", ""),
+				Config:             cmGroupConfig(name, "Drift test", ""),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
@@ -93,13 +94,14 @@ func TestAccCMGroup_driftDetection(t *testing.T) {
 }
 
 func TestAccCMGroup_attributeDrift(t *testing.T) {
+	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: cmGroupConfig(testGroupName+"AttrDrift", "Original description", ""),
+				Config: cmGroupConfig(name, "Original description", ""),
 			Check: checkStep(t, "attribute drift: create",
 				resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "Original description"),
 				func(s *terraform.State) error {
@@ -128,7 +130,7 @@ func TestAccCMGroup_attributeDrift(t *testing.T) {
 						"name",
 					)
 				},
-				Config:             cmGroupConfig(testGroupName+"AttrDrift", "Original description", ""),
+				Config:             cmGroupConfig(name, "Original description", ""),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},

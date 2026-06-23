@@ -1,21 +1,25 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestResourceCTEPolicyDataTXRule(t *testing.T) {
+	name := "test-policy-datatx-" + uuid.New().String()[:8]
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 
 			// Step 1: Create Standard Policy with Key Rule (clear_key)
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_policy" "policy" {
-  name        = "test-policy-datatx"
+  name        = %q
   policy_type = "Standard"
 
   security_rules = [{
@@ -28,7 +32,7 @@ resource "ciphertrust_cte_policy" "policy" {
     key_type = ""
   }]
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy.policy", "id"),
 				),
@@ -36,9 +40,9 @@ resource "ciphertrust_cte_policy" "policy" {
 
 			// Step 2: Add Data TX Rule (clear_key)
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_policy" "policy" {
-  name        = "test-policy-datatx"
+  name        = %q
   policy_type = "Standard"
 
   security_rules = [{
@@ -60,7 +64,7 @@ resource "ciphertrust_cte_policy_data_tx_rule" "datatx" {
     key_type = ""
   }
 }
-`,
+`, name),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy_data_tx_rule.datatx", "rule.id"),
 				),
