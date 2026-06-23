@@ -1,5 +1,27 @@
 # 1.0.1
 
+## Security: Secure-by-default TLS (breaking)
+    TLS certificate verification is now ENABLED by default. The `no_ssl_verify`
+    provider attribute now defaults to `false` (previously `true`); the HTTP
+    client enforces a minimum TLS version of 1.2 and rejects TLS 1.0/1.1.
+    Mitigates CWE-295 (Improper Certificate Validation) and CWE-326
+    (Inadequate Encryption Strength).
+
+    Added `ca_cert` (env: CIPHERTRUST_CA_CERT) for supplying a PEM-encoded
+    CA bundle for private PKI, internally-issued certificates, or air-gapped
+    environments. The file may contain one or more concatenated PEM certs.
+    Supplied CAs are ADDED to the system trust store, not substituted for
+    it — a single plan can reach both private-CA and publicly-trusted
+    CipherTrust Managers without further configuration.
+
+    Migration notes:
+      - Production: do nothing if your CipherTrust Manager presents a
+        certificate trusted by the system root store.
+      - Private PKI / self-signed: set `ca_cert = "/path/to/ca.pem"` (or
+        export CIPHERTRUST_CA_CERT) so the provider trusts your CA.
+      - Development / lab only: explicitly set `no_ssl_verify = true`. The
+        provider now emits a warning when verification is disabled.
+
 ## Provider Configuration
     Added `tenant` (env: CIPHERTRUST_TENANT) for CDSPaaS authentication.
     When set, the provider sends auth_domain_path on sign-in and rejects
