@@ -34,6 +34,8 @@ The following table illustrates which provider parameters can be provided as env
 | domain               | CM_DOMAIN            | domain                  | No       | Empty string (root domain) |
 | auth_domain          | CM_AUTH_DOMAIN       | auth_domain             | No       | Empty string (root domain) |
 | tenant               | CIPHERTRUST_TENANT   | tenant                  | No       | Empty string (CM mode)     |
+| ca_cert              | CIPHERTRUST_CA_CERT  | ca_cert                 | No       | N/A (uses system root CAs) |
+| no_ssl_verify        | NO_SSL_VERIFY        | no_ssl_verify           | No       | false (verification ON)    |
 | replication_delay_ms | CM_REPLICATION_DELAY |replication_delay_ms     | No       |100 (milliseconds)          | 
 | remaining parameters | no                   | yes                     | No       | N/A                        |
  
@@ -132,6 +134,67 @@ diagnostic rather than producing a runtime error:
 In addition, `ciphertrust_cm_ssh_key` is implicitly unavailable on CDSPaaS
 because it runs only in bootstrap mode, which CDSPaaS does not expose.
 
+## TLS / Certificate Validation
+
+The provider is **secure by default**: TLS certificate chain and hostname
+verification are enabled, and the HTTP client enforces TLS 1.2 as the
+minimum protocol version (TLS 1.0 and 1.1 are rejected).
+
+### Trusting a private or internal CA
+
+Use `ca_cert` to point at a PEM-encoded CA bundle when the CipherTrust
+Manager certificate is issued by a private or internal CA that is not in
+the system trust store:
+
+```terraform
+provider "ciphertrust" {
+  address  = "https://cm.internal.example.com"
+  username = "cm-username"
+  password = "cm-password"
+  ca_cert  = "/etc/ssl/certs/my-internal-ca.pem"
+}
+```
+
+The file may contain one or more concatenated PEM certificates. The
+provider returns a clear error if the file cannot be read or contains no
+valid certificates.
+
+The supplied CAs are **added on top of** the system trust store — they
+do not replace it. This means a single plan can talk to one CipherTrust
+Manager presenting a private-CA cert and another presenting a
+publicly-trusted cert without further configuration.
+
+### Disabling verification (testing only)
+
+`no_ssl_verify = true` disables certificate verification entirely. This
+is intended **for local development or testing only** — it exposes
+connections to man-in-the-middle attacks and must not be used in
+production. The provider emits a warning at plan time whenever
+verification is disabled.
+
+```terraform
+provider "ciphertrust" {
+  address       = "https://lab-cm.local"
+  username      = "cm-username"
+  password      = "cm-password"
+  no_ssl_verify = true   # WARNING: development/test environments only
+}
+```
+
+### Migration from earlier provider versions
+
+Earlier provider releases defaulted `no_ssl_verify` to `true` (certificate
+validation **disabled**). The default is now `false`. To migrate:
+
+- **Production** with a publicly-trusted certificate: no change required.
+- **Private PKI / internally-issued certificate**: add `ca_cert =
+  "/path/to/ca.pem"` (or export `CIPHERTRUST_CA_CERT`).
+- **Development / lab only**: explicitly set `no_ssl_verify = true`. You
+  will see a plan-time warning that this is insecure.
+
+This mitigates CWE-295 (Improper Certificate Validation) and CWE-326
+(Inadequate Encryption Strength).
+
 ## Configuration File
 
 All provider parameters can be read from the configuration file.
@@ -192,7 +255,8 @@ provider "ciphertrust" {}
 
   The `bootstrap` value can be set in the provider block, via `BOOTSTRAP` environment variable or in ~/.ciphertrust/config file. Default value for `bootstrap` variable is "no". 
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
-- `no_ssl_verify` (Boolean) Set as false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
+- `ca_cert` (String) Path to a PEM-encoded CA certificate bundle used to validate the CipherTrust server's TLS certificate. Use this for private PKI, internally-issued certificates, or air-gapped environments where the certificate chain is not in the system trust store. The file may contain one or more concatenated PEM certificates. ca_cert can be set in the provider block, via the CIPHERTRUST_CA_CERT environment variable or in ~/.ciphertrust/config.
+- `no_ssl_verify` (Boolean) Disable TLS certificate chain and hostname verification when set to true. **WARNING:** disabling certificate verification exposes connections to man-in-the-middle attacks and should only be used for local development or testing — never in production. Set to false (the default) to enforce certificate validation; supply a custom CA bundle via `ca_cert` for private PKI or air-gapped environments. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is false.
 - `oci_operation_timeout` (Number) Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. oci_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
 - `password` (String, Sensitive) Password of a CipherTrust user. password can be set in the provider block, via the CM_PASSWORD environment variable or in ~/.ciphertrust/config
 - `replication_delay_ms` (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. replication_delay_ms can be set in the provider block, via the CM_REPLICATION_DELAY environment variable or in ~/.ciphertrust/config. Default is 100.
