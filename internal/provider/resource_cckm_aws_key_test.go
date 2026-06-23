@@ -76,9 +76,18 @@ func initCckmAwsTest(timeout ...int) (string, bool) {
 	if len(timeout) > 0 {
 		operationTimeout = timeout[0]
 	}
+	// Lab / CI CMs present self-signed certs (often without IP SANs). Honour
+	// CIPHERTRUST_CA_CERT when set; otherwise opt into skip-verify so the
+	// inline test provider block isn't blocked by the secure-by-default TLS
+	// behaviour introduced for end users.
+	tlsLine := "  no_ssl_verify = true"
+	if caCert := os.Getenv("CIPHERTRUST_CA_CERT"); caCert != "" {
+		tlsLine = fmt.Sprintf("  ca_cert = %q", caCert)
+	}
 	awsConfig := `
 		provider "ciphertrust" {
 			aws_operation_timeout = %d
+` + tlsLine + `
 		}
 		resource "ciphertrust_aws_connection" "aws_connection" {
 			name = "%s"
