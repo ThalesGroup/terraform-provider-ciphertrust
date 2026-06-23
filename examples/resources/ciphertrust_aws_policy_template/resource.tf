@@ -17,14 +17,16 @@ resource "ciphertrust_aws_kms" "kms" {
 
 # Define a policy template using key_admins and key_users
 resource "ciphertrust_aws_policy_template" "policy_template_ex1" {
+  name       = "policy-template-1"
+  kms_id     = ciphertrust_aws_kms.kms.id
   key_admins = ["aws-iam-user", "aws-iam-role"]
   key_users  = ["aws-iam-user", "aws-iam-role"]
-  km         = kms.id
 }
 
 # Define a policy template using a policy json
 resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
-  km     = kms.id
+  name   = "policy-template-2"
+  kms_id = ciphertrust_aws_kms.kms.id
   policy = <<-EOT
     {
     "Version": "2012-10-17",
@@ -44,9 +46,9 @@ resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
 
 # Define an AWS key and assign the key policy template to it
 resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
+  kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
-  policy {
+  key_policy = {
     policy_template = ciphertrust_aws_policy_template.policy_template_ex1.id
   }
 }

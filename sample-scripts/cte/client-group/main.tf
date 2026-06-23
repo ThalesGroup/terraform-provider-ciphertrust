@@ -18,6 +18,13 @@ resource "ciphertrust_cte_client_group" "test_cg_group_test1" {
   cluster_type = "NON-CLUSTER"
   communication_enabled = true
   description = "tf test cg.."
+
+  # - List of clients to be added to client group
+  client_list = [
+    "client1",  # Client hostname or identifier
+    "client2"      # Client IP address
+  ]
+
   # Operation type to perform on the client group
   #
   # IMPORTANT:
@@ -40,13 +47,9 @@ resource "ciphertrust_cte_client_group" "test_cg_group_test1" {
   # - Used ONLY for client-related operations:
   #     add-client, remove-client
   # - Ignored for other op_type values
+  # - Add/remove clients from client_list based on operation type
 
-/*
-  client_list = [
-    "client1",  # Client hostname or identifier
-    "client2"      # Client IP address
-  ]
-*/
+
   # Whether to inherit attributes from client group
   #
   # NOTE:

@@ -21,12 +21,7 @@ description: |-
 
 ### Optional
 
-- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `rule` (Attributes) Security Rule to be updated in the parent policy. (see [below for nested schema](#nestedatt--rule))
-
-### Read-Only
-
-- `rule_id` (String) ID of the Security Rule created in the parent policy
 
 <a id="nestedatt--rule"></a>
 ### Nested Schema for `rule`
@@ -38,7 +33,12 @@ Optional:
 - `exclude_process_set` (Boolean) Process set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_resource_set` (Boolean) Resource set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_user_set` (Boolean) User set to exclude. Supported for Standard, LDT and IDT policies.
+- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `partial_match` (Boolean) Whether to allow partial match operations. By default, it is enabled. Supported for Standard, LDT and IDT policies.
 - `process_set_id` (String) ID of the process set to link to the policy.
 - `resource_set_id` (String) ID of the resource set to link to the policy. Supported for Standard, LDT and IDT policies.
 - `user_set_id` (String) ID of the user set to link to the policy.
+
+Read-Only:
+
+- `id` (String) Identifier of the security rule.

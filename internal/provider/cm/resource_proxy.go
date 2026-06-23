@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -145,6 +146,14 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_CM_PROXY)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Proxy Not Found",
+				"The Proxy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading Proxy information on CipherTrust Manager: ",

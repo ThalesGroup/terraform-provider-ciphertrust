@@ -92,7 +92,7 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 
 // deleteOCIKey schedules an OCI key for deletion.
 func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, days int64, diags *diag.Diagnostics) {
-	keyJSON := getOciKey(ctx, id, client, vaultID, keyID, "deleting", diags)
+	keyJSON, _ := getOciKey(ctx, id, client, vaultID, keyID, "deleting", diags)
 	if diags.HasError() {
 		return // key error - resource kept in state
 	}
@@ -159,7 +159,7 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 		if strings.Contains(err.Error(), notFoundError) {
 			msg := "OCI vault (" + vaultID + ") was not found."
 			details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID})
-			if opLabel == "deleting" {
+			if opLabel == "deleting" || opLabel == "reading" {
 				tflog.Warn(ctx, details)
 				diags.AddWarning(details, "")
 			} else {
@@ -178,37 +178,72 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 }
 
 // getOciKey fetches an OCI key by its CipherTrust Manager ID.
-// If vaultID is non-empty the vault is verified to exist first (opLabel "reading");
-// a missing vault is always a hard error. Callers that do not know the vault ID
-// at call time (e.g. getOciKeyVersion) should pass "".
-func getOciKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
-	if vaultID != "" {
-		getOciVault(ctx, id, client, vaultID, "reading", diags)
-		if diags.HasError() {
-			return ""
-		}
-	}
+// Returns (keyJSON, false) on success.
+// If the key is not found (404):
+//   - opLabel "deleting": warning added, ("", false) returned - resource removed from state.
+//   - opLabel "reading" + vaultID set + vault 404: warning added, ("", true) returned - caller
+//     should preserve existing state until the vault is recovered.
+//   - opLabel "reading" + vaultID set + vault reachable: error added, ("", false) returned.
+//   - other opLabels + vaultID set: vault checked for context; error added, ("", false) returned.
+//   - vaultID empty: generic error added, ("", false) returned.
+//
+// A non-404 key error is always a hard error; ("", false) is returned.
+// Callers that do not know the vault ID at call time (e.g. getOciKeyVersion) should pass "".
+func getOciKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, opLabel string, diags *diag.Diagnostics) (string, bool) {
 	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			msg := "OCI key (" + keyID + ") was not found."
-			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			if opLabel == "deleting" {
+				msg := "OCI key was not found, it will be removed from state."
+				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 				tflog.Warn(ctx, details)
 				diags.AddWarning(details, "")
-			} else {
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
+				return "", false
 			}
-			return ""
+			if vaultID != "" {
+				_, vaultErr := client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
+				if vaultErr != nil {
+					if strings.Contains(vaultErr.Error(), notFoundError) {
+						if opLabel == "reading" {
+							// Vault gone - key is hidden. Signal caller to preserve existing state.
+							msg := "OCI vault was not found while reading OCI key. Key state preserved until vault is recovered."
+							details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
+							tflog.Warn(ctx, details)
+							diags.AddWarning(details, "")
+							return "", true
+						}
+						msg := "OCI vault was not found while " + opLabel + " OCI key."
+						details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
+						tflog.Error(ctx, details)
+						diags.AddError(details, "")
+					} else {
+						msg := "Error reading OCI vault while " + opLabel + " OCI key."
+						details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID, "error": vaultErr.Error()})
+						tflog.Error(ctx, details)
+						diags.AddError(details, "")
+					}
+				} else {
+					// Vault is reachable but the key is gone.
+					msg := "OCI key was not found in CipherTrust Manager while " + opLabel + ". Use terraform state rm to remove this resource from state if the key no longer exists."
+					details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
+					tflog.Error(ctx, details)
+					diags.AddError(details, "")
+				}
+				return "", false
+			}
+			msg := "OCI key was not found while " + opLabel + "."
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return "", false
 		}
 		msg := "Error " + opLabel + " OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		tflog.Error(ctx, details)
 		diags.AddError(details, "")
-		return ""
+		return "", false
 	}
-	return response
+	return response, false
 }
 
 // setKeyState sets the full Terraform state. Used by resourceCCKMOCIKey and resourceCCKMOCIByokKey.
@@ -565,22 +600,8 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 	}
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
-	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyState == currentState; retry++ {
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
-		if time.Since(tStart).Seconds() > refreshTokenSeconds {
-			if err = client.RefreshToken(ctx, id); err != nil {
-				msg := "Error refreshing CipherTrust Manager authentication token."
-				details := utils.ApiError(msg, map[string]interface{}{
-					"error":  err.Error(),
-					"key_id": keyID,
-				})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-			tStart = time.Now()
-		}
 		if refresh {
 			response, err = client.PostNoData(ctx, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
 			if err != nil {

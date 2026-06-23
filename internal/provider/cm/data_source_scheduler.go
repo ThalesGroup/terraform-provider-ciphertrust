@@ -294,18 +294,15 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 		Scope:          types.StringValue(dbBackupParams.Scope),
 		TiedToHSM:      types.BoolValue(dbBackupParams.TiedToHSM),
 		RetentionCount: types.Int64Value(dbBackupParams.RetentionCount),
-		Filters: func() []BackupFilterTFSDK {
-			var filters []BackupFilterTFSDK
+		Filters: func() types.List {
+			filterObjs := make([]attr.Value, 0)
 			if dbBackupParams.Filters != nil {
 				for _, filter := range *dbBackupParams.Filters {
 					var resourceQueryStr string
-
-					// Handle ResourceQuery which is an interface
 					switch query := filter.ResourceQuery.(type) {
 					case string:
 						resourceQueryStr = query
 					case map[string]interface{}:
-						// Serialize map into a JSON string
 						bytes, err := json.Marshal(query)
 						if err != nil {
 							resourceQueryStr = "error_serializing_resource_query"
@@ -315,14 +312,23 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 					default:
 						resourceQueryStr = fmt.Sprintf("%v", query)
 					}
-
-					filters = append(filters, BackupFilterTFSDK{
-						ResourceType:  types.StringValue(filter.ResourceType),
-						ResourceQuery: types.StringValue(resourceQueryStr),
+					obj, objDiags := types.ObjectValue(BackupFilterElemType.AttrTypes, map[string]attr.Value{
+						"resource_type":  types.StringValue(filter.ResourceType),
+						"resource_query": types.StringValue(resourceQueryStr),
 					})
+					if objDiags.HasError() {
+						diags.Append(objDiags...)
+						continue
+					}
+					filterObjs = append(filterObjs, obj)
 				}
 			}
-			return filters
+			list, listDiags := types.ListValue(BackupFilterElemType, filterObjs)
+			if listDiags.HasError() {
+				diags.Append(listDiags...)
+				return types.ListValueMust(BackupFilterElemType, []attr.Value{})
+			}
+			return list
 		}(),
 	}
 }

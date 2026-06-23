@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -59,6 +60,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "The name of the domain",
+				PlanModifiers: []planmodifier.String{
+					NameImmutableModifier{},
+				},
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
@@ -115,9 +119,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"updated_at": schema.StringAttribute{
-				Computed: true,
-			},
+		"updated_at": schema.StringAttribute{
+			Computed: true,
+		},
 		},
 	}
 }
@@ -239,6 +243,14 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Domain Not Found",
+				"The Domain resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager: ",
@@ -290,9 +302,11 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		state.Admins = admins
 	}
 
-	// Read meta_data map
+	// Read meta_data map — only set state if the server returned non-empty meta.
+	// When the server returns {} we leave state.Meta unchanged (preserving null
+	// if the user did not configure meta_data) to avoid spurious plan drift.
 	metaResult := gjson.Get(response, "meta")
-	if metaResult.Exists() {
+	if metaResult.Exists() && len(metaResult.Map()) > 0 {
 		metaMap := make(map[string]types.String)
 		metaResult.ForEach(func(key, value gjson.Result) bool {
 			metaMap[key.String()] = types.StringValue(value.String())

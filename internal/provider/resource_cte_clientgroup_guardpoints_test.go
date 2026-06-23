@@ -39,7 +39,7 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
     "/tmp/testpathcg1" = {
       guard_point_params = {
         guard_point_type = "directory_auto"
-        policy_id        = ciphertrust_cte_policy.policy.name
+        policy_id        = ciphertrust_cte_policy.policy.id
       }
     }
   }
@@ -79,7 +79,7 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
     "/tmp/testpathcg1" = {
       guard_point_params = {
         guard_point_type = "directory_auto"
-        policy_id        = ciphertrust_cte_policy.policy.name
+        policy_id        = ciphertrust_cte_policy.policy.id
         guard_enabled    = false
       }
     }
@@ -120,14 +120,14 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
     "/tmp/testpathcg1" = {
       guard_point_params = {
         guard_point_type = "directory_auto"
-        policy_id        = ciphertrust_cte_policy.policy.name
+        policy_id        = ciphertrust_cte_policy.policy.id
         guard_enabled    = false
       }
     }
     "/tmp/testpathcg2" = {
       guard_point_params = {
         guard_point_type = "directory_auto"
-        policy_id        = ciphertrust_cte_policy.policy.name
+        policy_id        = ciphertrust_cte_policy.policy.id
       }
     }
   }
@@ -167,7 +167,7 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
     "/tmp/testpathcg2" = {
       guard_point_params = {
         guard_point_type = "directory_auto"
-        policy_id        = ciphertrust_cte_policy.policy.name
+        policy_id        = ciphertrust_cte_policy.policy.id
       }
     }
   }

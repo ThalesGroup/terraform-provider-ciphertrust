@@ -65,7 +65,8 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name.",
+				Description: "Unique connection name. Immutable after creation.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"tenant_id": schema.StringAttribute{
 				Optional:    true,

@@ -41,8 +41,9 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
+				Description: "Unique group name. Immutable after creation.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					NameImmutableModifier{},
 				},
 			},
 			"app_metadata": schema.StringAttribute{
@@ -183,7 +184,10 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	if v := gjson.Get(response, "app_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		state.AppMetadata = types.StringValue(v.Raw)
+		// Normalize to compact JSON so whitespace differences between CM and
+		// CDSPaaS responses don't surface as phantom drift in subsequent plans.
+		compacted := compactJSONString(v.Raw)
+		state.AppMetadata = types.StringValue(compacted)
 	} else {
 		state.AppMetadata = types.StringNull()
 	}
@@ -311,4 +315,19 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+// compactJSONString returns s compacted (no extra whitespace). If compaction
+// fails it returns s unchanged — keeps JSON round-trips safe when the server
+// returns pretty-printed JSON and the config stores compact JSON.
+func compactJSONString(s string) string {
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return s
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return s
+	}
+	return string(b)
 }

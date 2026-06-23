@@ -16,7 +16,7 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 	kmsTwoConfig := `
 		resource "ciphertrust_aws_kms" "kms_two" {
 			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-			aws_connection  = ciphertrust_aws_connection.aws_connection.id
+			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			regions = [
 				data.ciphertrust_aws_account_details.account_details.regions[3],

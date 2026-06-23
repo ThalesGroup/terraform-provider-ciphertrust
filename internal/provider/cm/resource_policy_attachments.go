@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -184,6 +185,11 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Read]["+id+"]")
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Warn(ctx, "The Policy Attachment resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error reading CM Policy Attachment on CipherTrust Manager: ",
 			"Could not read Attachment for CM Policy: "+state.ID.ValueString()+", unexpected error: "+err.Error(),

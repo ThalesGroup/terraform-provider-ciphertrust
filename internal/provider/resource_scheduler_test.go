@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -67,6 +68,51 @@ resource "ciphertrust_scheduler" "scheduler" {
 			},
 		},
 	})
+}
+
+// TestAccScheduler_nameImmutable verifies that changing the name of a scheduler
+// after creation produces a plan-time error, not a silent no-op.
+func TestAccScheduler_nameImmutable(t *testing.T) {
+	RequireCM(t)
+	t.Log("======== CHECK: scheduler name immutable ========")
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scheduler" "sched" {
+  name      = "tf-test-sched-immutable"
+  operation = "database_backup"
+  run_at    = "*/15 * * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.sched", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.sched", "name", "tf-test-sched-immutable"),
+				),
+			},
+			// Step 2: Attempt to rename — must produce a plan-time error
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scheduler" "sched" {
+  name      = "tf-test-sched-renamed"
+  operation = "database_backup"
+  run_at    = "*/15 * * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Name cannot be changed"),
+			},
+		},
+	})
+	t.Log("======== PASSED: scheduler name immutable ========")
 }
 
 // terraform destroy will perform automatically at the end of the test

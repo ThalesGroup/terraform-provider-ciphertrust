@@ -12,13 +12,18 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+const notFoundError = "status: 404"
 
 var (
 	_ resource.Resource              = &resourceCCKMAWSConnection{}
@@ -50,16 +55,21 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				},
 			},
 			"dev_account": schema.StringAttribute{
-				Description: "The developer account which owns this resource's application.",
-				Computed:    true,
+				Description:   "The developer account which owns this resource's application.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"application": schema.StringAttribute{
-				Description: "The application this resource belongs to.",
-				Computed:    true,
+				Description:   "The application this resource belongs to.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name",
+				Description: "(Immutable) Unique connection name",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"access_key_id": schema.StringAttribute{
 				Optional:    true,
@@ -89,7 +99,6 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional: true,
-				Computed: true,
 				Description: "Name of the cloud. Options are: \n" +
 					"aws (default) \n" +
 					"aws-us-gov \n" +
@@ -121,6 +130,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					},
 					"private_key": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "The private key associated with the certificate",
 					},
 				},
@@ -146,19 +156,49 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"secret_access_key": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Secret associated with the access key ID of the AWS user",
 			},
-			//common response parameters (optional)
-			"uri":                   schema.StringAttribute{Computed: true},
-			"account":               schema.StringAttribute{Computed: true},
-			"created_at":            schema.StringAttribute{Computed: true},
-			"updated_at":            schema.StringAttribute{Computed: true},
-			"service":               schema.StringAttribute{Computed: true},
-			"category":              schema.StringAttribute{Computed: true},
-			"resource_url":          schema.StringAttribute{Computed: true},
-			"last_connection_ok":    schema.BoolAttribute{Computed: true},
-			"last_connection_error": schema.StringAttribute{Computed: true},
-			"last_connection_at":    schema.StringAttribute{Computed: true},
+			//common response parameters
+			"uri": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"account": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"updated_at": schema.StringAttribute{
+				Computed: true,
+			},
+			"service": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"category": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"resource_url": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_ok": schema.BoolAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_error": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 		},
 	}
 }
@@ -221,7 +261,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
 
-	if plan.IsRoleAnywhere.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.IsRoleAnywhere.IsNull() && !plan.IsRoleAnywhere.IsUnknown() {
 		payload.IsRoleAnywhere = plan.IsRoleAnywhere.ValueBool()
 	}
 
@@ -236,7 +276,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	}
 	payload.Labels = labelsPayload
 
-	// Add labels to payload
+	// Add meta to payload
 	metaPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metaPayload[k] = v.(types.String).ValueString()
@@ -287,6 +327,8 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	plan.Category = types.StringValue(gjson.Get(response, "category").String())
 	plan.Service = types.StringValue(gjson.Get(response, "service").String())
 	plan.ResourceURL = types.StringValue(gjson.Get(response, "resource_url").String())
+
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
@@ -303,28 +345,32 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state AWSConnectionModelTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_aws_connection.go -> Read] connection not found, removing from state ["+id+"]")
+		if strings.Contains(err.Error(), notFoundError) {
+			// Intentional: a 404 on an AWS connection reliably indicates out-of-band deletion.
+			// Terraform should plan re-creation.
 			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error Reading CipherTrust AWS Connection",
-			"Could not read AWS Connection id: "+state.ID.ValueString()+": "+err.Error(),
+			"Error reading AWS Connection on CipherTrust Manager: ",
+			"Could not read AWS Connection id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
 
-	// Computed / server-generated fields
+	// Computed-only fields — always present in GET response; UseStateForUnknown keeps them stable
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
@@ -332,46 +378,161 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Category = types.StringValue(gjson.Get(response, "category").String())
 	state.Service = types.StringValue(gjson.Get(response, "service").String())
+	state.Category = types.StringValue(gjson.Get(response, "category").String())
 	state.ResourceURL = types.StringValue(gjson.Get(response, "resource_url").String())
+
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent
 	state.LastConnectionOK = types.BoolValue(gjson.Get(response, "last_connection_ok").Bool())
 	state.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	state.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 
-	// User-configurable fields confirmed in the GET swagger response — refreshed for drift detection.
+	// Required / always-present user fields
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	// cloud_name is Optional+Computed: CM always returns a value (default "aws").
-	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
-	// Optional-only fields: only update when non-empty to avoid null → "" phantom drift.
-	if v := gjson.Get(response, "description").String(); v != "" {
-		state.Description = types.StringValue(v)
+
+	// description: purely user-settable; CM only returns what was explicitly set.
+	// Use r.Exists() to surface drift when the value changes vs config.
+	if r := gjson.Get(response, "description"); r.Exists() {
+		state.Description = types.StringValue(r.String())
+	} else {
+		state.Description = types.StringNull()
 	}
-	if v := gjson.Get(response, "assume_role_arn").String(); v != "" {
-		state.AssumeRoleARN = types.StringValue(v)
-	}
-	if v := gjson.Get(response, "assume_role_external_id").String(); v != "" {
-		state.AssumeRoleExternalID = types.StringValue(v)
-	}
-	// aws_region, aws_sts_regional_endpoints, is_role_anywhere, iam_role_anywhere are
-	// CREATE-body-only fields per the API spec: not returned by GET. Plan/state values
-	// are preserved as-is; out-of-band drift for these fields cannot be detected via the API.
-	state.Labels = common.ParseMap(response, &resp.Diagnostics, "labels")
-	state.Meta = common.ParseMap(response, &resp.Diagnostics, "meta")
-	// products: preserve null for unconfigured; empty slice for explicitly-configured empty list.
-	if gjson.Get(response, "products").IsArray() {
-		var products []types.String
-		gjson.Get(response, "products").ForEach(func(_, v gjson.Result) bool {
-			products = append(products, types.StringValue(v.String()))
-			return true
-		})
-		if products == nil {
-			products = []types.String{}
+	// access_key_id: only hydrate from API when the user configured the field (prior state
+	// is non-null). When null in state, the connection may carry credentials set via the
+	// env-var fallback in Create(); reading them back would produce a spurious diff against
+	// an HCL config that does not declare the field. When non-null, update from API to
+	// surface drift; if absent from response, preserve prior state (CDSPaaS may not echo
+	// credentials back in GET responses).
+	if !state.AccessKeyID.IsNull() {
+		if r := gjson.Get(response, "access_key_id"); r.Exists() {
+			state.AccessKeyID = types.StringValue(r.String())
 		}
-		state.Products = products
+	}
+	if r := gjson.Get(response, "assume_role_arn"); r.Exists() {
+		state.AssumeRoleARN = types.StringValue(r.String())
+	} else {
+		state.AssumeRoleARN = types.StringNull()
+	}
+	if r := gjson.Get(response, "assume_role_external_id"); r.Exists() {
+		state.AssumeRoleExternalID = types.StringValue(r.String())
+	} else {
+		state.AssumeRoleExternalID = types.StringNull()
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Read]["+id+"]")
+	// aws_region, aws_sts_regional_endpoints, cloud_name: CM returns server defaults
+	// (e.g. cloud_name="aws", aws_sts_regional_endpoints="legacy", aws_region="us-east-1")
+	// even when the user did not configure them. Guard with IsNull to prevent perpetual
+	// drift for users who never set these fields (same pattern as is_role_anywhere).
+	if !state.AWSRegion.IsNull() {
+		if r := gjson.Get(response, "aws_region"); r.Exists() {
+			state.AWSRegion = types.StringValue(r.String())
+		} else {
+			state.AWSRegion = types.StringNull()
+		}
+	}
+	if !state.AWSSTSRegionalEndpoints.IsNull() {
+		if r := gjson.Get(response, "aws_sts_regional_endpoints"); r.Exists() {
+			state.AWSSTSRegionalEndpoints = types.StringValue(r.String())
+		} else {
+			state.AWSSTSRegionalEndpoints = types.StringNull()
+		}
+	}
+	if !state.CloudName.IsNull() {
+		if r := gjson.Get(response, "cloud_name"); r.Exists() {
+			state.CloudName = types.StringValue(r.String())
+		} else {
+			state.CloudName = types.StringNull()
+		}
+	}
+
+	// is_role_anywhere: CM always returns this field (default false).
+	// Guard with IsNull() check: users who do not configure this attribute have null in state.
+	// Writing false unconditionally for unconfigured users causes perpetual drift (null → false).
+	if !state.IsRoleAnywhere.IsNull() {
+		if r := gjson.Get(response, "is_role_anywhere"); r.Exists() {
+			state.IsRoleAnywhere = types.BoolValue(r.Bool())
+		} else {
+			state.IsRoleAnywhere = types.BoolNull()
+		}
+	}
+
+	// secret_access_key: write-only — CM never returns it in GET responses.
+	// state.SecretAccessKey retains the value loaded by req.State.Get above; no API hydration needed.
+
+	// iam_role_anywhere: CM may return an empty block when not configured. Only populate state
+	// when the anywhere_role_arn sub-field (Required) is non-empty, indicating a real configuration.
+	if r := gjson.Get(response, "iam_role_anywhere"); r.Exists() && r.Type != gjson.Null {
+		anywhereRoleARN := gjson.Get(response, "iam_role_anywhere.anywhere_role_arn").String()
+		if anywhereRoleARN != "" {
+			var nested IAMRoleAnywhereTFSDK
+			nested.AnywhereRoleARN = types.StringValue(anywhereRoleARN)
+			nested.Certificate = types.StringValue(gjson.Get(response, "iam_role_anywhere.certificate").String())
+			nested.ProfileARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.profile_arn").String())
+			nested.TrustAnchorARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.trust_anchor_arn").String())
+			// private_key: write-only — absent from CM GET responses; preserve from prior state
+			if state.IAMRoleAnywhere != nil {
+				nested.PrivateKey = state.IAMRoleAnywhere.PrivateKey
+			} else {
+				nested.PrivateKey = types.StringNull()
+			}
+			state.IAMRoleAnywhere = &nested
+		} else {
+			state.IAMRoleAnywhere = nil
+		}
+	} else {
+		state.IAMRoleAnywhere = nil
+	}
+
+	// labels map — guard with IsNull: Create() sends {} to CM when not configured,
+	// so CM echoes back {} even for unconfigured users; IsNull guard prevents false drift.
+	if !state.Labels.IsNull() {
+		if r := gjson.Get(response, "labels"); r.Exists() && r.Type != gjson.Null {
+			labelsMap := make(map[string]attr.Value)
+			r.ForEach(func(key, value gjson.Result) bool {
+				labelsMap[key.String()] = types.StringValue(value.String())
+				return true
+			})
+			labelsVal, diags := types.MapValue(types.StringType, labelsMap)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Labels = labelsVal
+		} else {
+			state.Labels = types.MapNull(types.StringType)
+		}
+	}
+
+	// meta map — same IsNull guard as labels
+	if !state.Meta.IsNull() {
+		if r := gjson.Get(response, "meta"); r.Exists() && r.Type != gjson.Null {
+			metaMap := make(map[string]attr.Value)
+			r.ForEach(func(key, value gjson.Result) bool {
+				metaMap[key.String()] = types.StringValue(value.String())
+				return true
+			})
+			metaVal, diags := types.MapValue(types.StringType, metaMap)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Meta = metaVal
+		} else {
+			state.Meta = types.MapNull(types.StringType)
+		}
+	}
+
+	// products list — distinguish null (not configured) from empty (configured as [])
+	if r := gjson.Get(response, "products"); r.Exists() && r.Type != gjson.Null {
+		products := []types.String{}
+		for _, v := range r.Array() {
+			products = append(products, types.StringValue(v.String()))
+		}
+		state.Products = products
+	} else {
+		state.Products = nil
+	}
+
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 }
@@ -379,9 +540,19 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan AWSConnectionModelTFSDK
+	var state AWSConnectionModelTFSDK
 	var payload AWSConnectionModelJSON
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Update]["+id+"]")
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Load prior state to preserve write-only fields absent from CM GET responses.
+	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -440,7 +611,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	}
 	payload.Labels = labelsPayload
 
-	// Add labels to payload
+	// Add meta to payload
 	metaPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metaPayload[k] = v.(types.String).ValueString()
@@ -455,7 +626,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: AWS Connection Update",
 			err.Error(),
@@ -463,38 +634,81 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "updatedAt")
+	// Fix: use plan.ID as the resource UUID (arg 1 → URL path); discard return value since we
+	// do a GET read-back below to refresh all Computed fields correctly.
+	_, err = r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error updating AWS Connection on CipherTrust Manager: ",
 			"Could not update AWS Connection, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	plan.ID = types.StringValue(response)
+
+	// GET read-back to refresh all Computed fields after PATCH
+	readResponse, err := r.client.GetById(ctx, uuid.New().String(), plan.ID.ValueString(), common.URL_AWS_CONNECTION)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading AWS Connection after update: ",
+			"Could not read AWS Connection id: "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Refresh Computed fields from GET read-back
+	plan.ID = types.StringValue(gjson.Get(readResponse, "id").String())
+	plan.URI = types.StringValue(gjson.Get(readResponse, "uri").String())
+	plan.Account = types.StringValue(gjson.Get(readResponse, "account").String())
+	plan.DevAccount = types.StringValue(gjson.Get(readResponse, "devAccount").String())
+	plan.Application = types.StringValue(gjson.Get(readResponse, "application").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(readResponse, "createdAt").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(readResponse, "updatedAt").String())
+	plan.Service = types.StringValue(gjson.Get(readResponse, "service").String())
+	plan.Category = types.StringValue(gjson.Get(readResponse, "category").String())
+	plan.ResourceURL = types.StringValue(gjson.Get(readResponse, "resource_url").String())
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent
+	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
+	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
+	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
+	// Optional fields retain plan values (user intent); Read() on next plan/refresh corrects API-side drift.
+
+	// Preserve write-only field: secret_access_key is never returned by CM GET responses.
+	// When not present in the HCL config, plan.SecretAccessKey is null; restore from prior
+	// state so the key is not silently lost after an update that doesn't re-supply the secret.
+	if plan.SecretAccessKey.IsNull() || plan.SecretAccessKey.ValueString() == "" {
+		plan.SecretAccessKey = state.SecretAccessKey
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state AWSConnectionModelTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Delete]["+id+"]")
+
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_AWS_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Resource already deleted out-of-band; treat as success.
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting AWS Connection",
 			"Could not delete AWS Connection, unexpected error: "+err.Error(),

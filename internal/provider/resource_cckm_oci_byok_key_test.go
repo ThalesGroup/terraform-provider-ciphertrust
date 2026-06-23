@@ -25,7 +25,6 @@ var importStateVerifyIgnoreOCIKey = []string{
 }
 
 func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
-	t.Skip("skipped")
 
 	connectionResource := initCckmOCITest(t)
 
@@ -49,7 +48,7 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 		# Create a rotation scheduler
 		resource "ciphertrust_scheduler" "scheduler_1" {
 			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name       = "oci"
 			}
 			name       = local.rotation_job_name
@@ -151,7 +150,7 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 		# Create a rotation scheduler
 		resource "ciphertrust_scheduler" "scheduler_1" {
 			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name       = "oci"
 			}
 			name       = local.rotation_job_name
@@ -163,7 +162,7 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 
 		resource "ciphertrust_scheduler" "scheduler_2" {
 			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 			cloud_name       = "oci"
 			}
 			name       = local.rotation_job_name_2

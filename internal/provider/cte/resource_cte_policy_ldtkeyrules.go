@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -19,8 +20,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEPolicyLDTKeyRule{}
-	_ resource.ResourceWithConfigure = &resourceCTEPolicyLDTKeyRule{}
+	_ resource.Resource                = &resourceCTEPolicyLDTKeyRule{}
+	_ resource.ResourceWithConfigure   = &resourceCTEPolicyLDTKeyRule{}
+	_ resource.ResourceWithImportState = &resourceCTEPolicyLDTKeyRule{}
 )
 
 func NewResourceCTEPolicyLDTKeyRule() resource.Resource {
@@ -227,10 +229,15 @@ func (r *resourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req resource.Rea
 
 	var currentKey *CurrentKeyTFSDK
 	var rule = state.LDTKeyRule
-	if rule.CurrentKey != nil {
+	if apiResponse.CurrentKey.KeyID != "" {
 		currentKey = &CurrentKeyTFSDK{
-			KeyID:   types.StringValue(apiResponse.CurrentKey.KeyID),
-			KeyType: rule.CurrentKey.KeyType, // keep from state
+			KeyID: types.StringValue(apiResponse.CurrentKey.KeyID),
+			KeyType: func() types.String {
+				if rule.CurrentKey != nil {
+					return rule.CurrentKey.KeyType
+				}
+				return types.StringNull()
+			}(),
 		}
 	}
 
@@ -241,7 +248,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req resource.Rea
 			if rule.TransformationKey != nil {
 				return rule.TransformationKey.KeyType // keep from state if exists
 			}
-			return types.StringValue("") // default to empty if not in state
+			return types.StringNull()
 		}(),
 	}
 	state.LDTKeyRule = LDTKeyRuleTFSDK{
@@ -271,6 +278,11 @@ func (r *resourceCTEPolicyLDTKeyRule) Update(ctx context.Context, req resource.U
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	//immutable field handling
+	if plan.CTEClientPolicyID.ValueString() != state.CTEClientPolicyID.ValueString() {
+		resp.Diagnostics.AddError("Cannot change policy ID associated with policy rule", "Policy ID is an immutable field")
 		return
 	}
 	var ldtKeyRule = plan.LDTKeyRule
@@ -385,4 +397,29 @@ func (d *resourceCTEPolicyLDTKeyRule) Configure(_ context.Context, req resource.
 	}
 
 	d.client = client
+}
+
+func (r *resourceCTEPolicyLDTKeyRule) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Import ID format: "policy_id:rule_id"
+	parts := strings.Split(req.ID, ":")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		resp.Diagnostics.AddError(
+			"Invalid import ID",
+			"Expected format: policy_id:rule_id",
+		)
+		return
+	}
+
+	policyID := parts[0]
+	ruleID := parts[1]
+
+	state := CTEPolicyAddLDTKeyRuleTFSDK{
+		CTEClientPolicyID: types.StringValue(policyID),
+		LDTKeyRule: LDTKeyRuleTFSDK{
+			ID: types.StringValue(ruleID),
+		},
+	}
+
+	diags := resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }

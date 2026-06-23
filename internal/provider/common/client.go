@@ -61,6 +61,15 @@ func BuildTLSConfig(opts TLSOptions) (*tls.Config, error) {
 	return cfg, nil
 }
 
+// normalizeAddress ensures the address has an https:// scheme and no trailing slash.
+func normalizeAddress(addr string) string {
+	addr = strings.TrimRight(addr, "/")
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "https://" + addr
+	}
+	return addr
+}
+
 type CCKMProviderConfig struct {
 	AwsOperationTimeout int64
 	OCIOperationTimeout int64
@@ -118,6 +127,7 @@ func NewCMClientBoot(ctx context.Context, uuid string, address *string, tlsOpts 
 	}
 	tr := &http.Transport{
 		TLSClientConfig: tlsCfg,
+		Proxy:           http.ProxyFromEnvironment, // respects HTTPS_PROXY/NO_PROXY env vars
 	}
 
 	c := CMClientBootstrap{
@@ -130,7 +140,7 @@ func NewCMClientBoot(ctx context.Context, uuid string, address *string, tlsOpts 
 	}
 
 	if address != nil {
-		c.CipherTrustURL = strings.TrimRight(*address, "/")
+		c.CipherTrustURL = normalizeAddress(*address)
 	}
 
 	tflog.Trace(ctx, MSG_METHOD_END+" [client.go -> NewCMClientBoot]["+uuid+"]")
@@ -151,6 +161,7 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 	}
 	tr := &http.Transport{
 		TLSClientConfig: tlsCfg,
+		Proxy:           http.ProxyFromEnvironment, // respects HTTPS_PROXY/NO_PROXY env vars
 	}
 
 	// Create the token refresh transport (client back-reference set below).
@@ -169,7 +180,7 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 	refreshTransport.client = &c
 
 	if address != nil {
-		c.CipherTrustURL = strings.TrimRight(*address, "/")
+		c.CipherTrustURL = normalizeAddress(*address)
 	}
 
 	// If username or password not provided, return empty client

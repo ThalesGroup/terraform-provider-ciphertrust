@@ -9,6 +9,8 @@ import (
 )
 
 func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
+	RequireCM(t)
+
 	policyName := "tf-policy-ldt-" + uuid.New().String()[:8]
 	keyName := "tf-key-ldt-" + uuid.New().String()[:8]
 

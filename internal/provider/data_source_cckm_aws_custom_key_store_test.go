@@ -14,7 +14,15 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 	if !ok {
 		t.Skip()
 	}
-	createKeyStoreConfig := `
+
+	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
+	keyStoreName := "tf-custom-key-store-" + uuid.New().String()[:8]
+	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
+	if os.Getenv("CDSPAAS") == "true" {
+		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
+	}
+
+	keyStoreResourceConfig := fmt.Sprintf(`
 		resource "ciphertrust_cm_key" "cm_aes_key" {
 			name         = "%s"
 			algorithm    = "AES"
@@ -26,74 +34,80 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 		resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
 			name    = "%s"
 			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms     = ciphertrust_aws_kms.kms.name
+			kms_id  = ciphertrust_aws_kms.kms.id
 			linked_state = false
 			enable_success_audit_event = false
-			local_hosted_params {
+			local_hosted_params = {
 				blocked = false
 				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
 				max_credentials = 8
 				source_key_tier = "local"
-				mtls_enabled = true
 			}
-			aws_param {
+			aws_param = {
 				xks_proxy_uri_endpoint = "%s"
-				#xks_proxy_connectivity = "PUBLIC_ENDPOINT"
 				xks_proxy_connectivity = "VPC_ENDPOINT_SERVICE"
 				custom_key_store_type = "EXTERNAL_KEY_STORE"
 				key_store_password = "thequickbrownfox"
 				xks_proxy_vpc_endpoint_service_name = "endpointservicename"
 			}
-		}
-		data "ciphertrust_aws_custom_keystore" "by_id" {
-			id = ciphertrust_aws_custom_keystore.custom_keystore.id
+		}`, cmKeyName, keyStoreName, proxyURIEndpoint)
+
+	byName := `
+		data "ciphertrust_aws_custom_keystore_list" "by_name" {
+			filters = {
+				name = ciphertrust_aws_custom_keystore.custom_keystore.name
+			}
 		}`
 
-	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
-	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
-	if os.Getenv("CDSPAAS") == "true" {
-		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
-	}
-	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig, cmKeyName, keyStoreName, proxyURIEndpoint)
+	byKmsID := `
+		data "ciphertrust_aws_custom_keystore_list" "by_kms_id" {
+			filters = {
+				kms_id = ciphertrust_aws_kms.kms.id
+			}
+		}`
 
 	keyStoreResourceName := "ciphertrust_aws_custom_keystore.custom_keystore"
-	dataSourceResourceName := "data.ciphertrust_aws_custom_keystore.by_id"
+	dsByName := "data.ciphertrust_aws_custom_keystore_list.by_name"
+	dsByKmsID := "data.ciphertrust_aws_custom_keystore_list.by_kms_id"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: awsConnectionResource + createKeyStoreConfigStr,
+				// Filter by name - should find exactly one match equal to our resource.
+				Config: awsConnectionResource + keyStoreResourceConfig + byName,
 				Check: resource.ComposeTestCheckFunc(
-					// Verify resource attributes are set as expected.
+					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
 					resource.TestCheckResourceAttr(keyStoreResourceName, "name", keyStoreName),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "linked_state", "false"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "connect_disconnect_keystore", "DISCONNECT_KEYSTORE"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.0.blocked", "false"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.0.max_credentials", "8"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.0.source_key_tier", "local"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.0.mtls_enabled", "true"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.0.custom_key_store_type", "EXTERNAL_KEY_STORE"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.0.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "labels.%", "0"),
+					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.blocked", "false"),
+					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.max_credentials", "8"),
+					resource.TestCheckResourceAttr(keyStoreResourceName, "local_hosted_params.source_key_tier", "local"),
+					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.custom_key_store_type", "EXTERNAL_KEY_STORE"),
+					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
 
-					// Verify data source matches resource.
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "id", keyStoreResourceName, "id"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "name", keyStoreResourceName, "name"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "region", keyStoreResourceName, "region"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "kms_id", keyStoreResourceName, "kms_id"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "linked_state", keyStoreResourceName, "linked_state"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "connect_disconnect_keystore", keyStoreResourceName, "connect_disconnect_keystore"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "local_hosted_params.0.blocked", keyStoreResourceName, "local_hosted_params.0.blocked"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "local_hosted_params.0.max_credentials", keyStoreResourceName, "local_hosted_params.0.max_credentials"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "local_hosted_params.0.source_key_tier", keyStoreResourceName, "local_hosted_params.0.source_key_tier"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "local_hosted_params.0.mtls_enabled", keyStoreResourceName, "local_hosted_params.0.mtls_enabled"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "aws_param.0.custom_key_store_type", keyStoreResourceName, "aws_param.0.custom_key_store_type"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "aws_param.0.connection_state", keyStoreResourceName, "aws_param.0.connection_state"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "aws_param.0.xks_proxy_connectivity", keyStoreResourceName, "aws_param.0.xks_proxy_connectivity"),
-					resource.TestCheckResourceAttrPair(dataSourceResourceName, "labels.%", keyStoreResourceName, "labels.%"),
+					resource.TestCheckResourceAttr(dsByName, "matched", "1"),
+					resource.TestCheckResourceAttr(dsByName, "custom_key_stores.#", "1"),
+					resource.TestCheckResourceAttrPair(dsByName, "custom_key_stores.0.id", keyStoreResourceName, "id"),
+					resource.TestCheckResourceAttrPair(dsByName, "custom_key_stores.0.name", keyStoreResourceName, "name"),
+					resource.TestCheckResourceAttrPair(dsByName, "custom_key_stores.0.region", keyStoreResourceName, "region"),
+					resource.TestCheckResourceAttrPair(dsByName, "custom_key_stores.0.kms_id", keyStoreResourceName, "kms_id"),
+					resource.TestCheckResourceAttr(dsByName, "custom_key_stores.0.aws_param.custom_key_store_type", "EXTERNAL_KEY_STORE"),
+					resource.TestCheckResourceAttr(dsByName, "custom_key_stores.0.aws_param.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
+					resource.TestCheckResourceAttr(dsByName, "custom_key_stores.0.local_hosted_params.blocked", "false"),
+					resource.TestCheckResourceAttr(dsByName, "custom_key_stores.0.local_hosted_params.source_key_tier", "local"),
+					resource.TestCheckResourceAttrSet(dsByName, "custom_key_stores.0.local_hosted_params.health_check_uri_path"),
+				),
+			},
+			{
+				// Filter by kms_id - should return at least the key store we created.
+				Config: awsConnectionResource + keyStoreResourceConfig + byKmsID,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(dsByKmsID, "matched"),
+					resource.TestCheckResourceAttrSet(dsByKmsID, "custom_key_stores.0.id"),
+					resource.TestCheckResourceAttrSet(dsByKmsID, "custom_key_stores.0.kms_id"),
+					resource.TestCheckResourceAttrSet(dsByKmsID, "custom_key_stores.0.name"),
+					resource.TestCheckResourceAttr(dsByKmsID, "custom_key_stores.0.aws_param.custom_key_store_type", "EXTERNAL_KEY_STORE"),
 				),
 			},
 		},

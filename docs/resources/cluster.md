@@ -3,24 +3,22 @@
 page_title: "ciphertrust_cluster Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Initializes a new CipherTrust Manager cluster with this node as the initial member.
+  Initializes a new CipherTrust Manager cluster with this node as the initial member. Additional nodes can be added using ciphertrust_cluster_node resources. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_cluster (Resource)
 
-Initializes a new CipherTrust Manager cluster with a single node. Additional nodes can be added using `ciphertrust_cluster_node` resources.
-
-## Workflow
-
-1. Create a single-node cluster using `ciphertrust_cluster`
-2. Add additional nodes using `ciphertrust_cluster_node` resources
-3. Update `public_address` on cluster or nodes as needed
-4. Remove specific nodes by removing their `ciphertrust_cluster_node` resources
-5. Destroy the cluster by running `terraform destroy`
+Initializes a new CipherTrust Manager cluster with this node as the initial member. Additional nodes can be added using ciphertrust_cluster_node resources. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 
 ```terraform
+# Terraform Configuration for CipherTrust Cluster Management
+#
+# This example demonstrates cluster creation workflow:
+# 1. Create a single-node cluster using ciphertrust_cluster resource
+# 2. Add additional nodes using ciphertrust_cluster_node resources
+
 terraform {
   required_providers {
     ciphertrust = {
@@ -30,47 +28,160 @@ terraform {
   }
 }
 
+# Configure the CipherTrust provider
+# The provider points to the initial cluster node
 provider "ciphertrust" {
   address  = "https://10.10.10.11"
   username = "admin"
   password = "ChangeMe101!"
 }
 
-# Initialize cluster on the main node
+# Step 1: Initialize the cluster on the main node
+# This creates a single-node cluster that additional nodes can join
 resource "ciphertrust_cluster" "main" {
-  local_node_host = "10.10.10.11"
-  local_node_port = 5432
-  public_address  = "10.10.10.11"  # Can be updated later
+  local_node_host = "10.10.10.11"  # Hostname/IP of this node
+  local_node_port = 5432            # Port (defaults to 5432)
+  public_address  = "10.10.10.11"  # Public IP/FQDN for remote connectors (updatable)
 }
 
-# Add additional nodes
+# Step 2: Define additional nodes to join the cluster
+# Using locals makes it easy to add/remove nodes
+#
+# IMPORTANT - Choosing IP Addresses:
+# ==================================
+#
+# host: Must be reachable by:
+#   1. Terraform (to connect and run API calls)
+#   2. The node itself (for self-validation)
+#   3. Other cluster members (for cluster communication)
+#
+# Recommended values for 'host':
+#   - On-premises/Single network: Use private IPs or hostnames
+#     Example: host = "10.10.10.12"
+#
+#   - AWS EC2 (Terraform inside VPC): Use private IPs
+#     Example: host = "172.30.100.184"
+#
+#   - AWS EC2 (Terraform outside VPC): Use FQDNs (NOT public IPs)
+#     Example: host = "ec2-44-200-204-237.compute-1.amazonaws.com"
+#     Why: EC2 instances cannot reach their own public IPs (no hairpin NAT)
+#          FQDNs resolve to private IPs from inside VPC, public IPs from outside
+#
+# public_address: Used by external connectors/applications to reach this node
+#   - Can be public IP, public FQDN, or load balancer address
+#   - Example: public_address = "44.200.204.237"
+#
 locals {
   additional_nodes = {
-    "node2" = { host = "10.10.10.12", password = "ChangeMe102!" }
-    "node3" = { host = "10.10.10.13", password = "ChangeMe103!" }
+    "node2" = {
+      host           = "10.10.10.12"      # Private IP/hostname (on-premises) or FQDN (AWS)
+      public_address = "10.10.10.12"      # Public IP/FQDN for external access
+      password       = "ChangeMe102!"
+    }
+    "node3" = {
+      host           = "10.10.10.13"
+      public_address = "10.10.10.13"
+      password       = "ChangeMe103!"
+    }
   }
+
+  # AWS EC2 Example (Terraform outside VPC - use FQDNs):
+  # additional_nodes = {
+  #   "node2" = {
+  #     host           = "ec2-44-200-204-237.compute-1.amazonaws.com"  # FQDN
+  #     public_address = "44.200.204.237"                              # Public IP
+  #     password       = "Ssl12345#"
+  #   }
+  # }
+
+  # AWS EC2 Example (Terraform inside VPC - use private IPs):
+  # additional_nodes = {
+  #   "node2" = {
+  #     host           = "172.30.100.184"   # Private IP
+  #     public_address = "44.200.204.237"   # Public IP
+  #     password       = "Ssl12345#"
+  #   }
+  # }
 }
 
+# Step 3: Add additional nodes to the cluster
+# The for_each creates a separate resource for each node
+# depends_on ensures cluster exists before adding nodes
+# Each node waits until the previous join completes
 resource "ciphertrust_cluster_node" "nodes" {
   for_each   = local.additional_nodes
   depends_on = [ciphertrust_cluster.main]
-  
+
   host           = each.value.host
   port           = 5432
-  public_address = each.value.host
-  
+  public_address = each.value.public_address  # Updatable
+
+  # member_host: Existing cluster member to sign CSR and coordinate join
+  # Can be any node already in the cluster (not necessarily the first node)
+  # Must be reachable by: (1) Terraform, (2) the joining node
+  # Use same addressing strategy as 'host' field:
+  #   - On-premises/VPC: Private IP (e.g., "10.10.10.11" or "172.30.100.183")
+  #   - AWS (Terraform outside): FQDN (e.g., "ec2-3-239-247-150.compute-1.amazonaws.com")
   member_host = "10.10.10.11"
   member_port = 5432
-  
+
+  # Credentials for the new node
   credentials = {
     username = "admin"
     password = each.value.password
   }
 }
 
+# Outputs
 output "cluster_id" {
-  value = ciphertrust_cluster.main.id
+  description = "The cluster node ID"
+  value       = ciphertrust_cluster.main.id
 }
+
+output "cluster_node_count" {
+  description = "Total nodes in cluster"
+  value       = ciphertrust_cluster.main.node_count
+}
+
+output "cluster_status" {
+  description = "Cluster status"
+  value       = ciphertrust_cluster.main.status_description
+}
+
+output "additional_node_ids" {
+  description = "Node IDs of additional cluster members"
+  value       = { for k, v in ciphertrust_cluster_node.nodes : k => v.node_id }
+}
+
+# Usage Examples:
+# ================
+
+# To add a 4th node:
+# -----------------
+# Just add to locals.additional_nodes:
+# "node4" = {
+#   host           = "10.10.10.14"
+#   public_address = "10.10.10.14"
+#   password       = "ChangeMe104!"
+# }
+# Then run: terraform apply
+
+# To remove node3:
+# ----------------
+# Remove "node3" from locals.additional_nodes
+# Then run: terraform apply
+
+# To update a node's public address:
+# -----------------------------------
+# Change public_address in locals.additional_nodes or in cluster.main
+# Then run: terraform apply
+
+# To destroy the entire cluster:
+# -------------------------------
+# Run: terraform destroy
+# Terraform will automatically:
+# 1. Remove all additional nodes first (due to depends_on)
+# 2. Then destroy the main cluster resource
 ```
 
 <!-- schema generated by tfplugindocs -->
@@ -92,32 +203,3 @@ output "cluster_id" {
 - `node_id` (String) CipherTrust Manager node ID assigned to this cluster node.
 - `status_code` (String) Short cluster status code (e.g., 'r' = ready).
 - `status_description` (String) Human-readable cluster status description.
-
-## Operations
-
-### Create
-
-Calls `POST /v1/cluster/new` on the provider's configured node to initialize a new cluster.
-
-### Read
-
-Calls `GET /v1/cluster` to refresh the cluster status and node count.
-
-### Update
-
-Calls `PATCH /v1/nodes/{id}` to update the `public_address` attribute. This is the only updatable attribute.
-
-### Delete
-
-Calls `DELETE /v1/cluster` to remove the cluster configuration. This only works if this is the last/only node in the cluster. All `ciphertrust_cluster_node` resources must be destroyed first.
-
-## Import
-
-Cluster resources cannot be imported.
-
-## Notes
-
-- **Adding Nodes**: Use `ciphertrust_cluster_node` resources with `depends_on = [ciphertrust_cluster.main]`. Even when multiple nodes are declared, the provider joins them to the cluster one at a time.
-- **Updating Public Address**: You can update `public_address` after cluster creation by modifying the attribute and running `terraform apply`
-- **Deleting Cluster**: When running `terraform destroy`, Terraform automatically destroys all `ciphertrust_cluster_node` resources first (due to `depends_on`), then destroys the cluster resource
-- **Single Node**: This resource creates a single-node cluster. Use `ciphertrust_cluster_node` to add more nodes

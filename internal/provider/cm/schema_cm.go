@@ -120,7 +120,7 @@ type KeyMetadataTFSDK struct {
 
 type KeyAliasTFSDK struct {
 	Alias types.String `tfsdk:"alias"`
-	Index types.Int64  `tfsdk:"index"`
+	Index types.String `tfsdk:"index"`
 	Type  types.String `tfsdk:"type"`
 }
 
@@ -249,15 +249,15 @@ type KeyMetadataCTEJSON struct {
 }
 
 type KeyMetadataJSON struct {
-	OwnerId     string                      `json:"owner_id"`
-	Permissions *KeyMetadataPermissionsJSON `json:"permissions"`
-	CTE         *KeyMetadataCTEJSON         `json:"cte"`
+	OwnerId     string                      `json:"ownerId,omitempty"`
+	Permissions *KeyMetadataPermissionsJSON `json:"permissions,omitempty"`
+	CTE         *KeyMetadataCTEJSON         `json:"cte,omitempty"`
 }
 
 type KeyAliasJSON struct {
-	Alias string `json:"alias"`
-	Index int64  `json:"index"`
-	Type  string `json:"type"`
+	Alias string `json:"alias,omitempty"`
+	Index *int64 `json:"index,omitempty"` // pointer: nil omitted (add), &N used (modify/delete)
+	Type  string `json:"type,omitempty"`
 }
 
 type PublicKeyParametersJSON struct {
@@ -328,15 +328,15 @@ type CMKeyJSON struct {
 	Password                 string                   `json:"password,omitempty"`
 	ProcessStartDate         string                   `json:"processStartDate,omitempty"`
 	ProtectStopDate          string                   `json:"protectStopDate,omitempty"`
-	RevocationReason         string                   `json:"revocationMessage,omitempty"`
-	RevocationMessage        string                   `json:"revocationReason,omitempty"`
+	RevocationReason         string                   `json:"revocationReason,omitempty"`
+	RevocationMessage        string                   `json:"revocationMessage,omitempty"`
 	RotationFrequencyDays    string                   `json:"rotationFrequencyDays,omitempty"`
 	SecretDataEncoding       string                   `json:"secretDataEncoding,omitempty"`
 	SecretDataLink           string                   `json:"secretDataLink,omitempty"`
 	SigningAlgo              string                   `json:"signingAlgo,omitempty"`
 	Size                     int64                    `json:"size,omitempty"`
-	UnExportable             bool                     `json:"unexportable,omitempty"`
-	UnDeletable              bool                     `json:"undeletable,omitempty"`
+	UnExportable             *bool                    `json:"unexportable,omitempty"`
+	UnDeletable              *bool                    `json:"undeletable,omitempty"`
 	State                    string                   `json:"state,omitempty"`
 	TemplateID               string                   `json:"templateId,omitempty"`
 	UsageMask                int64                    `json:"usageMask,omitempty"`
@@ -443,8 +443,10 @@ type CMUserJSON struct {
 	Password               string             `json:"password,omitempty"`
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
-	PasswordChangeRequired bool               `json:"password_change_required"`
-	Metadata               map[string]string  `json:"user_metadata,omitempty"`
+	PasswordChangeRequired bool                       `json:"password_change_required"`
+	// user_metadata values can be strings or nested objects (e.g. current_domain
+	// on CDSPaaS); use json.RawMessage to accept any JSON value without error.
+	Metadata               map[string]json.RawMessage `json:"user_metadata,omitempty"`
 }
 
 type CMSSHKeyTFSDK struct {
@@ -912,8 +914,8 @@ type CreateJobConfigParamsTFSDKCommon struct {
 
 type CreateJobConfigParamsTFSDK struct {
 	CreateJobConfigParamsTFSDKCommon
-	CCKMKeyRotationParams     types.List `tfsdk:"cckm_key_rotation_params"`
-	CCKMSynchronizationParams types.List `tfsdk:"cckm_synchronization_params"`
+	CCKMKeyRotationParams     *CCKMKeyRotationParamsTFSDK     `tfsdk:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK `tfsdk:"cckm_synchronization_params"`
 }
 
 type JobConfigParamsTFSDK struct {
@@ -922,20 +924,28 @@ type JobConfigParamsTFSDK struct {
 	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK       `tfsdk:"cckm_synchronization_params"`
 }
 
-type DatabaseBackupParamsTFSDK struct {
-	TiedToHSM      types.Bool          `tfsdk:"tied_to_hsm"`
-	Description    types.String        `tfsdk:"description"`
-	BackupKey      types.String        `tfsdk:"backup_key"`
-	Scope          types.String        `tfsdk:"scope"`
-	Filters        []BackupFilterTFSDK `tfsdk:"filters"`
-	RetentionCount types.Int64         `tfsdk:"retention_count"`
-	DoSCP          types.Bool          `tfsdk:"do_scp"`
-	Connection     types.String        `tfsdk:"connection"`
+// BackupFilterElemType is the object type for a single filters list element.
+var BackupFilterElemType = types.ObjectType{
+	AttrTypes: map[string]attr.Type{
+		"resource_type":  types.StringType,
+		"resource_query": types.StringType,
+	},
 }
 
-type BackupFilterTFSDK struct {
-	ResourceType  types.String `tfsdk:"resource_type"`
-	ResourceQuery types.String `tfsdk:"resource_query"`
+type DatabaseBackupParamsTFSDK struct {
+	TiedToHSM      types.Bool   `tfsdk:"tied_to_hsm"`
+	Description    types.String `tfsdk:"description"`
+	BackupKey      types.String `tfsdk:"backup_key"`
+	Scope          types.String `tfsdk:"scope"`
+	Filters        types.List   `tfsdk:"filters"`
+	RetentionCount types.Int64  `tfsdk:"retention_count"`
+	DoSCP          types.Bool   `tfsdk:"do_scp"`
+	Connection     types.String `tfsdk:"connection"`
+}
+
+var backupFilterAttrTypes = map[string]attr.Type{
+	"resource_type":  types.StringType,
+	"resource_query": types.StringType,
 }
 
 type CreateJobConfigParamsListJSON struct {
@@ -1215,3 +1225,15 @@ var CCKMSynchronizationParamsAttribs = map[string]attr.Type{
 type CCKMXksRotateCredentialsParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
+
+// stringsToRawJSON converts map[string]string to map[string]json.RawMessage
+// so string values from Terraform config can be assigned to CMUserJSON.Metadata.
+func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(m))
+	for k, v := range m {
+		b, _ := json.Marshal(v)
+		out[k] = json.RawMessage(b)
+	}
+	return out
+}
+

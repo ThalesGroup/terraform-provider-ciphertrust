@@ -7,9 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -21,8 +23,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEClientGroupDesignatedPrimarySet{}
-	_ resource.ResourceWithConfigure = &resourceCTEClientGroupDesignatedPrimarySet{}
+	_ resource.Resource                = &resourceCTEClientGroupDesignatedPrimarySet{}
+	_ resource.ResourceWithConfigure   = &resourceCTEClientGroupDesignatedPrimarySet{}
+	_ resource.ResourceWithImportState = &resourceCTEClientGroupDesignatedPrimarySet{}
 )
 
 func NewResourceCTEClientGroupDesignatedPrimarySet() resource.Resource {
@@ -52,9 +55,6 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context, _
 			"client_group_id": schema.StringAttribute{
 				Required:    true,
 				Description: "The ID of the CTE Client Group to which this Designated Primary Set belongs.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -184,12 +184,34 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 // Update updates the resource and sets the updated Terraform state on success.
 // Only client_list is updatable; all other fields either require replacement or are immutable.
 func (r *resourceCTEClientGroupDesignatedPrimarySet) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan CTEClientGroupDesignatedPrimarySetTFSDK
+	var plan, state CTEClientGroupDesignatedPrimarySetTFSDK
 	var payload CTEClientGroupDesignatedPrimarySetUpdateJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//handle immutable fields
+	if plan.ClientGroupID.ValueString() != state.ClientGroupID.ValueString() {
+		resp.Diagnostics.AddError("Cannot change client group id", "client group id is an immutable field")
+		return
+	}
+
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannt change designated primary set name", "name is an immutable field")
+		return
+	}
+
+	if plan.LDTCommGroupServiceID.ValueString() != state.LDTCommGroupServiceID.ValueString() {
+		resp.Diagnostics.AddError("Cannt change LDT comm group service id", "LDT comm group service id is an immutable field")
 		return
 	}
 
@@ -274,4 +296,24 @@ func setCTEClientGroupDesignatedPrimarySetState(
 	state.ID = types.StringValue(apiResp.ID)
 	state.Name = types.StringValue(apiResp.Name)
 	state.ClientList = types.StringValue(apiResp.PrimaryClientNameList)
+	state.LDTCommGroupServiceID = types.StringValue(apiResp.LdtCommGroupServiceID)
+}
+
+func (r *resourceCTEClientGroupDesignatedPrimarySet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_dps.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> ImportState]["+id+"]")
+
+	// Expect import ID in format: "client_group_id:dps_id"
+	parts := strings.SplitN(req.ID, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		resp.Diagnostics.AddError(
+			"Invalid import ID format",
+			"Expected import ID in format: <client_group_id>:<dps_id>, got: "+req.ID,
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("client_group_id"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
 }

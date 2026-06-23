@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -26,8 +28,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEClientGroup{}
-	_ resource.ResourceWithConfigure = &resourceCTEClientGroup{}
+	_ resource.Resource                = &resourceCTEClientGroup{}
+	_ resource.ResourceWithConfigure   = &resourceCTEClientGroup{}
+	_ resource.ResourceWithImportState = &resourceCTEClientGroup{}
 )
 
 func NewResourceCTEClientGroup() resource.Resource {
@@ -247,6 +250,48 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	if plan.ProfileID.ValueString() == "" || plan.ProfileID.ValueString() == types.StringNull().ValueString() {
 		plan.ProfileID = types.StringValue(gjson.Get(response, "profile_id").String())
 	}
+	// Add clients to client group
+
+	if len(plan.ClientList) > 0 {
+		if plan.InheritAttributes.IsNull() || plan.InheritAttributes.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid data input: CTE Client Group Add Clients",
+				"Inherit Attributes value is required when adding clients to the group",
+			)
+			return
+		}
+		var clientNames []string
+		for _, c := range plan.ClientList {
+			clientNames = append(clientNames, c.ValueString())
+		}
+
+		addClientsPayload := CTEClientGroupJSON{
+			ClientList:        clientNames,
+			InheritAttributes: plan.InheritAttributes.ValueBool(),
+		}
+		addClientsPayloadJSON, err := json.Marshal(addClientsPayload)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> Create add-clients]["+id+"]")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", err.Error())
+			return
+		}
+
+		_, err = r.client.PostData(
+			ctx,
+			id,
+			common.URL_CTE_CLIENT_GROUP+"/"+plan.ID.ValueString()+"/clients",
+			addClientsPayloadJSON,
+			"items",
+		)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> Create add-clients]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error adding clients to CTE Client Group on CipherTrust Manager: ",
+				"Could not add clients to CTE Client Group, unexpected error: "+err.Error(),
+			)
+			return
+		}
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -339,8 +384,42 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	//handle immutable fields
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change client group name once it is created", "client group name is an immutable field")
+		return
+	}
+	if plan.ClusterType.ValueString() != state.ClusterType.ValueString() {
+		resp.Diagnostics.AddError("Cannot change client group cluster_type once it is created", "cluster_type is an immutable field")
+		return
+	}
+
 	if plan.OpType.ValueString() != "" && plan.OpType.ValueString() != types.StringNull().ValueString() {
 		if plan.OpType.ValueString() == "update" {
+
+			// Add error checks for fields we cant change in op_type = update
+			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "client_list cannot be changed with op_type 'update'")
+				return
+			}
+			if plan.InheritAttributes != state.InheritAttributes {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "inherit_attributes cannot be changed with op_type 'update'")
+				return
+			}
+			if plan.AuthBinaries != state.AuthBinaries {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "auth_binaries cannot be changed with op_type 'update'")
+				return
+			}
+			if plan.ReSign != state.ReSign {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "re_sign cannot be changed with op_type 'update'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "paused cannot be changed with op_type 'update'")
+				return
+			}
+
+			//Now handle the mutable fields
 			if plan.ClientLocked.ValueBool() != types.BoolNull().ValueBool() {
 				payload.ClientLocked = plan.ClientLocked.ValueBool()
 			}
@@ -405,6 +484,66 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 			plan.ID = types.StringValue(response)
 		} else if plan.OpType.ValueString() == "auth-binaries" {
+			// Add error checks for fields we cant change in op_type = auth-binaries
+			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "client_list cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.InheritAttributes != state.InheritAttributes {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "inherit_attributes cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "paused cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.Password != state.Password {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "password cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "password_creation_method cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.ClientLocked != state.ClientLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "client_locked cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.CommunicationEnabled != state.CommunicationEnabled {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "communication_enabled cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.Description != state.Description {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "description cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.EnableDomainSharing != state.EnableDomainSharing {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "enable_domain_sharing cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.EnabledCapabilities != state.EnabledCapabilities {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "enabled_capabilities cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "ldt_designated_primary_set cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.ProfileID != state.ProfileID {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "profile_id cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "shared_domain_list cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+			if plan.SystemLocked != state.SystemLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "system_locked cannot be changed with op_type 'auth-binaries'")
+				return
+			}
+
+			//Now handle the mutable fields
+
 			if plan.AuthBinaries.ValueString() != "" && plan.AuthBinaries.ValueString() != types.StringNull().ValueString() {
 				payload.AuthBinaries = strings.TrimSpace(plan.AuthBinaries.ValueString())
 			}
@@ -438,6 +577,66 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 			plan.ID = types.StringValue(response)
 		} else if plan.OpType.ValueString() == "update-password" {
+			// Add error checks for fields we cant change in op_type = update-password
+			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "client_list cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.InheritAttributes != state.InheritAttributes {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "inherit_attributes cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "paused cannot be changed with op_type 'update-password'")
+				return
+			}
+
+			if plan.AuthBinaries != state.AuthBinaries {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "auth_binaries cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.ReSign != state.ReSign {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "re_sign cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.ClientLocked != state.ClientLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "client_locked cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.CommunicationEnabled != state.CommunicationEnabled {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "communication_enabled cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.Description != state.Description {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "description cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.EnableDomainSharing != state.EnableDomainSharing {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "enable_domain_sharing cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.EnabledCapabilities != state.EnabledCapabilities {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "enabled_capabilities cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "ldt_designated_primary_set cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.ProfileID != state.ProfileID {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "profile_id cannot be changed with op_type 'update-password'")
+				return
+			}
+			if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "shared_domain_list cannot be changed with op_type 'update-password'")
+				return
+			}
+			if plan.SystemLocked != state.SystemLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "system_locked cannot be changed with op_type 'update-password'")
+				return
+			}
+
+			//Now handle mutable fields
 			if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
 				payload.Password = common.TrimString(plan.Password.String())
 			}
@@ -478,6 +677,71 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 			plan.ID = types.StringValue(response)
 		} else if plan.OpType.ValueString() == "reset-password" {
+			// Add error checks for fields we cant change in op_type = reset-password
+			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "client_list cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.InheritAttributes != state.InheritAttributes {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "inherit_attributes cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "paused cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.AuthBinaries != state.AuthBinaries {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "auth_binaries cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.ReSign != state.ReSign {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "re_sign cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.Password != state.Password {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "password cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "password_creation_method cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.ClientLocked != state.ClientLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "client_locked cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.CommunicationEnabled != state.CommunicationEnabled {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "communication_enabled cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.Description != state.Description {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "description cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.EnableDomainSharing != state.EnableDomainSharing {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "enable_domain_sharing cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.EnabledCapabilities != state.EnabledCapabilities {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "enabled_capabilities cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "ldt_designated_primary_set cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.ProfileID != state.ProfileID {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "profile_id cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "shared_domain_list cannot be changed with op_type 'reset-password'")
+				return
+			}
+			if plan.SystemLocked != state.SystemLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "system_locked cannot be changed with op_type 'reset-password'")
+				return
+			}
 			var payload []byte
 			response, err := r.client.UpdateDataFullURL(
 				ctx,
@@ -495,6 +759,68 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 			plan.ID = types.StringValue(response)
 		} else if plan.OpType.ValueString() == "remove-client" {
+			// Add error checks for fields we cant change in op_type = remove-client
+			if !plan.InheritAttributes.IsNull() {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "inherit_attributes must not be set with op_type 'remove-client'")
+				return
+			}
+			if plan.AuthBinaries != state.AuthBinaries {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "auth_binaries cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.ReSign != state.ReSign {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "re_sign cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "paused cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.Password != state.Password {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "password cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "password_creation_method cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.ClientLocked != state.ClientLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "client_locked cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.CommunicationEnabled != state.CommunicationEnabled {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "communication_enabled cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.Description != state.Description {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "description cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.EnableDomainSharing != state.EnableDomainSharing {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "enable_domain_sharing cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.EnabledCapabilities != state.EnabledCapabilities {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "enabled_capabilities cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "ldt_designated_primary_set cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.ProfileID != state.ProfileID {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "profile_id cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "shared_domain_list cannot be changed with op_type 'remove-client'")
+				return
+			}
+			if plan.SystemLocked != state.SystemLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "system_locked cannot be changed with op_type 'remove-client'")
+				return
+			}
+
 			// clients in state but not in plan = to be removed
 			planSet := make(map[string]bool)
 			for _, c := range plan.ClientList {
@@ -526,6 +852,64 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			resp.Diagnostics.Append(diags...)
 			return
 		} else if plan.OpType.ValueString() == "add-client" {
+			// Add error checks for fields we cant change in op_type = add-client
+			if plan.AuthBinaries != state.AuthBinaries {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "auth_binaries cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.ReSign != state.ReSign {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "re_sign cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.Paused != state.Paused {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "paused cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.Password != state.Password {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "password cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "password_creation_method cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.ClientLocked != state.ClientLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "client_locked cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.CommunicationEnabled != state.CommunicationEnabled {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "communication_enabled cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.Description != state.Description {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "description cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.EnableDomainSharing != state.EnableDomainSharing {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "enable_domain_sharing cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.EnabledCapabilities != state.EnabledCapabilities {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "enabled_capabilities cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "ldt_designated_primary_set cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.ProfileID != state.ProfileID {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "profile_id cannot be changed with op_type 'add-client'")
+				return
+			}
+			if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "shared_domain_list cannot be changed with op_type 'add-client'")
+				return
+			}
+			if plan.SystemLocked != state.SystemLocked {
+				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "system_locked cannot be changed with op_type 'add-client'")
+				return
+			}
+			//Now handle mutable fields
 			var clientsArr, stateClientsArr []string
 			for _, client := range state.ClientList {
 				stateClientsArr = append(stateClientsArr, client.ValueString())
@@ -536,17 +920,14 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				}
 			}
 			payload.ClientList = clientsArr
-
-			if plan.InheritAttributes.ValueBool() != types.BoolNull().ValueBool() {
-				payload.InheritAttributes = plan.InheritAttributes.ValueBool()
-			} else {
-				tflog.Debug(ctx, common.ERR_METHOD_END+"Inherit Attributes value is null or unknown, please provide a value"+" [resource_cte_clientgroup.go -> add-client]["+plan.ID.ValueString()+"]")
+			if plan.InheritAttributes.IsNull() || plan.InheritAttributes.IsUnknown() {
 				resp.Diagnostics.AddError(
 					"Invalid data input: CTE Client Group Add Clients",
 					"Inherit Attributes value is required when adding clients to the group",
 				)
 				return
 			}
+			payload.InheritAttributes = plan.InheritAttributes.ValueBool()
 
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
@@ -633,6 +1014,27 @@ func (r *resourceCTEClientGroup) Delete(ctx context.Context, req resource.Delete
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	//Delete clients from client group
+	for _, c := range state.ClientList {
+		clientName := c.ValueString()
+		if clientName == "" {
+			continue
+		}
+		_, err := r.client.DeleteByURL(
+			ctx,
+			state.ID.ValueString(),
+			common.URL_CTE_CLIENT_GROUP+"/"+state.ID.ValueString()+"/clients/"+clientName,
+		)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> Delete client]["+state.ID.ValueString()+"]")
+			resp.Diagnostics.AddError(
+				"Error removing client from CTE Client Group before deletion",
+				"Could not remove client "+clientName+" from group "+state.ID.ValueString()+": "+err.Error(),
+			)
+			return
+		}
 	}
 
 	// Delete existing Client Group
@@ -727,4 +1129,27 @@ func setCTEClientGroupState(
 		clientList = append(clientList, types.StringValue(c))
 	}
 	state.ClientList = clientList
+}
+
+func stringSlicesEqual(a, b []types.String) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aMap := make(map[string]bool, len(a))
+	for _, v := range a {
+		aMap[v.ValueString()] = true
+	}
+	for _, v := range b {
+		if !aMap[v.ValueString()] {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *resourceCTEClientGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

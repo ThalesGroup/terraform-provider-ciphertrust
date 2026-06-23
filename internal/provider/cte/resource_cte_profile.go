@@ -11,6 +11,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -27,8 +28,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEProfile{}
-	_ resource.ResourceWithConfigure = &resourceCTEProfile{}
+	_ resource.Resource                = &resourceCTEProfile{}
+	_ resource.ResourceWithConfigure   = &resourceCTEProfile{}
+	_ resource.ResourceWithImportState = &resourceCTEProfile{}
 )
 
 func NewResourceCTEProfile() resource.Resource {
@@ -898,12 +900,23 @@ func (r *resourceCTEProfile) Read(ctx context.Context, req resource.ReadRequest,
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan CTEProfileTFSDK
+	var plan, state CTEProfileTFSDK
 	var payload CTEProfileJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//immutable field handling
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change name once the profile is created", "Name is an immutable field")
 		return
 	}
 
@@ -1231,6 +1244,7 @@ func setProfileState(
 		state.Description = types.StringNull()
 	}
 
+	state.Name = types.StringValue(apiResp.Name)
 	state.ConciseLogging = types.BoolValue(apiResp.ConciseLogging)
 	state.ConnectTimeout = types.Int64Value(apiResp.ConnectTimeout)
 	state.LDTQOSCapCPUAllocation = types.BoolValue(apiResp.LDTQOSCapCPUAllocation)
@@ -1420,4 +1434,11 @@ func setProfileState(
 		state.UploadSettings = nil
 	}
 
+}
+
+func (r *resourceCTEProfile) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_profile.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

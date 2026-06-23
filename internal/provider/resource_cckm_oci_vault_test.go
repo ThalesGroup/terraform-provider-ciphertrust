@@ -59,7 +59,7 @@ func cleanupCckmOCIVaults() {
 // OCI CCKM resource type: native key + key version, BYOK key + BYOK key version,
 // and vault ACL. A RefreshState step confirms there is no post-apply plan drift.
 func TestCckmOCIMinimalConfig(t *testing.T) {
-	t.Skip("skipped")
+
 	connectionResource := initCckmOCITest(t)
 
 	keyConfig := `
@@ -251,9 +251,10 @@ func TestCckmOCIVault(t *testing.T) {
 				RefreshState: true,
 			},
 			{
-				ResourceName:      vaultResource,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            vaultResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"connection_id"},
 			},
 			{
 				Config: updateConfigStr,
@@ -282,9 +283,10 @@ func TestCckmOCIVault(t *testing.T) {
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
 			},
 			{
-				ResourceName:      vaultResource,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            vaultResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"connection_id"},
 			},
 		},
 	})

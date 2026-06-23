@@ -29,11 +29,13 @@ description: |-
 Read-Only:
 
 - `email` (String)
-- `full_name` (String)
+- `id` (String)
 - `is_domain_user` (Boolean)
+- `name` (String)
 - `nickname` (String)
 - `password` (String)
 - `password_change_required` (Boolean)
 - `prevent_ui_login` (Boolean)
 - `user_id` (String)
+- `user_metadata` (Map of String)
 - `username` (String)

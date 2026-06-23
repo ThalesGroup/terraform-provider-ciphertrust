@@ -19,7 +19,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -47,7 +47,7 @@ resource "ciphertrust_aws_connection" "aws_connection" {
   secret_access_key = "SECRET_ACCESS_KEY"
 
   # Name of the cloud.
-  cloud_name= "aws"
+  cloud_name = "aws"
 
   # AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given. For aws, default region will be "us-east-1".
   aws_region = "us-east-1"
@@ -57,14 +57,14 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 
   # Labels for categorizing the AWS connection
   labels = {
-      "environment" = "devenv"
+    "environment" = "devenv"
   }
 
   # Custom metadata for the AWS connection
   # This can be used to store additional information related to the AWS connection
   meta = {
-      "custom_meta_key1" = "custom_value1"
-      "customer_meta_key2" = "custom_value2"
+    "custom_meta_key1"   = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
   }
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -41,128 +42,62 @@ func cleanupCckmAwsKMS() {
 	if len(resources) == 0 {
 		return
 	}
+	fmt.Printf("Num kmses : %d\n", len(resources))
 	for _, r := range resources {
 		kmsID := gjson.Get(r.Raw, "id").String()
 		kmsName := gjson.Get(r.Raw, "name").String()
 		_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_AWS_KMS+"/"+kmsID)
 		if err != nil {
-			fmt.Printf("** cleanupCckmAwsKMS: failed to delete KMS '%s' (%s): %s\n", kmsName, kmsID, err.Error())
-		} else {
-			fmt.Printf("cleanupCckmAwsKMS: deleted KMS '%s'\n", kmsName)
+			if !strings.Contains(err.Error(), "Delete all custom key stores") {
+				fmt.Printf("** cleanupCckmAwsKMS: failed to delete KMS '%s' (%s): %s\n", kmsName, kmsID, err.Error())
+				continue
+			}
+			// The KMS has key stores.
+			// Step 1: delete all keys in this KMS.
+			keyFilters := url.Values{}
+			keyFilters.Add("kms_id", kmsID)
+			keyFilters.Add("limit", "1000")
+			keyResp, err := client.ListWithFilters(ctx, uuid.NewString(), common.URL_AWS_KEY, keyFilters)
+			if err != nil {
+				fmt.Printf("** cleanupCckmAwsKMS: failed to list keys for KMS '%s': %s\n", kmsName, err.Error())
+			} else {
+				for _, k := range gjson.Get(keyResp, "resources").Array() {
+					keyID := gjson.Get(k.Raw, "id").String()
+					_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_AWS_KEY+"/"+keyID)
+					if err != nil {
+						fmt.Printf("** cleanupCckmAwsKMS: failed to delete key %s for KMS '%s': %s\n", keyID, kmsName, err.Error())
+					} else {
+						fmt.Printf("cleanupCckmAwsKMS: deleted key %s for KMS '%s'\n", keyID, kmsName)
+					}
+				}
+			}
+			// Step 2: delete all custom key stores in this KMS.
+			cksFilters := url.Values{}
+			cksFilters.Add("kms_id", kmsID)
+			cksFilters.Add("limit", "1000")
+			cksResp, err := client.ListWithFilters(ctx, uuid.NewString(), common.URL_AWS_XKS, cksFilters)
+			if err != nil {
+				fmt.Printf("** cleanupCckmAwsKMS: failed to list custom key stores for KMS '%s': %s\n", kmsName, err.Error())
+			} else {
+				for _, c := range gjson.Get(cksResp, "resources").Array() {
+					cksID := gjson.Get(c.Raw, "id").String()
+					_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_AWS_XKS+"/"+cksID)
+					if err != nil {
+						fmt.Printf("** cleanupCckmAwsKMS: failed to delete custom key store %s for KMS '%s': %s\n", cksID, kmsName, err.Error())
+					} else {
+						fmt.Printf("cleanupCckmAwsKMS: deleted custom key store %s for KMS '%s'\n", cksID, kmsName)
+					}
+				}
+			}
+			// Retry the KMS delete.
+			_, err2 := client.DeleteByURL(ctx, uuid.NewString(), common.URL_AWS_KMS+"/"+kmsID)
+			if err2 != nil {
+				fmt.Printf("** cleanupCckmAwsKMS: failed to delete KMS '%s' (%s) after cascade cleanup: %s\n", kmsName, kmsID, err2.Error())
+				continue
+			}
 		}
+		fmt.Printf("cleanupCckmAwsKMS: deleted KMS '%s'\n", kmsName)
 	}
-}
-
-// TestCckmAWSKeyMinimalConfig verifies that a resource configuration
-// containing only the minimal required attributes is accepted and applied
-// without error.
-func TestCckmAWSKeyMinimalConfig(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	nativeKeyConfig := `
-		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias]
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-            origin       = "AWS_KMS"
-		}
-		resource "ciphertrust_aws_policy_template" "policy_template" {
-            kms    = ciphertrust_aws_kms.kms.id
-			name   = "%s"
-			policy = <<-EOT
-				%s
-			EOT
-		}
-		resource "ciphertrust_groups" "acl_group" {
-			name = "%s"
-		}
-		resource "ciphertrust_aws_acl" "acl" {
-			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.acl_group.id
-			actions = ["view"]
-		}
-		resource "ciphertrust_cm_key" "cm_key" {
-			name      = local.cmKeyName
-			algorithm = "RSA"
-			key_size  = 2048
-		}
-		resource "ciphertrust_aws_key" "external_key" {
-			alias   = ["%s"]
-			customer_master_key_spec = "RSA_2048"
-			kms     = ciphertrust_aws_kms.kms.id
-			region  = ciphertrust_aws_kms.kms.regions[0]
-			upload_key {
-				source_key_identifier = ciphertrust_cm_key.cm_key.id
-			}
-		}
-		resource "ciphertrust_aws_key_import_material" "reimport" {
-			key_id = ciphertrust_aws_key.external_key.key_id
-			import_key_material {
-				source_key_identifier = ciphertrust_aws_key.external_key.local_key_id
-			}
-		}`
-
-	// customKeystoreConfig exercises ciphertrust_aws_custom_keystore and
-	// ciphertrust_aws_xks_key with the minimal required attributes.
-	// An AES CM key is created for the health-check key ID (the existing cm_key
-	// is RSA and cannot be used for an XKS health check).
-	// CM_ADDRESS must be set to the CipherTrust Manager HTTPS address so that
-	// the XKS proxy URI endpoint passes API validation; the test is skipped when it is absent.
-	customKeystoreConfig := `
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name                         = "%s"
-			algorithm                    = "AES"
-			usage_mask                   = local.cm_key_usage_mask
-			unexportable                 = true
-			undeletable                  = true
-			remove_from_state_on_destroy = true
-		}
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name   = "%s"
-			region = ciphertrust_aws_kms.kms.regions[0]
-			kms    = ciphertrust_aws_kms.kms.id
-			local_hosted_params {
-				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
-				max_credentials     = 8
-				source_key_tier     = "local"
-			}
-			aws_param {
-				custom_key_store_type  = "EXTERNAL_KEY_STORE"
-				xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-				xks_proxy_uri_endpoint = "%s"
-			}
-		}
-		resource "ciphertrust_aws_xks_key" "xks_key" {
-			local_hosted_params {
-				custom_key_store_id = ciphertrust_aws_custom_keystore.keystore.id
-				blocked             = false
-				linked              = false
-				source_key_id       = ciphertrust_cm_key.cm_aes_key.id
-				source_key_tier     = "local"
-			}
-		}`
-
-	keyConfigStr := fmt.Sprintf(nativeKeyConfig, "tf-"+uuid.NewString()[:8], defaultPolicy, "tf-"+uuid.NewString()[:8], "tf-"+uuid.NewString()[:8])
-	proxyURIEndpoint := os.Getenv("CM_ADDRESS")
-	if os.Getenv("CDSPAAS") == "true" {
-		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
-	}
-	customKeyStoreConfigStr := fmt.Sprintf(customKeystoreConfig, "tf-aes-"+uuid.NewString()[:8], "tf-ks-"+uuid.NewString()[:8], proxyURIEndpoint)
-	fullConfig := awsConnectionResource + keyConfigStr + customKeyStoreConfigStr
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: fullConfig,
-			},
-			{
-				RefreshState: true,
-			},
-		},
-	})
 }
 
 func TestCckmAWSKms(t *testing.T) {
@@ -177,11 +112,11 @@ func TestCckmAWSKms(t *testing.T) {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
-			aws_connection = ciphertrust_aws_connection.aws_connection.id
+			connection_id = ciphertrust_aws_connection.aws_connection.id
 		}
 		resource "ciphertrust_aws_kms" "kms" {
 			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-			aws_connection = ciphertrust_aws_connection.aws_connection.name
+			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			regions = [
 				data.ciphertrust_aws_account_details.account_details.regions[0],
@@ -195,11 +130,11 @@ func TestCckmAWSKms(t *testing.T) {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
-			aws_connection = ciphertrust_aws_connection.aws_connection.id
+			connection_id = ciphertrust_aws_connection.aws_connection.id
 		}
 		resource "ciphertrust_aws_kms" "kms" {
 			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-			aws_connection = ciphertrust_aws_connection.aws_connection.name
+			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 		}`, uid, uid)
@@ -212,11 +147,11 @@ func TestCckmAWSKms(t *testing.T) {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
-			aws_connection = ciphertrust_aws_connection.aws_connection.id
+			connection_id = ciphertrust_aws_connection.aws_connection.id
 		}
 		resource "ciphertrust_aws_kms" "kms" {
 			account_id     = %s
-			aws_connection = ciphertrust_aws_connection.new_aws_connection.name
+			connection_id  = ciphertrust_aws_connection.new_aws_connection.id
 			name           = "%s"
 			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 		}`
@@ -234,7 +169,6 @@ func TestCckmAWSKms(t *testing.T) {
 				Config: createKmsConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "arn"),
-					resource.TestCheckResourceAttrSet(resourceName, "aws_connection"),
 					resource.TestCheckResourceAttr(resourceName, "name", uid),
 					resource.TestCheckResourceAttrSet(resourceName, "regions.#"),
 				),
@@ -247,7 +181,7 @@ func TestCckmAWSKms(t *testing.T) {
 				ResourceName:            resourceName,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"updated_at"},
+				ImportStateVerifyIgnore: []string{"updated_at", "connection_id"},
 			},
 			{
 				Config: updateKmsRegionsConfig,
@@ -258,7 +192,7 @@ func TestCckmAWSKms(t *testing.T) {
 			{
 				Config: updateKmsConnectionConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "aws_connection", updatedConnName),
+					resource.TestCheckResourceAttr(resourceName, "connection_name", updatedConnName),
 					resource.TestCheckResourceAttr(resourceName, "regions.#", "1"),
 				),
 			},

@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -150,7 +151,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(metadata)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -206,6 +207,14 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	userResponse, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_USER_MANAGEMENT)
 	tflog.Trace(ctx, userResponse)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"CipherTrust User Not Found",
+				"The CipherTrust User resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust User",
 			"Could not read CipherTrust user ID "+state.UserID.ValueString()+": "+err.Error(),
@@ -324,7 +333,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 		// Convert map[string]string to map[string]interface{}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(metadata)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -380,6 +389,14 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Delete]["+state.UserID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			// Resource was already deleted outside of Terraform — desired state achieved.
+			resp.Diagnostics.AddWarning(
+				"CipherTrust User Not Found on Delete",
+				"The CipherTrust User resource returned HTTP 404 during deletion. It was likely removed outside of Terraform. Treating as successfully deleted.",
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust User",
 			"Could not delete user, unexpected error: "+err.Error(),

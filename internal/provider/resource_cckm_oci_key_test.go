@@ -1,14 +1,121 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+// Ensure regexp is used (referenced in TestCckmOCIKeysAndVersionsNative ModifyPlan steps).
+var _ = regexp.MustCompile
+
+// deleteOciVaultOOB removes a CipherTrust Manager OCI vault registration out-of-band
+// (i.e. without going through Terraform). It is idempotent - if the vault is already
+// gone it returns silently. Errors are logged as warnings; the function never fails
+// the test on its own because the test steps that follow will surface any real problem.
+func deleteOciVaultOOB(t *testing.T, vaultID string) {
+	t.Helper()
+	if vaultID == "" {
+		t.Log("deleteOciVaultOOB: vaultID is empty, skipping")
+		return
+	}
+	client, ok := createCMClient()
+	if !ok {
+		t.Log("deleteOciVaultOOB: could not create CM client, skipping OOB delete")
+		return
+	}
+	ctx := context.Background()
+	_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_OCI+"/vaults/"+vaultID)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			t.Logf("deleteOciVaultOOB: vault %s already absent", vaultID)
+			return
+		}
+		t.Logf("deleteOciVaultOOB: warning - failed to delete vault %s: %s", vaultID, err.Error())
+		return
+	}
+	t.Logf("deleteOciVaultOOB: deleted vault %s out-of-band", vaultID)
+}
+
+// TestCckmOCIKeyVaultDeletedOOB verifies provider behaviour when the CipherTrust Manager
+// OCI vault registration is removed out-of-band while a ciphertrust_oci_key resource is
+// still tracked in Terraform state. Two scenarios are exercised in a single destroy step:
+//
+//  1. Vault delete - vault registration already gone OOB; delete adds a warning and removes
+//     the vault cleanly from state (no error).
+//
+//  2. Key delete   - vault is gone but the key CM record still exists; the key destroy
+//     schedules it for deletion normally and removes it from state (no error).
+func TestCckmOCIKeyVaultDeletedOOB(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+
+	// createConfig: connection + vault + key.
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// destroyConfig: removes both vault and key resources so Terraform destroys them.
+	// The vault will already be gone OOB (warning expected); the key destroy runs normally.
+	destroyConfig := connectionResource
+
+	// capturedVaultID is populated during Step 1 so the PreConfig in Step 2 can delete
+	// the vault registration out-of-band before Terraform's destroy runs.
+	var capturedVaultID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create the key; capture the vault CM ID for the OOB delete.
+			{
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource %s not found in state", keyResource)
+						}
+						capturedVaultID = rs.Primary.Attributes["vault"]
+						t.Logf("captured vault ID %s", capturedVaultID)
+						return nil
+					},
+				),
+			},
+			// Step 2: delete vault OOB then apply destroyConfig (no key, no vault in config).
+			// Terraform destroys both resources:
+			//   - Vault: already gone (404) -> getOciVault warns, Terraform removes from state.
+			//   - Key:   still in CM -> deleteOCIKey schedules it for deletion normally.
+			// Expected: no error, only warnings.
+			{
+				PreConfig: func() {
+					deleteOciVaultOOB(t, capturedVaultID)
+				},
+				Config: destroyConfig,
+			},
+		},
+	})
+}
 
 // initCckmOCITest builds the Terraform resource configuration used as a shared setup by most CCKM OCI
 // tests. It creates an OCI connection and registers an OCI vault, exposing them as Terraform resources
@@ -55,7 +162,6 @@ func initCckmOCITest(t *testing.T) string {
 }
 
 func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
-	t.Skip("skipped")
 
 	connectionResource := initCckmOCITest(t)
 

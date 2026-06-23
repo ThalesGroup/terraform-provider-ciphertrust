@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -10,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+var testGroupName = "TFTestGroup-" + uuid.New().String()[:8]
 
 func cmGroupConfig(name, description, appMeta string) string {
 	cfg := fmt.Sprintf(`
@@ -24,6 +27,28 @@ resource "ciphertrust_groups" "testGroup" {
 	}
 	cfg += "}\n"
 	return providerConfig + cfg
+}
+
+// TestAccCMGroup_nameImmutable verifies that changing the group name is blocked at plan
+// time with a clear error, leaving the original group untouched on CM.
+func TestAccCMGroup_nameImmutable(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig(testGroupName+"Immutable", "Original", ""),
+				Check: checkStep(t, "name immutable: create",
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", testGroupName+"Immutable"),
+				),
+			},
+			// Renaming must be blocked at plan time with a clear error.
+			{
+				Config:      cmGroupConfig(testGroupName+"ImmutableRenamed", "Original", ""),
+				ExpectError: regexp.MustCompile(`Name cannot be changed`),
+				PlanOnly:    true,
+			},
+		},
+	})
 }
 
 func TestAccCMGroup_basicCreate(t *testing.T) {

@@ -23,15 +23,22 @@ This section contains APIs for managing Storage Group resources related to Kuber
 
 ### Optional
 
-- `client_id` (String) ID of the client to be removed from the client group.
-- `client_list` (List of String) List of identifiers of clients to be associated with the client group. This identifier can be the name or UUID.
 - `client_profile` (String) Optional Client Profile for the storage group. If not provided, the default profile will be used.
 - `description` (String) Optional description for the storage group.
-- `gp_id` (String) ID of the guard policy to be updated in the client group.
-- `guard_enabled` (Boolean) Enable or disable the GuardPolicy. Set to true to enable, false to disable.
+- `guard_policies` (Attributes Map) Guard policies keyed by policy name or UUID. Eliminates index-based drift. (see [below for nested schema](#nestedatt--guard_policies))
 - `op_type` (String) Update CSIGroup Option
-- `policy_list` (List of String) List of CSI policy identifiers to be associated with the storage group. This identifier can be the name or UUID.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+
+<a id="nestedatt--guard_policies"></a>
+### Nested Schema for `guard_policies`
+
+Optional:
+
+- `guard_enabled` (Boolean) Whether this guard policy is enabled. Defaults to true.
+
+Read-Only:
+
+- `gp_id` (String) Guardpoint ID returned by the API after the policy is added.

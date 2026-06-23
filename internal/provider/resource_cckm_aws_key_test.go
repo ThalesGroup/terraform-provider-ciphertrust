@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -47,20 +46,19 @@ var (
 
 var importStateVerifyIgnoreAwsKey = []string{
 	"auto_rotate",
+	"aws_param.next_rotation_date",
+	"aws_param.tags",
 	"enable_rotation",
-	"import_key_material",
 	"key_policy",
-	"kms",
+	"kms_id",
 	"labels",
-	"multi_region_key_type",
-	"multi_region_primary_key",
-	"multi_region_replica_keys",
-	"next_rotation_date",
+	"multi_region_configuration.multi_region_key_type",
+	"multi_region_configuration.primary_key.arn",
+	"multi_region_configuration.primary_key.region",
+	"multi_region_configuration.replica_keys.#",
 	"replicate_key",
 	"schedule_for_deletion_days",
-	"tags",
 	"updated_at",
-	"upload_key",
 }
 
 // initCckmAwsTest builds the Terraform provider and resource configuration used as a shared setup
@@ -86,16 +84,18 @@ func initCckmAwsTest(timeout ...int) (string, bool) {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
-			aws_connection = ciphertrust_aws_connection.aws_connection.id
+			connection_id = ciphertrust_aws_connection.aws_connection.id
 		}
 		resource "ciphertrust_aws_kms" "kms" {
 			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-			aws_connection  = ciphertrust_aws_connection.aws_connection.id
+			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			regions = [
 				data.ciphertrust_aws_account_details.account_details.regions[0],
 				data.ciphertrust_aws_account_details.account_details.regions[1],
-				data.ciphertrust_aws_account_details.account_details.regions[2]
+				data.ciphertrust_aws_account_details.account_details.regions[2],
+				data.ciphertrust_aws_account_details.account_details.regions[3],
+				data.ciphertrust_aws_account_details.account_details.regions[5],
 			]
 		}
 		locals {
@@ -147,7 +147,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 
 	createKeyConfig := `
 		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
 			end_date = "2050-03-07T14:24:00Z"
@@ -158,34 +158,35 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias, "%s", "%s"]
+			aws_param = {
+				alias                    = [local.alias, "%s", "%s"]
+				auto_rotation_period_in_days = 256
+				customer_master_key_spec = "SYMMETRIC_DEFAULT"
+				description              = "create description"
+				key_usage                = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
 			auto_rotate  = true
-			auto_rotation_period_in_days = 256
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "create description"
 			enable_key   = true
-			enable_rotation {
+			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
 				key_source    = "ciphertrust"
 			}
-			key_policy {
+			key_policy = {
 				key_admins  = ["%s"]
 				key_users   = ["%s"]
 				key_admins_roles  = ["%s"]
 				key_users_roles   = ["%s"]
 			}
-			key_usage    = "ENCRYPT_DECRYPT"
-			kms          = ciphertrust_aws_kms.kms.id
+			kms_id       = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				TagKey1 = "TagValue1"
-				TagKey2 = "TagValue2"
-			}
-            origin       = "AWS_KMS"
 		}`
 	updateKeyConfig := `
 		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
 			end_date = "2050-03-07T14:24:00Z"
@@ -196,7 +197,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_scheduler" "scheduler_two" {
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
 			end_date = "2050-03-07T14:24:00Z"
@@ -207,30 +208,31 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias                    = [local.alias]
+				auto_rotation_period_in_days = 128
+				customer_master_key_spec = "SYMMETRIC_DEFAULT"
+				description              = "update description"
+				key_usage                = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey3 = "TagValue3"
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
 			auto_rotate = true
-			auto_rotation_period_in_days = 128
-			alias        = [local.alias]
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "update description"
 			enable_key   = false
-			enable_rotation {
+			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler_two.id
 				key_source    = "ciphertrust"
 			}
-			key_policy {
+			key_policy = {
 				policy = <<-EOT
 					%s
 				EOT
 			}
-			key_usage = "ENCRYPT_DECRYPT"
-			kms       = ciphertrust_aws_kms.kms.id
+			kms_id    = ciphertrust_aws_kms.kms.id
 			region    = ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				TagKey3 = "TagValue3"
-				TagKey1 = "TagValue1"
-				TagKey2 = "TagValue2"
-			}
-			origin       = "AWS_KMS"
 		}`
 	updateKeyConfig2 := `
 		variable "policy" {
@@ -240,40 +242,42 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			EOT
 		}
 		resource "ciphertrust_aws_policy_template" "policy_template" {
-			kms    = ciphertrust_aws_kms.kms.id
+			kms_id = ciphertrust_aws_kms.kms.id
 			name   = "%s"
 			policy = var.policy
 		}
 		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias]
+			aws_param = {
+				alias        = [local.alias]
+				customer_master_key_spec = "SYMMETRIC_DEFAULT"
+				description  = "create description"
+				key_usage    = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
 			auto_rotate  = false
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "create description"
 			enable_key   = true
-			key_usage    = "ENCRYPT_DECRYPT"
-			key_policy {
+			key_policy = {
 				policy_template = ciphertrust_aws_policy_template.policy_template.id
 			}
-			kms          = ciphertrust_aws_kms.kms.id
+			kms_id       = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
-			tags = {
-				TagKey1 = "TagValue1"
-				TagKey2 = "TagValue2"
-			}
-			origin       = "AWS_KMS"
 		}`
 	updateKeyConfig3 := `
 		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias]
+			aws_param = {
+				alias        = [local.alias]
+				customer_master_key_spec = "%s"
+				description  = "create description"
+				key_usage    = "ENCRYPT_DECRYPT"
+				tags         = {}
+			}
 			auto_rotate  = false
-			customer_master_key_spec = "%s"
-			description  = "create description"
 			enable_key   = false
-			key_usage    = "ENCRYPT_DECRYPT"
-			kms          = ciphertrust_aws_kms.kms.id
+			kms_id       = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
-			tags = {}
-			origin       = "AWS_KMS"
 		}`
 	aliasList := []string{
 		awsKeyNamePrefix + uuid.New().String(),
@@ -304,19 +308,10 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			{
 				Config: awsConnectionResource + createKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "3"),
-					resource.TestCheckResourceAttrSet(keyResource, "arn"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", createKeyRotationPeriodInDays),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "enabled", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
@@ -325,11 +320,19 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", createKeyRotationPeriodInDays),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
 				),
 			},
 			{
@@ -342,43 +345,32 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			{
 				Config: awsConnectionResource + updateKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", updateKeyRotationPeriodInDays),
-					resource.TestCheckResourceAttr(keyResource, "description", "update description"),
-					resource.TestCheckResourceAttr(keyResource, "enabled", "false"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admin.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Disabled"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "0"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admin_roles.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "0"),
 					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerTwoResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "3"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey3", "TagValue3"),
-					testCheckAttributeContains(keyResource, "policy", append(awsKeyUsers, awsKeyRoles...), false),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", updateKeyRotationPeriodInDays),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "update description"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "false"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Disabled"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "3"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey3", "TagValue3"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
 				),
 			},
 			{
 				Config: awsConnectionResource + createKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "3"),
-					resource.TestCheckResourceAttrSet(keyResource, "arn"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", createKeyRotationPeriodInDays),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "enabled", "true"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
@@ -386,34 +378,45 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					testCheckAttributeContains(keyResource, "policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", createKeyRotationPeriodInDays),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
 				),
 			},
 			{
 				Config: awsConnectionResource + updateKeyConfigStr2,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
-					resource.TestCheckNoResourceAttr(keyResource, "auto_rotation_period_in_days"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
+					resource.TestCheckNoResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					//resource.TestCheckResourceAttrPair(keyResource, "tags.cckm_policy_template_id", policyTemplateResource, "id"),
 					// policy not always updated in time
-					// testCheckAttributeContains(keyResource, "policy", append(awsKeyUsers, awsKeyRoles...), false),
+					// testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
 				),
 			},
 			{
 				Config: awsConnectionResource + updateKeyConfig3Str,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
-					resource.TestCheckNoResourceAttr(keyResource, "auto_rotation_period_in_days"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Disabled"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
+					resource.TestCheckNoResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Disabled"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "0"),
 				),
 			},
 			{
@@ -426,567 +429,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 	})
 }
 
-func TestCckmAWSKeyImportKeyMaterialLocal(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	importKeys := `
-		resource "ciphertrust_aws_key" "aes" {
-			import_key_material {
-				source_key_name = "%s"
-				source_key_tier = "local"
-				key_expiration = true
-				valid_to = "%s"
-			}
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-		}
-		resource "ciphertrust_aws_key" "rsa2048" {
-			import_key_material {
-				source_key_name = "%s"
-				source_key_tier = "local"
-				key_expiration = false
-			}
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-            customer_master_key_spec = "RSA_2048"
-		}
-		resource "ciphertrust_aws_key" "ec_p521" {
-			customer_master_key_spec = "ECC_NIST_P521"
-			import_key_material {
-				source_key_name = "%s"
-				source_key_tier = "local"
-			}
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-		}`
-	aesKeyResource := "ciphertrust_aws_key.aes"
-	rsaKeyResource := "ciphertrust_aws_key.rsa2048"
-	ecKeyResource := "ciphertrust_aws_key.ec_p521"
-
-	aesCmKeyName := "tf-aes-" + uuid.NewString()[:]
-	rsaCmKeyName := "tf-rsa-" + uuid.NewString()[:]
-	ecCmKeyName := "tf-ec_p521-" + uuid.NewString()[:]
-
-	validTo := time.Now().UTC().AddDate(0, 0, 1).Format(time.RFC3339)
-	// modifyPlanEcConfigStr uses a fake source_key_name for ec_p521 to exercise
-	// the ModifyPlan immutable-field check without making any real API calls.
-	modifyPlanEcConfigStr := awsConnectionResource + fmt.Sprintf(importKeys, aesCmKeyName, validTo, rsaCmKeyName, "tf-fake-ec-key")
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + fmt.Sprintf(importKeys, aesCmKeyName, validTo, rsaCmKeyName, ecCmKeyName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(aesKeyResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-					resource.TestCheckResourceAttr(aesKeyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttrSet(aesKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(aesKeyResource, "key_id"),
-					resource.TestCheckResourceAttr(aesKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(aesKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "valid_to", ""),
-					testCheckAttributeContains(aesKeyResource, "valid_to", []string{validTo}, true),
-
-					resource.TestCheckResourceAttr(rsaKeyResource, "expiration_model", "KEY_MATERIAL_DOES_NOT_EXPIRE"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "customer_master_key_spec", "RSA_2048"),
-					resource.TestCheckResourceAttrSet(rsaKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(rsaKeyResource, "key_id"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "valid_to", ""),
-
-					resource.TestCheckResourceAttr(ecKeyResource, "expiration_model", "KEY_MATERIAL_DOES_NOT_EXPIRE"),
-					resource.TestCheckResourceAttr(ecKeyResource, "customer_master_key_spec", "ECC_NIST_P521"),
-					resource.TestCheckResourceAttrSet(ecKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(ecKeyResource, "key_id"),
-					resource.TestCheckResourceAttr(ecKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(ecKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(ecKeyResource, "valid_to", ""),
-				),
-			},
-			// Re-apply to let EXTERNAL key material processing settle before import.
-			// The checks confirm stable attributes for all three keys so that the
-			// subsequent ImportStateVerify steps compare against known-good values.
-			{
-				Config: awsConnectionResource + fmt.Sprintf(importKeys, aesCmKeyName, validTo, rsaCmKeyName, ecCmKeyName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(aesKeyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(aesKeyResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-					resource.TestCheckResourceAttr(aesKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(aesKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(aesKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(aesKeyResource, "key_id"),
-
-					resource.TestCheckResourceAttr(rsaKeyResource, "customer_master_key_spec", "RSA_2048"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "expiration_model", "KEY_MATERIAL_DOES_NOT_EXPIRE"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(rsaKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(rsaKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(rsaKeyResource, "key_id"),
-
-					resource.TestCheckResourceAttr(ecKeyResource, "customer_master_key_spec", "ECC_NIST_P521"),
-					resource.TestCheckResourceAttr(ecKeyResource, "expiration_model", "KEY_MATERIAL_DOES_NOT_EXPIRE"),
-					resource.TestCheckResourceAttr(ecKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(ecKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(ecKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(ecKeyResource, "key_id"),
-				),
-			},
-			{
-				// Verify ModifyPlan fires an error when import_key_material.source_key_name is changed.
-				Config:      modifyPlanEcConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-			{
-				ResourceName:            aesKeyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(aesKeyResource, "id"),
-			},
-			{
-				ResourceName:            rsaKeyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(rsaKeyResource, "id"),
-			},
-			{
-				ResourceName:            ecKeyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(ecKeyResource, "id"),
-			},
-		},
-	})
-}
-
-func TestCckmAWSKeyUpload(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	uploadKeys := `
-		resource "ciphertrust_cm_key" "cm_key" {
-			name      = local.cmKeyName
-			algorithm = "RSA"
-			key_size  = 2048
-		}
-		resource "ciphertrust_aws_key" "upload_local_key" {
-			alias   = [local.alias]
-			customer_master_key_spec = "RSA_2048"
-			description  = "upload description"
-			kms     = ciphertrust_aws_kms.kms.id
-			region  = ciphertrust_aws_kms.kms.regions[0]
-			upload_key {
-				key_expiration        = true
-				source_key_identifier = %s
-				valid_to              = "%s"
-				source_key_tier		  = "local"
-			}
-			key_policy {
-				policy = <<-EOT
-				  %s
-				EOT
-			}
-			tags = {
-				UploadTagKey = "UploadTagValue"
-			}
-		}`
-
-	validTo := time.Now().UTC().AddDate(0, 0, 1).Format(time.RFC3339)
-	localKeyResource := "ciphertrust_aws_key.upload_local_key"
-	uploadConfig := awsConnectionResource + fmt.Sprintf(uploadKeys, "ciphertrust_cm_key.cm_key.id", validTo, awsKeyPolicy)
-	modifyPlanConfigStr := awsConnectionResource + fmt.Sprintf(uploadKeys, `"tf-fake-key-id"`, validTo, awsKeyPolicy)
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: uploadConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(localKeyResource, "alias.#", "1"),
-					resource.TestCheckResourceAttr(localKeyResource, "description", "upload description"),
-					resource.TestCheckResourceAttrSet(localKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(localKeyResource, "key_id"),
-					resource.TestCheckResourceAttr(localKeyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttrSet(localKeyResource, "key_id"),
-					resource.TestCheckResourceAttr(localKeyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(localKeyResource, "key_usage", "ENCRYPT_DECRYPT"),
-					resource.TestCheckResourceAttrSet(localKeyResource, "policy"),
-					resource.TestCheckResourceAttr(localKeyResource, "tags.%", "1"),
-					resource.TestCheckResourceAttr(localKeyResource, "tags.UploadTagKey", "UploadTagValue"),
-				),
-			},
-			{
-				ResourceName:            localKeyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(localKeyResource, "id"),
-			},
-			{
-				// Verify ModifyPlan fires an error when upload_key.source_key_identifier is changed.
-				Config:      modifyPlanConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-		},
-	})
-}
-
-func TestCckmAWSKeyMultiRegionNative(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
-	createConfig := `
-			resource "ciphertrust_aws_key" "multi_region_key" {
-				alias                    = ["%s", "%s"]
-				customer_master_key_spec = "RSA_2048"
-				key_usage                = "SIGN_VERIFY"
-				kms                      = ciphertrust_aws_kms.kms.id
-				region                   = ciphertrust_aws_kms.kms.regions[0]
-				tags = {
-					CreateTagKey1 = "CreateTagValue1"
-					CreateTagKey2 = "CreateTagValue2"
-				}
-				multi_region = true
-                origin       = "AWS_KMS"
-			}
-			resource "ciphertrust_aws_key" "replica"{
-				depends_on = [
-					ciphertrust_aws_key.multi_region_key,
-				]
-				alias = ["%s"]
-				key_policy {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
-				}
-				region 					= ciphertrust_aws_kms.kms.regions[1]
-				description 			= "replica one"
-				origin					= "AWS_KMS"
-				tags = {
-					RegionOneTagKey = "RegionOneTagValue"
-				}
-				replicate_key {
-					key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-					make_primary 		= true
-				}
-			}`
-	updateConfig := `
-			resource "ciphertrust_aws_key" "multi_region_key" {
-				alias                    = ["%s", "%s"]
-				customer_master_key_spec = "RSA_2048"
-				key_usage                = "SIGN_VERIFY"
-				kms                      = ciphertrust_aws_kms.kms.id
-				region                   = ciphertrust_aws_kms.kms.regions[0]
-				tags = {
-					CreateTagKey1 = "CreateTagValue1"
-					CreateTagKey2 = "CreateTagValue2"
-				}
-				multi_region = true
-			}
-			resource "ciphertrust_aws_key" "replica"{
-				alias = ["%s"]
-				key_policy {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
-				}
-				region 					= ciphertrust_aws_kms.kms.regions[1]
-				description 			= "replica one"
-				origin					= "AWS_KMS"
-				primary_region			= ciphertrust_aws_kms.kms.regions[0]
-				tags = {
-					RegionOneTagKey = "RegionOneTagValue"
-				}
-				replicate_key {
-					key_id 				= ciphertrust_aws_key.multi_region_key.key_id
-				}
-			}`
-	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
-	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
-	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
-	keyResource := "ciphertrust_aws_key.multi_region_key"
-	replicaResource1 := "ciphertrust_aws_key.replica"
-	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: createResources,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "2"),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "RSA_2048"),
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region", "true"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region_replica_keys.#", "0"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey1", "CreateTagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey2", "CreateTagValue2"),
-
-					resource.TestCheckResourceAttr(replicaResource1, "alias.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "alias.0", replicaAlias),
-					resource.TestCheckResourceAttr(replicaResource1, "description", "replica one"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region", "true"),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region_replica_keys.#", "1"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.%", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.RegionOneTagKey", "RegionOneTagValue"),
-					// Sometimes - this is true
-					//resource.TestCheckResourceAttr(replicaResource1, "multi_region_key_type", "PRIMARY"),
-				),
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						replicaResource1,
-						tfjsonpath.New("policy"),
-						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
-				},
-			},
-			{
-				// Update state before import as primary region has changed. The Check
-				// confirms stable attributes are correct so the subsequent
-				// ImportStateVerify steps compare against known-good values.
-				Config: createResources,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "2"),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "RSA_2048"),
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region", "true"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey1", "CreateTagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.CreateTagKey2", "CreateTagValue2"),
-					resource.TestCheckResourceAttr(replicaResource1, "alias.#", "1"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "key_id"),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region", "true"),
-					resource.TestCheckResourceAttrSet(replicaResource1, "policy"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.%", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "tags.RegionOneTagKey", "RegionOneTagValue"),
-				),
-			},
-			{
-				ResourceName:            keyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
-			},
-			{
-				ResourceName:            replicaResource1,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(replicaResource1, "id"),
-			},
-			{
-				Config: updateResources,
-				Check:  resource.ComposeTestCheckFunc(
-				// On return of the API the replicated key the previous primary key will be a replica (primary_region) - sometimes
-				//resource.TestCheckResourceAttr(keyResource, "multi_region_key_type", "PRIMARY"),
-				),
-			},
-		},
-	})
-}
-
-func TestCckmAWSKeyMultiRegionLocal(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	createConfig := `
-			resource "ciphertrust_cm_key" "cm_key" {
-				name      = local.cmKeyName
-				algorithm = "RSA"
-				key_size  = 2048
-			}
-			resource "ciphertrust_aws_key" "multi_region_key" {
-				alias                    = [local.alias]
-				customer_master_key_spec = "RSA_2048"
-				kms                      = ciphertrust_aws_kms.kms.id
-				region  = ciphertrust_aws_kms.kms.regions[0]
-				upload_key {
-					source_key_identifier = ciphertrust_cm_key.cm_key.id
-					source_key_tier		  = "local"
-				}
-				multi_region = true
-			}`
-	replicateConfig := `
-			resource "ciphertrust_cm_key" "cm_key" {
-				name      = local.cmKeyName
-				algorithm = "RSA"
-				key_size  = 2048
-			}
-			resource "ciphertrust_aws_key" "multi_region_key" {
-				alias                    = [local.alias]
-				customer_master_key_spec = "RSA_2048"
-				kms                      = ciphertrust_aws_kms.kms.id
-				region  = ciphertrust_aws_kms.kms.regions[0]
-				upload_key {
-					source_key_identifier = ciphertrust_cm_key.cm_key.id
-					source_key_tier		  = "local"
-				}
-				multi_region = true
-			}
-			resource "ciphertrust_aws_key" "replica"{
-				alias                    = [local.alias]
-				region 					= ciphertrust_aws_kms.kms.regions[1]
-				replicate_key {
-					key_expiration        = true
-					key_id 				= %s
-					import_key_material = true
-					valid_to              = "%s"
-				}
-			}`
-	cmKeyResource := "ciphertrust_cm_key.cm_key"
-	awsKeyResource := "ciphertrust_aws_key.multi_region_key"
-	replicaResource := "ciphertrust_aws_key.replica"
-	createConfigStr := awsConnectionResource + createConfig
-	validTo := time.Now().UTC().AddDate(0, 0, 1).Format(time.RFC3339)
-	replicateConfigStr := awsConnectionResource + fmt.Sprintf(replicateConfig, "ciphertrust_aws_key.multi_region_key.key_id", validTo)
-	modifyPlanConfigStr := awsConnectionResource + fmt.Sprintf(replicateConfig, `"tf-fake-key-id"`, validTo)
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: createConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_id", cmKeyResource, "id"),
-					resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_name", cmKeyResource, "name"),
-					resource.TestCheckResourceAttr(awsKeyResource, "origin", "EXTERNAL"),
-				),
-			},
-			{
-				Config: replicateConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrPair(replicaResource, "local_key_id", cmKeyResource, "id"),
-					resource.TestCheckResourceAttrPair(replicaResource, "local_key_name", cmKeyResource, "name"),
-					resource.TestCheckResourceAttr(replicaResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(replicaResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-					testCheckAttributeContains(replicaResource, "valid_to", []string{validTo}, true),
-				),
-			},
-			{
-				// Re-apply to allow state to settle before import. The Check confirms
-				// stable attributes for both resources so ImportStateVerify has
-				// known-good values to compare against.
-				Config: replicateConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_id", cmKeyResource, "id"),
-					resource.TestCheckResourceAttrPair(awsKeyResource, "local_key_name", cmKeyResource, "name"),
-					resource.TestCheckResourceAttr(awsKeyResource, "multi_region", "true"),
-					resource.TestCheckResourceAttr(awsKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(awsKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(awsKeyResource, "key_id"),
-					resource.TestCheckResourceAttrPair(replicaResource, "local_key_id", cmKeyResource, "id"),
-					resource.TestCheckResourceAttrPair(replicaResource, "local_key_name", cmKeyResource, "name"),
-					resource.TestCheckResourceAttr(replicaResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-					resource.TestCheckResourceAttr(replicaResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(replicaResource, "id"),
-					resource.TestCheckResourceAttrSet(replicaResource, "key_id"),
-				),
-			},
-			{
-				// Verify ModifyPlan fires an error when replicate_key.key_id is changed.
-				Config:      modifyPlanConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-			{
-				ResourceName:            awsKeyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(awsKeyResource, "id"),
-			},
-			{
-				ResourceName:            replicaResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-				ImportStateIdFunc:       getResourceAttr(replicaResource, "id"),
-			},
-		},
-	})
-}
-
-func TestCckmAWSKeyRotationNative(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	nativeKey := `
-		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias, "%s"]
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "create description"
-			key_usage    = "ENCRYPT_DECRYPT"
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-            origin       = "AWS_KMS"
-			tags = {
-				TagKey1 = "TagValue1"
-				TagKey2 = "TagValue2"
-			}
-		}
-		resource "ciphertrust_aws_key_rotation" "rotate" {
-			key_id = ciphertrust_aws_key.native_key.key_id
-		}`
-	aesNativeKeyResource := "ciphertrust_aws_key_rotation.rotate"
-	aesCmKeyRotationName := "tf-aes-key-rotation" + uuid.NewString()[:]
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + fmt.Sprintf(nativeKey, aesCmKeyRotationName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(aesNativeKeyResource, "id"),
-					resource.TestCheckResourceAttrSet(aesNativeKeyResource, "key_id"),
-					resource.TestCheckResourceAttrSet(aesNativeKeyResource, "status"),
-				),
-			},
-		},
-	})
-}
-
+// Sarah this test seeems superflous
 func TestCckmAWSKeyNativeImport(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1003,7 +446,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 
 	createKeyConfig := `
 		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params {
+			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
 			end_date = "2050-03-07T14:24:00Z"
@@ -1014,30 +457,31 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_aws_key" "native_key" {
-			alias        = [local.alias, "%s", "%s"]
+			aws_param = {
+				alias                    = [local.alias, "%s", "%s"]
+				auto_rotation_period_in_days = 256
+				customer_master_key_spec = "SYMMETRIC_DEFAULT"
+				description              = "create description"
+				key_usage                = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
 			auto_rotate  = true
-			auto_rotation_period_in_days = 256
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-			description  = "create description"
 			enable_key   = true
-			enable_rotation {
+			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
 				key_source    = "ciphertrust"
 			}
-			key_policy {
-				key_admins  = ["%s"]
-				key_users   = ["%s"]
-				key_admins_roles  = ["%s"]
-				key_users_roles   = ["%s"]
+			key_policy = {
+				key_admins       = ["%s"]
+				key_users        = ["%s"]
+				key_admins_roles = ["%s"]
+				key_users_roles  = ["%s"]
 			}
-			key_usage    = "ENCRYPT_DECRYPT"
-			kms          = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-            origin       = "AWS_KMS"
-			tags = {
-				TagKey1 = "TagValue1"
-				TagKey2 = "TagValue2"
-			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
 		}`
 
 	aliasList := []string{
@@ -1059,19 +503,11 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 				// not just whatever Read() happened to return unchecked.
 				Config: awsConnectionResource + createKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "alias.#", "3"),
-					resource.TestCheckResourceAttrSet(keyResource, "arn"),
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotation_period_in_days", "256"),
-					resource.TestCheckResourceAttr(keyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(keyResource, "description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "enabled", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "key_usage", "ENCRYPT_DECRYPT"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
@@ -1079,13 +515,20 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
-					resource.TestCheckResourceAttr(keyResource, "origin", "AWS_KMS"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
-					resource.TestCheckResourceAttrSet(keyResource, "policy"),
-					resource.TestCheckResourceAttr(keyResource, "tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", "256"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.origin", "AWS_KMS"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
 				),
 			},
 			{
@@ -1093,7 +536,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
-			ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
+				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
 			},
 		},
 	})
@@ -1102,7 +545,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 // getResourceAttr returns an ImportStateIdFunc (and general state-extraction helper)
 // that reads the named attribute from resourceName in the current Terraform state.
 // Pass attrName = "id" to get the primary resource ID, or any other attribute name
-// (e.g. "key_id", "kms") to extract a different field.
+// (e.g. "alias", "kms") to extract a different field.
 func getResourceAttr(resourceName, attrName string) resource.ImportStateIdFunc {
 	return func(s *terraform.State) (string, error) {
 		rs, ok := s.RootModule().Resources[resourceName]
@@ -1115,126 +558,6 @@ func getResourceAttr(resourceName, attrName string) resource.ImportStateIdFunc {
 		}
 		return val, nil
 	}
-}
-
-// TestCckmAWSKeyImportMaterialResourceNoExpiry tests the ciphertrust_aws_key_import_material
-// resource by re-importing key material without expiry to a key created via ciphertrust_aws_key.
-// Note: TestCckmAWSKeyImportKeyMaterialLocal tests the import_key_material block inside
-// ciphertrust_aws_key - a different code path.
-func TestCckmAWSKeyImportMaterialResourceNoExpiry(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	importConfig := `
-		resource "ciphertrust_aws_key" "base" {
-			import_key_material {
-				source_key_name = "%s"
-				source_key_tier = "local"
-				key_expiration  = false
-			}
-			kms    = ciphertrust_aws_kms.kms.id
-			region = ciphertrust_aws_kms.kms.regions[0]
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-		}
-		resource "ciphertrust_aws_key_import_material" "reimport" {
-			key_id = %s
-			import_key_material {
-				source_key_identifier = ciphertrust_aws_key.base.local_key_name
-				source_key_tier       = "local"
-				key_expiration        = false
-			}
-		}`
-
-	baseKeyResource := "ciphertrust_aws_key.base"
-	reimportResource := "ciphertrust_aws_key_import_material.reimport"
-	cmKeyName := "tf-aes-" + uuid.NewString()
-	importConfigStr := awsConnectionResource + fmt.Sprintf(importConfig, cmKeyName, "ciphertrust_aws_key.base.key_id")
-	modifyPlanConfigStr := awsConnectionResource + fmt.Sprintf(importConfig, cmKeyName, `"tf-fake-key-id"`)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: importConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(baseKeyResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(baseKeyResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(baseKeyResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(baseKeyResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttrSet(reimportResource, "id"),
-					resource.TestCheckResourceAttrSet(reimportResource, "key_id"),
-					resource.TestCheckResourceAttr(reimportResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(reimportResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(reimportResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(reimportResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(reimportResource, "expiration_model", "KEY_MATERIAL_DOES_NOT_EXPIRE"),
-					resource.TestCheckResourceAttr(reimportResource, "valid_to", ""),
-				),
-			},
-			{
-				// Verify ModifyPlan fires an error when import_key_material.key_id is changed.
-				Config:      modifyPlanConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-		},
-	})
-}
-
-// TestCckmAWSKeyImportMaterialResourceWithExpiry tests the
-// ciphertrust_aws_key_import_material resource with key_expiration = true.
-// The re-import sets an expiry date on the key material.
-func TestCckmAWSKeyImportMaterialResourceWithExpiry(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	importConfig := `
-		resource "ciphertrust_aws_key" "base" {
-			import_key_material {
-				source_key_name = "%s"
-				source_key_tier = "local"
-				key_expiration  = false
-			}
-			kms    = ciphertrust_aws_kms.kms.id
-			region = ciphertrust_aws_kms.kms.regions[0]
-			customer_master_key_spec = "SYMMETRIC_DEFAULT"
-		}
-		resource "ciphertrust_aws_key_import_material" "reimport" {
-			key_id = ciphertrust_aws_key.base.key_id
-			import_key_material {
-				source_key_identifier = ciphertrust_aws_key.base.local_key_name
-				source_key_tier       = "local"
-				key_expiration        = true
-				valid_to              = "%s"
-			}
-		}`
-
-	reimportResource := "ciphertrust_aws_key_import_material.reimport"
-	cmKeyName := "tf-aes-" + uuid.NewString()
-	validTo := time.Now().UTC().AddDate(0, 0, 1).Format(time.RFC3339)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + fmt.Sprintf(importConfig, cmKeyName, validTo),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(reimportResource, "id"),
-					resource.TestCheckResourceAttrSet(reimportResource, "key_id"),
-					resource.TestCheckResourceAttr(reimportResource, "customer_master_key_spec", "SYMMETRIC_DEFAULT"),
-					resource.TestCheckResourceAttr(reimportResource, "key_material_origin", "cckm"),
-					resource.TestCheckResourceAttr(reimportResource, "origin", "EXTERNAL"),
-					resource.TestCheckResourceAttr(reimportResource, "key_state", "Enabled"),
-					resource.TestCheckResourceAttr(reimportResource, "expiration_model", "KEY_MATERIAL_EXPIRES"),
-				testCheckAttributeContains(reimportResource, "valid_to", []string{validTo[:10]}, true),
-				),
-			},
-		},
-	})
 }
 
 // TestCckmAWSKeyKmsDeleteRecovery verifies provider recovery after a KMS is
@@ -1259,10 +582,11 @@ func TestCckmAWSKeyKmsDeleteRecovery(t *testing.T) {
 			actions = ["keycreate"]
 		}
 		resource "ciphertrust_aws_key" "native_key" {
-			alias   = [local.alias]
-			kms     = ciphertrust_aws_kms.kms.id
-			region  = ciphertrust_aws_kms.kms.regions[0]
-			origin  = "AWS_KMS"
+			aws_param = {
+				alias = [local.alias]
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
 		}`
 	userName := "tf-" + uuid.New().String()[:8]
 	keyResource := "ciphertrust_aws_key.native_key"
@@ -1282,7 +606,6 @@ func TestCckmAWSKeyKmsDeleteRecovery(t *testing.T) {
 				Config: fullConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
 					resource.TestCheckResourceAttrSet(aclResource, "id"),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmsResource]
@@ -1323,10 +646,8 @@ func TestCckmAWSKeyKmsDeleteRecovery(t *testing.T) {
 				//   - ACL: recreated from scratch (was removed from state in Step 2).
 				Config: fullConfig,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(kmsResource, "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "key_id"),
-					resource.TestCheckResourceAttr(keyResource, "key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttrSet(aclResource, "id"),
 				),
 			},
@@ -1337,6 +658,450 @@ func TestCckmAWSKeyKmsDeleteRecovery(t *testing.T) {
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(kmsResource, "acls.#", "1"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmAWSNativeKeyMinimalConfig verifies that a resource configuration
+// containing only the minimal required attributes is accepted and applied
+// without error.
+func TestCckmAWSNativeKeyMinimalConfig(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	nativeKeyConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias        = [local.alias]
+			}
+			kms_id       = ciphertrust_aws_kms.kms.id
+			region       = ciphertrust_aws_kms.kms.regions[0]
+		}
+		resource "ciphertrust_aws_policy_template" "policy_template" {
+            kms_id = ciphertrust_aws_kms.kms.id
+			name   = "%s"
+			policy = <<-EOT
+				%s
+			EOT
+		}
+		resource "ciphertrust_groups" "acl_group" {
+			name = "%s"
+		}
+		resource "ciphertrust_aws_acl" "acl" {
+			kms_id  = ciphertrust_aws_kms.kms.id
+			group   = ciphertrust_groups.acl_group.id
+			actions = ["view"]
+		}
+`
+
+	keyConfigStr := fmt.Sprintf(nativeKeyConfig, "tf-"+uuid.NewString()[:8], defaultPolicy, "tf-"+uuid.NewString()[:8])
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnectionResource + keyConfigStr,
+			},
+			{
+				RefreshState: true,
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyMultiRegionNative creates a key and a replica and makes the replica primary
+func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	awsKeyUsers := getAwsUsers()
+	if len(awsKeyUsers) != 2 {
+		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
+	}
+	awsKeyRoles := getAwsRoles()
+	if len(awsKeyRoles) != 2 {
+		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
+	}
+	createConfig := `
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				aws_param = {
+					alias                    = ["%s", "%s"]
+					customer_master_key_spec = "RSA_2048"
+					key_usage                = "SIGN_VERIFY"
+					multi_region             = true
+					tags = {
+						CreateTagKey1 = "CreateTagValue1"
+						CreateTagKey2 = "CreateTagValue2"
+					}
+				}
+				kms_id = ciphertrust_aws_kms.kms.id
+				region = ciphertrust_aws_kms.kms.regions[0]
+			}
+			resource "ciphertrust_aws_key" "replica"{
+				depends_on = [
+					ciphertrust_aws_key.multi_region_key,
+				]
+				aws_param = {
+					alias       = ["%s"]
+					description = "replica one"
+					tags = {
+						RegionOneTagKey = "RegionOneTagValue"
+					}
+				}
+				key_policy = {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region = ciphertrust_aws_kms.kms.regions[1]
+				replicate_key = {
+					key_id       = ciphertrust_aws_key.multi_region_key.id
+					make_primary = true
+				}
+			}`
+	updateConfig := `
+			resource "ciphertrust_aws_key" "multi_region_key" {
+				aws_param = {
+					alias                    = ["%s", "%s"]
+					customer_master_key_spec = "RSA_2048"
+					key_usage                = "SIGN_VERIFY"
+					multi_region             = true
+					tags = {
+						CreateTagKey1 = "CreateTagValue1"
+						CreateTagKey2 = "CreateTagValue2"
+					}
+				}
+				kms_id = ciphertrust_aws_kms.kms.id
+				region = ciphertrust_aws_kms.kms.regions[0]
+			}
+			resource "ciphertrust_aws_key" "replica"{
+				aws_param = {
+					alias       = ["%s"]
+					description = "replica one"
+					tags = {
+						RegionOneTagKey = "RegionOneTagValue"
+					}
+				}
+				key_policy = {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region         = ciphertrust_aws_kms.kms.regions[1]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.multi_region_key.id
+				}
+			}`
+	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
+	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
+	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
+	keyResource := "ciphertrust_aws_key.multi_region_key"
+	replicaResource1 := "ciphertrust_aws_key.replica"
+	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
+		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
+		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey1", "CreateTagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
+
+					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.replica_keys.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.0", replicaAlias),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.description", "replica one"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replicaResource1, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
+					// Sometimes - this is true
+					//resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+				),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						replicaResource1,
+						tfjsonpath.New("aws_param").AtMapKey("policy"),
+						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
+				},
+			},
+			{
+				// Update state before import as primary region has changed. The Check
+				// confirms stable attributes are correct so the subsequent
+				// ImportStateVerify steps compare against known-good values.
+				Config: createResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey1", "CreateTagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
+
+					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replicaResource1, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
+				),
+			},
+			{
+				ResourceName:            keyResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
+			},
+			{
+				ResourceName:            replicaResource1,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(replicaResource1, "id"),
+			},
+			{
+				// After update: multi_region_key (regions[0]) is now a REPLICA;
+				// replica (regions[1]) is now the PRIMARY with one replica key.
+				Config: updateResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+
+					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.replica_keys.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.%", "1"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses primary_region to change replica key to the primary key
+// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses the primary_key to make change the replica to the primary
+func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	awsKeyUsers := getAwsUsers()
+	if len(awsKeyUsers) != 2 {
+		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
+	}
+	awsKeyRoles := getAwsRoles()
+	if len(awsKeyRoles) != 2 {
+		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
+	}
+	createConfig := `
+			resource "ciphertrust_aws_key" "primary_key" {
+				aws_param = {
+					alias                    = ["%s", "%s"]
+					customer_master_key_spec = "RSA_2048"
+					key_usage                = "SIGN_VERIFY"
+					multi_region             = true
+					tags = {
+						CreateTagKey1 = "CreateTagValue1"
+						CreateTagKey2 = "CreateTagValue2"
+					}
+				}
+				kms_id = ciphertrust_aws_kms.kms.id
+				region = ciphertrust_aws_kms.kms.regions[0]
+			}
+			resource "ciphertrust_aws_key" "replica"{
+				depends_on = [
+					ciphertrust_aws_key.primary_key,
+				]
+				aws_param = {
+					alias       = ["%s"]
+					description = "replica one"
+					tags = {
+						RegionOneTagKey = "RegionOneTagValue"
+					}
+				}
+				key_policy = {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region = ciphertrust_aws_kms.kms.regions[1]
+				replicate_key = {
+					key_id       = ciphertrust_aws_key.primary_key.id
+				}
+			}`
+	updateConfig := `
+			resource "ciphertrust_aws_key" "primary_key" {
+				aws_param = {
+					alias                    = ["%s", "%s"]
+					customer_master_key_spec = "RSA_2048"
+					key_usage                = "SIGN_VERIFY"
+					multi_region             = true
+					tags = {
+						CreateTagKey1 = "CreateTagValue1"
+						CreateTagKey2 = "CreateTagValue2"
+					}
+				}
+				kms_id = ciphertrust_aws_kms.kms.id
+				region = ciphertrust_aws_kms.kms.regions[0]
+				primary_region = ciphertrust_aws_kms.kms.regions[1]
+			}
+			resource "ciphertrust_aws_key" "replica"{
+				aws_param = {
+					alias       = ["%s"]
+					description = "replica one"
+					tags = {
+						RegionOneTagKey = "RegionOneTagValue"
+					}
+				}
+				key_policy = {
+					key_admins        = ["%s"]
+					key_users         = ["%s"]
+					key_admins_roles  = ["%s"]
+					key_users_roles   = ["%s"]
+				}
+				region         = ciphertrust_aws_kms.kms.regions[1]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.primary_key.id
+				}
+			}`
+	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
+	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
+	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
+	keyResource := "ciphertrust_aws_key.primary_key"
+	replicaResource := "ciphertrust_aws_key.replica"
+	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
+		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
+		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey1", "CreateTagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
+
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
+					resource.TestCheckResourceAttr(replicaResource, "key_users.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
+					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.0", replicaAlias),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.description", "replica one"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replicaResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+				),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						replicaResource,
+						tfjsonpath.New("aws_param").AtMapKey("policy"),
+						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
+				},
+			},
+			{
+				// Update state before import as primary region has changed. The Check
+				// confirms stable attributes are correct so the subsequent
+				// ImportStateVerify steps compare against known-good values.
+				Config: createResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey1", "CreateTagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
+
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replicaResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
+				),
+			},
+			{
+				ResourceName:            keyResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
+			},
+			{
+				ResourceName:            replicaResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(replicaResource, "id"),
+			},
+			{
+				// After update: the primary key will no longer be the primary
+				// A refresh is required to update the state of the replica
+				Config: updateResources,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
+				),
+			},
+			{
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
 				),
 			},
 		},

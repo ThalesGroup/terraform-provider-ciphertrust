@@ -3,12 +3,12 @@
 page_title: "ciphertrust_domain Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager domain (a tenant boundary inside a single CipherTrust Manager instance). Only available on CipherTrust Manager — not supported on CDSPaaS, where each customer is their own tenant and domains are managed by the platform.
 ---
 
 # ciphertrust_domain (Resource)
 
-
+Manages a CipherTrust Manager domain (a tenant boundary inside a single CipherTrust Manager instance). **Only available on CipherTrust Manager — not supported on CDSPaaS, where each customer is their own tenant and domains are managed by the platform.**
 
 ## Example Usage
 

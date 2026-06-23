@@ -111,8 +111,12 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.",
+				Description: "(Updatable) CipherTrust Manager OCI connection ID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"connection_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.",
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
@@ -227,7 +231,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	payload := models.AddVaultsPayloadJSON{
-		Connection: plan.Connection.ValueString(),
+		Connection: plan.ConnectionID.ValueString(),
 		Region:     plan.Region.ValueString(),
 		VaultIDs:   []string{plan.VaultID.ValueString()},
 	}
@@ -301,30 +305,23 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 	vaultID := state.ID.ValueString()
-	// Save the prior connection value before getOciVault and setVaultState run.
-	priorConn := state.Connection.ValueString()
 	response := getOciVault(ctx, id, r.client, vaultID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if response == "" {
+		// Vault was not found (404) - warning already added by getOciVault.
+		// Remove this registration from state so Terraform can re-register it when
+		// the vault is restored or re-added.
+		resp.State.RemoveResource(ctx)
+		return
+	}
+	// setVaultState refreshes all computed fields including connection_name.
+	// connection_id is left untouched so it always reflects the user-supplied value;
+	// any out-of-band connection change is visible via connection_name drifting.
 	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
-	}
-	// Preserve the user-supplied connection_id form (name or UUID) when it resolves
-	// to the same connection that the API reports, so configs using either form do
-	// not produce spurious plan drift after every refresh.
-	// Only overwrite when the connection has genuinely changed out-of-band.
-	apiConnName := gjson.Get(response, "connection").String()
-	state.Connection = types.StringValue(apiConnName)
-	if priorConn != "" && priorConn != apiConnName {
-		connResp, connErr := r.client.GetById(ctx, id, priorConn, common.URL_OCI_CONNECTION)
-		if connErr == nil && gjson.Get(connResp, "name").String() == apiConnName {
-			// Same connection, different representation - restore the prior value so
-			// that users who specify a UUID do not see spurious drift.
-			state.Connection = types.StringValue(priorConn)
-		}
-		// else: genuine out-of-band change - keep the API name.
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -352,13 +349,13 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if plan.Connection.ValueString() != gjson.Get(response, "connection").String() ||
+	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() ||
 		plan.BucketName.ValueString() != gjson.Get(response, "bucket_name").String() ||
 		plan.BucketNamespace.ValueString() != gjson.Get(response, "bucket_namespace").String() {
 
 		var payload models.UpdateVaultJSON
-		if plan.Connection.ValueString() != gjson.Get(response, "connection").String() {
-			payload.Connection = plan.Connection.ValueStringPointer()
+		if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
+			payload.Connection = plan.ConnectionID.ValueStringPointer()
 		}
 		if plan.BucketName.ValueString() != gjson.Get(response, "bucket_name").String() {
 			payload.BucketName = plan.BucketName.ValueStringPointer()
@@ -398,7 +395,7 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	state.Connection = plan.Connection
+	state.ConnectionID = plan.ConnectionID
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -454,7 +451,21 @@ func (r *resourceCCKMOCIVault) ModifyPlan(ctx context.Context, req resource.Modi
 	}
 
 	if plan.VaultID != state.VaultID {
-		changed = append(changed, "vault_id")
+		connID := state.ConnectionID.ValueString()
+		if connID != "" {
+			id := uuid.New().String()
+			_, err := r.client.GetById(ctx, id, connID, common.URL_OCI_CONNECTION)
+			if err != nil && strings.Contains(err.Error(), notFoundError) {
+				msg := "Previous OCI connection was not found, allowing vault_id update."
+				details := utils.ApiError(msg, map[string]interface{}{"connection_id": connID})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				changed = append(changed, "vault_id")
+			}
+		} else {
+			changed = append(changed, "vault_id")
+		}
 	}
 
 	if len(changed) > 0 {
@@ -512,6 +523,7 @@ func setCommonVaultState(ctx context.Context, response string, state *models.Vau
 	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())
 	state.LifecycleState = types.StringValue(gjson.Get(response, "lifecycle_state").String())
 	state.ManagementEndpoint = types.StringValue(gjson.Get(response, "management_endpoint").String())
+	state.ConnectionName = types.StringValue(gjson.Get(response, "connection").String())
 	state.RestoredFromVaultID = types.StringValue(gjson.Get(response, "restored_from_vault_id").String())
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.ReplicationID = types.StringValue(gjson.Get(response, "replication_id").String())

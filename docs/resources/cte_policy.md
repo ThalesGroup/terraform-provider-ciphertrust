@@ -44,7 +44,12 @@ Optional:
 
 - `key_id` (String) Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id. Note: For decryption, where a clear key is to be supplied, use the string "clear_key" only. Do not specify any other identifier.
 - `key_type` (String) Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.
+- `order_number` (Number) Precedence order of the rule in the policy.
 - `resource_set_id` (String) ID of the resource set linked with the rule.
+
+Read-Only:
+
+- `id` (String) Identifier of the data transform rule.
 
 
 <a id="nestedatt--idt_key_rules"></a>
@@ -57,6 +62,10 @@ Optional:
 - `transformation_key` (String) Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id.
 - `transformation_key_type` (String) Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.
 
+Read-Only:
+
+- `id` (String) Identifier for key rule
+
 
 <a id="nestedatt--key_rules"></a>
 ### Nested Schema for `key_rules`
@@ -65,18 +74,31 @@ Optional:
 
 - `key_id` (String) Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id. Note: For decryption, where a clear key is to be supplied, use the string "clear_key" only. Do not specify any other identifier.
 - `key_type` (String) Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.
+- `order_number` (Number) Precedence order of the rule in the policy.
 - `resource_set_id` (String) ID of the resource set to link with the rule. Supported for Standard, LDT and IDT policies.
+
+Read-Only:
+
+- `id` (String) Identifier of the key rule.
 
 
 <a id="nestedatt--ldt_key_rules"></a>
 ### Nested Schema for `ldt_key_rules`
 
-Optional:
+Required:
 
 - `current_key` (Attributes) Properties of the current key. (see [below for nested schema](#nestedatt--ldt_key_rules--current_key))
+
+Optional:
+
 - `is_exclusion_rule` (Boolean) Whether this is an exclusion rule. If enabled, no need to specify the transformation rule.
+- `order_number` (Number) Precedence order of the rule in the policy.
 - `resource_set_id` (String) ID of the resource set to link with the rule.
 - `transformation_key` (Attributes) Properties of the transformation key. (see [below for nested schema](#nestedatt--ldt_key_rules--transformation_key))
+
+Read-Only:
+
+- `id` (String) Identifier of the LDT key rule.
 
 <a id="nestedatt--ldt_key_rules--current_key"></a>
 ### Nested Schema for `ldt_key_rules.current_key`
@@ -102,7 +124,7 @@ Optional:
 
 Optional:
 
-- `restrict_update` (Boolean) To restrict the policy for modification. If its value enabled means user not able to modify the guarded policy.
+- `restrict_update` (Boolean) To restrict the policy for modification.
 
 
 <a id="nestedatt--security_rules"></a>
@@ -115,15 +137,24 @@ Optional:
 - `exclude_process_set` (Boolean) Process set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_resource_set` (Boolean) Resource set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_user_set` (Boolean) User set to exclude. Supported for Standard, LDT and IDT policies.
+- `order_number` (Number) Precedence order of the rule in the policy.
 - `partial_match` (Boolean) Whether to allow partial match operations. By default, it is enabled. Supported for Standard, LDT and IDT policies.
 - `process_set_id` (String) ID of the process set to link to the policy.
 - `resource_set_id` (String) ID of the resource set to link to the policy. Supported for Standard, LDT and IDT policies.
 - `user_set_id` (String) ID of the user set to link to the policy.
 
+Read-Only:
+
+- `id` (String) Identifier of the security rule.
+
 
 <a id="nestedatt--signature_rules"></a>
 ### Nested Schema for `signature_rules`
 
-Optional:
+Required:
 
 - `signature_set_id` (String) List of identifiers of signature sets. This identifier can be the Name, ID (a UUIDv4), URI, or slug of the signature set.
+
+Read-Only:
+
+- `id` (String) Identifier of the signature rule.

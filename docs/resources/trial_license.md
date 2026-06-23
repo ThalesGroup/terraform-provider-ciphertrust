@@ -3,12 +3,12 @@
 page_title: "ciphertrust_trial_license Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Activates a CipherTrust Manager trial license. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_trial_license (Resource)
 
-
+Activates a CipherTrust Manager trial license. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 
