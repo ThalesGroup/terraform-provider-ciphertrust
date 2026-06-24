@@ -58,6 +58,7 @@ type CMGroupTFSDK struct {
 	ClientMetadata types.String `tfsdk:"client_metadata"`
 	Description    types.String `tfsdk:"description"`
 	UserMetadata   types.String `tfsdk:"user_metadata"`
+	UserIDs        types.Set    `tfsdk:"user_ids"`
 }
 
 type CMKeysListTFSDK struct {
@@ -443,10 +444,10 @@ type CMUserJSON struct {
 	Password               string             `json:"password,omitempty"`
 	IsDomainUser           bool               `json:"is_domain_user"`
 	LoginFlags             UserLoginFlagsJSON `json:"login_flags"`
-	PasswordChangeRequired bool                       `json:"password_change_required"`
+	PasswordChangeRequired bool               `json:"password_change_required"`
 	// user_metadata values can be strings or nested objects (e.g. current_domain
 	// on CDSPaaS); use json.RawMessage to accept any JSON value without error.
-	Metadata               map[string]json.RawMessage `json:"user_metadata,omitempty"`
+	Metadata map[string]json.RawMessage `json:"user_metadata,omitempty"`
 }
 
 type CMSSHKeyTFSDK struct {
@@ -1236,4 +1237,3 @@ func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {
 	}
 	return out
 }
-
