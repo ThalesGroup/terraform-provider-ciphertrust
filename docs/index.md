@@ -13,10 +13,20 @@ description: |-
 
 ```terraform
 provider "ciphertrust" {
-  address           = "https://ip_or_hostname_of_cm"
-  username          = "username"
-  password          = "password"
-  auth_domain       = "authentication-domain"
+  address     = "https://ip_or_hostname_of_cm"
+  username    = "username"
+  password    = "password"
+  auth_domain = "authentication-domain"
+
+  # Optional: PEM-encoded CA bundle for private PKI / internally-issued certs.
+  # Use this when CipherTrust Manager presents a certificate that is not in
+  # the system trust store (air-gapped, self-issued, internal CA, etc.).
+  # ca_cert = "/etc/ssl/certs/my-internal-ca.pem"
+
+  # Optional: disable TLS certificate verification. NOT RECOMMENDED — use
+  # only for local development or testing. The provider will emit a warning
+  # at plan time when this is enabled.
+  # no_ssl_verify = true
 }
 ```
 
@@ -64,15 +74,16 @@ provider "ciphertrust" {
 
 ### Optional
 
-- `address` (String) HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config
+- `address` (String) HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. address can be set in the provider block, via the CIPHERTRUST_ADDRESS environment variable or in ~/.ciphertrust/config
 - `auth_domain` (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CM_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `aws_operation_timeout` (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
 - `bootstrap` (String) Is it a bootstrap operation. bootstrap can be set in the provider block, via the no environment variable or in ~/.ciphertrust/config
+- `ca_cert` (String) Path to a PEM-encoded CA certificate bundle used to validate the CipherTrust server's TLS certificate. Use this for private PKI, internally-issued certificates, or air-gapped environments where the certificate chain is not in the system trust store. The file may contain one or more concatenated PEM certificates. ca_cert can be set in the provider block, via the CIPHERTRUST_CA_CERT environment variable or in ~/.ciphertrust/config
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
-- `no_ssl_verify` (Boolean) Set as false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
+- `no_ssl_verify` (Boolean) Disable TLS certificate chain and hostname verification when set to true. **WARNING:** disabling certificate verification exposes connections to man-in-the-middle attacks and should only be used for local development or testing — never in production. Set to false (the default) to enforce certificate validation; supply a custom CA bundle via `ca_cert` for private PKI or air-gapped environments. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is false.
 - `oci_operation_timeout` (Number) Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. oci_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
-- `password` (String, Sensitive) Password of a CipherTrust user. password can be set in the provider block, via the CM_PASSWORD environment variable or in ~/.ciphertrust/config
+- `password` (String, Sensitive) Password of a CipherTrust user. password can be set in the provider block, via the CIPHERTRUST_PASSWORD environment variable or in ~/.ciphertrust/config
 - `replication_delay_ms` (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. replication_delay_ms can be set in the provider block, via the CM_REPLICATION_DELAY environment variable or in ~/.ciphertrust/config. Default is 100.
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
 - `tenant` (String) CDSPaaS tenant name (e.g. "acme") or tenant path (e.g. "acme/eng/team"). Setting this opts the provider into the CDSPaaS authentication path; leave unset for on-prem CipherTrust Manager. tenant can be set in the provider block, via the CIPHERTRUST_TENANT environment variable or in ~/.ciphertrust/config
-- `username` (String) Username of a CipherTrust user. username can be set in the provider block, via the CM_USERNAME environment variable or in ~/.ciphertrust/config
+- `username` (String) Username of a CipherTrust user. username can be set in the provider block, via the CIPHERTRUST_USERNAME environment variable or in ~/.ciphertrust/config
