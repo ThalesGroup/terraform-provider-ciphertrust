@@ -30,7 +30,7 @@ import (
 //  4. Remove valid_to from material1 Verify expiration_model reverts to
 //     KEY_MATERIAL_DOES_NOT_EXPIRE and rotation_history.valid_to is cleared.
 //  5. Add material2.  Verify rotation_history.#=2 and key remains Enabled.
-func TestXCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
+func TestCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -191,7 +191,7 @@ func TestXCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
 
 // TestCckmAWSKeyMaterialCombinedUpdates verifies that multiple update operations can fire
 // in a single apply.
-func TestXCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
+func TestCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -325,7 +325,7 @@ func TestXCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
 //  3. Re-apply config unchanged. Provider detects PENDING_IMPORT, calls import-material
 //     with EXISTING_KEY_MATERIAL. Verify key_state=Enabled, rotation_history.#=1.
 //  4. RefreshState - confirm plan is stable.
-func TestXCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
+func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -433,7 +433,7 @@ func TestXCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 //     with an empty body to resume the pending rotation.
 //     Verify key_state=Enabled, rotation_history.#=2.
 //  5. RefreshState - confirm plan is stable.
-func TestXCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -571,7 +571,7 @@ func TestXCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 //     resumes material2. Both phases fire in the same apply.
 //     Verify key_state=Enabled, rotation_history.#=2.
 //  4. RefreshState - confirm plan is stable.
-func TestXCckmAWSKeyMaterialRepairCombined(t *testing.T) {
+func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -721,7 +721,7 @@ func TestXCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 //     rotation history and re-imports it via import-material with EXISTING_KEY_MATERIAL.
 //     rotation_history.#=3 restored.
 //  7. RefreshState - confirm plan is stable.
-func TestXCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
+func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1136,7 +1136,7 @@ func TestXCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 //     Call rotate-material on primary.
 //     Verify rotation_history.#=2 and all keys Enabled.
 //  6. RefreshState - confirm plan stable.
-func TestXCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1337,7 +1337,7 @@ func TestXCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing
 //     with an empty body to activate the material. Verify key_state=Enabled,
 //     rotation_history.#=1 and rotation_history.0.key_material_state=CURRENT.
 //  4. RefreshState confirms the plan is stable.
-func TestXCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1468,7 +1468,7 @@ func TestXCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 //  3. Verify enabled=true, rotation_history.#=2 (cm_aes_key initial + cm_aes_key2 current),
 //     rotation_history.0.key_material_state=CURRENT.
 //  4. RefreshState confirms plan is stable.
-func TestXCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1766,7 +1766,7 @@ func TestXCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 // TestCckmAWSKeyMaterialMRPendingImportFirstMaterial verifies that a multi-region
 // EXTERNAL key created in PendingImport state (no source_key_identifier) can receive
 // its first key material via aws_key_material and transition to enabled state.
-func TestXCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
+func TestCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1847,7 +1847,7 @@ func TestXCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 // No set values on create
 // Adding more than one new key_material
 // Set values that duplicate source_key_id
-func TestXCckmAWSKeyMaterialPlanValidation(t *testing.T) {
+func TestCckmAWSKeyMaterialPlanValidation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -2122,7 +2122,7 @@ func refreshKeyAndWait(keyID string, sourceKeyID string) {
 
 // TestCckmAWSByokKeyCreatePendingImport verifies that an EXTERNAL (BYOK) key created with
 // no source_key_identifier lands in PendingImport state. No key material is uploaded.
-func TestXCckmAWSByokKeyCreatePendingImport(t *testing.T) {
+func TestCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -2164,7 +2164,7 @@ func TestXCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 // TestCckmAWSKeyMaterialCDSPaaSNotSupported verifies that creating a
 // ciphertrust_aws_key_material resource against CDSPaaS fails at plan time
 // with "Resource not supported on CDSPaaS".
-func TestXCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
+func TestCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
 	if os.Getenv("CDSPAAS") != "true" {
 		t.Skip("Skipping: only runs on CDSPaaS")
 	}
