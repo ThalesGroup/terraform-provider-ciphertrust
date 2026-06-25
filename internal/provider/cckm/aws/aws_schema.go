@@ -1,7 +1,6 @@
 package cckm
 
 import (
-	"context"
 	"regexp"
 	"strings"
 
@@ -10,44 +9,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
-
-// nullOrStateForUnknownObject is a plan modifier for Computed-only SingleNestedAttribute
-// fields whose Go TFSDK type is a pointer (e.g. *MultiRegionConfigTFSDK). The Terraform
-// Plugin Framework marks Computed-only attributes as unknown in the plan. This modifier
-// resolves the unknown:
-//   - New resource (null prior state): leaves the planned value as unknown so that
-//     Terraform accepts whatever value (null or non-null) the provider returns after apply.
-//   - Existing resource (known prior state): copies the prior state value to avoid
-//     spurious "will be recomputed" diffs on this read-only nested object.
-type nullOrStateForUnknownObject struct{}
-
-func (nullOrStateForUnknownObject) Description(_ context.Context) string {
-	return "Use null for new resources; use prior state value for existing resources."
-}
-
-func (nullOrStateForUnknownObject) MarkdownDescription(_ context.Context) string {
-	return "Use null for new resources; use prior state value for existing resources."
-}
-
-func (nullOrStateForUnknownObject) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
-	if !req.PlanValue.IsUnknown() {
-		return
-	}
-	// New resource: state is null. Leave plan as unknown so Terraform accepts
-	// whatever value (null or non-null) the provider returns after apply.
-	// Returning null here would cause an "inconsistent result after apply" error
-	// when the provider sets a non-null value (e.g. multi_region_configuration
-	// for a multi-region key).
-	if req.StateValue.IsNull() {
-		return
-	}
-	// Existing resource: copy prior state to avoid spurious recompute diffs.
-	resp.PlanValue = req.StateValue
-}
 
 type AWSCustomKeyStoreParamTFSDK struct {
 	CloudHSMClusterID              types.String `tfsdk:"cloud_hsm_cluster_id"`
@@ -1232,7 +1196,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable for linked keys) Alias(es) assigned to the key.",
+			Description: "Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(

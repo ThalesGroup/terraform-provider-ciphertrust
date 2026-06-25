@@ -30,7 +30,7 @@ import (
 //  4. Remove valid_to from material1 Verify expiration_model reverts to
 //     KEY_MATERIAL_DOES_NOT_EXPIRE and rotation_history.valid_to is cleared.
 //  5. Add material2.  Verify rotation_history.#=2 and key remains Enabled.
-func TestCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
+func TestXCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -191,7 +191,7 @@ func TestCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
 
 // TestCckmAWSKeyMaterialCombinedUpdates verifies that multiple update operations can fire
 // in a single apply.
-func TestCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
+func TestXCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -325,7 +325,7 @@ func TestCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
 //  3. Re-apply config unchanged. Provider detects PENDING_IMPORT, calls import-material
 //     with EXISTING_KEY_MATERIAL. Verify key_state=Enabled, rotation_history.#=1.
 //  4. RefreshState - confirm plan is stable.
-func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
+func TestXCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -376,11 +376,13 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKeyID = rsCmKey.Primary.ID
@@ -431,7 +433,7 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 //     with an empty body to resume the pending rotation.
 //     Verify key_state=Enabled, rotation_history.#=2.
 //  5. RefreshState - confirm plan is stable.
-func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
+func TestXCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -511,11 +513,13 @@ func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -567,7 +571,7 @@ func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 //     resumes material2. Both phases fire in the same apply.
 //     Verify key_state=Enabled, rotation_history.#=2.
 //  4. RefreshState - confirm plan is stable.
-func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
+func TestXCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -643,11 +647,13 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -715,7 +721,7 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 //     rotation history and re-imports it via import-material with EXISTING_KEY_MATERIAL.
 //     rotation_history.#=3 restored.
 //  7. RefreshState - confirm plan is stable.
-func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
+func TestXCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -953,11 +959,13 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKeyID = rsCmKey.Primary.ID
@@ -1128,7 +1136,7 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 //     Call rotate-material on primary.
 //     Verify rotation_history.#=2 and all keys Enabled.
 //  6. RefreshState - confirm plan stable.
-func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.T) {
+func TestXCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1245,11 +1253,13 @@ func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[primaryResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", primaryResource)
 							return fmt.Errorf("resource %s not found in state", primaryResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -1327,7 +1337,7 @@ func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.
 //     with an empty body to activate the material. Verify key_state=Enabled,
 //     rotation_history.#=1 and rotation_history.0.key_material_state=CURRENT.
 //  4. RefreshState confirms the plan is stable.
-func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
+func TestXCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1387,11 +1397,13 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[extKeyResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", extKeyResource)
 							return fmt.Errorf("resource %s not found in state", extKeyResource)
 						}
 						capturedKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key not found in state")
 						}
 						capturedCmKeyID = rs2.Primary.ID
@@ -1456,7 +1468,7 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 //  3. Verify enabled=true, rotation_history.#=2 (cm_aes_key initial + cm_aes_key2 current),
 //     rotation_history.0.key_material_state=CURRENT.
 //  4. RefreshState confirms plan is stable.
-func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
+func TestXCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1578,6 +1590,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Key to import new material too
 						rs, ok := s.RootModule().Resources[primaryResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", primaryResource)
 							return fmt.Errorf("resource %s not found in state", primaryResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
@@ -1585,6 +1598,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Key to import new material too
 						rs1, ok := s.RootModule().Resources[replica1Resource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", replica1Resource)
 							return fmt.Errorf("resource %s not found in state", replica1Resource)
 						}
 						capturedReplica1KeyID = rs1.Primary.ID
@@ -1592,6 +1606,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Rotation record to check during refresh wait
 						rsCM1, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey1ID = rsCM1.Primary.ID
@@ -1599,6 +1614,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Source key id of CM key - material to import
 						rsCM2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rsCM2.Primary.ID
@@ -1750,7 +1766,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 // TestCckmAWSKeyMaterialMRPendingImportFirstMaterial verifies that a multi-region
 // EXTERNAL key created in PendingImport state (no source_key_identifier) can receive
 // its first key material via aws_key_material and transition to enabled state.
-func TestCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
+func TestXCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1831,7 +1847,7 @@ func TestCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 // No set values on create
 // Adding more than one new key_material
 // Set values that duplicate source_key_id
-func TestCckmAWSKeyMaterialPlanValidation(t *testing.T) {
+func TestXCckmAWSKeyMaterialPlanValidation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -2106,7 +2122,7 @@ func refreshKeyAndWait(keyID string, sourceKeyID string) {
 
 // TestCckmAWSByokKeyCreatePendingImport verifies that an EXTERNAL (BYOK) key created with
 // no source_key_identifier lands in PendingImport state. No key material is uploaded.
-func TestCckmAWSByokKeyCreatePendingImport(t *testing.T) {
+func TestXCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -2148,7 +2164,7 @@ func TestCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 // TestCckmAWSKeyMaterialCDSPaaSNotSupported verifies that creating a
 // ciphertrust_aws_key_material resource against CDSPaaS fails at plan time
 // with "Resource not supported on CDSPaaS".
-func TestCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
+func TestXCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
 	if os.Getenv("CDSPAAS") != "true" {
 		t.Skip("Skipping: only runs on CDSPaaS")
 	}

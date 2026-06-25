@@ -100,7 +100,7 @@ func replicateKeyCommon(
 		if err != nil {
 			errMsg = err.Error()
 		}
-		msg := "Error replicated AWS key, failed to read primary key."
+		msg := "Error replicating AWS key, failed to read primary key."
 		details := utils.ApiError(msg, map[string]interface{}{
 			"error":          errMsg,
 			"primary_key_id": primaryKeyID,

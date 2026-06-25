@@ -13,14 +13,11 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// getAwsKey fetches an AWS key from CipherTrust Manager by its CM resource UUID (new format).
+// getAwsKey fetches an AWS key from CipherTrust Manager by its CM resource UUID.
 // Returns (keyJSON, false) on success.
 // If the key is not found (404):
 //   - opLabel "deleting": warning added, ("", false) returned - resource will be removed from state.
-//   - opLabel "reading" + KMS 404: warning added, ("", true) returned - caller should preserve state.
-//   - opLabel "reading" + KMS reachable error: error added, ("", false) returned.
-//   - other opLabels + kmsID set: KMS is checked for a specific error; error added, ("", false) returned.
-//   - kmsID empty: generic error added, ("", false) returned.
+//   - any other opLabel: error added, ("", false) returned - state is preserved.
 //
 // A non-404 key error is always a hard error. ("", false) is returned.
 func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID string, keyID string, opLabel string, diags *diag.Diagnostics) (string, bool) {
@@ -36,15 +33,7 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 				_, kmsErr := client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 				if kmsErr != nil {
 					if strings.Contains(kmsErr.Error(), notFoundError) {
-						if opLabel == "reading" {
-							// KMS gone - key is hidden. Signal caller to preserve existing state.
-							msg := "AWS KMS was not found while reading AWS key. Key state preserved until KMS is recovered."
-							details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID})
-							tflog.Warn(ctx, details)
-							diags.AddWarning(details, "")
-							return "", true
-						}
-						msg := "AWS KMS was not found while " + opLabel + " AWS key."
+						msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS")
 						details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID})
 						tflog.Error(ctx, details)
 						diags.AddError(details, "")
@@ -55,14 +44,14 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 						diags.AddError(details, "")
 					}
 				} else {
-					// KMS is reachable but the key is gone - use terraform state rm to remove.
-					msg := "AWS key was not found in CipherTrust Manager while " + opLabel + ". Use terraform state rm to remove this resource from state if the key no longer exists."
+					// KMS is reachable but the key is gone.
+					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS key")
 					details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID})
 					tflog.Error(ctx, details)
 					diags.AddError(details, "")
 				}
 			} else {
-				msg := "AWS key was not found while " + opLabel + "."
+				msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS key")
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")
@@ -232,5 +221,77 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 		response = keyResourceJSON.Raw
 	}
 	tflog.Debug(ctx, "[aws_read.go -> getPrimaryKey][response:"+redactAWSResponse(response))
+	return response
+}
+
+// getAwsPolicyTemplate fetches an AWS key policy template by its CipherTrust Manager ID.
+// On success the template JSON is returned.
+// On a 404 error:
+//   - opLabel "deleting": warning added, "" returned - Terraform removes the resource from state.
+//   - any other opLabel: error added, "" returned - state is preserved.
+//
+// Any non-404 error adds an error diagnostic and returns "".
+func getAwsPolicyTemplate(ctx context.Context, id string, client *common.Client, templateID string, opLabel string, diags *diag.Diagnostics) string {
+	response, err := client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			var msg string
+			if opLabel == "deleting" {
+				msg = "AWS policy template was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS policy template")
+			}
+			details := utils.ApiError(msg, map[string]interface{}{"template_id": templateID})
+			if opLabel == "deleting" {
+				tflog.Warn(ctx, details)
+				diags.AddWarning(details, "")
+			} else {
+				tflog.Error(ctx, details)
+				diags.AddError(details, "")
+			}
+			return ""
+		}
+		msg := "Error " + opLabel + " AWS policy template, failed to read AWS policy template."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template_id": templateID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
+	return response
+}
+
+// getAwsKms fetches an AWS KMS by its CipherTrust Manager ID.
+// On success the KMS JSON is returned.
+// On a 404 error:
+//   - opLabel "deleting": warning added, "" returned - Terraform removes the resource from state.
+//   - any other opLabel: error added, "" returned - state is preserved.
+//
+// Any non-404 error adds an error diagnostic and returns "".
+func getAwsKms(ctx context.Context, id string, client *common.Client, kmsID string, opLabel string, diags *diag.Diagnostics) string {
+	response, err := client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			var msg string
+			if opLabel == "deleting" {
+				msg = "AWS KMS was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS")
+			}
+			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
+			if opLabel == "deleting" {
+				tflog.Warn(ctx, details)
+				diags.AddWarning(details, "")
+			} else {
+				tflog.Error(ctx, details)
+				diags.AddError(details, "")
+			}
+			return ""
+		}
+		msg := "Error " + opLabel + " AWS KMS, failed to read AWS KMS."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
 	return response
 }

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -242,6 +243,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			}
 			kms_id    = ciphertrust_aws_kms.kms.id
 			region    = ciphertrust_aws_kms.kms.regions[0]
+			schedule_for_deletion_days = 13
 		}`
 	updateKeyConfig2 := `
 		variable "policy" {
@@ -273,6 +275,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			}
 			kms_id       = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
+			schedule_for_deletion_days = 20
 		}`
 	updateKeyConfig3 := `
 		resource "ciphertrust_aws_key" "native_key" {
@@ -287,6 +290,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			enable_key   = false
 			kms_id       = ciphertrust_aws_kms.kms.id
 			region       = ciphertrust_aws_kms.kms.regions[0]
+			schedule_for_deletion_days = 8
 		}`
 	aliasList := []string{
 		awsKeyNamePrefix + uuid.New().String(),
@@ -371,6 +375,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey3", "TagValue3"),
 					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "13"),
 				),
 			},
 			{
@@ -400,6 +405,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "13"),
 				),
 			},
 			{
@@ -412,6 +418,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "20"),
 					//resource.TestCheckResourceAttrPair(keyResource, "tags.cckm_policy_template_id", policyTemplateResource, "id"),
 					// policy not always updated in time
 					// testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
@@ -426,6 +433,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Disabled"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
 				),
 			},
 			{
@@ -567,110 +575,6 @@ func getResourceAttr(resourceName, attrName string) resource.ImportStateIdFunc {
 		}
 		return val, nil
 	}
-}
-
-// TestCckmAWSKeyKmsDeleteRecovery verifies provider recovery after a KMS is
-// deleted out-of-band. On refresh the KMS and ACL are dropped from state;
-// the key is preserved in state (KMS 404 is a hard error for the key). On
-// the next apply Terraform recreates the KMS and ACL; the key is
-// re-associated with the new KMS registration. The ACL check in Step 3
-// confirms the ACL is recreated on the new KMS.
-func TestCckmAWSKeyKmsDeleteRecovery(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	keyConfig := `
-		resource "ciphertrust_user" "acl_user" {
-			username = "%s"
-			password = "LongPassword1234++"
-		}
-		resource "ciphertrust_aws_acl" "user_acl" {
-			kms_id  = ciphertrust_aws_kms.kms.id
-			user_id = ciphertrust_user.acl_user.id
-			actions = ["keycreate"]
-		}
-		resource "ciphertrust_aws_key" "native_key" {
-			aws_param = {
-				alias = [local.alias]
-			}
-			kms_id = ciphertrust_aws_kms.kms.id
-			region = ciphertrust_aws_kms.kms.regions[0]
-		}`
-	userName := "tf-" + uuid.New().String()[:8]
-	keyResource := "ciphertrust_aws_key.native_key"
-	aclResource := "ciphertrust_aws_acl.user_acl"
-	kmsResource := "ciphertrust_aws_kms.kms"
-	fullConfig := awsConnectionResource + fmt.Sprintf(keyConfig, userName)
-
-	var capturedKMSID string
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				// Step 1: create KMS + key + user ACL; capture the KMS ID for
-				// out-of-band deletion.
-				Config: fullConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(aclResource, "id"),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[kmsResource]
-						if !ok {
-							return fmt.Errorf("kms resource not found in state")
-						}
-						capturedKMSID = rs.Primary.ID
-						return nil
-					},
-				),
-			},
-			{
-				// Step 2: delete the KMS out-of-band in PreConfig, then refresh state.
-				// Expected outcome:
-				//   - KMS: dropped from state (404 = warning + RemoveResource).
-				//   - Key: preserved in state (KMS 404 is a hard error for the key,
-				//     keeping it in state so it can be re-associated when the KMS returns).
-				//   - ACL: dropped from state (KMS 404 = warning + RemoveResource, since
-				//     an ACL cannot exist without its parent KMS).
-				PreConfig: func() {
-					client, ok := createCMClient()
-					if !ok {
-						return
-					}
-					_, _ = client.DeleteByURL(
-						context.Background(),
-						"delete-kms-recovery-test",
-						common.URL_AWS_KMS+"/"+capturedKMSID,
-					)
-				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-			},
-			{
-				// Step 3: re-apply to recover.
-				//   - KMS: recreated by Terraform (was in config, absent from state).
-				//   - Key: re-associated with the new KMS (was preserved in state in Step 2).
-				//   - ACL: recreated from scratch (was removed from state in Step 2).
-				Config: fullConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttrSet(aclResource, "id"),
-				),
-			},
-			{
-				// Step 4: refresh state so the KMS Read picks up the ACL that was
-				// created after the KMS in Step 3. The acls.# check confirms the
-				// ACL is visible on the KMS registration.
-				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(kmsResource, "acls.#", "1"),
-				),
-			},
-		},
-	})
 }
 
 // TestCckmAWSNativeKeyMinimalConfig verifies that a resource configuration
@@ -1111,6 +1015,205 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+				),
+			},
+		},
+	})
+}
+
+// scheduleAwsKeyDeletionOutOfBand schedules an AWS key for deletion outside of Terraform
+// by calling the schedule-deletion API directly. Used in tests that verify provider behaviour
+// when a key enters PendingDeletion state without Terraform's knowledge.
+// Failures are intentionally ignored - the test will catch any unexpected state.
+func scheduleAwsKeyDeletionOutOfBand(keyID string) {
+	client, ok := createCMClient()
+	if !ok {
+		return
+	}
+	payload, _ := json.Marshal(map[string]int{"days": 7})
+	_, _ = client.PostDataV2(
+		context.Background(),
+		"oob-schedule-deletion-"+keyID,
+		common.URL_AWS_KEY+"/"+keyID+"/schedule-deletion",
+		payload,
+	)
+}
+
+// TestCckmAWSKeyNativePendingDeletionRefresh verifies that when an AWS key is scheduled
+// for deletion out-of-band (without Terraform), a subsequent terraform refresh retains
+// the resource in state and issues a warning rather than removing it from state.
+// AWS automatically disables keys pending deletion, so Terraform will report drift on
+// enable_key - ExpectNonEmptyPlan: true captures this expected drift.
+func TestCckmAWSKeyNativePendingDeletionRefresh(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	keyConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias = [local.alias]
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	keyResource := "ciphertrust_aws_key.native_key"
+	var capturedKeyID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create a minimal native key and capture the ID for OOB deletion.
+				Config: awsConnectionResource + keyConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						capturedKeyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule the key for deletion out-of-band, then refresh state.
+				// Expected: provider issues a warning (not an error) and retains the resource
+				// in state with key_state = "PendingDeletion". Terraform reports drift on
+				// enable_key because AWS automatically disables keys pending deletion.
+				PreConfig: func() {
+					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeTestCheckFunc(
+					// Use a closure so capturedKeyID is read at execution time (after Step 1
+					// has populated it), not at TestCase definition time when it is still "".
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						if rs.Primary.ID != capturedKeyID {
+							return fmt.Errorf("expected id %q, got %q", capturedKeyID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "PendingDeletion"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyNativePendingDeletionUpdate verifies that when an AWS key is scheduled
+// for deletion out-of-band, a subsequent terraform apply that includes a key_policy update
+// succeeds with a warning, retains the resource in state, and reflects the updated policy.
+// AWS permits key policy updates on keys in PendingDeletion state.
+func TestCckmAWSKeyNativePendingDeletionUpdate(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	awsKeyUsers := getAwsUsers()
+	if len(awsKeyUsers) != 2 {
+		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 users")
+	}
+	awsKeyRoles := getAwsRoles()
+	if len(awsKeyRoles) != 2 {
+		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 roles")
+	}
+
+	createConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias = [local.alias]
+			}
+			key_policy = {
+				key_admins       = ["%s"]
+				key_users        = ["%s"]
+				key_admins_roles = ["%s"]
+				key_users_roles  = ["%s"]
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`,
+		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1],
+	)
+
+	updateConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias = [local.alias]
+			}
+			key_policy = {
+				policy = <<-EOT
+					%s
+				EOT
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`, awsKeyPolicy)
+
+	keyResource := "ciphertrust_aws_key.native_key"
+	var capturedKeyID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create a native key with a structured key policy containing
+				// admins and users. Capture the ID for OOB deletion in Step 2.
+				Config: awsConnectionResource + createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						capturedKeyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule the key for deletion out-of-band, then apply a policy update.
+				// Expected: Update detects PendingDeletion state, issues a warning (not an error),
+				// applies the policy change (AWS permits policy updates on keys pending deletion),
+				// and retains the resource in state. The admins/users from the create policy
+				// should no longer appear in the updated policy.
+				PreConfig: func() {
+					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
+				},
+				Config: awsConnectionResource + updateConfig,
+				Check: resource.ComposeTestCheckFunc(
+					// Use a closure so capturedKeyID is read at execution time (after Step 1
+					// has populated it), not at TestCase definition time when it is still "".
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						if rs.Primary.ID != capturedKeyID {
+							return fmt.Errorf("expected id %q, got %q", capturedKeyID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "PendingDeletion"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
 				),
 			},
 		},

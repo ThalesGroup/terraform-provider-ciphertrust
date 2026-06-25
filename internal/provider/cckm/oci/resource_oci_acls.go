@@ -176,8 +176,8 @@ func (r *resourceCCKMOCIAcl) Create(ctx context.Context, req resource.CreateRequ
 }
 
 // Read retrieves the vault JSON via getOciVault and extracts the current acls array to
-// refresh state. If the specific user/group ACL entry is absent from the vault ACL list, the resource
-// is removed from state with a warning.
+// refresh state. If the specific user/group ACL entry is absent from the vault ACL list, an error
+// is returned so the user can remove the resource from their Terraform config.
 func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_acls.go -> Read]["+id+"]")
@@ -203,11 +203,10 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "OCI vault ACL was not found, it will be removed from state."
+		msg := "OCI vault ACL not found. If it no longer exists, remove it from your Terraform config."
 		details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "id": resourceID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setOCIAclState(ctx, resourceID, response, &state, &resp.Diagnostics)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"reflect"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -16,8 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -87,19 +84,17 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true.",
-				Default:     booldefault.StaticBool(true),
+				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Computed:    true,
-				Optional:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.",
-				Default:     int64default.StaticInt64(7),
-				Validators: []validator.Int64{
-					int64validator.AtLeast(7),
-					int64validator.AtMost(30),
-				},
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to 7. Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: 7}},
+				Validators:    []validator.Int64{int64validator.AtLeast(7), int64validator.AtMost(30)},
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -303,9 +298,18 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+redactAWSResponse(response)+"]")
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	// No error after this
+	// Do not return error after this
 
 	keyID := gjson.Get(response, "id").String()
+	if !gjson.Get(response, "linked_state").Bool() && !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+			msg := "Multiple aliases cannot be added to an unlinked CloudHSM key. Only the first alias was applied."
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
+			tflog.Warn(ctx, details)
+			resp.Diagnostics.AddWarning(details, "")
+		}
+	}
 	if gjson.Get(response, "linked_state").Bool() && !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
@@ -323,19 +327,11 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.ValueBool() {
+	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
 		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	var plannedAlias types.Set
-	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if planP != nil {
-			plannedAlias = planP.AWSKeyStoreCommonAwsParamTFSDK.Alias
 		}
 	}
 
@@ -347,19 +343,11 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		response = getResponse
-		tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+redactAWSResponse(response)+"]")
+		tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Create][get response:"+redactAWSResponse(response)+"]")
 	}
 
 	var diags diag.Diagnostics
 	setCloudHSMKeyResourceState(ctx, response, &plan.AWSKeyStoreResourceCommonTFSDK, &diags)
-	// Restore the planned alias if setCloudHSMKeyResourceState overwrote it with API values.
-	if !plannedAlias.IsNull() && !plannedAlias.IsUnknown() {
-		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &diags)
-		if planP != nil && !reflect.DeepEqual(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, plannedAlias) {
-			planP.AWSKeyStoreCommonAwsParamTFSDK.Alias = plannedAlias
-			plan.AWSParam = packCloudHSMKeyAwsParam(ctx, planP, &diags)
-		}
-	}
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
@@ -367,8 +355,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 }
 
 // Read refreshes Terraform state for an AWS CloudHSM key by reading its current data from CipherTrust Manager.
-// If the linked key is in PendingDeletion or PendingReplicaDeletion state, it is removed from state.
-// For unlinked keys, the description attribute is preserved from prior state rather than overwritten.
+// If the linked key is in PendingDeletion or PendingReplicaDeletion state, a warning is added.
 // Returns an error if the key or key store is not reachable.
 func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
@@ -386,19 +373,10 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if gjson.Get(response, "linked_state").Bool() &&
 		(readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion") {
-		msg := "AWS CloudHSM key is pending deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "CloudHSM key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
-	}
-	var savedDesc types.String
-	if !state.AWSParam.IsNull() && !state.AWSParam.IsUnknown() {
-		stateP := extractCloudHSMKeyAwsParam(ctx, state.AWSParam, &resp.Diagnostics)
-		if stateP != nil {
-			savedDesc = stateP.AWSKeyStoreCommonAwsParamTFSDK.Description
-		}
 	}
 	setCloudHSMKeyResourceState(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -408,36 +386,14 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	if !gjson.Get(response, "linked_state").Bool() {
-		stateP := extractCloudHSMKeyAwsParam(ctx, state.AWSParam, &resp.Diagnostics)
-		// Only restore savedDesc when it was a known value from prior state.
-		// If savedDesc is null (e.g. after import with no prior state), keep the
-		// API value ("") so that aws_param.description is always present in state.
-		if stateP != nil && !savedDesc.IsNull() && !savedDesc.IsUnknown() {
-			stateP.AWSKeyStoreCommonAwsParamTFSDK.Description = savedDesc
-		}
-		state.AWSParam = packCloudHSMKeyAwsParam(ctx, stateP, &resp.Diagnostics)
-	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 }
 
-// Update applies plan changes to an AWS CloudHSM key. Only keys in a linked state (linked_state = true)
-// have their AWS-facing attributes updated. Specifically:
-//
-//	When linked (linked_state = true):
-//	  - description, key_policy, enable_rotation (via updateAwsKeyCommon)
-//	  - alias
-//	  - tags
-//	  - enable_key (enable or disable the key in AWS)
-//
-//	When unlinked (linked_state = false):
-//	  - No AWS updates are applied; all plan changes are silently skipped
-//	  - description is preserved from the prior state value rather than overwritten
-//
-// Block/unblock and link operations are not supported for CloudHSM keys.
+// Update applies plan changes to an AWS CloudHSM key. All plan changes are passed through to CCKM
+// unconditionally; CCKM will return an error for any operation that is not supported on an unlinked key.
 // Returns an error if the key or key store is not reachable.
 func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
@@ -463,73 +419,86 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if gjson.Get(response, "linked_state").Bool() &&
 		(updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion") {
-		msg := "AWS CloudHSM key is pending deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "CloudHSM key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		// Policy updates are permitted by AWS on keys pending deletion.
+		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
+			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
+			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
+			var policyDiags diag.Diagnostics
+			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
+			for _, d := range policyDiags {
+				if d.Severity() == diag.SeverityError {
+					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+				} else {
+					resp.Diagnostics.Append(d)
+				}
+			}
+			// Re-fetch to reflect any policy change in state.
+			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
+				response = updated
+			}
+		}
+		// key_policy IS updated in this path - reflect the new config value in state.
+		state.KeyPolicy = plan.KeyPolicy
+		setCloudHSMKeyResourceState(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 		return
 	}
-	planDesc := types.StringNull()
-	planAlias := types.SetNull(types.StringType)
-	planTags := types.MapNull(types.StringType)
+	var planP *AWSCloudHSMKeyAwsParamTFSDK
 	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+		planP = extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
-		}
-		if planP != nil {
-			planDesc = planP.AWSKeyStoreCommonAwsParamTFSDK.Description
-			planAlias = planP.AWSKeyStoreCommonAwsParamTFSDK.Alias
-			planTags = planP.AWSKeyStoreCommonAwsParamTFSDK.Tags
 		}
 	}
-	if gjson.Get(response, "linked_state").Bool() {
-		var keyEnabled bool
-		planEnableKey := false
-		if !plan.EnableKey.IsUnknown() {
-			keyEnabled = gjson.Get(response, "aws_param.Enabled").Bool()
-			planEnableKey = plan.EnableKey.ValueBool()
-			if !keyEnabled && planEnableKey {
-				enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
-				if resp.Diagnostics.HasError() {
-					return
-				}
+	planDesc := types.StringNull()
+	if planP != nil {
+		planDesc = planP.AWSKeyStoreCommonAwsParamTFSDK.Description
+	}
+	planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, Description: planDesc, KeyPolicy: plan.KeyPolicy, EnableRotation: plan.EnableRotation}
+	stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy, EnableRotation: state.EnableRotation}
+	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
+	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() {
+		if !keyEnabled && plan.EnableKey.ValueBool() {
+			enableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
 			}
 		}
-		planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, Description: planDesc, KeyPolicy: plan.KeyPolicy, EnableRotation: plan.EnableRotation}
-		stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy, EnableRotation: state.EnableRotation}
-		updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
+	}
+	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
+		updateAliases(ctx, id, r.client, keyID, planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		if !planAlias.IsNull() && !planAlias.IsUnknown() {
-			updateAliases(ctx, id, r.client, keyID, planAlias, response, &resp.Diagnostics)
+	}
+	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
+		planTagsMap := make(map[string]string, len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
+		if len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
+			resp.Diagnostics.Append(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		if !planTags.IsUnknown() {
-			planTagsMap := make(map[string]string, len(planTags.Elements()))
-			if len(planTags.Elements()) != 0 {
-				resp.Diagnostics.Append(planTags.ElementsAs(ctx, &planTagsMap, false)...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-			}
-			updateTags(ctx, id, r.client, planTagsMap, response, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
+		updateTags(ctx, id, r.client, planTagsMap, response, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-
-		if !plan.EnableKey.IsUnknown() {
-			if keyEnabled && !planEnableKey {
-				disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-			}
+	}
+	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && keyEnabled && !plan.EnableKey.ValueBool() {
+		disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
 	}
 	var err error
@@ -541,7 +510,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	savedPlanDesc := planDesc
+	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Update][response:"+redactAWSResponse(response)+"]")
 	setCloudHSMKeyResourceState(ctx, response, &plan.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS CloudHSM key, failed to set resource state."
@@ -549,17 +518,6 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
-	}
-	if !gjson.Get(response, "linked_state").Bool() {
-		updP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if updP != nil {
-			if !savedPlanDesc.IsNull() && !savedPlanDesc.IsUnknown() {
-				updP.AWSKeyStoreCommonAwsParamTFSDK.Description = savedPlanDesc
-			} else {
-				updP.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue("")
-			}
-			plan.AWSParam = packCloudHSMKeyAwsParam(ctx, updP, &resp.Diagnostics)
-		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	if resp.Diagnostics.HasError() {
@@ -593,7 +551,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 	if gjson.Get(response, "linked_state").Bool() {
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		if keyState == "PendingDeletion" {
-			msg := "AWS CloudHSM key is already pending deletion, it will be removed from state."
+			msg := fmt.Sprintf(utils.PendingDeletionDeleteFmt, "AWS", "CloudHSM key")
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Warn(ctx, details)
 			resp.Diagnostics.AddWarning(details, "")
@@ -739,7 +697,7 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 					tflog.Warn(ctx, details)
 					diags.AddWarning(details, "")
 				} else {
-					msg := "AWS CloudHSM key (" + terraformID + ") was not found."
+					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
 					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
 					tflog.Error(ctx, details)
 					diags.AddError(details, "")
@@ -768,7 +726,12 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 	}
 	total := gjson.Get(response, "total").Int()
 	if total == 0 {
-		msg := "AWS CloudHSM key was not found."
+		var msg string
+		if opLabel == "deleting" {
+			msg = "AWS CloudHSM key was not found. It will be removed from state."
+		} else {
+			msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
+		}
 		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
 		if opLabel == "deleting" {
 			tflog.Warn(ctx, details)
