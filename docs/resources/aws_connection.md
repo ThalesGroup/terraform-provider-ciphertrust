@@ -107,11 +107,11 @@ output "aws_connection_name" {
 
 ### Required
 
-- `name` (String) Unique connection name
+- `name` (String) (Immutable) Unique connection name
 
 ### Optional
 
-- `access_key_id` (String) Key ID of the AWS user
+- `access_key_id` (String, Sensitive) Key ID of the AWS user
 - `assume_role_arn` (String) AWS IAM role ARN
 - `assume_role_external_id` (String) Specify AWS Role external ID
 - `aws_region` (String) AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given.Default values are: 
@@ -131,7 +131,7 @@ aws-cn
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products associated with the connection
-- `secret_access_key` (String) Secret associated with the access key ID of the AWS user
+- `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user
 
 ### Read-Only
 
@@ -161,4 +161,4 @@ Required:
 
 Optional:
 
-- `private_key` (String) The private key associated with the certificate
+- `private_key` (String, Sensitive) The private key associated with the certificate

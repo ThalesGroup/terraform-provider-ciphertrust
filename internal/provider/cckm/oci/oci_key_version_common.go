@@ -37,7 +37,12 @@ func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	response, err := client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			msg := "OCI key version (" + versionID + ") was not found."
+			var msg string
+			if versionOpLabel == "deleting" {
+				msg = "OCI key version was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key version")
+			}
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 			if versionOpLabel == "deleting" {
 				tflog.Warn(ctx, details)

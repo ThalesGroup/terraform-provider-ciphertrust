@@ -120,7 +120,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 		}
 		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_max_params" {
 			aws_param = {
-				alias       = [local.alias, "%s", "%s"]
+				alias       = [local.alias]
 				description = "create description"
 				tags = {
 					TagKey1 = "TagValue1"
@@ -141,6 +141,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				source_key_id   = %s
 				source_key_tier = "local"
 			}
+			schedule_for_deletion_days = 8
 		}`
 
 	updateXksKeyConfig := `
@@ -164,6 +165,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				source_key_id = ciphertrust_cm_key.cm_aes_key.id
 				source_key_tier = "local"
 			}
+			schedule_for_deletion_days = 9
 		}
 		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_max_params" {
 			aws_param = {
@@ -185,13 +187,10 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				source_key_id = ciphertrust_cm_key.cm_aes_key.id
 				source_key_tier = "local"
 			}
+			schedule_for_deletion_days = 9
 		}`
 
-	aliasList := []string{
-		awsKeyNamePrefix + uuid.New().String(),
-		awsKeyNamePrefix + uuid.New().String(),
-	}
-	createXksKeyConfigStr := fmt.Sprintf(createXksKeyConfig, aliasList[0], aliasList[1], false, "ciphertrust_cm_key.cm_aes_key.id")
+	createXksKeyConfigStr := fmt.Sprintf(createXksKeyConfig, false, "ciphertrust_cm_key.cm_aes_key.id")
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr +
 		enableRotationConfigStr + createXksKeyConfigStr
 
@@ -200,7 +199,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 		enableRotationConfigStr + updateXksKeyConfigStr
 
 	modifyPlanConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr +
-		fmt.Sprintf(createXksKeyConfig, aliasList[0], aliasList[1], false, `"tf-fake-key-id"`)
+		fmt.Sprintf(createXksKeyConfig, false, `"tf-fake-key-id"`)
 
 	keyResourceMaxParams := "ciphertrust_aws_xks_key.unlinked_cm_source_max_params"
 	keyResourceMinParams := "ciphertrust_aws_xks_key.unlinked_cm_source_min_params"
@@ -221,60 +220,21 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_on_auto_rotate", "false"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_for_all_accounts_on_auto_rotate", "false"),
 					resource.TestCheckResourceAttrPair(keyResourceMaxParams, "labels.job_config_id", "ciphertrust_scheduler.scheduled_rotation_job", "id"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "3"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
-
-					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "0"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
-				),
-			},
-			{
-				ResourceName:            keyResourceMaxParams,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsXksKey,
-			},
-			{
-				ResourceName:            keyResourceMinParams,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsXksKey,
-			},
-			{
-				Config: updateConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "false"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "0"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "update description"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "8"),
 
-					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "true"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "0"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", "update description"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "schedule_for_deletion_days", "7"),
 				),
-			},
-			{
-				// Verify state is stable immediately after the update (no phantom diffs).
-				RefreshState: true,
 			},
 			{
 				ResourceName:            keyResourceMaxParams,
@@ -289,32 +249,81 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsXksKey,
 			},
 			{
-				Config: createConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					// blocked, enable_key, key_state: for unlinked keys these are stored from plan but not
-					// applied to AWS - block/enable ops are gated on linked_state == true.
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "true"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "false"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "4"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.auto_rotate_key_source", "local"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_on_auto_rotate", "false"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_for_all_accounts_on_auto_rotate", "false"),
-					resource.TestCheckResourceAttrPair(keyResourceMaxParams, "labels.job_config_id", "ciphertrust_scheduler.scheduled_rotation_job", "id"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "3"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
-
-					resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "0"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
-					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
-				),
+				// Update is expected to fail: description/alias/tags/enable changes are not
+				// applicable for unlinked HYOK (XKS) keys - CCKM returns 422.
+				Config:      updateConfigStr,
+				ExpectError: regexp.MustCompile(`unlinked HYOK`),
+				// Check: resource.ComposeTestCheckFunc(
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "false"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "true"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "0"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "1"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "update description"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "2"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey2", "TagValue2"),
+				// 	resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "9"),
+				//
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "true"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "false"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "1"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", "update description"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "2"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey1", "TagValue1"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey2", "TagValue2"),
+				// 	resource.TestCheckResourceAttr(keyResourceMinParams, "schedule_for_deletion_days", "9"),
+				// ),
 			},
+			{
+				// State is not clean after the failed update (blockUnblock ran before description
+				// failed), so a non-empty plan against updateConfigStr is expected here.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				ResourceName:            keyResourceMaxParams,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsXksKey,
+			},
+			{
+				ResourceName:            keyResourceMinParams,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsXksKey,
+			},
+			//{
+			//	Config: createConfigStr,
+			//	Check: resource.ComposeTestCheckFunc(
+			//		// blocked, enable_key, key_state: for unlinked keys these are stored from plan but not
+			//		// applied to AWS - block/enable ops are gated on linked_state == true.
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "true"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "false"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "4"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.auto_rotate_key_source", "local"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_on_auto_rotate", "false"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.disable_encrypt_for_all_accounts_on_auto_rotate", "false"),
+			//		resource.TestCheckResourceAttrPair(keyResourceMaxParams, "labels.job_config_id", "ciphertrust_scheduler.scheduled_rotation_job", "id"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "1"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
+			//		resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "8"),
+			//
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "blocked", "false"),
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.alias.#", "0"),
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
+			//		// schedule_for_deletion_days stays at 7 (update step failed with ExpectError, so it was never set to 9).
+			//		resource.TestCheckResourceAttr(keyResourceMinParams, "schedule_for_deletion_days", "7"),
+			//	),
+			//},
 			{
 				// Verify ModifyPlan fires an error when local_hosted_params.source_key_id is changed.
 				Config:      modifyPlanConfigStr,

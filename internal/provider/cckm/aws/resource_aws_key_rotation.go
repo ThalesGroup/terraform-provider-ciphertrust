@@ -295,8 +295,8 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 }
 
 // Read confirms the key still exists in CipherTrust Manager and refreshes
-// the rotation_history computed attribute. If the key is pending deletion,
-// the resource is removed from state with a warning.
+// the rotation_history computed attribute. If the key is not found, an error
+// is returned and state is preserved.
 func (r *resourceAWSKeyRotation) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_rotation.go -> Read]["+id+"]")
@@ -309,23 +309,8 @@ func (r *resourceAWSKeyRotation) Read(ctx context.Context, req resource.ReadRequ
 	}
 
 	keyID := state.KeyID.ValueString()
-	keyJSON, preserveState := getAwsKey(ctx, id, r.client, "", keyID, "reading", &resp.Diagnostics)
-	if preserveState {
-		// KMS is gone - keep existing state unchanged.
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
+	getAwsKey(ctx, id, r.client, "", keyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	keyState := gjson.Get(keyJSON, "aws_param.KeyState").String()
-	if keyState == "PendingDeletion" || keyState == "PendingReplicaDeletion" {
-		msg := "AWS key is pending deletion; removing rotation resource from state."
-		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -334,10 +319,8 @@ func (r *resourceAWSKeyRotation) Read(ctx context.Context, req resource.ReadRequ
 	if listErr != nil {
 		msg := "Error reading rotation history during refresh."
 		details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
-		// Use the existing rotation_history from state rather than failing the read.
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 

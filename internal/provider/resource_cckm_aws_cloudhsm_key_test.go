@@ -131,13 +131,42 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 			key_policy = {
 				policy_template = ciphertrust_aws_policy_template.cloudhsm_template.id
 			}
+			schedule_for_deletion_days = 8
 		}`
-	aliasList := []string{
-		awsKeyNamePrefix + uuid.New().String(),
-		awsKeyNamePrefix + uuid.New().String(),
-	}
-	createKeyConfigStr := fmt.Sprintf(createKeyConfig, aliasList[0], aliasList[1], false)
-	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + createKeyConfigStr
+
+	updateKeyConfig := `
+		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_min_params" {
+			aws_param = {
+				alias       = [local.alias]
+				description = "update description"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
+			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
+			enable_key = false
+			key_policy = {
+				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
+			}
+			schedule_for_deletion_days = 9
+		}
+		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_max_params" {
+			aws_param = {
+				alias       = [local.alias]
+				description = "update description"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
+			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
+			enable_key = %t
+			key_policy = {
+				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
+			}
+			schedule_for_deletion_days = 11
+		}`
 
 	modifyPlanKeyConfig := `
 		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_min_params" {
@@ -157,42 +186,19 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 				policy_template = ciphertrust_aws_policy_template.cloudhsm_template.id
 			}
 		}`
-	modifyPlanConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr +
+
+	aliasList := []string{
+		awsKeyNamePrefix + uuid.New().String(),
+		awsKeyNamePrefix + uuid.New().String(),
+	}
+	createKeyConfigStr := fmt.Sprintf(createKeyConfig, aliasList[0], aliasList[1], false)
+	createConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + createKeyConfigStr
+
+	modifyPlanConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr +
 		fmt.Sprintf(modifyPlanKeyConfig, aliasList[0], aliasList[1])
 
-	updateKeyConfig := `
-		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_min_params" {
-			aws_param = {
-				alias       = [local.alias]
-				description = "update description"
-				tags = {
-					TagKey1 = "TagValue1"
-					TagKey2 = "TagValue2"
-				}
-			}
-			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
-			enable_key = false
-			key_policy = {
-				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
-			}
-		}
-		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_max_params" {
-			aws_param = {
-				alias       = [local.alias]
-				description = "update description"
-				tags = {
-					TagKey1 = "TagValue1"
-					TagKey2 = "TagValue2"
-				}
-			}
-			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
-			enable_key = %t
-			key_policy = {
-				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
-			}
-		}`
 	updateKeyConfigStr := fmt.Sprintf(updateKeyConfig, true)
-	updateConfigStr := awsConnectionResource + createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + updateKeyConfigStr
+	updateConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + updateKeyConfigStr
 
 	keyResourceMaxParams := "ciphertrust_aws_cloudhsm_key.cloudhsm_key_max_params"
 	keyResourceMinParams := "ciphertrust_aws_cloudhsm_key.cloudhsm_key_min_params"
@@ -202,7 +208,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: createConfigStr,
+				Config: awsConnectionResource + createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					// blocked, enable_key, key_state: for unlinked keys these are stored from plan but not
 					// applied to AWS - block/enable ops are gated on linked_state == true.
@@ -217,6 +223,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "8"),
 
 					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
@@ -224,6 +231,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "7"),
 				),
 			},
 			{
@@ -239,7 +247,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsCloudHSMKey,
 			},
 			{
-				Config: updateConfigStr,
+				Config: awsConnectionResource + updateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "0"),
@@ -249,6 +257,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "11"),
 
 					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "false"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
@@ -258,6 +267,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "schedule_for_deletion_days", "9"),
 				),
 			},
 			{
@@ -277,7 +287,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsCloudHSMKey,
 			},
 			{
-				Config: createConfigStr,
+				Config: awsConnectionResource + createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "enable_key", "false"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "labels.%", "4"),
@@ -290,6 +300,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.%", "1"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "8"),
 
 					resource.TestCheckResourceAttr(keyResourceMinParams, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "labels.%", "0"),
@@ -297,11 +308,12 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.description", ""),
 					resource.TestCheckResourceAttr(keyResourceMinParams, "aws_param.tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResourceMinParams, "schedule_for_deletion_days", "9"),
 				),
 			},
 			{
 				// Verify ModifyPlan fires an error when custom_key_store_id is changed.
-				Config:      modifyPlanConfigStr,
+				Config:      awsConnectionResource + modifyPlanConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},

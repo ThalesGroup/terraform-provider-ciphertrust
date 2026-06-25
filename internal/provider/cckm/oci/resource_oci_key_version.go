@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -148,10 +147,13 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 				Description: "Date/time the key was refreshed.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is " + strconv.Itoa(scheduleForDeletionDays) + ". Must be between 7 and 30.",
-				Default:     int64default.StaticInt64(scheduleForDeletionDays),
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the OCI key version " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: scheduleForDeletionDays}},
 				Validators: []validator.Int64{
 					int64validator.AtLeast(scheduleForDeletionDays),
 					int64validator.AtMost(30),
@@ -267,12 +269,10 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 	}
 	readVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	if readVersionState == keyStateScheduledForDeletion {
-		msg := "OCI key version is scheduled for deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
 	}
 	setCommonKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -305,12 +305,10 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 	}
 	updateVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	if updateVersionState == keyStateScheduledForDeletion {
-		msg := "OCI key version is scheduled for deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
 	}
 
 	var plan models.KeyVersionTFSDK

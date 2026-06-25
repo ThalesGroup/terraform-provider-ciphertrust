@@ -97,7 +97,7 @@ output "gcp_connection_name" {
 ### Required
 
 - `key_file` (String, Sensitive) The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string.
-- `name` (String) Unique connection name.
+- `name` (String) Unique connection name. Immutable after creation.
 
 ### Optional
 

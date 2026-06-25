@@ -15,6 +15,37 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// NotFoundRetainedFmt is the standard message for a non-delete 404 response.
+// The %s placeholder receives the human-readable resource type (e.g. "AWS key").
+// The resource ID should be included separately in the utils.ApiError details map.
+const NotFoundRetainedFmt = "%s was not found and has been retained in the Terraform state. " +
+	"If it has been permanently deleted, either remove it from your Terraform configuration " +
+	"or run terraform state rm to remove it from the Terraform state. " +
+	"If the resource remains in your configuration, Terraform will propose recreating it on the next apply."
+
+// PendingDeletionReadFmt is the standard warning when a key/version is found in a
+// pending-deletion state during a read/refresh operation. The resource is retained in state.
+// Placeholders (in order): cloud name, resource type, state value, cloud name.
+const PendingDeletionReadFmt = "%s %s was found in %s state during refresh. " +
+	"The resource has been retained in Terraform state, but it cannot be managed " +
+	"while scheduled for deletion. Cancel the scheduled deletion in CipherTrust " +
+	"Manager or %s to resume management, or remove the resource from your Terraform " +
+	"configuration if deletion is intended."
+
+// PendingDeletionUpdateFmt is the standard warning when a key/version is found in a
+// pending-deletion state during an update operation. The resource is retained in state.
+// Placeholders (in order): cloud name, resource type, state value, cloud name.
+const PendingDeletionUpdateFmt = "%s %s is in %s state. The resource has been " +
+	"retained in Terraform state. Cancel the scheduled deletion in CipherTrust " +
+	"Manager or %s to resume management, or remove the resource from your Terraform " +
+	"configuration if deletion is intended."
+
+// PendingDeletionDeleteFmt is the standard warning when a key/version is already in a
+// pending-deletion state when a delete operation is attempted. The resource is removed from state.
+// Placeholders (in order): cloud name, resource type.
+const PendingDeletionDeleteFmt = "%s %s is already scheduled for deletion, " +
+	"it will be removed from state."
+
 // StringSliceToListValue converts a Go string slice into a Terraform ListValue of string elements.
 func StringSliceToListValue(inputStrings []string, diags *diag.Diagnostics) basetypes.ListValue {
 	var values []attr.Value

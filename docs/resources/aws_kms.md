@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_kms Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager. If the KMS is not found during refresh it is removed from state automatically.
+  Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 ---
 
 # ciphertrust_aws_kms (Resource)
 
-Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager. If the KMS is not found during refresh it is removed from state automatically.
+Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.
 
 ## Example Usage
 

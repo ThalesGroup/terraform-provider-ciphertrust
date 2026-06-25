@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -228,14 +227,14 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "The key's region.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is " + strconv.Itoa(scheduleForDeletionDays) + ". Must be between 7 and 30.",
-				Default:     int64default.StaticInt64(scheduleForDeletionDays),
-				Validators: []validator.Int64{
-					int64validator.AtLeast(scheduleForDeletionDays),
-					int64validator.AtMost(30),
-				},
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the OCI key " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: scheduleForDeletionDays}},
+				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"tenancy": schema.StringAttribute{
 				Computed:    true,
@@ -404,7 +403,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the OCI key state from CipherTrust Manager.
 // Returns an error if the vault or key is not found (404).
-// Removes the resource from state only if the key lifecycle state is SCHEDULING_DELETION.
+// Adds a warning if the key lifecycle state is SCHEDULING_DELETION but keeps the resource in state.
 func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> Read]["+id+"]")
@@ -418,21 +417,16 @@ func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest,
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	response, preserveState := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
-	if preserveState {
-		return // vault gone - preserve existing state until vault is recovered
-	}
+	response, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	readKeyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	if readKeyState == keyStateScheduledForDeletion {
-		msg := "OCI key is scheduled for deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key", readKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
 	}
 	setKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -469,11 +463,15 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	preCheckKeyState := gjson.Get(preCheckResponse, "oci_params.lifecycle_state").String()
 	if preCheckKeyState == keyStateScheduledForDeletion {
-		msg := "OCI key is scheduled for deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key", preCheckKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		setKeyState(ctx, id, r.client, preCheckResponse, &plan, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
 
