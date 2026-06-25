@@ -239,6 +239,13 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
+		msg := "Error adding OCI vault: connection_id must be a resource ID of an OCI connection."
+		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
 	connAccount := gjson.Get(connResponse, "account").String()
 	mutexKey := fmt.Sprintf("oci-vault-%s", connAccount)
 	mutex.CckmMutex.Lock(mutexKey)
@@ -352,10 +359,17 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
-		_, connErr := r.client.GetById(ctx, id, plan.ConnectionID.ValueString(), common.URL_OCI_CONNECTION)
+		connResp, connErr := r.client.GetById(ctx, id, plan.ConnectionID.ValueString(), common.URL_OCI_CONNECTION)
 		if connErr != nil {
 			msg := "Error updating OCI vault, failed to read OCI connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
+			msg := "Error updating OCI vault: connection_id must be a resource ID of an OCI connection."
+			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return

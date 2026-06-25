@@ -181,6 +181,13 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
+		msg := "Error creating AWS KMS: connection_id must be a resource ID of an AWS connection."
+		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
 	connAccount := gjson.Get(connResponse, "account").String()
 	mutexKey := fmt.Sprintf("aws-kms-%s", connAccount)
 	mutex.CckmMutex.Lock(mutexKey)
@@ -270,10 +277,17 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
-		_, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
 		if connErr != nil {
 			msg := "Error updating AWS KMS, failed to read AWS connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
+			msg := "Error updating AWS KMS: connection_id must be a resource ID of an AWS connection."
+			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
 			tflog.Error(ctx, details)
 			resp.Diagnostics.AddError(details, "")
 			return
