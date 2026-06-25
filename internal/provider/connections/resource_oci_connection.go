@@ -531,13 +531,10 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 	// Connection identity fields returned by CM on every read.
 	data.Name = types.StringValue(gjson.Get(response, "name").String())
-	// description is Optional/updatable; always sync from the CM response so that
-	// out-of-band changes are visible to terraform plan -refresh-only.
-	// When CM returns an empty or absent value, set null to clear any stale state.
+	// description is Optional-only; only update from response when the API returns a value,
+	// otherwise the plan/state null is preserved (avoids null→"" inconsistency on apply).
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
-	} else {
-		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
 	data.Region = types.StringValue(gjson.Get(response, "region").String())
