@@ -25,10 +25,8 @@ func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
 			xts          = false
 			meta = {
 				permissions = {
-					decrypt_with_key     = ["CTE Clients"]
-					encrypt_with_key     = ["CTE Clients"]
-					export_key           = ["CTE Clients"]
-					read_key             = ["CTE Clients"]
+					export_key = ["CTE Clients"]
+					read_key   = ["CTE Clients"]
 				}
 				cte = {
 					persistent_on_client = true
