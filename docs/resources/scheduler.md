@@ -103,8 +103,8 @@ resource "ciphertrust_scheduler" "oci" {
 
 ### Required
 
-- `name` (String) The name of the job configuration.
-- `operation` (String) The operation field specifies the type of operation to be performed. Currently, only database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation are supported.
+- `name` (String) The name of the job configuration. Immutable after creation.
+- `operation` (String) The operation field specifies the type of operation to be performed. Currently, only database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation are supported. Immutable after creation — changing this field forces replacement.
 - `run_at` (String) Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
 
 For example:

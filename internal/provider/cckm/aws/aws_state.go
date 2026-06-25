@@ -80,17 +80,10 @@ func setKeyStoreResourceCommonTopLevel(ctx context.Context, response string, sta
 // for unlinked keys alias/tags/policy_template_tag retain their prior values.
 func setXKSKeyResourceState(ctx context.Context, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
 	linked := gjson.Get(response, "linked_state").Bool()
-	savedEnableKey := state.EnableKey
 	setKeyStoreResourceCommonTopLevel(ctx, response, state, diags)
 	if diags.HasError() {
 		return
 	}
-	if !linked {
-		state.EnableKey = savedEnableKey
-	} else {
-		state.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	}
-
 	p := extractXKSKeyAwsParam(ctx, state.AWSParam, diags)
 	if p == nil {
 		p = &AWSXKSKeyAwsParamTFSDK{}
@@ -152,17 +145,10 @@ func setXKSKeyResourceState(ctx context.Context, response string, state *AWSKeyS
 // sets key_rotation_enabled instead of xks_key_configuration.
 func setCloudHSMKeyResourceState(ctx context.Context, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
 	linked := gjson.Get(response, "linked_state").Bool()
-	savedEnableKey := state.EnableKey
 	setKeyStoreResourceCommonTopLevel(ctx, response, state, diags)
 	if diags.HasError() {
 		return
 	}
-	if !linked {
-		state.EnableKey = savedEnableKey
-	} else {
-		state.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	}
-
 	p := extractCloudHSMKeyAwsParam(ctx, state.AWSParam, diags)
 	if p == nil {
 		p = &AWSCloudHSMKeyAwsParamTFSDK{}

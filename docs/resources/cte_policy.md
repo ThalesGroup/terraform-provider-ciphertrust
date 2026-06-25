@@ -132,7 +132,7 @@ Optional:
 
 Optional:
 
-- `action` (String) Actions applicable to the rule. Examples of actions are read, write, all_ops, and key_op.
+- `action` (String) Actions applicable to the rule. Examples of actions are read, write, all_ops, and key_op. Separate multiple actions by commas.
 - `effect` (String) Effects applicable to the rule. Separate multiple effects by commas. The valid values are: permit, deny, audit, applykey
 - `exclude_process_set` (Boolean) Process set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_resource_set` (Boolean) Resource set to exclude. Supported for Standard, LDT and IDT policies.

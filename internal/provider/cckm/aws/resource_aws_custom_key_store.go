@@ -135,7 +135,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the available AWS regions.",
+				Description: "Name of an available AWS region.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"enable_success_audit_event": schema.BoolAttribute{
@@ -224,10 +224,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"xks_proxy_uri_endpoint": schema.StringAttribute{
 						Optional: true,
 						Computed: true,
-						MarkdownDescription: "(Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. " +
-							"The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. " +
-							"**Required** field for a custom key store of type EXTERNAL_KEY_STORE.",
-					},
+						MarkdownDescription: "(Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. " +
+							"The DNS hostname can be either a load balancer directing requests to CipherTrust Manager or the CipherTrust Manager instance itself. " +
+							"**Required** for a custom key store of type EXTERNAL_KEY_STORE. " +
+							"For **CDSPaaS**, the endpoint is `https://xks.<cdspaas>.dpondemand.io`; " +
+							"for **on-premises** deployments, use the HTTPS address of the CipherTrust Manager instance."},
 					"xks_proxy_uri_path": schema.StringAttribute{
 						Computed: true,
 					},
@@ -425,7 +426,25 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			LocalHostedParams.Blocked = planLocalHostedParamsTFSDK.Blocked.ValueBool()
 		}
 		if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
-			LocalHostedParams.HealthCheckKeyID = planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
+			hckID := planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
+			keyResponse, keyErr := r.client.GetById(ctx, id, hckID, common.URL_KEY_MANAGEMENT)
+			if keyErr != nil {
+				tflog.Error(ctx, common.ERR_METHOD_END+keyErr.Error()+" [resource_aws_custom_key_store.go -> Create - health_check_key_id lookup]["+id+"]")
+				resp.Diagnostics.AddError(
+					"Invalid health_check_key_id: could not read CM key",
+					"Failed to read the CM key referenced by health_check_key_id '"+hckID+"': "+keyErr.Error(),
+				)
+				return
+			}
+			if !gjson.Get(keyResponse, "undeletable").Bool() {
+				resp.Diagnostics.AddError(
+					"Invalid health_check_key_id: key must be undeletable",
+					"The CM key '"+hckID+"' referenced by health_check_key_id must have undeletable=true. "+
+						"Update the key to be undeletable before using it as the XKS health check key.",
+				)
+				return
+			}
+			LocalHostedParams.HealthCheckKeyID = hckID
 		}
 		if !planLocalHostedParamsTFSDK.MaxCredentials.IsNull() {
 			LocalHostedParams.MaxCredentials = planLocalHostedParamsTFSDK.MaxCredentials.ValueInt32()
@@ -706,7 +725,28 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		toBeUpdated = true
 	}
 	if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
-		planLocalHostedParams.HealthCheckKeyID = planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
+		hckID := planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
+		if hckID != stateLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() {
+			// Only validate when the value is actually changing.
+			keyResponse, keyErr := r.client.GetById(ctx, id, hckID, common.URL_KEY_MANAGEMENT)
+			if keyErr != nil {
+				tflog.Error(ctx, common.ERR_METHOD_END+keyErr.Error()+" [resource_aws_custom_key_store.go -> Update - health_check_key_id lookup]["+id+"]")
+				resp.Diagnostics.AddError(
+					"Invalid health_check_key_id: could not read CM key",
+					"Failed to read the CM key referenced by health_check_key_id '"+hckID+"': "+keyErr.Error(),
+				)
+				return
+			}
+			if !gjson.Get(keyResponse, "undeletable").Bool() {
+				resp.Diagnostics.AddError(
+					"Invalid health_check_key_id: key must be undeletable",
+					"The CM key '"+hckID+"' referenced by health_check_key_id must have undeletable=true. "+
+						"Update the key to be undeletable before using it as the XKS health check key.",
+				)
+				return
+			}
+		}
+		planLocalHostedParams.HealthCheckKeyID = hckID
 	}
 	payload.LocalHostedParams = &planLocalHostedParams
 	if toBeUpdated {
@@ -1067,7 +1107,7 @@ func getAwsCustomKeyStore(ctx context.Context, client *common.Client, id string,
 				tflog.Warn(ctx, details)
 				diags.AddWarning(details, "")
 			} else {
-				msg := "AWS custom key store (" + keystoreID + ") was not found."
+				msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS custom key store")
 				details := utils.ApiError(msg, map[string]interface{}{"id": keystoreID})
 				tflog.Error(ctx, details)
 				diags.AddError(details, "")

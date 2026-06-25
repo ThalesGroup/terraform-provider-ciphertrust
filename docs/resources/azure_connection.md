@@ -101,7 +101,7 @@ output "azure_connection_name" {
 
 ### Required
 
-- `name` (String) Unique connection name.
+- `name` (String) Unique connection name. Immutable after creation.
 
 ### Optional
 
@@ -118,7 +118,7 @@ output "azure_connection_name" {
 - `cert_duration` (Number) Duration in days for which the azure certificate is valid, default (730 i.e. 2 Years).
 - `certificate` (String) User has the option to upload external certificate for Azure Cloud connection. This option cannot be used with option is_certificate_used and client_secret.User first has to generate a new Certificate Signing Request (CSR) in POST /v1/connectionmgmt/connections/csr. The generated CSR can be signed with any internal or external CA. The Certificate must have an RSA key strength of 2048 or 4096. User can also update the new external certificate in the existing connection. Any unused certificate will automatically deleted in 24 hours.The certificate should be provided in \n (newline) format.
 - `client_id` (String) Unique Identifier (client ID) for the Azure application.
-- `client_secret` (String) Secret key for the Azure application. Required in Azure Stack connection.
+- `client_secret` (String, Sensitive) Secret key for the Azure application. Required in Azure Stack connection.
 - `cloud_name` (String) Name of the cloud.
 
 	Options:

@@ -60,8 +60,7 @@ func (r *resourceCCKMAWSKMS) Configure(_ context.Context, req resource.Configure
 
 func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager. " +
-			"If the KMS is not found during refresh it is removed from state automatically.",
+		Description: "Use this resource to create and manage KMS keys for AWS accounts in CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Description: "The account which owns this resource.",
@@ -176,8 +175,15 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	}
 	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
 	if connErr != nil {
-		msg := "Error creating AWS KMS, failed to read AWS connection."
+		msg := "Error creating AWS KMS, failed to read AWS connection by 'connection_id'."
 		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
+		msg := "Error creating AWS KMS: connection_id must be a resource ID of an AWS connection."
+		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
@@ -219,21 +225,17 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	}
 	tflog.Debug(ctx, "[resource_aws_kms.go -> Create][response:"+redactAWSResponse(response)+"]")
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	r.setKmsState(ctx, response, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		msg := "Error creating AWS KMS, failed to set resource state."
-		details := utils.ApiError(msg, map[string]interface{}{"kms id": plan.ID.ValueString()})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+	var stateDiags diag.Diagnostics
+	r.setKmsState(ctx, id, response, &plan, &stateDiags)
+	for _, d := range stateDiags {
+		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
-	r.resolveConnectionName(ctx, id, response, &plan)
-	// Preserve the user-supplied connection_id (name or UUID); connection_name holds the API value.
-	plan.ConnectionID = types.StringValue(common.TrimString(plan.ConnectionID.String()))
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Read refreshes the Terraform state for an AWS KMS by fetching the latest data from CipherTrust Manager.
+// A 404 is treated as an error so state is preserved until the resource is explicitly removed
+// (terraform destroy or removed from config).
 func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Read]["+id+"]")
@@ -244,34 +246,14 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	kmsID := state.ID.ValueString()
-	// Preserve the user-supplied connection_id before setKmsState populates connection_name.
-	priorConnID := state.ConnectionID.ValueString()
-	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			msg := "AWS KMS was not found. It will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		msg := "Error reading AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	tflog.Debug(ctx, "[resource_aws_kms.go -> Read][response:"+redactAWSResponse(response)+"]")
-	r.setKmsState(ctx, response, &state, &resp.Diagnostics)
+	response := getAwsKms(ctx, id, r.client, kmsID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.resolveConnectionName(ctx, id, response, &state)
-	// connection_id is left untouched so it always reflects the user-supplied value;
-	// any out-of-band connection change is visible via connection_name drifting.
-	if priorConnID != "" {
-		state.ConnectionID = types.StringValue(priorConnID)
+	tflog.Debug(ctx, "[resource_aws_kms.go -> Read][response:"+redactAWSResponse(response)+"]")
+	r.setKmsState(ctx, id, response, &state, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -294,21 +276,26 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	kmsID := state.ID.ValueString()
-	kmsResponse, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
-	if kmsErr != nil {
-		if strings.Contains(kmsErr.Error(), notFoundError) {
-			msg := "AWS KMS was not found. It will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			resp.State.RemoveResource(ctx)
+	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
+		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+		if connErr != nil {
+			msg := "Error updating AWS KMS, failed to read AWS connection by 'connection_id'."
+			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
-		msg := "Error updating AWS KMS, failed to read AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": kmsErr.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
+			msg := "Error updating AWS KMS: connection_id must be a resource ID of an AWS connection."
+			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+	}
+	kmsID := state.ID.ValueString()
+	kmsResponse := getAwsKms(ctx, id, r.client, kmsID, "updating", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	kmsAccount := gjson.Get(kmsResponse, "account").String()
@@ -355,7 +342,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	tflog.Debug(ctx, "[resource_aws_kms.go -> Update][response:"+redactAWSResponse(response)+"]")
-	r.setKmsState(ctx, response, &plan, &resp.Diagnostics)
+	r.setKmsState(ctx, id, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS KMS, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms id": kmsID})
@@ -363,10 +350,6 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	r.resolveConnectionName(ctx, id, response, &plan)
-	// connection_id is left untouched so it always reflects the user-supplied value;
-	// any out-of-band connection change is visible via connection_name drifting.
-	plan.ConnectionID = types.StringValue(common.TrimString(plan.ConnectionID.String()))
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -383,19 +366,8 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	kmsID := state.ID.ValueString()
-	if _, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS); kmsErr != nil {
-		if strings.Contains(kmsErr.Error(), notFoundError) {
-			msg := "AWS KMS was not found. It will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			return // Terraform removes from state when Delete returns without error.
-		}
-		msg := "Error deleting AWS KMS, failed to read AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": kmsErr.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+	if getAwsKms(ctx, id, r.client, kmsID, "deleting", &resp.Diagnostics) == "" {
+		return // 404 warning added (Terraform removes state) or non-404 error added (state kept).
 	}
 	_, err := r.client.DeleteByURL(ctx, id, common.URL_AWS_KMS+"/"+kmsID)
 	if err != nil {
@@ -452,36 +424,16 @@ func (r *resourceCCKMAWSKMS) ImportState(ctx context.Context, req resource.Impor
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// resolveConnectionName looks up the human-readable name of the connection whose ID is stored
-// in the API response "connection" field and writes it into state.ConnectionName.
-// If the lookup fails (e.g. permissions, network), ConnectionName is left unchanged.
-func (r *resourceCCKMAWSKMS) resolveConnectionName(ctx context.Context, reqID string, apiResponse string, state *KMSModelTFSDK) {
-	connUUID := gjson.Get(apiResponse, "connection").String()
-	if connUUID == "" {
-		return
-	}
-	connResp, err := r.client.GetById(ctx, reqID, connUUID, common.URL_AWS_CONNECTION)
-	if err != nil {
-		return
-	}
-	name := gjson.Get(connResp, "name").String()
-	if name != "" {
-		state.ConnectionName = types.StringValue(name)
-	}
-}
-
 // setKmsState populates the Terraform state for an AWS KMS from an API response JSON string.
-// connection_id is NOT set here - it is preserved as the user-supplied value by the caller.
-// connection_name is initially set to the raw connection UUID from the API; callers should
-// follow up with resolveConnectionName to replace it with the human-readable name.
-func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
+// connection_id and connection_name are resolved via resolveConnectionByIDOrName using the
+// connection field returned in the API response (may be a UUID or a name).
+func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, reqID string, response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
 	state.Arn = types.StringValue(gjson.Get(response, "arn").String())
 	state.AutoAdded = types.BoolValue(gjson.Get(response, "auto_added").Bool())
-	state.ConnectionName = types.StringValue(gjson.Get(response, "connection").String())
 	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
@@ -489,4 +441,52 @@ func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, response string, s
 	state.Status = types.StringValue(gjson.Get(response, "status").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
+	r.resolveConnectionByIDOrName(ctx, reqID, gjson.Get(response, "connection").String(), state, diags)
+}
+
+// resolveConnectionByIDOrName resolves an AWS connection from the value stored in the API
+// "connection" field, which may be a UUID or a human-readable name. It first attempts a
+// GetById lookup; on a 404 it falls back to a name-based list query. Both connection_id
+// and connection_name are written into state. An error is added to diags if all lookups fail.
+func (r *resourceCCKMAWSKMS) resolveConnectionByIDOrName(ctx context.Context, reqID string, connValue string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
+	if connValue == "" {
+		return
+	}
+	// Try lookup by ID first.
+	connResp, err := r.client.GetById(ctx, reqID, connValue, common.URL_AWS_CONNECTION)
+	if err != nil && !strings.Contains(err.Error(), notFoundError) {
+		msg := "Error resolving AWS connection by ID."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	if err == nil {
+		state.ConnectionID = types.StringValue(gjson.Get(connResp, "id").String())
+		state.ConnectionName = types.StringValue(gjson.Get(connResp, "name").String())
+		return
+	}
+	// 404 - fall back to lookup by name.
+	listResp, err := r.client.GetAll(ctx, reqID, common.URL_AWS_CONNECTION+"?name="+connValue)
+	if err != nil {
+		msg := "Error resolving AWS connection by name."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	resources := gjson.Get(listResp, "resources").Array()
+	if len(resources) == 0 {
+		msg := "AWS connection not found by ID or name."
+		details := utils.ApiError(msg, map[string]interface{}{"connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	connID := resources[0].Get("id").String()
+	if connID == "" {
+		msg := "AWS connection found by name but ID is empty."
+		details := utils.ApiError(msg, map[string]interface{}{"connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	state.ConnectionID = types.StringValue(connID)
+	state.ConnectionName = types.StringValue(resources[0].Get("name").String())
 }

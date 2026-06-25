@@ -60,7 +60,7 @@ output "cm_property_name" {
 
 ### Optional
 
-- `name` (String) Name of property
+- `name` (String) Name of the system property. Immutable after creation.
 - `value` (String) Value to be set
 
 ### Read-Only

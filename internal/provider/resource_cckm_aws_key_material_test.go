@@ -376,11 +376,13 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKeyID = rsCmKey.Primary.ID
@@ -511,11 +513,13 @@ func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -643,11 +647,13 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -953,11 +959,13 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[kmResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", kmResource)
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKeyID = rsCmKey.Primary.ID
@@ -1245,11 +1253,13 @@ func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[primaryResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", primaryResource)
 							return fmt.Errorf("resource %s not found in state", primaryResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rs2.Primary.ID
@@ -1387,11 +1397,13 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[extKeyResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", extKeyResource)
 							return fmt.Errorf("resource %s not found in state", extKeyResource)
 						}
 						capturedKeyID = rs.Primary.ID
 						rs2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key not found in state")
 						}
 						capturedCmKeyID = rs2.Primary.ID
@@ -1578,6 +1590,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Key to import new material too
 						rs, ok := s.RootModule().Resources[primaryResource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", primaryResource)
 							return fmt.Errorf("resource %s not found in state", primaryResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
@@ -1585,6 +1598,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Key to import new material too
 						rs1, ok := s.RootModule().Resources[replica1Resource]
 						if !ok {
+							fmt.Printf("resource %s not found in state\n", replica1Resource)
 							return fmt.Errorf("resource %s not found in state", replica1Resource)
 						}
 						capturedReplica1KeyID = rs1.Primary.ID
@@ -1592,6 +1606,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Rotation record to check during refresh wait
 						rsCM1, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey1ID = rsCM1.Primary.ID
@@ -1599,6 +1614,7 @@ func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
 						// Source key id of CM key - material to import
 						rsCM2, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key2"]
 						if !ok {
+							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
 							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
 						}
 						capturedCmKey2ID = rsCM2.Primary.ID
