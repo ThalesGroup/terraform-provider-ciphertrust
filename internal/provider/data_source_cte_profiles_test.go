@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTEProfilesDataSource(t *testing.T) {
+func TestCTEProfilesDataSource(t *testing.T) {
 	profileName := "tf-profile-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

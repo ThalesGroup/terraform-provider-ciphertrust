@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEClientsDataSource(t *testing.T) {
+func TestCTEClientsDataSource(t *testing.T) {
 	clientName := "tf-client-" + uuid.New().String()[:8]
 
 	cteClientConfig := fmt.Sprintf(`

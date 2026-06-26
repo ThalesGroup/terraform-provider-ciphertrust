@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTEProcessSetsDataSource(t *testing.T) {
+func TestCTEProcessSetsDataSource(t *testing.T) {
 	processSetName := "tf-processset-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

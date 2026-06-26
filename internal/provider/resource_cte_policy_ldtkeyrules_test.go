@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceCTEPolicyLDTKeyRule(t *testing.T) {
+func TestCTEPolicyLDTKeyRuleResource(t *testing.T) {
 	RequireCM(t)
 
 	suffix := uuid.New().String()[:8]
