@@ -295,3 +295,134 @@ func getAwsKms(ctx context.Context, id string, client *common.Client, kmsID stri
 	}
 	return response
 }
+
+// getAwsXksKey fetches an AWS XKS key from CipherTrust Manager by its resource ID.
+// If keystoreID is non-empty, the custom key store is verified to exist before fetching the key;
+// a missing or unreachable key store is always a hard error regardless of opLabel.
+// A 404 on the key itself is treated according to opLabel: when opLabel is "deleting" a warning is
+// added and an empty string is returned; for any other opLabel an error is added and an empty string is returned.
+func (r *resourceAWSXKSKey) getAwsXksKey(ctx context.Context, id string, keystoreID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
+	if keystoreID != "" {
+		getAwsCustomKeyStore(ctx, r.client, id, keystoreID, "reading", diags)
+		if diags.HasError() {
+			return ""
+		}
+	}
+
+	keyJSON, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			var msg string
+			if opLabel == "deleting" {
+				msg = "AWS XKS key was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS XKS key")
+			}
+			details := utils.ApiError(msg, map[string]interface{}{"keystore_id": keystoreID, "key_id": keyID})
+			if opLabel == "deleting" {
+				tflog.Warn(ctx, details)
+				diags.AddWarning(details, "")
+			} else {
+				tflog.Error(ctx, details)
+				diags.AddError(details, "")
+			}
+			return ""
+		}
+		msg := "Error " + opLabel + " AWS XKS key."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
+	return keyJSON
+}
+
+// getAwsCloudHsmKey fetches an AWS CloudHSM key from CipherTrust Manager using the Terraform resource ID.
+// If customKeyStoreID is not empty, the custom key store is verified to exist before fetching the key;
+// a missing or unreachable key store is always a hard error regardless of opLabel.
+// If terraformID has no backslash (new format - CM resource UUID), the key is fetched directly by ID.
+// If terraformID has a backslash (legacy region\aws-key-id format), the key is fetched via list query.
+// A 404 on the key itself is treated according to opLabel: when opLabel is "deleting" a warning is
+// added and an empty string is returned; for any other opLabel an error is added and an empty string is returned.
+func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id string, customKeyStoreID string, terraformID string, opLabel string, diags *diag.Diagnostics) string {
+	if customKeyStoreID != "" {
+		getAwsCustomKeyStore(ctx, r.client, id, customKeyStoreID, "reading", diags)
+		if diags.HasError() {
+			return ""
+		}
+	}
+	region, kid, err := r.decodeCloudHSMKeyTerraformResourceID(terraformID)
+	if err != nil {
+		diags.AddError("Failed to decode terraform ID "+terraformID+".", err.Error())
+		return ""
+	}
+	if region == "" {
+		// New format: terraformID is the CM resource UUID. Fetch directly.
+		keyJSON, err := r.client.GetById(ctx, id, terraformID, common.URL_AWS_KEY)
+		if err != nil {
+			if strings.Contains(err.Error(), notFoundError) {
+				if opLabel == "deleting" {
+					msg := "AWS CloudHSM key (" + terraformID + ") was not found. It will be removed from state."
+					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
+					tflog.Warn(ctx, details)
+					diags.AddWarning(details, "")
+				} else {
+					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
+					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
+					tflog.Error(ctx, details)
+					diags.AddError(details, "")
+				}
+				return ""
+			}
+			msg := "Error reading AWS CloudHSM key."
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": terraformID})
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+			return ""
+		}
+		return keyJSON
+	}
+	// Legacy format: region\aws-key-id. Use list query for backwards compatibility.
+	filters := url.Values{}
+	filters.Add("keyid", kid)
+	filters.Add("region", region)
+	response, err := r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
+	if err != nil {
+		msg := "Failed to read AWS CloudHSM key."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kid": kid, "region": region})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
+	total := gjson.Get(response, "total").Int()
+	if total == 0 {
+		var msg string
+		if opLabel == "deleting" {
+			msg = "AWS CloudHSM key was not found. It will be removed from state."
+		} else {
+			msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
+		}
+		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
+		if opLabel == "deleting" {
+			tflog.Warn(ctx, details)
+			diags.AddWarning(details, "")
+		} else {
+			tflog.Error(ctx, details)
+			diags.AddError(details, "")
+		}
+		return ""
+	}
+	if total != 1 {
+		msg := "Error reading AWS CloudHSM key, failed to list just one key."
+		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return ""
+	}
+	resources := gjson.Get(response, "resources").Array()
+	var keyJSON string
+	for _, keyResourceJSON := range resources {
+		keyJSON = keyResourceJSON.Raw
+	}
+	return keyJSON
+}

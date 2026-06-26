@@ -920,47 +920,59 @@ func byokAwsParamSchemaAttributes() map[string]schema.Attribute {
 	return attrs
 }
 
+var keyPolicyAttributeMap = map[string]schema.Attribute{
+	"external_accounts": schema.SetAttribute{
+		Optional:    true,
+		ElementType: types.StringType,
+		Description: "Other AWS accounts that can access the key.",
+	},
+	"key_admins": schema.SetAttribute{
+		Optional:    true,
+		ElementType: types.StringType,
+		Description: "Key administrators - users.",
+	},
+	"key_admins_roles": schema.SetAttribute{
+		Optional:    true,
+		ElementType: types.StringType,
+		Description: "Key administrators - roles.",
+	},
+	"key_users": schema.SetAttribute{
+		Optional:    true,
+		ElementType: types.StringType,
+		Description: "Key users - users.",
+	},
+	"key_users_roles": schema.SetAttribute{
+		Optional:    true,
+		ElementType: types.StringType,
+		Description: "Key users - roles.",
+	},
+	"policy": schema.StringAttribute{
+		Optional:    true,
+		Description: "AWS key policy json.",
+	},
+	"policy_template": schema.StringAttribute{
+		Optional:    true,
+		Description: "CipherTrust Manager policy template ID.",
+	},
+}
+
 // keyPolicySchemaAttribute returns the key_policy schema attribute shared by all four
 // AWS key resources (aws_key, aws_byok_key, aws_xks_key, aws_cloudhsm_key).
 func keyPolicySchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
 		Description: "(Updatable) Key policy parameters.",
-		Attributes: map[string]schema.Attribute{
-			"external_accounts": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Other AWS accounts that can access the key.",
-			},
-			"key_admins": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Key administrators - users.",
-			},
-			"key_admins_roles": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Key administrators - roles.",
-			},
-			"key_users": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Key users - users.",
-			},
-			"key_users_roles": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
-				Description: "Key users - roles.",
-			},
-			"policy": schema.StringAttribute{
-				Optional:    true,
-				Description: "AWS key policy json.",
-			},
-			"policy_template": schema.StringAttribute{
-				Optional:    true,
-				Description: "CipherTrust Manager policy template ID.",
-			},
-		},
+		Attributes:  keyPolicyAttributeMap,
+	}
+}
+
+// keyPolicySchemaAttribute returns the key_policy schema attribute shared by all four
+// AWS key resources (aws_key, aws_byok_key, aws_xks_key, aws_cloudhsm_key).
+func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
+	return schema.SingleNestedAttribute{
+		Optional:    true,
+		Description: "(Updatable) Key policy parameters. Only applicable to keys in a linked state.",
+		Attributes:  keyPolicyAttributeMap,
 	}
 }
 
@@ -1196,7 +1208,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.",
+			Description: "(Updatable) Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(
@@ -1209,13 +1221,13 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 		"description": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "(Updatable for linked keys) Description of the AWS key.",
+			Description: "(Updatable) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.",
 		},
 		"tags": schema.MapAttribute{
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable for linked keys) Tags assigned to the key.",
+			Description: "(Updatable) Tags assigned to the key. Applicable only for keys in a linked state.",
 		},
 		// Computed-only fields sourced from aws_param in the CCKM API response
 		"arn": schema.StringAttribute{

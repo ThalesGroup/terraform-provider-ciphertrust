@@ -110,7 +110,7 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
 - `enable_key` (Boolean) (Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.
 - `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. (see [below for nested schema](#nestedatt--enable_rotation))
-- `key_policy` (Attributes) (Updatable) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
+- `key_policy` (Attributes) (Updatable) Key policy parameters. Only applicable to keys in a linked state. (see [below for nested schema](#nestedatt--key_policy))
 - `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
 ### Read-Only
@@ -150,9 +150,9 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 
 Optional:
 
-- `alias` (Set of String) Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.
-- `description` (String) (Updatable for linked keys) Description of the AWS key.
-- `tags` (Map of String) (Updatable for linked keys) Tags assigned to the key.
+- `alias` (Set of String) (Updatable) Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.
+- `description` (String) (Updatable) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.
+- `tags` (Map of String) (Updatable) Tags assigned to the key. Applicable only for keys in a linked state.
 
 Read-Only:
 
