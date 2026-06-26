@@ -224,29 +224,15 @@ func (r *resourceCCKMAWSAcl) Read(ctx context.Context, req resource.ReadRequest,
 	}
 	state.KmsID = types.StringValue(kmsID)
 
-	kmsResponse, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
-	if kmsErr != nil {
-		if strings.Contains(kmsErr.Error(), notFoundError) {
-			msg := "AWS KMS was not found. AWS KMS ACLs will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		msg := "Error reading AWS KMS ACLs, failed to read AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": kmsErr.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+	response := getAwsKms(ctx, id, r.client, kmsID, "reading", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	response := kmsResponse
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "AWS KMS ACL was not found, it will be removed from state."
+		msg := "AWS KMS ACL not found. If it no longer exists, remove it from your Terraform config."
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
-		tflog.Warn(ctx, details)
-		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	r.setAWSAclState(ctx, resourceID, response, &state, &resp.Diagnostics)
@@ -274,23 +260,10 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 	kmsID := state.KmsID.ValueString()
 	plan.ID = state.ID
 
-	kmsResp, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
-	if kmsErr != nil {
-		if strings.Contains(kmsErr.Error(), notFoundError) {
-			msg := "AWS KMS was not found. AWS KMS ACLs will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		msg := "Error updating AWS KMS ACLs, failed to read AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": kmsErr.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+	response := getAwsKms(ctx, id, r.client, kmsID, "updating", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	response := kmsResp
 	if !acls.AclExistsInResponse(response, resourceID) {
 		msg := "AWS KMS ACL was not found, cannot update."
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
@@ -355,22 +328,10 @@ func (r *resourceCCKMAWSAcl) Delete(ctx context.Context, req resource.DeleteRequ
 	resourceID := state.ID.ValueString()
 	kmsID := state.KmsID.ValueString()
 
-	kmsResp, kmsErr := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
-	if kmsErr != nil {
-		if strings.Contains(kmsErr.Error(), notFoundError) {
-			msg := "AWS KMS was not found. AWS KMS ACLs will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-			return // Terraform removes from state when Delete returns without error.
-		}
-		msg := "Error deleting AWS KMS ACLs, failed to read AWS KMS."
-		details := utils.ApiError(msg, map[string]interface{}{"error": kmsErr.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
+	response := getAwsKms(ctx, id, r.client, kmsID, "deleting", &resp.Diagnostics)
+	if response == "" {
+		return // 404 warning added (Terraform removes state) or non-404 error added (state kept).
 	}
-	response := kmsResp
 	if !acls.AclExistsInResponse(response, resourceID) {
 		msg := "AWS KMS ACL was not found, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})

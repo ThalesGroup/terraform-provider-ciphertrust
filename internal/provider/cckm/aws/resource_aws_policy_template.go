@@ -190,8 +190,8 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 }
 
 // Read refreshes the Terraform state for an AWS key policy template by fetching it from CipherTrust Manager.
-// If the policy template is no longer found (HTTP 404), it is silently removed from Terraform state rather
-// than returning an error, allowing Terraform to plan its recreation.
+// If the policy template is not found (HTTP 404) an error is returned and state is preserved.
+// The resource is only removed from state on "terraform destroy" or when removed from config.
 func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_policy_template.go -> Read]["+id+"]")
@@ -202,17 +202,8 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 	templateID := state.ID.ValueString()
-	response, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Warn(ctx, "[resource_aws_policy_template.go -> Read][template not found, removing from state][template id: "+templateID+"]")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		msg := "Error reading AWS key policy template."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+	response := getAwsPolicyTemplate(ctx, id, r.client, templateID, "reading", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
@@ -313,22 +304,15 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 		return
 	}
 	templateID := state.ID.ValueString()
-	_, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			msg := "AWS policy template was not found, it will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-		} else {
-			msg := "Error reading AWS key policy template."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template_id": templateID})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-		}
+	getAwsPolicyTemplate(ctx, id, r.client, templateID, "deleting", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err = r.client.DeleteByURL(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES+"/"+templateID)
+	if resp.Diagnostics.WarningsCount() > 0 {
+		// 404 - already gone, nothing to delete
+		return
+	}
+	_, err := r.client.DeleteByURL(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES+"/"+templateID)
 	if err != nil {
 		if strings.Contains(err.Error(), "has one or more key associated") {
 			msg := "AWS policy template " + templateID + " has one or more keys associated with it so it can't be deleted. This includes keys scheduled for deletion."

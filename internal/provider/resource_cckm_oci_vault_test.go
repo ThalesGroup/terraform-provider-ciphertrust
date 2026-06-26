@@ -161,7 +161,7 @@ func TestCckmOCIVault(t *testing.T) {
 		}
 		 resource "ciphertrust_oci_vault" "vault" {
 		   region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
-		   connection_id = ciphertrust_oci_connection.connection.name
+		   connection_id = ciphertrust_oci_connection.connection.id
 		   vault_id = tolist(data.ciphertrust_get_oci_vaults.vaults.vaults)[0].vault_id
 		}`
 
@@ -191,7 +191,7 @@ func TestCckmOCIVault(t *testing.T) {
 		}
 		resource "ciphertrust_oci_vault" "vault" {
 				region = %s
-				connection_id = ciphertrust_oci_connection.connection_two.name
+				connection_id = ciphertrust_oci_connection.connection_two.id
 				vault_id = tolist(data.ciphertrust_get_oci_vaults.vaults.vaults)[0].vault_id
 		}
 		resource "ciphertrust_oci_connection" "connection_two" {
@@ -239,7 +239,7 @@ func TestCckmOCIVault(t *testing.T) {
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.lifecycle_state"),
 					// Vault resource
 					resource.TestCheckResourceAttrSet(vaultResource, "id"),
-					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionResource, "name"),
+					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "region", regionsDataSource, "oci_regions.0"),
@@ -249,10 +249,9 @@ func TestCckmOCIVault(t *testing.T) {
 				RefreshState: true,
 			},
 			{
-				ResourceName:            vaultResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"connection_id"},
+				ResourceName:      vaultResource,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 			{
 				Config: updateConfigStr,
@@ -266,7 +265,7 @@ func TestCckmOCIVault(t *testing.T) {
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.lifecycle_state"),
 					// Vault resource
 					resource.TestCheckResourceAttrSet(vaultResource, "id"),
-					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionTwoResource, "name"),
+					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionTwoResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
 				),
@@ -281,10 +280,9 @@ func TestCckmOCIVault(t *testing.T) {
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
 			},
 			{
-				ResourceName:            vaultResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"connection_id"},
+				ResourceName:      vaultResource,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})

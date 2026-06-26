@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_byok_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is removed from state automatically on refresh.
+  Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is kept in state on refresh with a warning.
 ---
 
 # ciphertrust_aws_byok_key (Resource)
 
-Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is removed from state automatically on refresh.
+Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is kept in state on refresh with a warning.
 
 ## Example Usage
 
@@ -146,10 +146,10 @@ resource "ciphertrust_aws_byok_key" "with_rotation" {
 - `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true.
 - `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) (Updatable) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
-- `kms_id` (String) CipherTrust Manager ID of the KMS to create the key in. Required unless replicating a multi-region key.
+- `kms_id` (String) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key.
 - `primary_region` (String) (Updatable) Updates the primary region of a multi-region key. Only valid during updates.
 - `replicate_key` (Attributes) Replicate a primary EXTERNAL multi-region key to a new region. Key material will be imported from the primary key. (see [below for nested schema](#nestedatt--replicate_key))
-- `schedule_for_deletion_days` (Number) (Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.
+- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 - `source_key_identifier` (String) CipherTrust Manager key ID to upload to AWS as BYOK material. Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. Populated on read from the API once material has been imported.
 - `source_key_tier` (String) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). Leave blank when not importing key material.
 

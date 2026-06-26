@@ -157,9 +157,14 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 	response, err := client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			msg := "OCI vault (" + vaultID + ") was not found."
+			var msg string
+			if opLabel == "deleting" {
+				msg = "OCI vault was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI vault")
+			}
 			details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID})
-			if opLabel == "deleting" || opLabel == "reading" {
+			if opLabel == "deleting" {
 				tflog.Warn(ctx, details)
 				diags.AddWarning(details, "")
 			} else {
@@ -181,10 +186,7 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 // Returns (keyJSON, false) on success.
 // If the key is not found (404):
 //   - opLabel "deleting": warning added, ("", false) returned - resource removed from state.
-//   - opLabel "reading" + vaultID set + vault 404: warning added, ("", true) returned - caller
-//     should preserve existing state until the vault is recovered.
-//   - opLabel "reading" + vaultID set + vault reachable: error added, ("", false) returned.
-//   - other opLabels + vaultID set: vault checked for context; error added, ("", false) returned.
+//   - any other opLabel + vaultID set: vault checked for context; error added, ("", false) returned.
 //   - vaultID empty: generic error added, ("", false) returned.
 //
 // A non-404 key error is always a hard error; ("", false) is returned.
@@ -204,15 +206,7 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 				_, vaultErr := client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 				if vaultErr != nil {
 					if strings.Contains(vaultErr.Error(), notFoundError) {
-						if opLabel == "reading" {
-							// Vault gone - key is hidden. Signal caller to preserve existing state.
-							msg := "OCI vault was not found while reading OCI key. Key state preserved until vault is recovered."
-							details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
-							tflog.Warn(ctx, details)
-							diags.AddWarning(details, "")
-							return "", true
-						}
-						msg := "OCI vault was not found while " + opLabel + " OCI key."
+						msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI vault")
 						details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
 						tflog.Error(ctx, details)
 						diags.AddError(details, "")
@@ -224,14 +218,14 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 					}
 				} else {
 					// Vault is reachable but the key is gone.
-					msg := "OCI key was not found in CipherTrust Manager while " + opLabel + ". Use terraform state rm to remove this resource from state if the key no longer exists."
+					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key")
 					details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
 					tflog.Error(ctx, details)
 					diags.AddError(details, "")
 				}
 				return "", false
 			}
-			msg := "OCI key was not found while " + opLabel + "."
+			msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key")
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			tflog.Error(ctx, details)
 			diags.AddError(details, "")

@@ -142,7 +142,7 @@ resource "ciphertrust_aws_custom_keystore" "imported_external_custom_keystore" {
 
 - `kms_id` (String) ID of the AWS KMS account container in which to create the key store.
 - `name` (String) (Updatable) Unique name for the custom key store.
-- `region` (String) Name of the available AWS regions.
+- `region` (String) Name of an available AWS region.
 
 ### Optional
 
@@ -180,7 +180,7 @@ Optional:
 - `key_store_password` (String) (Updatable) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. **Required** field for custom key store of type AWS_CLOUDHSM.
 - `trust_anchor_certificate` (String) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. **Required** field for a custom key store of type AWS_CLOUDHSM
 - `xks_proxy_connectivity` (String) (Updatable) Indicates how AWS KMS communicates with the Ciphertrust Manager. **Required** field for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.
-- `xks_proxy_uri_endpoint` (String) (Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS will send XKS API requests. The DNS hostname is for either for a load balancer directing to the CipherTrust Manager or the CipherTrust Manager itself. **Required** field for a custom key store of type EXTERNAL_KEY_STORE.
+- `xks_proxy_uri_endpoint` (String) (Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. The DNS hostname can be either a load balancer directing requests to CipherTrust Manager or the CipherTrust Manager instance itself. **Required** for a custom key store of type EXTERNAL_KEY_STORE. For **CDSPaaS**, the endpoint is `https://xks.<cdspaas>.dpondemand.io`; for **on-premises** deployments, use the HTTPS address of the CipherTrust Manager instance.
 - `xks_proxy_vpc_endpoint_service_name` (String) (Updatable) Indicates the VPC endpoint service name the custom key store uses. **Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.
 
 Read-Only:

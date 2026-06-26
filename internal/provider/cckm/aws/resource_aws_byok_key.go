@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -66,7 +65,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 		Description: "Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. " +
 			"Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. " +
 			"If the KMS is not found during refresh the key is kept in state until the KMS is recovered. " +
-			"A key pending deletion is removed from state automatically on refresh.",
+			"A key pending deletion is kept in state on refresh with a warning.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -103,7 +102,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "CipherTrust Manager ID of the KMS to create the key in. Required unless replicating a multi-region key.",
+				Description: "CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -113,11 +112,14 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "(Updatable) Updates the primary region of a multi-region key. Only valid during updates.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before it is permanently deleted. Optional; valid values are 7-30 days (inclusive). Defaults to 7 days and is only used when the resource is destroyed.",
-				Default:     int64default.StaticInt64(7),
-				Validators:  []validator.Int64{int64validator.AtLeast(7), int64validator.AtMost(30)},
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to 7. Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: 7}},
+				Validators:    []validator.Int64{int64validator.AtLeast(7), int64validator.AtMost(30)},
 			},
 			// Key policy block
 			"key_policy": keyPolicySchemaAttribute(),
@@ -388,7 +390,7 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes Terraform state for an AWS BYOK key from CipherTrust Manager.
 // If the key is not found and the KMS is also not found, existing state is preserved so that
-// recovery is possible without manual state surgery. A key pending deletion is removed from state.
+// recovery is possible without manual state surgery. A key pending deletion is kept in state with a warning.
 func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Read]["+id+"]")
@@ -398,22 +400,22 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	response, preserveState := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
+	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if preserveState {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
-	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
-	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
-		msg := "AWS BYOK key is pending deletion, removing from state."
+	if gjson.Get(response, "gone").Bool() {
+		msg := "AWS BYOK key is gone - its region is not in the KMS regions list. Key operations will fail until the region is restored to the KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
+	}
+	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
+	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "BYOK key", readKeyState, "AWS")
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
+		tflog.Warn(ctx, details)
+		resp.Diagnostics.AddWarning(details, "")
 	}
 	r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -447,11 +449,35 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
-		msg := "AWS BYOK key is pending deletion, removing from state."
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "BYOK key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		// Policy updates are permitted by AWS on keys pending deletion.
+		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
+			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
+			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
+			var policyDiags diag.Diagnostics
+			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
+			for _, d := range policyDiags {
+				if d.Severity() == diag.SeverityError {
+					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+				} else {
+					resp.Diagnostics.Append(d)
+				}
+			}
+			// Re-fetch to reflect any policy change in state.
+			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
+				response = updated
+			}
+		}
+		// key_policy IS updated in this path - reflect the new config value in state.
+		state.KeyPolicy = plan.KeyPolicy
+		r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 		return
 	}
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
@@ -574,7 +600,7 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 	keyState := gjson.Get(response, "aws_param.KeyState").String()
 	if keyState == "PendingDeletion" || keyState == "PendingReplicaDeletion" {
-		msg := "AWS BYOK key is already pending deletion, it will be removed from state."
+		msg := fmt.Sprintf(utils.PendingDeletionDeleteFmt, "AWS", "BYOK key")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
