@@ -58,7 +58,7 @@ func (r *resourceAWSXKSKey) Configure(_ context.Context, req resource.ConfigureR
 
 func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage AWS XKS keys in CipherTrust Manager.",
+		Description: "Use this resource to create and manage AWS XKS keys in CipherTrust Manager. ",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -214,7 +214,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 			},
-			"key_policy":      keyPolicySchemaAttribute(),
+			"key_policy":      keyStoreKeyPolicySchemaAttribute(),
 			"enable_rotation": enableRotationSchemaAttribute(),
 			"local_hosted_params": schema.SingleNestedAttribute{
 				Required:    true,
@@ -273,29 +273,15 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 			base = &xksP.AWSKeyStoreCommonAwsParamTFSDK
 		}
 	}
-	// Validate: unlinked keys can only have one alias.
-	if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() &&
-		base != nil && len(base.Alias.Elements()) > 1 {
-		resp.Diagnostics.AddError(
-			"Multiple aliases cannot be added to an unlinked XKS key.",
-			"Only one alias can be specified when creating an unlinked key. "+
-				"Set local_hosted_params.linked = true before adding multiple aliases, "+
-				"or reduce the alias list to a single value.",
-		)
-		return
-	}
+	payload := CreateXKSKeyInputPayloadJSON{}
 	awsParams := getKeyStoreKeyAWSParams(ctx, plan.KeyPolicy, base, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	localHostedParamsJSON := r.getLocalHostedParams(ctx, &plan, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	payload := CreateXKSKeyInputPayloadJSON{}
 	if awsParams != nil {
 		payload.AWSParams = *awsParams
 	}
+	localHostedParamsJSON := r.getLocalHostedParams(&plan)
 	if localHostedParamsJSON != nil {
 		payload.XKSKeyLocalHostedInputParamsJSON = *localHostedParamsJSON
 	}
@@ -343,7 +329,18 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	// Do not return error after this
 
 	keyID := gjson.Get(response, "id").String()
-	if gjson.Get(response, "linked_state").Bool() && !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+
+	if localHostedParamsJSON != nil && localHostedParamsJSON.Blocked {
+		var blockDiags diag.Diagnostics
+		r.blockUnblockXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &blockDiags)
+		for _, d := range blockDiags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+	}
+
+	// The following updates are only valid for linked keys
+
+	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 		planP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
 			var diags diag.Diagnostics
@@ -353,6 +350,7 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 			}
 		}
 	}
+
 	if plan.EnableRotation != nil {
 		var diags diag.Diagnostics
 		enableKeyRotationJob(ctx, id, r.client, keyID, plan.EnableRotation, &diags)
@@ -360,7 +358,8 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+
+	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
 		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
@@ -404,7 +403,7 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
-	if gjson.Get(response, "linked_state").Bool() && readKeyState == "PendingDeletion" {
+	if readKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "XKS key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
@@ -440,79 +439,45 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	keyID := state.ID.ValueString()
 	response := r.getAwsXksKey(ctx, id, state.CustomKeyStoreID.ValueString(), keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if gjson.Get(response, "linked_state").Bool() && updateKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "XKS key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		// Policy updates are permitted by AWS on keys pending deletion.
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-			// Re-fetch to reflect any policy change in state.
-			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
-				response = updated
-			}
-		}
-		// key_policy IS updated in this path - reflect the new config value in state.
-		state.KeyPolicy = plan.KeyPolicy
-		r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
 	}
+
 	if plan.LocalHostParams != nil {
-		localHostedParamsJSON := r.getLocalHostedParams(ctx, &plan, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+		localHostedParamsJSON := r.getLocalHostedParams(&plan)
 		r.blockUnblockXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
+
 		r.linkUnlinkXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-	if err != nil {
-		msg := "Error updating AWS XKS key. Failed to read key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
-		return
-	}
-	var planP *AWSXKSKeyAwsParamTFSDK
-	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP = extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
+
+		response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+		if err != nil {
+			msg := "Error updating AWS XKS key. Failed to read key."
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
 			return
 		}
 	}
-	planDesc := types.StringNull()
-	if planP != nil {
-		planDesc = planP.AWSKeyStoreCommonAwsParamTFSDK.Description
-	}
-	planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, Description: planDesc, KeyPolicy: plan.KeyPolicy, EnableRotation: plan.EnableRotation}
-	stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy, EnableRotation: state.EnableRotation}
+
+	// The following updates are only valid for linked keys
+
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
 	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() {
 		if !keyEnabled && plan.EnableKey.ValueBool() {
@@ -522,35 +487,95 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 			}
 		}
 	}
-	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+
+	if plan.KeyPolicy != nil || state.KeyPolicy != nil {
+		planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
+		stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
+		var policyDiags diag.Diagnostics
+		updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
+		for _, d := range policyDiags {
+			if d.Severity() == diag.SeverityError {
+				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+			} else {
+				resp.Diagnostics.Append(d)
+			}
+		}
+		// Re-fetch to reflect any policy change in state.
+		if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
+			response = updated
+		}
 	}
-	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
-		updateAliases(ctx, id, r.client, keyID, planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
+
+	var planAwsParam *AWSXKSKeyAwsParamTFSDK
+	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+		planAwsParam = extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
-	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
-		planTagsMap := make(map[string]string, len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
-		if len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
-			resp.Diagnostics.Append(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
+
+	stateUpdate := &AWSKeyUpdateInputTFSDK{
+		KeyID:          keyID,
+		KeyPolicy:      state.KeyPolicy,
+		EnableRotation: state.EnableRotation,
+	}
+
+	planUpdate := &AWSKeyUpdateInputTFSDK{
+		KeyID:       keyID,
+		Description: types.StringNull(),
+	}
+
+	updateCommon := false
+	if plan.EnableRotation != nil {
+		planUpdate.EnableRotation = plan.EnableRotation
+		updateCommon = true
+	}
+	if plan.KeyPolicy != nil {
+		planUpdate.KeyPolicy = plan.KeyPolicy
+		updateCommon = true
+	}
+
+	if planAwsParam != nil && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsUnknown() {
+		planUpdate.Description = planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description
+		updateCommon = true
+	}
+
+	if updateCommon {
+		updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	if planAwsParam != nil {
+		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, keyID, planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		updateTags(ctx, id, r.client, planTagsMap, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
+		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
+			planTagsMap := make(map[string]string, len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
+			if len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+			}
+			updateTags(ctx, id, r.client, planTagsMap, response, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 	}
+
 	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && keyEnabled && !plan.EnableKey.ValueBool() {
 		disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
+
 	response, err = r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Error reading AWS XKS key."
@@ -559,6 +584,7 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	tflog.Trace(ctx, "[resource_aws_xks_key.go -> Update][response:"+redactAWSResponse(response)+"]")
 	r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -655,17 +681,65 @@ func (r *resourceAWSXKSKey) Delete(ctx context.Context, req resource.DeleteReque
 // ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
 // preventing silent in-place updates to fields that cannot be modified after creation.
 func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// Skip destroy operations.
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 
 	var plan, state AWSXKSKeyTFSDK
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	}
 
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// On create (no prior state), validate that the config is compatible with an unlinked key.
+	if req.State.Raw.IsNull() {
+		if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() {
+			var invalid []string
+
+			// More than one alias and tags cannot be used with an unlinked key.
+			if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+				xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+				if xksP != nil {
+					if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+						invalid = append(invalid, "aws_param.alias (more than one alias)")
+					}
+					if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
+						len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
+						invalid = append(invalid, "aws_param.tags")
+					}
+				}
+			}
+
+			// key_policy cannot be set on an unlinked key.
+			if plan.KeyPolicy != nil {
+				invalid = append(invalid, "key_policy")
+			}
+
+			// Rotation cannot be enabled on an unlinked key.
+			if plan.EnableRotation != nil {
+				invalid = append(invalid, "enable_rotation")
+			}
+
+			// Disabling the key requires the key to be linked.
+			if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+				invalid = append(invalid, "enable_key = false")
+			}
+
+			if len(invalid) > 0 {
+				resp.Diagnostics.AddError(
+					"Invalid configuration for an unlinked key",
+					"The following attributes cannot be set when local_hosted_params.linked = false: "+
+						strings.Join(invalid, ", ")+". "+
+						"\nSet local_hosted_params.linked = true, or remove these attributes.",
+				)
+			}
+		}
 		return
 	}
 
@@ -710,8 +784,61 @@ func (r *resourceAWSXKSKey) ImportState(ctx context.Context, req resource.Import
 }
 
 // setXKSKeyState populates the Terraform state for an AWS XKS key from an API response JSON string.
+// In addition to the common top-level and aws_param fields, it refreshes all local_hosted_params
+// fields from the API response so that drift in blocked, linked, custom_key_store_id,
+// source_key_id (local_key_id), and source_key_tier (key_source) can be detected.
 func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
-	setXKSKeyResourceState(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, diags)
+	setKeyStoreResourceCommonTopLevel(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, diags)
+	if diags.HasError() {
+		return
+	}
+	p := extractXKSKeyAwsParam(ctx, state.AWSParam, diags)
+	if p == nil {
+		p = &AWSXKSKeyAwsParamTFSDK{}
+	}
+	setAliases(response, &p.AWSKeyStoreCommonAwsParamTFSDK.Alias, diags)
+	setKeyTags(ctx, response, &p.AWSKeyStoreCommonAwsParamTFSDK.Tags, diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	p.AWSKeyStoreCommonAwsParamTFSDK.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	policy := gjson.Get(response, "aws_param.Policy").String()
+	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
+		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
+		!getPoliciesAreEqual(ctx, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
+		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
+	}
+	// XKS-specific computed field: populate the nested xks_key_configuration object.
+	// Set to nil (null object) when the key is unlinked or the ID is not yet populated.
+	xksConfigID := gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String()
+	if xksConfigID != "" {
+		p.XksKeyConfiguration = &XksKeyConfigurationTFSDK{ID: types.StringValue(xksConfigID)}
+	} else {
+		p.XksKeyConfiguration = nil
+	}
+	state.AWSParam = packXKSKeyAwsParam(ctx, p, diags)
+
+	if state.LocalHostParams == nil {
+		state.LocalHostParams = &XKSKeyLocalHostedParamsTFSDK{}
+	}
+	state.LocalHostParams.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
+	state.LocalHostParams.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
+	state.LocalHostParams.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
+	state.LocalHostParams.SourceKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
+	state.LocalHostParams.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
 }
 
 // blockUnblockXKSKey blocks or unblocks an AWS XKS key if the planned blocked state differs from current state.
@@ -794,57 +921,17 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 }
 
 // getLocalHostedParams extracts the local_hosted_params block from the XKS key plan into a JSON payload struct.
-func (r *resourceAWSXKSKey) getLocalHostedParams(ctx context.Context, plan *AWSXKSKeyTFSDK, diags *diag.Diagnostics) *XKSKeyLocalHostedInputParamsJSON {
-	var localHostedInputParams XKSKeyLocalHostedInputParamsJSON
+func (r *resourceAWSXKSKey) getLocalHostedParams(plan *AWSXKSKeyTFSDK) *XKSKeyLocalHostedInputParamsJSON {
 	if plan.LocalHostParams != nil {
+		var localHostedInputParams XKSKeyLocalHostedInputParamsJSON
 		localHostedInputParams.Blocked = plan.LocalHostParams.Blocked.ValueBool()
 		localHostedInputParams.SourceKeyTier = plan.LocalHostParams.SourceKeyTier.ValueString()
 		localHostedInputParams.SourceKeyIdentifier = plan.LocalHostParams.SourceKeyID.ValueString()
 		localHostedInputParams.CustomKeyStoreID = plan.LocalHostParams.CustomKeyStoreID.ValueString()
 		localHostedInputParams.LinkedState = plan.LocalHostParams.Linked.ValueBool()
+		return &localHostedInputParams
 	}
-	return &localHostedInputParams
-}
-
-// getAwsXksKey fetches an AWS XKS key from CipherTrust Manager by its resource ID.
-// If keystoreID is non-empty, the custom key store is verified to exist before fetching the key;
-// a missing or unreachable key store is always a hard error regardless of opLabel.
-// A 404 on the key itself is treated according to opLabel: when opLabel is "deleting" a warning is
-// added and an empty string is returned; for any other opLabel an error is added and an empty string is returned.
-func (r *resourceAWSXKSKey) getAwsXksKey(ctx context.Context, id string, keystoreID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
-	if keystoreID != "" {
-		getAwsCustomKeyStore(ctx, r.client, id, keystoreID, "reading", diags)
-		if diags.HasError() {
-			return ""
-		}
-	}
-
-	keyJSON, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			var msg string
-			if opLabel == "deleting" {
-				msg = "AWS XKS key was not found. It will be removed from state."
-			} else {
-				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS XKS key")
-			}
-			details := utils.ApiError(msg, map[string]interface{}{"keystore_id": keystoreID, "key_id": keyID})
-			if opLabel == "deleting" {
-				tflog.Warn(ctx, details)
-				diags.AddWarning(details, "")
-			} else {
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-			}
-			return ""
-		}
-		msg := "Error " + opLabel + " AWS XKS key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return ""
-	}
-	return keyJSON
+	return nil
 }
 
 // getKeyStoreKeyAWSParams builds the AWS parameter payload (alias, description, tags, policy)
