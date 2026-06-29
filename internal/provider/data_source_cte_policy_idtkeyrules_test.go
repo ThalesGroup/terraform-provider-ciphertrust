@@ -26,9 +26,7 @@ func TestCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
 			meta = {
 				permissions = {
 					export_key           = ["CTE Clients"]
-					read_key             = ["CTE Clients"]
-					delete_key           = ["Key Users", "Key Admins"]
- 
+					read_key             = ["CTE Clients"] 
 				}
 				cte = {
 					persistent_on_client = true
