@@ -36,9 +36,7 @@ resource "ciphertrust_cm_key" "key1" {
   meta = {
     permissions = {
       export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
- 
+      read_key         = ["CTE Clients"] 
     }
     cte = {
       persistent_on_client = true
@@ -90,8 +88,6 @@ resource "ciphertrust_cm_key" "key1" {
     permissions = {
       export_key       = ["CTE Clients"]
       read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
-
     }
     cte = {
       persistent_on_client = true
@@ -114,8 +110,6 @@ resource "ciphertrust_cm_key" "key2" {
     permissions = {
       export_key       = ["CTE Clients"]
       read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
-
     }
     cte = {
       persistent_on_client = true
