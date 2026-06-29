@@ -48,7 +48,7 @@ func init() {
 var providerConfig = func() string {
 	address := os.Getenv("CIPHERTRUST_ADDRESS")
 	if address == "" {
-		address = "https://10.171.2.80"
+		address = "https://192.168.2.135"
 	}
 	username := os.Getenv("CIPHERTRUST_USERNAME")
 	if username == "" {
@@ -56,7 +56,7 @@ var providerConfig = func() string {
 	}
 	password := os.Getenv("CIPHERTRUST_PASSWORD")
 	if password == "" {
-		password = "Ssl12345#"
+		password = "ChangeIt01!"
 	}
 	tenant := os.Getenv("CIPHERTRUST_TENANT")
 
