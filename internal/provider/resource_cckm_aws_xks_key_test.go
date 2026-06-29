@@ -48,13 +48,10 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
 	}
 	createKeyStoreConfig := `
-		resource "ciphertrust_cm_key" "cm_aes_key" {
+		resource "ciphertrust_cm_key" "cm_healthcheck_key" {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
-			remove_from_state_on_destroy = true
 		}
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
 			name    = "%s"
@@ -62,7 +59,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 			kms_id  = ciphertrust_aws_kms.kms.id
 			linked_state = false
 			local_hosted_params = {
-				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
+				health_check_key_id = ciphertrust_cm_key.cm_healthcheck_key.id
 				max_credentials = 8
 				source_key_tier = "local"
 			}
@@ -72,15 +69,24 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				custom_key_store_type = "EXTERNAL_KEY_STORE"
 			}
 		}`
-	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
+
+	healthCheckKeyName := "tf-cm-key-" + uuid.New().String()[:8]
 	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
 	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
 	if os.Getenv("CDSPAAS") == "true" {
 		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
 	}
-	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig, cmKeyName, keyStoreName, proxyURIEndpoint)
+	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig, healthCheckKeyName, keyStoreName, proxyURIEndpoint)
 
 	xksKeyConfig := `
+		resource "ciphertrust_cm_key" "cm_aes_key" {
+			name         = "%s"
+			algorithm    = "AES"
+			usage_mask   = local.cm_key_usage_mask
+			unexportable = true
+			undeletable  = true
+			remove_from_state_on_destroy = true
+		}
 		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_min_params" {
 			local_hosted_params = {
 				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
@@ -106,14 +112,15 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 			enable_key = %t
 		}`
 
-	createXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, false, true, 8, true)
+	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
+	createXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, false, true, 8, true)
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + createXksKeyConfigStr
 
-	updateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, true, false, 9, true)
+	updateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, false, 9, true)
 	validUpdateConfigStr := awsConnectionResource + createKeyStoreConfigStr + updateXksKeyConfigStr
 
 	// Unable to disable a key not in a linked state
-	invalidUpdateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, true, false, 9, false)
+	invalidUpdateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, false, 9, false)
 	invalidUpdateConfigStr := awsConnectionResource + createKeyStoreConfigStr + invalidUpdateXksKeyConfigStr
 
 	keyResourceMaxParams := "ciphertrust_aws_xks_key.unlinked_cm_source_max_params"

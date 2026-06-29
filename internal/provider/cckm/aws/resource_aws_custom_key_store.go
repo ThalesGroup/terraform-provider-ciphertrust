@@ -426,25 +426,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 			LocalHostedParams.Blocked = planLocalHostedParamsTFSDK.Blocked.ValueBool()
 		}
 		if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
-			hckID := planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
-			keyResponse, keyErr := r.client.GetById(ctx, id, hckID, common.URL_KEY_MANAGEMENT)
-			if keyErr != nil {
-				tflog.Error(ctx, common.ERR_METHOD_END+keyErr.Error()+" [resource_aws_custom_key_store.go -> Create - health_check_key_id lookup]["+id+"]")
-				resp.Diagnostics.AddError(
-					"Invalid health_check_key_id: could not read CM key",
-					"Failed to read the CM key referenced by health_check_key_id '"+hckID+"': "+keyErr.Error(),
-				)
-				return
-			}
-			if !gjson.Get(keyResponse, "undeletable").Bool() {
-				resp.Diagnostics.AddError(
-					"Invalid health_check_key_id: key must be undeletable",
-					"The CM key '"+hckID+"' referenced by health_check_key_id must have undeletable=true. "+
-						"Update the key to be undeletable before using it as the XKS health check key.",
-				)
-				return
-			}
-			LocalHostedParams.HealthCheckKeyID = hckID
+			LocalHostedParams.HealthCheckKeyID = planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
 		}
 		if !planLocalHostedParamsTFSDK.MaxCredentials.IsNull() {
 			LocalHostedParams.MaxCredentials = planLocalHostedParamsTFSDK.MaxCredentials.ValueInt32()
@@ -725,28 +707,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		toBeUpdated = true
 	}
 	if planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != "" && planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() != types.StringNull().ValueString() {
-		hckID := planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
-		if hckID != stateLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString() {
-			// Only validate when the value is actually changing.
-			keyResponse, keyErr := r.client.GetById(ctx, id, hckID, common.URL_KEY_MANAGEMENT)
-			if keyErr != nil {
-				tflog.Error(ctx, common.ERR_METHOD_END+keyErr.Error()+" [resource_aws_custom_key_store.go -> Update - health_check_key_id lookup]["+id+"]")
-				resp.Diagnostics.AddError(
-					"Invalid health_check_key_id: could not read CM key",
-					"Failed to read the CM key referenced by health_check_key_id '"+hckID+"': "+keyErr.Error(),
-				)
-				return
-			}
-			if !gjson.Get(keyResponse, "undeletable").Bool() {
-				resp.Diagnostics.AddError(
-					"Invalid health_check_key_id: key must be undeletable",
-					"The CM key '"+hckID+"' referenced by health_check_key_id must have undeletable=true. "+
-						"Update the key to be undeletable before using it as the XKS health check key.",
-				)
-				return
-			}
-		}
-		planLocalHostedParams.HealthCheckKeyID = hckID
+		planLocalHostedParams.HealthCheckKeyID = planLocalHostedParamsTFSDK.HealthCheckKeyID.ValueString()
 	}
 	payload.LocalHostedParams = &planLocalHostedParams
 	if toBeUpdated {
