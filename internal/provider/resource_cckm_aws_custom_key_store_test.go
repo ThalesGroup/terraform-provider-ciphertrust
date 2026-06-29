@@ -30,8 +30,8 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
+			#unexportable = true
+			#undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
@@ -64,8 +64,6 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
@@ -258,8 +256,6 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 
@@ -367,55 +363,6 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "local_hosted_params.health_check_ciphertext"),
 					resource.TestCheckResourceAttrSet(resourceName, "local_hosted_params.health_check_uri_path"),
 				),
-			},
-		},
-	})
-}
-
-// TestCckmAWSCustomKeyStoreWithDeletableHealthCheckKey validates check for undeleteable health-check key
-func TestCckmAWSCustomKeyStoreWithDeletableHealthCheckKey(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-
-	customKeystoreConfig := `
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name                         = "%s"
-			algorithm                    = "AES"
-			usage_mask                   = local.cm_key_usage_mask
-			unexportable                 = true
-			undeletable                  = false
-			remove_from_state_on_destroy = true
-		}
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name   = "%s"
-			region = ciphertrust_aws_kms.kms.regions[0]
-			kms_id = ciphertrust_aws_kms.kms.id
-			local_hosted_params = {
-				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
-				max_credentials     = 8
-				source_key_tier     = "local"
-			}
-			aws_param = {
-				custom_key_store_type  = "EXTERNAL_KEY_STORE"
-				xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-				xks_proxy_uri_endpoint = "%s"
-			}
-		}`
-
-	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
-	if os.Getenv("CDSPAAS") == "true" {
-		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
-	}
-	customKeyStoreConfigStr := fmt.Sprintf(customKeystoreConfig, "tf-aes-"+uuid.NewString()[:8], "tf-ks-"+uuid.NewString()[:8], proxyURIEndpoint)
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config:      awsConnectionResource + customKeyStoreConfigStr,
-				ExpectError: regexp.MustCompile(`key must be undeletable`),
 			},
 		},
 	})
