@@ -57,55 +57,6 @@ func ntpSweep(host string) {
 	)
 }
 
-// TestAccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
-func TestAccCMNTP_DriftDetection(t *testing.T) {
-	RequireCM(t)
-	var hostVal string
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				PreConfig: func() { ntpSweep("time3.google.com") },
-				Config: providerConfig + `
-resource "ciphertrust_ntp" "test" {
-  host = "time3.google.com"
-}
-`,
-				Check: checkStep(t, "drift detection: create",
-					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time3.google.com"),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["ciphertrust_ntp.test"]
-						if !ok {
-							return fmt.Errorf("resource not found in state")
-						}
-						hostVal = rs.Primary.Attributes["host"]
-						return nil
-					},
-				),
-			},
-			{
-				// Delete the NTP server out-of-band; Read() must detect the 404 and mark for re-creation.
-				PreConfig: func() {
-					client, ok := createCMClient()
-					if !ok {
-						t.Fatal("could not create CM client")
-					}
-					_, _ = client.DeleteByID(
-						context.Background(),
-						"DELETE",
-						hostVal,
-						fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, hostVal),
-						nil,
-					)
-				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-			},
-		},
-	})
-}
-
 // TestAccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
 func TestAccCMNTP_NoDrift(t *testing.T) {
 	RequireCM(t)
@@ -180,7 +131,58 @@ resource "ciphertrust_ntp" "test" {
   host = "time3.google.com"
 }
 `,
-				Destroy: true,
+			Destroy: true,
+			},
+		},
+	})
+}
+
+// TestAccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
+// NOTE: This test performs an out-of-band deletion that disturbs the NTP daemon; it runs last
+// so that earlier tests are not affected by the daemon's recovery period.
+func TestAccCMNTP_DriftDetection(t *testing.T) {
+	RequireCM(t)
+	var hostVal string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time3.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time3.google.com"
+}
+`,
+				Check: checkStep(t, "drift detection: create",
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time3.google.com"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_ntp.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						hostVal = rs.Primary.Attributes["host"]
+						return nil
+					},
+				),
+			},
+			{
+				// Delete the NTP server out-of-band; Read() must detect the absence and mark for re-creation.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Fatal("could not create CM client")
+					}
+					_, _ = client.DeleteByID(
+						context.Background(),
+						"DELETE",
+						hostVal,
+						fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, hostVal),
+						nil,
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
