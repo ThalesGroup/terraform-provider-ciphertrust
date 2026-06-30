@@ -1,68 +1,138 @@
 package provider
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+// cteResourceSetConfig renders a ciphertrust_cte_resource_set. type is held
+// constant ("Directory") across steps because it is immutable. A second resource
+// entry is appended when secondResource is true so the update step can assert a
+// list-length change.
+func cteResourceSetConfig(name, description string, secondResource bool) string {
+	resources := `
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }`
+	if secondResource {
+		resources += `,
+    {
+      directory          = "/home/testUser"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }`
+	}
+	desc := ""
+	if description != "" {
+		desc = fmt.Sprintf("  description = %q\n", description)
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+%s  type = "Directory"
+  resources = [%s
+  ]
+}
+`, name, desc, resources)
+}
+
 func TestResourceCTEResourceSet(t *testing.T) {
+	name := "tf-resset-" + uuid.New().String()[:8]
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
-resource "ciphertrust_cte_resource_set" "resource_set" {
-  name = "testResourceSet"
-  resources = [
-    {
-      directory="/tmp"
-      file="*"
-	  hdfs=false
-	  include_subfolders=false
-    }
-  ]
-  type="Directory"
-}
-`,
-				Check: resource.ComposeAggregateTestCheckFunc(
+				Config: cteResourceSetConfig(name, "Created via TF", false),
+				Check: checkStep(t, "resource_set: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_resource_set.resource_set", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cte_resource_set.resource_set", "uri"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "name", name),
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "type", "Directory"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "resources.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "resources.0.directory", "/tmp"),
 				),
 			},
-			// ImportState testing
-			//{
-			//	ResourceName:      "ciphertrust_cm_reg_token.reg_token",
-			//	ImportState:       true,
-			//	ImportStateVerify: true,
-			//	ImportStateVerifyIgnore: []string{"last_updated"},
-			//},
-			// Update and Read testing
 			{
-				Config: providerConfig + `
-resource "ciphertrust_cte_resource_set" "resource_set" {
-  name = "testResourceSet"
-  description = "Updated via TF"
-  resources = [
-    {
-      directory="/tmp"
-      file="*"
-	  hdfs=false
-	  include_subfolders=false
-    },
-	{
-      directory="/home/testUser"
-      file="*"
-	  hdfs=false
-	  include_subfolders=false
-    }
-  ]
-}
-`,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_cte_resource_set.resource_set", "id"),
+				Config:             cteResourceSetConfig(name, "Created via TF", false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: cteResourceSetConfig(name, "Updated via TF", true),
+				Check: checkStep(t, "resource_set: update",
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "description", "Updated via TF"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "resources.#", "2"),
 				),
 			},
-			// Delete testing automatically occurs in TestCase
+			{
+				Config:             cteResourceSetConfig(name, "Updated via TF", true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				ResourceName:      "ciphertrust_cte_resource_set.resource_set",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+// TestResourceCTEResourceSet_nameImmutable verifies a name change is rejected.
+func TestResourceCTEResourceSet_nameImmutable(t *testing.T) {
+	name := "tf-resset-imm-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteResourceSetConfig(name, "Original", false),
+				Check: checkStep(t, "resource_set immutable: create",
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "name", name),
+				),
+			},
+			{
+				Config:      cteResourceSetConfig(name+"-renamed", "Original", false),
+				ExpectError: regexp.MustCompile(`(?i)cannot change resource set name|immutable`),
+			},
+		},
+	})
+}
+
+// TestResourceCTEResourceSet_drift mutates the description out-of-band and asserts
+// the next plan is non-empty.
+func TestResourceCTEResourceSet_drift(t *testing.T) {
+	name := "tf-resset-drift-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteResourceSetConfig(name, "Drift original", false),
+				Check: checkStep(t, "resource_set drift: create",
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "description", "Drift original"),
+					cteCaptureID("ciphertrust_cte_resource_set.resource_set", &capturedID),
+				),
+			},
+			{
+				PreConfig: func() {
+					cteOutOfBandPatch(common.URL_CTE_RESOURCE_SET, capturedID, `{"description":"Out-of-band modified"}`)
+				},
+				Config:             cteResourceSetConfig(name, "Drift original", false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
 		},
 	})
 }

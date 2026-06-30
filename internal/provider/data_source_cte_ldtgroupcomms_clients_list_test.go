@@ -33,6 +33,11 @@ func TestCiphertrustCTELDTGroupCommSvcClientsDataSource(t *testing.T) {
 				Config: providerConfig + testConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					// Field-level value on the data source itself: the queried
+					// group name round-trips. A freshly created LDT comm group has
+					// no member clients yet, so the clients list is legitimately
+					// empty (asserts the data source returns a valid empty result).
+					resource.TestCheckResourceAttr(datasourceName, "group_name", groupName),
 					resource.TestCheckResourceAttr(datasourceName, "clients.#", "0"),
 				),
 			},
