@@ -1,0 +1,5 @@
+{
+  "status": "fixed",
+  "plan_output": "Error: Invalid Attribute Value Match\n  with ciphertrust_aws_connection.test,\n  on main.tf line 23, in resource \"ciphertrust_aws_connection\" \"test\":\n  23:   products          = [\"azure\"]\n\nAttribute products[0] value must be one of: [\"cckm\"], got: \"azure\"",
+  "verdict": "Terraform plan now rejects the invalid products value 'azure' at plan time with a clear validation error, preventing the 422 failure that previously occurred at apply time."
+}

@@ -77,3 +77,4 @@ func TestOCIConnectionSensitiveFields(t *testing.T) {
 		}
 	}
 }
+

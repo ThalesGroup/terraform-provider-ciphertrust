@@ -363,6 +363,150 @@ func TestAccAWSConnection_immutableName(t *testing.T) {
 	})
 }
 
+// awsConnConfigInvalidProducts returns a ciphertrust_aws_connection config that
+// sets an invalid products value to verify plan-time validation catches it.
+func awsConnConfigInvalidProducts(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+  products      = ["invalid-product"]
+}
+`, name, awsAccessKeyID())
+}
+
+// TestAccAWSConnection_invalidProductsRejectedAtPlan verifies that an invalid
+// products value is caught at plan time by the schema validator, not deferred
+// to a 422 from the CM API at apply time (regression test for TFIN-333).
+func TestAccAWSConnection_invalidProductsRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-inv-prod-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      awsConnConfigInvalidProducts(name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)invalid.*product|value must be one of|cckm`),
+			},
+		},
+	})
+}
+
+// awsConnConfigWithProducts returns a ciphertrust_aws_connection config with
+// the given products list. secret_access_key is intentionally omitted here;
+// Create() falls back to AWS_SECRET_ACCESS_KEY env var to avoid embedding the
+// secret value in test log output.
+func awsConnConfigWithProducts(name string, products []string) string {
+	cfg := fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+`, name, awsAccessKeyID())
+	productItems := ""
+	for i, p := range products {
+		if i > 0 {
+			productItems += ", "
+		}
+		productItems += fmt.Sprintf("%q", p)
+	}
+	cfg += fmt.Sprintf("  products = [%s]\n", productItems)
+	cfg += "}\n"
+	return providerConfig + cfg
+}
+
+// TestAccAWSConnection_InvalidProduct verifies that an invalid products value
+// is rejected at plan time by the schema validator (regression test for TFIN-333).
+func TestAccAWSConnection_InvalidProduct(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-badprod-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      awsConnConfigWithProducts(name, []string{"azure"}),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`value must be one of`),
+			},
+		},
+	})
+}
+
+// TestAccAWSConnection_ProductsDrift verifies that Read() surfaces an out-of-band
+// products change as drift.
+func TestAccAWSConnection_ProductsDrift(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-prod-drift-" + suffix
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnConfigWithProducts(name, []string{"cckm"}),
+				Check: checkStep(t, "products drift: create",
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "products.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "products.0", "cckm"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_aws_connection.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.UpdateData(
+						context.Background(),
+						capturedID,
+						common.URL_AWS_CONNECTION,
+						[]byte(`{"products":[]}`),
+						"id",
+					)
+				},
+				Config:             awsConnConfigWithProducts(name, []string{"cckm"}),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccAWSConnectionCreate verifies that a valid products value is accepted
+// at plan time and correctly stored in state after create.
+func TestAccAWSConnectionCreate(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-create-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnConfigWithProducts(name, []string{"cckm"}),
+				Check: checkStep(t, "products valid value accepted and stored",
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "products.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "products.0", "cckm"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+				),
+			},
+			{
+				Config:   awsConnConfigWithProducts(name, []string{"cckm"}),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 // awsConnConfigNoCredentials returns a ciphertrust_aws_connection config that
 // deliberately omits access_key_id and secret_access_key from HCL, relying on
 // the backwards-compatibility env-var fallback in Create().
