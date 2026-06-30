@@ -1,10 +1,11 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -84,6 +85,17 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	}
 }
 
+// ntpDaemonError is the substring returned by CM when its internal NTP Unix
+// socket is temporarily unavailable (e.g. after a rapid sequence of add/remove
+// operations overwhelms the daemon). Retrying after a short pause resolves it.
+const ntpDaemonError = "Local NTP Unix socket returned a non-successful HTTP code"
+
+// ntpMaxRetries is the number of additional attempts after the first failure.
+const ntpMaxRetries = 3
+
+// ntpRetryDelay is the pause between retry attempts.
+const ntpRetryDelay = 5 * time.Second
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -117,7 +129,17 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+	var response string
+	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
+		if attempt > 0 {
+			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Create] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
+			time.Sleep(ntpRetryDelay)
+		}
+		response, err = r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+		if err == nil || !strings.Contains(err.Error(), ntpDaemonError) {
+			break
+		}
+	}
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -230,9 +252,20 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	// Delete existing license
+	// Delete existing NTP server, retrying if the NTP daemon is temporarily busy.
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_NTP, state.Host.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+	var output string
+	var err error
+	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
+		if attempt > 0 {
+			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Delete] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, state.ID.ValueString()))
+			time.Sleep(ntpRetryDelay)
+		}
+		output, err = r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+		if err == nil || !strings.Contains(err.Error(), ntpDaemonError) {
+			break
+		}
+	}
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
