@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/go-hclog"
+
 	aws "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
 	oci "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
@@ -67,6 +69,8 @@ type ciphertrustProviderModel struct {
 	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
 	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
 	ReplicationDelayMS   types.Int64  `tfsdk:"replication_delay_ms"`
+	LogFile              types.String `tfsdk:"log_file"`
+	LogLevel             types.String `tfsdk:"log_level"`
 }
 
 const (
@@ -150,6 +154,14 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CM_REPLICATION_DELAY", defaultReplicationDelay),
 			},
+			"log_file": schema.StringAttribute{
+				Optional:    true,
+				Description: "Path to the provider log file. Provider logs are written separately from Terraform debug logs. " + fmt.Sprintf(providerDescWithDefault, "log_file", "ctp.log"),
+			},
+			"log_level": schema.StringAttribute{
+				Optional:    true,
+				Description: "Logging level for the provider log file. " + fmt.Sprintf(providerDescWithDefault, "log_level", "info") + " Options: debug, info, warn, error, off.",
+			},
 		},
 	}
 }
@@ -174,6 +186,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
 	var oci_operation_timeout = int64(defaultOciOperationTimeout)
 	var replication_delay_ms = int64(defaultReplicationDelay)
+	var log_file = "ctp.log"
+	var log_level = "info"
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -233,6 +247,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
 		case "replication_delay_ms":
 			replication_delay_ms, _ = strconv.ParseInt(value, 10, 64)
+		case "log_file":
+			log_file = value
+		case "log_level":
+			log_level = value
 		}
 	}
 
@@ -283,6 +301,30 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	// Finally if the provider block has values, make that highest priority
+	if !config.LogFile.IsNull() && config.LogFile.ValueString() != "" {
+		log_file = config.LogFile.ValueString()
+	}
+	if !config.LogLevel.IsNull() && config.LogLevel.ValueString() != "" {
+		log_level = config.LogLevel.ValueString()
+	}
+
+	// Create the provider-specific logger that writes to a dedicated file,
+	// independent of Terraform's TF_LOG output.
+	logFileHandle, err := os.OpenFile(log_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Failed to open provider log file",
+			fmt.Sprintf("Could not open log file %q: %s", log_file, err.Error()),
+		)
+		return
+	}
+	providerLogger := hclog.New(&hclog.LoggerOptions{
+		Name:   "ciphertrust",
+		Level:  hclog.LevelFromString(log_level),
+		Output: logFileHandle,
+	})
+	providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+
 	if !config.Address.IsNull() {
 		address = config.Address.ValueString()
 	}
@@ -442,6 +484,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		client.ReplicationDelay = replication_delay_ms
+		client.Log = providerLogger
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
@@ -458,6 +501,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		client.ReplicationDelay = replication_delay_ms
+		client.Log = providerLogger
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	}
