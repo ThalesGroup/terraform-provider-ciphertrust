@@ -142,14 +142,14 @@ func TestAccCMNTP_Delete404Guard(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig: func() { ntpSweep("time3.google.com") },
+				PreConfig: func() { ntpSweep("time5.google.com") },
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
-  host = "time3.google.com"
+  host = "time5.google.com"
 }
 `,
 				Check: checkStep(t, "delete 404 guard: create",
-					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time3.google.com"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time5.google.com"),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources["ciphertrust_ntp.test"]
 						if !ok {
@@ -177,7 +177,7 @@ resource "ciphertrust_ntp" "test" {
 				},
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
-  host = "time3.google.com"
+  host = "time5.google.com"
 }
 `,
 				Destroy: true,
