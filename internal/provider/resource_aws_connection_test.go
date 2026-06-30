@@ -411,6 +411,85 @@ func TestAccAWSConnection_envVarFallbackWritesToState(t *testing.T) {
 	})
 }
 
+// awsConnConfigInvalidProduct returns HCL for an AWS connection with an invalid products value.
+func awsConnConfigInvalidProduct(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name     = %q
+  products = ["azure"]
+}
+`, name)
+}
+
+// awsConnConfigWithProducts returns HCL for an AWS connection with the given products literal.
+// Omits secret_access_key to avoid logging secrets in test output; relies on env-var fallback in Create().
+func awsConnConfigWithProducts(name, productsLiteral string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name     = %q
+  products = %s
+}
+`, name, productsLiteral)
+}
+
+// TestAccAWSConnection_InvalidProductRejected verifies that terraform plan produces
+// a diagnostic error when products contains an invalid value, preventing the user
+// from reaching terraform apply.
+func TestAccAWSConnection_InvalidProductRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// PlanOnly: true — never calls Apply; verifies plan-phase validation only.
+				PlanOnly:    true,
+				Config:      awsConnConfigInvalidProduct("tftest-invalid-product"),
+				ExpectError: regexp.MustCompile(`(?i)value must be one of`),
+			},
+		},
+	})
+}
+
+// TestAccAWSConnection_ValidProducts verifies the full happy path through the new
+// validator: valid product values are accepted at plan time, applied successfully,
+// updated to a multi-value list, and Read() round-trips products without drift.
+func TestAccAWSConnection_ValidProducts(t *testing.T) {
+	RequireCM(t)
+	resourceName := "ciphertrust_aws_connection.test"
+	suffix := uuid.New().String()[:8]
+	connName := "tftest-valid-products-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with single valid product.
+				Config: awsConnConfigWithProducts(connName, `["cckm"]`),
+				Check: checkStep(t, "create with cckm",
+					resource.TestCheckResourceAttr(resourceName, "products.0", "cckm"),
+					resource.TestCheckResourceAttr(resourceName, "products.#", "1"),
+				),
+			},
+			{
+				// Step 2: Update to two valid products — verifies in-place update path
+				// (products is in update_connection_request_common; no RequiresReplace).
+				Config: awsConnConfigWithProducts(connName, `["cckm", "backup/restore"]`),
+				Check: checkStep(t, "update to two products",
+					resource.TestCheckResourceAttr(resourceName, "products.#", "2"),
+					resource.TestCheckResourceAttr(resourceName, "products.0", "cckm"),
+					resource.TestCheckResourceAttr(resourceName, "products.1", "backup/restore"),
+				),
+			},
+			{
+				// Step 3: Drift detection — RefreshState re-reads from CM and confirms no diff,
+				// verifying that Read() hydrates products correctly from the API response.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestAccAWSConnection_updateComputedFields verifies that Computed fields are
 // refreshed from CM in state after an in-Terraform update, and that Update()
 // does not corrupt the resource ID.
