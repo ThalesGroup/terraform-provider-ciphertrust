@@ -47,8 +47,6 @@ type LocalHostedParamsTFSDK struct {
 
 type AWSCustomKeyStoreCommonTFSDK struct {
 	ID                        types.String   `tfsdk:"id"`
-	AccessKeyID               types.String   `tfsdk:"access_key_id"`
-	SecretAccessKey           types.String   `tfsdk:"secret_access_key"`
 	CloudName                 types.String   `tfsdk:"cloud_name"`
 	CredentialVersion         types.Int64    `tfsdk:"credential_version"`
 	CredentialCount           types.Int64    `tfsdk:"credential_count"`
