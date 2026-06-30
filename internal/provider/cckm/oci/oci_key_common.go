@@ -117,8 +117,8 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 	}
 
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
-	if keyState == keyStateScheduledForDeletion {
-		msg := "OCI key is already scheduled for deletion, it will be removed from state."
+	if keyState == keyStateScheduledForDeletion || keyState == keyStatePendingDeletion {
+		msg := "OCI key is already scheduled for or pending deletion, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		diags.AddWarning(details, "")

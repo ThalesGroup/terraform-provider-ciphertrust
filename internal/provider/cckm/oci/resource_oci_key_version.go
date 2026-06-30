@@ -268,7 +268,7 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	readVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-	if readVersionState == keyStateScheduledForDeletion {
+	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
@@ -304,7 +304,7 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 		return
 	}
 	updateVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-	if updateVersionState == keyStateScheduledForDeletion {
+	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
