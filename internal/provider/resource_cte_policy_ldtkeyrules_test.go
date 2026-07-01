@@ -34,12 +34,6 @@ resource "ciphertrust_cm_key" "key1" {
   xts          = false
 
   meta = {
-    permissions = {
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
- 
-    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"
@@ -87,12 +81,6 @@ resource "ciphertrust_cm_key" "key1" {
   xts          = false
 
   meta = {
-    permissions = {
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
-
-    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"
@@ -111,12 +99,6 @@ resource "ciphertrust_cm_key" "key2" {
   xts          = false
 
   meta = {
-    permissions = {
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
-      delete_key           = ["Key Users", "Key Admins"]
-
-    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"
