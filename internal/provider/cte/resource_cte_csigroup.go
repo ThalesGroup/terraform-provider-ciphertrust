@@ -11,6 +11,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -24,8 +25,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTECSIGroup{}
-	_ resource.ResourceWithConfigure = &resourceCTECSIGroup{}
+	_ resource.Resource                = &resourceCTECSIGroup{}
+	_ resource.ResourceWithConfigure   = &resourceCTECSIGroup{}
+	_ resource.ResourceWithImportState = &resourceCTECSIGroup{}
 )
 
 func NewResourceCTECSIGroup() resource.Resource {
@@ -249,6 +251,9 @@ func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest
 	}
 	state.Description = types.StringValue(groupJSON.Description)
 	state.ClientProfile = types.StringValue(groupJSON.ClientProfileName)
+	state.Name = types.StringValue(groupJSON.Name)
+	state.Namespace = types.StringValue(groupJSON.K8sNamespace)
+	state.StorageClass = types.StringValue(groupJSON.K8sStorageClass)
 
 	// Get guard policies
 	gpResponse, err := r.client.GetById(
@@ -331,6 +336,19 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	//immutable field handling
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change CSI group name once it is created", "Name is an immutable field")
+		return
+	}
+	if plan.Namespace.ValueString() != state.Namespace.ValueString() {
+		resp.Diagnostics.AddError("Cannot change CSI group namespace once it is created", "Namespace is an immutable field")
+		return
+	}
+	if plan.StorageClass.ValueString() != state.StorageClass.ValueString() {
+		resp.Diagnostics.AddError("Cannot change CSI group storage class once it is created", "Storage class is an immutable field")
 		return
 	}
 	if plan.OpType.ValueString() != "" {
@@ -513,4 +531,11 @@ func (d *resourceCTECSIGroup) Configure(_ context.Context, req resource.Configur
 	}
 
 	d.client = client
+}
+
+func (r *resourceCTECSIGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_csigroup.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

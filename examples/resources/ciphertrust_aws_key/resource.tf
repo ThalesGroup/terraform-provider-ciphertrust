@@ -24,7 +24,7 @@ resource "ciphertrust_aws_kms" "kms" {
 }
 
 resource "ciphertrust_scheduler" "scheduled_rotation" {
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name       = "aws"
     expiration       = "2d"
     aws_retain_alias = true
@@ -35,42 +35,32 @@ resource "ciphertrust_scheduler" "scheduled_rotation" {
   run_on    = "any"
 }
 
-# Define a 2048 bit RSA AWS key
+# Define a native AWS symmetric key
 resource "ciphertrust_aws_key" "aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
+  kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
 }
 
-# Define an AES CipherTrust key to upload to AWS
-resource "ciphertrust_cm_key" "cm_key" {
-  name      = "cm-key-name"
-  algorithm = "aes"
-}
-
-# Upload an existing CipherTrust key to AWS
-resource "ciphertrust_aws_key" "upload_aws_key" {
-  kms    = ciphertrust_aws_kms.kms.id
+# Define a native AWS RSA 2048 key with an alias and description
+resource "ciphertrust_aws_key" "aws_rsa_key" {
+  kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
-  upload_key {
-    source_key_identifier = ciphertrust_cm_key.cm_key.id
+  aws_param = {
+    alias                    = ["my-rsa-key"]
+    customer_master_key_spec = "RSA_2048"
+    description              = "RSA 2048 key"
+    key_usage                = "ENCRYPT_DECRYPT"
   }
-}
-
-# Define a new CipherTrust key and import its key material to a new AWS key
-resource "ciphertrust_aws_key" "import_aws_key" {
-  import_key_material {
-    source_key_name = "key-name"
-  }
-  kms    = ciphertrust_aws_kms.kms.id
-  region = ciphertrust_aws_kms.kms.regions[0]
 }
 
 # Define a multi-region key
 resource "ciphertrust_aws_key" "aws_multiregion_key" {
-  kms          = ciphertrust_aws_kms.kms.id
-  multi_region = true
-  region       = ciphertrust_aws_kms.kms.regions[0]
-  enable_rotation {
+  kms_id = ciphertrust_aws_kms.kms.id
+  region = ciphertrust_aws_kms.kms.regions[0]
+  aws_param = {
+    multi_region = true
+  }
+  enable_rotation = {
     disable_encrypt = false
     job_config_id   = ciphertrust_scheduler.scheduled_rotation.id
     key_source      = "ciphertrust"
@@ -80,35 +70,18 @@ resource "ciphertrust_aws_key" "aws_multiregion_key" {
 # Replicate the above key and make the replica the primary key
 resource "ciphertrust_aws_key" "replicated_key" {
   region = ciphertrust_aws_kms.kms.regions[1]
-  replicate_key {
-    key_id       = ciphertrust_aws_key.aws_multiregion_key.key_id
+  replicate_key = {
+    key_id       = ciphertrust_aws_key.aws_multiregion_key.id
     make_primary = true
   }
 }
 
-# Define an AWS multi-region key and import its key material from a CipherTrust key
-resource "ciphertrust_aws_key" "aws_external_multiregion_key" {
-  import_key_material {
-    source_key_name = "cm-key-name"
-  }
-  kms          = ciphertrust_aws_kms.kms.id
-  multi_region = true
-  region       = ciphertrust_aws_kms.kms.regions[0]
-}
-
-# Replicate the above key to another region and import the same key material to the replica
-resource "ciphertrust_aws_key" "external_replicated_key" {
-  region = ciphertrust_aws_kms.kms.regions[1]
-  replicate_key {
-    import_key_material = true
-    key_id              = ciphertrust_aws_key.aws_external_multiregion_key.key_id
-  }
-}
-
-# Define am AWS key and enable autorotation by AWS
+# Define an AWS key and enable autorotation by AWS
 resource "ciphertrust_aws_key" "auto_rotated_aws_key" {
-  kms                          = ciphertrust_aws_kms.kms.id
-  region                       = ciphertrust_aws_kms.kms.regions[0]
-  auto_rotate                  = true
-  auto_rotation_period_in_days = 128
+  kms_id      = ciphertrust_aws_kms.kms.id
+  region      = ciphertrust_aws_kms.kms.regions[0]
+  auto_rotate = true
+  aws_param = {
+    auto_rotation_period_in_days = 128
+  }
 }

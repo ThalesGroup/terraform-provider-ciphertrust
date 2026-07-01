@@ -54,7 +54,8 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name.",
+				Description: "Unique connection name. Immutable after creation.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,

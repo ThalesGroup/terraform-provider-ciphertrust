@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/acctest"
@@ -50,6 +51,41 @@ resource "ciphertrust_domain" "testDomain" {
 				),
 			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+// TestCMDomainNameImmutable verifies that attempting to rename a domain after
+// creation produces a clear, actionable plan-time error rather than silent
+// state drift.
+func TestCMDomainNameImmutable(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-domain-" + acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "testDomain" {
+  name   = %q
+  admins = ["admin"]
+}
+`, rName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.testDomain", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.testDomain", "name", rName),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "testDomain" {
+  name   = %q
+  admins = ["admin"]
+}
+`, rName+"-renamed"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`cannot be changed`),
+			},
 		},
 	})
 }

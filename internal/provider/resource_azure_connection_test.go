@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -42,9 +43,9 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 				),
 			},
 
-			// Step 2: Update the resource
-			{
-				Config: providerConfig + `
+		// Step 2: Update the resource
+		{
+			Config: providerConfig + `
 resource "ciphertrust_azure_connection" "azure_connection" {
   name        = "TestAzureConnection"
   client_id="updated-client-id"
@@ -55,15 +56,29 @@ resource "ciphertrust_azure_connection" "azure_connection" {
   description = "updated description of the connection"
   
 }
-				`,
+			`,
 
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "tenant_id", "updated-tenant-id"),
-					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "description", "updated description of the connection"),
-					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "client_id", "updated-client-id"),
-				),
-			},
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "tenant_id", "updated-tenant-id"),
+				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "description", "updated description of the connection"),
+				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "client_id", "updated-client-id"),
+			),
 		},
+
+		// Step 3: Attempt to rename — must fail at plan time with a clear error.
+		{
+			Config: providerConfig + `
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name      = "TestAzureConnection-renamed"
+  client_id = "updated-client-id"
+  tenant_id = "updated-tenant-id"
+  products  = ["cckm"]
+}
+`,
+			ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+			PlanOnly:    true,
+		},
+	},
 	})
 }
 

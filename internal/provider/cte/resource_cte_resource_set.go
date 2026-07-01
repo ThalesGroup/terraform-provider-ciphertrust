@@ -13,6 +13,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -25,8 +26,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEResourceSet{}
-	_ resource.ResourceWithConfigure = &resourceCTEResourceSet{}
+	_ resource.Resource                = &resourceCTEResourceSet{}
+	_ resource.ResourceWithConfigure   = &resourceCTEResourceSet{}
+	_ resource.ResourceWithImportState = &resourceCTEResourceSet{}
 )
 
 func NewResourceCTEResourceSet() resource.Resource {
@@ -275,12 +277,26 @@ func (r *resourceCTEResourceSet) Read(ctx context.Context, req resource.ReadRequ
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCTEResourceSet) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan CTEResourceSetTFSDK
+	var plan, state CTEResourceSetTFSDK
 	var payload CTEResourceSetJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	//immutable fields handling
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change resource set name once it is created", "Name is an immutable field")
+		return
+	}
+	if plan.Type.ValueString() != state.Type.ValueString() {
+		resp.Diagnostics.AddError("Cannot change resource set type", "Type is an immutable field")
 		return
 	}
 
@@ -427,4 +443,11 @@ func setCTEResourceSetState(
 		resources = append(resources, resourceObj)
 	}
 	state.Resources = resources
+}
+
+func (r *resourceCTEResourceSet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_resource_set.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_resource_set.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

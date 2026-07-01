@@ -67,7 +67,7 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 			},
 			"key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manger resource ID of an AWS key.",
+				Description: "CipherTrust Manager ID of an AWS key.",
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
@@ -129,7 +129,7 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 						},
 						"id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The CipherTrust Manager resource ID for this rotation.",
+							Description: "The CipherTrust Manager ID for this rotation.",
 						},
 						"key_material_origin": schema.StringAttribute{
 							Computed:    true,
@@ -149,11 +149,11 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 						},
 						"kms_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "CipherTrust Manager AWS KMS resource ID.",
+							Description: "CipherTrust Manager AWS KMS ID.",
 						},
 						"source_key_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The CipherTrust Manager resource ID of the key used for the key material.",
+							Description: "The CipherTrust Manager ID of the key used for the key material.",
 						},
 						"source_key_name": schema.StringAttribute{
 							Computed:    true,
@@ -195,7 +195,7 @@ func (d *dataSourceAWSKeyRotationList) Read(ctx context.Context, req datasource.
 	keyID := state.KeyID.ValueString()
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotations", filters)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
+		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS key rotation list from CipherTrust Manager",
 			err.Error(),
@@ -206,7 +206,7 @@ func (d *dataSourceAWSKeyRotationList) Read(ctx context.Context, req datasource.
 	var rotations DataSourceKeyRotationsJSON
 	err = json.Unmarshal([]byte(jsonStr), &rotations)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
+		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS key rotation list from CipherTrust Manager",
 			err.Error(),

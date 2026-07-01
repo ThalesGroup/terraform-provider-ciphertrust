@@ -229,7 +229,11 @@ func (r *resourceCMClusterNode) Create(ctx context.Context, req resource.CreateR
 	if !strings.Contains(nodeURL, "://") {
 		nodeURL = "https://" + nodeURL
 	}
-	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, true, 180)
+	// Joining nodes present their self-signed bootstrap certificate during the
+	// CSR exchange; certificate verification is not applicable until after the
+	// node has been issued a cluster-trusted cert.
+	nodeTLS := common.TLSOptions{InsecureSkipVerify: true}
+	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, nodeTLS, 180)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError("Unable to create HTTPS client for the joining node.", err.Error())
@@ -521,7 +525,7 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 		lastErr    error
 	)
 	for attempt := 1; attempt <= readMaxRetries; attempt++ {
-		nodeClient, lastErr = common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, true, 180)
+		nodeClient, lastErr = common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, common.TLSOptions{InsecureSkipVerify: true}, 180)
 		if lastErr != nil {
 			tflog.Info(ctx, fmt.Sprintf("[resource_cm_cluster_node.go -> Read] attempt %d/%d: NewClient failed: %s", attempt, readMaxRetries, lastErr))
 			if attempt < readMaxRetries {
@@ -667,7 +671,7 @@ func (r *resourceCMClusterNode) Delete(ctx context.Context, req resource.DeleteR
 	if !strings.Contains(nodeURL, "://") {
 		nodeURL = "https://" + nodeURL
 	}
-	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, true, 180)
+	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, common.TLSOptions{InsecureSkipVerify: true}, 180)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Delete]["+id+"]")
 		resp.Diagnostics.AddError("Unable to create HTTPS client for the removed node", err.Error())

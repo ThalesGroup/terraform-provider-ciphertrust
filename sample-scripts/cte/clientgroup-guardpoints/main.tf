@@ -38,7 +38,7 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "dir_auto_gp_cg" {
     "/test/gp_cg1" = {
       guard_point_params = {
        guard_point_type = "directory_manual"
-        policy_id        = ciphertrust_cte_policy.standard_policy.name
+        policy_id        = ciphertrust_cte_policy.standard_policy.id
         #mfa_enabled = true
         #guard_enabled = false
       }

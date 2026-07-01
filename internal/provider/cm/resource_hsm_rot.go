@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -185,6 +186,14 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 
 	_, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"HSM Root of Trust Not Found",
+				"The HSM Root of Trust resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading HSM Server on CipherTrust Manager: ",

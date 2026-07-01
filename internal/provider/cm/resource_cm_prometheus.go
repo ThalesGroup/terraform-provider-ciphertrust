@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -111,6 +112,14 @@ func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadReques
 
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_PROMETHEUS_STATUS)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Prometheus Integration Not Found",
+				"The Prometheus Integration resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_prometheus.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching Prometheus status: "+err.Error())
 		return

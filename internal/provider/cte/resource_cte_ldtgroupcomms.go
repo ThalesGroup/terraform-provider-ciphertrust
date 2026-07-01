@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
@@ -23,8 +24,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceLDTGroupCommSvc{}
-	_ resource.ResourceWithConfigure = &resourceLDTGroupCommSvc{}
+	_ resource.Resource                = &resourceLDTGroupCommSvc{}
+	_ resource.ResourceWithConfigure   = &resourceLDTGroupCommSvc{}
+	_ resource.ResourceWithImportState = &resourceLDTGroupCommSvc{}
 )
 
 func NewResourceLDTGroupCommSvc() resource.Resource {
@@ -161,6 +163,7 @@ func (r *resourceLDTGroupCommSvc) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
+	state.Name = types.StringValue(apiResp.Name)
 	// Sync description
 	if apiResp.Description != "" {
 		state.Description = types.StringValue(apiResp.Description)
@@ -211,6 +214,12 @@ func (r *resourceLDTGroupCommSvc) Update(ctx context.Context, req resource.Updat
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//immutable field handling
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change name once the LDT comm group is created", "Name is an immutable field")
 		return
 	}
 
@@ -422,4 +431,11 @@ func (d *resourceLDTGroupCommSvc) Configure(_ context.Context, req resource.Conf
 	}
 
 	d.client = client
+}
+
+func (r *resourceLDTGroupCommSvc) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_ldtcommgrps.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_ldtcommgrps.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

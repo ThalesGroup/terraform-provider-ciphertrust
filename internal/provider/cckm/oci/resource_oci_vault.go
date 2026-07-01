@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -95,7 +96,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"bucket_namespace": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Namespace of the OCI bucket, bucket_name. This parameter is required if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
+				Description: "(Updatable) Namespace of the OCI bucket, bucket_name. This parameter is **Required** if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -111,8 +112,12 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager OCI connection ID or connection name. When importing an existing vault use the connection name.",
+				Description: "(Updatable) CipherTrust Manager OCI connection ID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"connection_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.",
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
@@ -226,8 +231,28 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
+	connResponse, connErr := r.client.GetById(ctx, id, plan.ConnectionID.ValueString(), common.URL_OCI_CONNECTION)
+	if connErr != nil {
+		msg := "Error adding OCI vault, failed to read OCI connection by 'connection_id'."
+		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
+		msg := "Error adding OCI vault: connection_id must be a resource ID of an OCI connection."
+		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+	connAccount := gjson.Get(connResponse, "account").String()
+	mutexKey := fmt.Sprintf("oci-vault-%s", connAccount)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+
 	payload := models.AddVaultsPayloadJSON{
-		Connection: plan.Connection.ValueString(),
+		Connection: plan.ConnectionID.ValueString(),
 		Region:     plan.Region.ValueString(),
 		VaultIDs:   []string{plan.VaultID.ValueString()},
 	}
@@ -261,7 +286,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 		for _, vaultJSON := range vaultsJSON {
 			plan.ID = types.StringValue(gjson.Get(vaultJSON.Raw, "id").String())
 			var diags diag.Diagnostics
-			r.setVaultState(ctx, vaultJSON.Raw, &plan, &diags)
+			r.setVaultState(ctx, id, vaultJSON.Raw, &plan, &diags)
 			for _, d := range diags {
 				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 			}
@@ -282,7 +307,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	} else {
 		var diags diag.Diagnostics
 		tflog.Debug(ctx, "[resource_oci_vault.go -> Create][response:"+redactOCIResponse(getResponse)+"]")
-		r.setVaultState(ctx, getResponse, &plan, &diags)
+		r.setVaultState(ctx, id, getResponse, &plan, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
@@ -291,6 +316,8 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 }
 
 // Read refreshes the Terraform state for an OCI vault. Uses getOciVault as a pre-flight check.
+// A 404 response is treated as an error so state is preserved until the resource is explicitly
+// removed (terraform destroy or removed from config).
 func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Read]["+id+"]")
@@ -301,30 +328,14 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 	vaultID := state.ID.ValueString()
-	// Save the prior connection value before getOciVault and setVaultState run.
-	priorConn := state.Connection.ValueString()
 	response := getOciVault(ctx, id, r.client, vaultID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
+	// setVaultState refreshes all computed fields including connection_name and connection_id.
+	r.setVaultState(ctx, id, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
-	}
-	// Preserve the user-supplied connection_id form (name or UUID) when it resolves
-	// to the same connection that the API reports, so configs using either form do
-	// not produce spurious plan drift after every refresh.
-	// Only overwrite when the connection has genuinely changed out-of-band.
-	apiConnName := gjson.Get(response, "connection").String()
-	state.Connection = types.StringValue(apiConnName)
-	if priorConn != "" && priorConn != apiConnName {
-		connResp, connErr := r.client.GetById(ctx, id, priorConn, common.URL_OCI_CONNECTION)
-		if connErr == nil && gjson.Get(connResp, "name").String() == apiConnName {
-			// Same connection, different representation - restore the prior value so
-			// that users who specify a UUID do not see spurious drift.
-			state.Connection = types.StringValue(priorConn)
-		}
-		// else: genuine out-of-band change - keep the API name.
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -347,18 +358,35 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
+	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
+		connResp, connErr := r.client.GetById(ctx, id, plan.ConnectionID.ValueString(), common.URL_OCI_CONNECTION)
+		if connErr != nil {
+			msg := "Error updating OCI vault, failed to read OCI connection by 'connection_id'."
+			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
+			msg := "Error updating OCI vault: connection_id must be a resource ID of an OCI connection."
+			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
+			tflog.Error(ctx, details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+	}
 	vaultID := state.ID.ValueString()
 	response := getOciVault(ctx, id, r.client, vaultID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if plan.Connection.ValueString() != gjson.Get(response, "connection").String() ||
+	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() ||
 		plan.BucketName.ValueString() != gjson.Get(response, "bucket_name").String() ||
 		plan.BucketNamespace.ValueString() != gjson.Get(response, "bucket_namespace").String() {
 
 		var payload models.UpdateVaultJSON
-		if plan.Connection.ValueString() != gjson.Get(response, "connection").String() {
-			payload.Connection = plan.Connection.ValueStringPointer()
+		if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
+			payload.Connection = plan.ConnectionID.ValueStringPointer()
 		}
 		if plan.BucketName.ValueString() != gjson.Get(response, "bucket_name").String() {
 			payload.BucketName = plan.BucketName.ValueStringPointer()
@@ -394,11 +422,10 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		response = updatedResponse
 	}
 	tflog.Debug(ctx, "[resource_oci_vault.go -> Update][response:"+redactOCIResponse(response)+"]")
-	r.setVaultState(ctx, response, &state, &resp.Diagnostics)
+	r.setVaultState(ctx, id, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	state.Connection = plan.Connection
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -454,7 +481,21 @@ func (r *resourceCCKMOCIVault) ModifyPlan(ctx context.Context, req resource.Modi
 	}
 
 	if plan.VaultID != state.VaultID {
-		changed = append(changed, "vault_id")
+		connID := state.ConnectionID.ValueString()
+		if connID != "" {
+			id := uuid.New().String()
+			_, err := r.client.GetById(ctx, id, connID, common.URL_OCI_CONNECTION)
+			if err != nil && strings.Contains(err.Error(), notFoundError) {
+				msg := "Previous OCI connection was not found, allowing vault_id update."
+				details := utils.ApiError(msg, map[string]interface{}{"connection_id": connID})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				changed = append(changed, "vault_id")
+			}
+		} else {
+			changed = append(changed, "vault_id")
+		}
 	}
 
 	if len(changed) > 0 {
@@ -476,7 +517,9 @@ func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.Imp
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response string, state *models.VaultTFSDK, diags *diag.Diagnostics) {
+// setVaultState populates the Terraform state for an OCI vault from an API response JSON string.
+// connection_name is set from the API "connection" field; connection_id is resolved via lookup.
+func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, reqID string, response string, state *models.VaultTFSDK, diags *diag.Diagnostics) {
 	setCommonVaultState(ctx, response, &state.VaultCommonTFSDK, diags)
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
 	state.BucketNamespace = types.StringValue(gjson.Get(response, "bucket_namespace").String())
@@ -497,6 +540,7 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, response strin
 	if diags.HasError() {
 		return
 	}
+	r.resolveConnectionByIDOrName(ctx, reqID, gjson.Get(response, "connection").String(), state, diags)
 }
 
 // setCommonVaultState populates VaultCommonTFSDK fields from a JSON response string.
@@ -512,6 +556,7 @@ func setCommonVaultState(ctx context.Context, response string, state *models.Vau
 	state.IsPrimary = types.BoolValue(gjson.Get(response, "is_primary").Bool())
 	state.LifecycleState = types.StringValue(gjson.Get(response, "lifecycle_state").String())
 	state.ManagementEndpoint = types.StringValue(gjson.Get(response, "management_endpoint").String())
+	state.ConnectionName = types.StringValue(gjson.Get(response, "connection").String())
 	state.RestoredFromVaultID = types.StringValue(gjson.Get(response, "restored_from_vault_id").String())
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.ReplicationID = types.StringValue(gjson.Get(response, "replication_id").String())
@@ -522,4 +567,51 @@ func setCommonVaultState(ctx context.Context, response string, state *models.Vau
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.VaultType = types.StringValue(gjson.Get(response, "vault_type").String())
 	state.WrappingkeyID = types.StringValue(gjson.Get(response, "wrappingkey_id").String())
+}
+
+// resolveConnectionByIDOrName resolves an OCI connection from the value stored in the API
+// "connection" field, which may be a UUID or a human-readable name. It first attempts a
+// GetById lookup; on a 404 it falls back to a name-based list query. Both connection_id
+// and connection_name are written into state. An error is added to diags if all lookups fail.
+func (r *resourceCCKMOCIVault) resolveConnectionByIDOrName(ctx context.Context, reqID string, connValue string, state *models.VaultTFSDK, diags *diag.Diagnostics) {
+	if connValue == "" {
+		return
+	}
+	// Try lookup by ID first.
+	connResp, err := r.client.GetById(ctx, reqID, connValue, common.URL_OCI_CONNECTION)
+	if err != nil && !strings.Contains(err.Error(), notFoundError) {
+		msg := "Error resolving OCI connection by ID."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	if err == nil {
+		state.ConnectionID = types.StringValue(gjson.Get(connResp, "id").String())
+		state.ConnectionName = types.StringValue(gjson.Get(connResp, "name").String())
+		return
+	}
+	// 404 - fall back to lookup by name.
+	listResp, err := r.client.GetAll(ctx, reqID, common.URL_OCI_CONNECTION+"?name="+connValue)
+	if err != nil {
+		msg := "Error resolving OCI connection by name."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	resources := gjson.Get(listResp, "resources").Array()
+	if len(resources) == 0 {
+		msg := "OCI connection not found by ID or name."
+		details := utils.ApiError(msg, map[string]interface{}{"connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	connID := resources[0].Get("id").String()
+	if connID == "" {
+		msg := "OCI connection found by name but ID is empty."
+		details := utils.ApiError(msg, map[string]interface{}{"connection": connValue})
+		diags.AddError(details, "")
+		return
+	}
+	state.ConnectionID = types.StringValue(connID)
+	state.ConnectionName = types.StringValue(resources[0].Get("name").String())
 }

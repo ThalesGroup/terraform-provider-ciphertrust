@@ -18,7 +18,7 @@ func TestCckmAWSDataSourceAccountDetails(t *testing.T) {
 		  name = "tf-test-%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
-		  aws_connection = ciphertrust_aws_connection.aws_connection.id
+		  connection_id = ciphertrust_aws_connection.aws_connection.id
 		}`
 	datasourceName := "data.ciphertrust_aws_account_details.account_details"
 

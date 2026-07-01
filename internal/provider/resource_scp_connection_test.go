@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -58,14 +59,31 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   products = ["backup/restore"]
 }
 				`,
-				// verifying the updated field username,port and protocol
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "protocol", "sftp"),
-					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "port", "2022"),
-					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "username", "updated-user"),
-				),
-			},
+			// verifying the updated field username,port and protocol
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "protocol", "sftp"),
+				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "port", "2022"),
+				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "username", "updated-user"),
+			),
 		},
+
+		// Step 3: Attempt to rename — must fail at plan time with a clear error.
+		{
+			Config: providerConfig + `
+resource "ciphertrust_scp_connection" "scp_connection" {
+  name        = "TestSCPConnection-renamed"
+  host        = "test-host"
+  username    = "updated-user"
+  auth_method = "key"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNxnOBfBVU4L3fQBVWK71CdoHXmFNxkD0lFYDagM8etytGxRMQeOSeARUYQA+xC/8ig+LHimQ97L0XPSCvTr/XbXxOYBOdGHFqr1o6QwmSBABoPz0fvfCHaipAdwGlfS50aDbCWYZSd9UX6stOazCPdQ9wiiGD0+wYmagxBtrBlzrXiXKV3q+GNr6iIlejsv2aK"
+  path_to     = "/home/testUser/data/"
+  products    = ["backup/restore"]
+}
+`,
+			ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+			PlanOnly:    true,
+		},
+	},
 	})
 }
 

@@ -18,7 +18,10 @@ func (m ListUseStateForUnknown) MarkdownDescription(ctx context.Context) string 
 
 func (m ListUseStateForUnknown) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
 	// If the plan value is unknown, use the state value.
-	if req.PlanValue.IsUnknown() {
+	// Only copy prior state when state is not null (i.e., an existing resource).
+	// On create, state is null; leaving the plan as Unknown tells Terraform the
+	// value will be determined after apply, avoiding a "null vs list" inconsistency.
+	if req.PlanValue.IsUnknown() && !req.StateValue.IsNull() {
 		resp.PlanValue = req.StateValue
 	}
 }

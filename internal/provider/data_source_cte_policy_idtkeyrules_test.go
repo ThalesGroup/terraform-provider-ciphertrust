@@ -9,6 +9,8 @@ import (
 )
 
 func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
+	RequireCM(t)
+
 	policyName := "tf-policy-idt-" + uuid.New().String()[:8]
 	keyName := "tf-key-idt-" + uuid.New().String()[:8]
 
@@ -23,10 +25,10 @@ func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
 			xts          = true
 			meta = {
 				permissions = {
-					decrypt_with_key     = ["CTE Clients"]
-					encrypt_with_key     = ["CTE Clients"]
 					export_key           = ["CTE Clients"]
 					read_key             = ["CTE Clients"]
+					delete_key           = ["Key Users", "Key Admins"]
+ 
 				}
 				cte = {
 					persistent_on_client = true

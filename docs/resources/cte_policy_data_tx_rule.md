@@ -21,12 +21,7 @@ description: |-
 
 ### Optional
 
-- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `rule` (Attributes) (see [below for nested schema](#nestedatt--rule))
-
-### Read-Only
-
-- `rule_id` (String) ID of the Data TX Rule created in the parent policy
 
 <a id="nestedatt--rule"></a>
 ### Nested Schema for `rule`
@@ -35,4 +30,9 @@ Optional:
 
 - `key_id` (String) Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id. Note: For decryption, where a clear key is to be supplied, use the string "clear_key" only. Do not specify any other identifier.
 - `key_type` (String) Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.
+- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `resource_set_id` (String) ID of the resource set linked with the rule.
+
+Read-Only:
+
+- `id` (String) Identifier of the data transform rule.

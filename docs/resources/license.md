@@ -3,12 +3,12 @@
 page_title: "ciphertrust_license Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager license. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_license (Resource)
 
-
+Manages a CipherTrust Manager license. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 

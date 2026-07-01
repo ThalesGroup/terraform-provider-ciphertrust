@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -72,12 +73,13 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Description about the connection. Once set, 'description' can be changed but not removed.",
 			},
 			"id": schema.StringAttribute{
-				Computed:    true,
+				Computed:      true,
 				Description:   "CipherTrust Manager resource ID of the connection.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"key_file": schema.StringAttribute{
 				Required:    true,
+				Sensitive:   true,
 				Description: "Path to or data of the OCI private key file (PEM format).",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -85,6 +87,7 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"key_file_pass_phrase": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Passphrase if the OCI key file is encrypted.",
 			},
 			"meta": schema.MapAttribute{
@@ -93,8 +96,9 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Optional end-user or service data stored with the connection.",
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Unique connection name",
+				Required:      true,
+				Description:   "Unique connection name. Immutable after creation — changing this field will produce a plan-time error.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"pub_key_fingerprint": schema.StringAttribute{
 				Required:    true,
@@ -419,6 +423,10 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	if plan.UserOcid.ValueString() != gjson.Get(response, "user_ocid").String() {
 		payload.UserOCID = plan.UserOcid.ValueString()
+	}
+
+	if plan.Region.ValueString() != gjson.Get(response, "region").String() {
+		payload.Region = plan.Region.ValueString()
 	}
 
 	payloadJSON, err := json.Marshal(payload)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -17,8 +18,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEPolicySignatureRule{}
-	_ resource.ResourceWithConfigure = &resourceCTEPolicySignatureRule{}
+	_ resource.Resource                = &resourceCTEPolicySignatureRule{}
+	_ resource.ResourceWithConfigure   = &resourceCTEPolicySignatureRule{}
+	_ resource.ResourceWithImportState = &resourceCTEPolicySignatureRule{}
 )
 
 func NewResourceCTEPolicySignatureRule() resource.Resource {
@@ -191,6 +193,12 @@ func (r *resourceCTEPolicySignatureRule) Update(ctx context.Context, req resourc
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//immutable field handling
+	if plan.CTEPolicyID.ValueString() != state.CTEPolicyID.ValueString() {
+		resp.Diagnostics.AddError("Cannot change policy ID associated with policy rule", "Policy ID is an immutable field")
 		return
 	}
 
@@ -474,4 +482,33 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+func (r *resourceCTEPolicySignatureRule) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Import ID format: "policy_id:signature_rule_id"
+	parts := strings.Split(req.ID, ":")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		resp.Diagnostics.AddError(
+			"Invalid import ID",
+			"Expected format: policy_id:signature_rule_id",
+		)
+		return
+	}
+
+	policyID := parts[0]
+	ruleID := parts[1]
+
+	idsList, diags := types.ListValue(types.StringType, []attr.Value{types.StringValue(ruleID)})
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	state := CTEPolicyAddSignatureRuleTFSDK{
+		CTEPolicyID:      types.StringValue(policyID),
+		SignatureRuleIDs: idsList,
+		SignatureSetList: []types.String{},
+	}
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }

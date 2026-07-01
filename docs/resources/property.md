@@ -3,12 +3,12 @@
 page_title: "ciphertrust_property Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager system property. Only available on CipherTrust Manager — not supported on CDSPaaS, where system properties are managed by the platform.
 ---
 
 # ciphertrust_property (Resource)
 
-
+Manages a CipherTrust Manager system property. **Only available on CipherTrust Manager — not supported on CDSPaaS, where system properties are managed by the platform.**
 
 ## Example Usage
 
@@ -60,7 +60,7 @@ output "cm_property_name" {
 
 ### Optional
 
-- `name` (String) Name of property
+- `name` (String) Name of the system property. Immutable after creation.
 - `value` (String) Value to be set
 
 ### Read-Only

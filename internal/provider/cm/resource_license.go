@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -294,6 +295,14 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"License Not Found",
+				"The License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Licenses on CipherTrust Manager: ",

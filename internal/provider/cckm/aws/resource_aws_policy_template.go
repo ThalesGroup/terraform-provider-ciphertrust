@@ -108,10 +108,14 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 				ElementType: types.StringType,
 				Description: "(Updatable) Key users - roles.",
 			},
-			"kms": schema.StringAttribute{
+			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Name or ID of the KMS to which the template belongs, 'account_id', 'external_accounts' or 'kms' must be provided.",
+				Description: "ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
+			},
+			"kms_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "Name of the KMS to which the template belongs.",
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -154,7 +158,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	}
 	payload := PolicyTemplatePayloadJSON{
 		AccountID:           plan.AccountID.ValueString(),
-		Kms:                 plan.Kms.ValueString(),
+		KmsID:               plan.KmsID.ValueString(),
 		Name:                plan.Name.ValueString(),
 		KeyPolicyParamsJSON: *keyPolicyParams,
 	}
@@ -186,8 +190,8 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 }
 
 // Read refreshes the Terraform state for an AWS key policy template by fetching it from CipherTrust Manager.
-// If the policy template is no longer found (HTTP 404), it is silently removed from Terraform state rather
-// than returning an error, allowing Terraform to plan its recreation.
+// If the policy template is not found (HTTP 404) an error is returned and state is preserved.
+// The resource is only removed from state on "terraform destroy" or when removed from config.
 func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_policy_template.go -> Read]["+id+"]")
@@ -198,17 +202,8 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 	templateID := state.ID.ValueString()
-	response, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Warn(ctx, "[resource_aws_policy_template.go -> Read][template not found, removing from state][template id: "+templateID+"]")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		msg := "Error reading AWS key policy template."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template id": templateID})
-		tflog.Error(ctx, details)
-		resp.Diagnostics.AddError(details, "")
+	response := getAwsPolicyTemplate(ctx, id, r.client, templateID, "reading", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	r.setPolicyTemplateState(ctx, response, &state, &resp.Diagnostics)
@@ -309,22 +304,15 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 		return
 	}
 	templateID := state.ID.ValueString()
-	_, err := r.client.GetById(ctx, id, templateID, common.URL_AWS_POLICY_TEMPLATES)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			msg := "AWS policy template was not found, it will be removed from state."
-			details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-		} else {
-			msg := "Error reading AWS key policy template."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template_id": templateID})
-			tflog.Error(ctx, details)
-			resp.Diagnostics.AddError(details, "")
-		}
+	getAwsPolicyTemplate(ctx, id, r.client, templateID, "deleting", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err = r.client.DeleteByURL(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES+"/"+templateID)
+	if resp.Diagnostics.WarningsCount() > 0 {
+		// 404 - already gone, nothing to delete
+		return
+	}
+	_, err := r.client.DeleteByURL(ctx, templateID, common.URL_AWS_POLICY_TEMPLATES+"/"+templateID)
 	if err != nil {
 		if strings.Contains(err.Error(), "has one or more key associated") {
 			msg := "AWS policy template " + templateID + " has one or more keys associated with it so it can't be deleted. This includes keys scheduled for deletion."
@@ -364,10 +352,10 @@ func (r *resourceAWSPolicyTemplate) ModifyPlan(ctx context.Context, req resource
 	if !plan.AccountID.IsNull() && !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
 		changed = append(changed, "account_id")
 	}
-	// Guard against false positives when kms is not set in config (null in plan)
+	// Guard against false positives when kms_id is not set in config (null in plan)
 	// but has a value in state (set by the API after create).
-	if !plan.Kms.IsNull() && !plan.Kms.IsUnknown() && plan.Kms != state.Kms {
-		changed = append(changed, "kms")
+	if !plan.KmsID.IsNull() && !plan.KmsID.IsUnknown() && plan.KmsID != state.KmsID {
+		changed = append(changed, "kms_id")
 	}
 	if plan.Name != state.Name {
 		changed = append(changed, "name")
@@ -509,7 +497,8 @@ func (r *resourceAWSPolicyTemplate) getUpdatePolicyTemplateParams(ctx context.Co
 // setPolicyTemplateState populates Terraform state for an AWS key policy template from an API response JSON string.
 func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(ctx context.Context, response string, state *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
-	state.Kms = types.StringValue(gjson.Get(response, "kms").String())
+	state.KmsID = types.StringValue(gjson.Get(response, "kms").String())
+	state.KmsName = types.StringValue(gjson.Get(response, "kms_name").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	externalAccounts := gjson.Get(response, "external_accounts").Array()
 	if len(externalAccounts) != 0 {

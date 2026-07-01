@@ -235,6 +235,84 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 	plan.ID = types.StringValue(passwordPolicyName)
 	plan.Name = types.StringValue(passwordPolicyName)
 
+	if !plan.InclusiveMaxTotalLength.IsNull() {
+		if r := gjson.Get(response, "inclusive_max_total_length"); r.Exists() {
+			plan.InclusiveMaxTotalLength = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMaxTotalLength = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinDigits.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_digits"); r.Exists() {
+			plan.InclusiveMinDigits = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinDigits = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinLowerCase.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_lower_case"); r.Exists() {
+			plan.InclusiveMinLowerCase = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinLowerCase = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinOther.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_other"); r.Exists() {
+			plan.InclusiveMinOther = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinOther = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinTotalLength.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_total_length"); r.Exists() {
+			plan.InclusiveMinTotalLength = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinTotalLength = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinUpperCase.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_upper_case"); r.Exists() {
+			plan.InclusiveMinUpperCase = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinUpperCase = types.Int64Null()
+		}
+	}
+	if !plan.PasswordChangeMinDays.IsNull() {
+		if r := gjson.Get(response, "password_change_min_days"); r.Exists() {
+			plan.PasswordChangeMinDays = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordChangeMinDays = types.Int64Null()
+		}
+	}
+	if !plan.PasswordHistoryThreshold.IsNull() {
+		if r := gjson.Get(response, "password_history_threshold"); r.Exists() {
+			plan.PasswordHistoryThreshold = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordHistoryThreshold = types.Int64Null()
+		}
+	}
+	if !plan.PasswordLifetime.IsNull() {
+		if r := gjson.Get(response, "password_lifetime"); r.Exists() {
+			plan.PasswordLifetime = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordLifetime = types.Int64Null()
+		}
+	}
+
+	if plan.FailedLoginsLockoutThresholds != nil {
+		result := gjson.Get(response, "failed_logins_lockout_thresholds")
+		if !result.Exists() {
+			plan.FailedLoginsLockoutThresholds = nil
+		} else {
+			thresholds := []types.Int64{}
+			result.ForEach(func(_, v gjson.Result) bool {
+				thresholds = append(thresholds, types.Int64Value(v.Int()))
+				return true
+			})
+			plan.FailedLoginsLockoutThresholds = thresholds
+		}
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -255,6 +333,14 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PASSWORD_POLICY)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Password Policy Not Found",
+				"The Password Policy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_password_policy.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading User's password policy from CipherTrust Manager: ",
@@ -264,22 +350,84 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 	}
 
 	state.Name = types.StringValue(gjson.Get(response, "policy_name").String())
-	state.InclusiveMaxTotalLength = types.Int64Value(gjson.Get(response, "inclusive_max_total_length").Int())
-	state.InclusiveMinDigits = types.Int64Value(gjson.Get(response, "inclusive_min_digits").Int())
-	state.InclusiveMinLowerCase = types.Int64Value(gjson.Get(response, "inclusive_min_lower_case").Int())
-	state.InclusiveMinOther = types.Int64Value(gjson.Get(response, "inclusive_min_other").Int())
-	state.InclusiveMinTotalLength = types.Int64Value(gjson.Get(response, "inclusive_min_total_length").Int())
-	state.InclusiveMinUpperCase = types.Int64Value(gjson.Get(response, "inclusive_min_upper_case").Int())
-	state.PasswordChangeMinDays = types.Int64Value(gjson.Get(response, "password_change_min_days").Int())
-	state.PasswordHistoryThreshold = types.Int64Value(gjson.Get(response, "password_history_threshold").Int())
-	state.PasswordLifetime = types.Int64Value(gjson.Get(response, "password_lifetime").Int())
 
-	thresholdsData := gjson.Get(response, "failed_logins_lockout_thresholds").Array()
-	var thresholds []types.Int64
-	for _, threshold := range thresholdsData {
-		thresholds = append(thresholds, types.Int64Value(threshold.Int()))
+	if !state.InclusiveMaxTotalLength.IsNull() {
+		if r := gjson.Get(response, "inclusive_max_total_length"); r.Exists() {
+			state.InclusiveMaxTotalLength = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMaxTotalLength = types.Int64Null()
+		}
 	}
-	state.FailedLoginsLockoutThresholds = thresholds
+	if !state.InclusiveMinDigits.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_digits"); r.Exists() {
+			state.InclusiveMinDigits = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMinDigits = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinLowerCase.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_lower_case"); r.Exists() {
+			state.InclusiveMinLowerCase = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMinLowerCase = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinOther.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_other"); r.Exists() {
+			state.InclusiveMinOther = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMinOther = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinTotalLength.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_total_length"); r.Exists() {
+			state.InclusiveMinTotalLength = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMinTotalLength = types.Int64Null()
+		}
+	}
+	if !state.InclusiveMinUpperCase.IsNull() {
+		if r := gjson.Get(response, "inclusive_min_upper_case"); r.Exists() {
+			state.InclusiveMinUpperCase = types.Int64Value(r.Int())
+		} else {
+			state.InclusiveMinUpperCase = types.Int64Null()
+		}
+	}
+	if !state.PasswordChangeMinDays.IsNull() {
+		if r := gjson.Get(response, "password_change_min_days"); r.Exists() {
+			state.PasswordChangeMinDays = types.Int64Value(r.Int())
+		} else {
+			state.PasswordChangeMinDays = types.Int64Null()
+		}
+	}
+	if !state.PasswordHistoryThreshold.IsNull() {
+		if r := gjson.Get(response, "password_history_threshold"); r.Exists() {
+			state.PasswordHistoryThreshold = types.Int64Value(r.Int())
+		} else {
+			state.PasswordHistoryThreshold = types.Int64Null()
+		}
+	}
+	if !state.PasswordLifetime.IsNull() {
+		if r := gjson.Get(response, "password_lifetime"); r.Exists() {
+			state.PasswordLifetime = types.Int64Value(r.Int())
+		} else {
+			state.PasswordLifetime = types.Int64Null()
+		}
+	}
+
+	if state.FailedLoginsLockoutThresholds != nil {
+		result := gjson.Get(response, "failed_logins_lockout_thresholds")
+		if !result.Exists() {
+			state.FailedLoginsLockoutThresholds = nil
+		} else {
+			thresholds := []types.Int64{}
+			result.ForEach(func(_, v gjson.Result) bool {
+				thresholds = append(thresholds, types.Int64Value(v.Int()))
+				return true
+			})
+			state.FailedLoginsLockoutThresholds = thresholds
+		}
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Read]["+id+"]")
 	// Set refreshed state
@@ -399,6 +547,9 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 		output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Delete]["+id+"]["+output+"]")
 		if err != nil {
+			if strings.Contains(err.Error(), "status: 404") {
+				return
+			}
 			resp.Diagnostics.AddError(
 				"Error Deleting User's password policy",
 				"Could not delete User's password policy, unexpected error: "+err.Error(),

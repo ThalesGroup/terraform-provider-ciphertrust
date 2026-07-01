@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -45,6 +44,7 @@ const (
 	keyStateDisabled             = "DISABLED"
 	keyStateUpdating             = "UPDATING"
 	keyStateScheduledForDeletion = "SCHEDULING_DELETION"
+	keyStatePendingDeletion      = "PENDING_DELETION"
 	keyStateChangingCompartment  = "CHANGING_COMPARTMENT"
 	notFoundError                = "status: 404"
 	scheduleForDeletionDays      = 7
@@ -240,14 +240,14 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Description: "The key's region.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Waiting period in days after the key is destroyed before the key is deleted from OCI. Only relevant when the resource is destroyed. Must be between 7 and 30. Default is " + strconv.Itoa(scheduleForDeletionDays) + ".",
-				Default:     int64default.StaticInt64(scheduleForDeletionDays),
-				Validators: []validator.Int64{
-					int64validator.AtLeast(scheduleForDeletionDays),
-					int64validator.AtMost(30),
-				},
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the OCI BYOK key " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: scheduleForDeletionDays}},
+				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
 				Required:    true,
@@ -421,7 +421,7 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 
 // Read refreshes the resource state from the CipherTrust Manager API.
 // Returns an error if the vault or key is not found (HTTP 404).
-// Removes the resource from state only if the key lifecycle state is SCHEDULING_DELETION.
+// Adds a warning if the key lifecycle state is SCHEDULING_DELETION but keeps the resource in state.
 func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key.go -> Read]["+id+"]")
@@ -435,18 +435,16 @@ func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequ
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	response := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
+	response, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	readKeyState := gjson.Get(response, "oci_params.lifecycle_state").String()
-	if readKeyState == keyStateScheduledForDeletion {
-		msg := "OCI BYOK key is scheduled for deletion, removing from state."
+	if readKeyState == keyStateScheduledForDeletion || readKeyState == keyStatePendingDeletion {
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key", readKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
 	}
 	setByokKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -478,17 +476,21 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	preCheckResponse := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
+	preCheckResponse, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	preCheckKeyState := gjson.Get(preCheckResponse, "oci_params.lifecycle_state").String()
-	if preCheckKeyState == keyStateScheduledForDeletion {
-		msg := "OCI BYOK key is scheduled for deletion, removing from state."
+	if preCheckKeyState == keyStateScheduledForDeletion || preCheckKeyState == keyStatePendingDeletion {
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key", preCheckKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
+		setByokKeyState(ctx, id, r.client, preCheckResponse, &plan, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
 
@@ -572,7 +574,21 @@ func (r *resourceCCKMOCIByokKey) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 
 	if plan.Vault != state.Vault {
-		changed = append(changed, "vault")
+		vaultCMID := state.Vault.ValueString()
+		if vaultCMID != "" {
+			id := uuid.New().String()
+			_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
+			if err != nil && strings.Contains(err.Error(), notFoundError) {
+				msg := "Previous OCI vault was not found, allowing vault update."
+				details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
+				tflog.Warn(ctx, details)
+				resp.Diagnostics.AddWarning(details, "")
+			} else {
+				changed = append(changed, "vault")
+			}
+		} else {
+			changed = append(changed, "vault")
+		}
 	}
 
 	if len(changed) > 0 {

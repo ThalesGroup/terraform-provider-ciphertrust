@@ -44,7 +44,7 @@ description: |-
 - `server_response_rate` (Number) the percentage value of successful API calls to the server, for which the agent will consider the server to be working fine. If the value is set to 75 then, if the server responds to 75 percent of the calls it is considered OK & no update is sent by agent. Valid values are between 0 to 100, both inclusive. Default value is 0.
 - `server_settings` (Attributes List) Server configuration of cluster nodes. These settings are allowed only in cluster environment. (see [below for nested schema](#nestedatt--server_settings))
 - `syslog_settings` (Attributes) Parameters to configure the Syslog server. (see [below for nested schema](#nestedatt--syslog_settings))
-- `upload_settings` (Attributes Map) Configure log upload to the Syslog server. (see [below for nested schema](#nestedatt--upload_settings))
+- `upload_settings` (Attributes) Configure log upload. (see [below for nested schema](#nestedatt--upload_settings))
 
 ### Read-Only
 
@@ -148,8 +148,10 @@ Optional:
 
 Optional:
 
-- `duplicates` (String) Control duplicate entries, ALLOW or SUPPRESS
-- `file_enabled` (Boolean) Whether to enable file upload.
-- `syslog_enabled` (Boolean) Whether to enable support for the Syslog server.
-- `threshold` (String) Threshold value
-- `upload_enabled` (Boolean) Whether to enable log upload to the URL.
+- `connection_timeout` (Number)
+- `drop_if_busy` (Boolean)
+- `job_completion_timeout` (Number)
+- `max_interval` (Number)
+- `max_messages` (Number)
+- `min_interval` (Number)
+- `upload_threshold` (String)

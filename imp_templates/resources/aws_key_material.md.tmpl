@@ -1,0 +1,55 @@
+---
+page_title: "{{.Type}} {{.Name}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}} "{{.Name}}" ({{.ProviderName}})
+
+{{ .Description | trimspace }}
+{{- if .HasExample }}
+
+## Example Usage
+
+{{ tffile .ExampleFile }}
+{{- end }}
+{{ .SchemaMarkdown | trimspace }}
+
+### Updates
+
+Attributes not marked as `(Updatable)` cannot be modified after resource creation. To change these attributes, the resource must be recreated.
+
+## Import
+
+`terraform import` is not supported for this resource.
+
+The `key_material` input parameters (`source_key_identifier`, `source_key_tier`,
+`key_material_description`) are write-only and are not returned by the CipherTrust
+Manager API. There is no way to reconstruct them from the key's current state, so
+`terraform import` would leave all input parameters absent from state and cause
+permanent plan diffs.
+
+### Adopting existing key material
+
+If an EXTERNAL AWS key already has material that was imported outside of Terraform,
+you can bring that material under Terraform management by adding a
+`ciphertrust_aws_key_material` resource whose `key_material` entry matches the
+existing material:
+
+```hcl
+resource "ciphertrust_aws_key_material" "km" {
+  aws_key_id = "<aws_key_id>"
+  key_material = [{
+    source_key_identifier = "<source_key_id>"
+    source_key_tier       = "<source_key_tier>"
+  }]
+}
+```
+
+On the first `terraform apply` the provider looks up the live CipherTrust Manager
+rotation history for the key. If it finds a history entry whose
+`source_key_identifier` matches the value supplied, it adopts that entry rather
+than importing new material bytes. After adoption, Terraform fully manages the
+material - you can update `valid_to` and `key_material_description`, or delete the
+material by removing the entry from `key_material`.

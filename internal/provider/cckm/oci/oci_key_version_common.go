@@ -21,7 +21,7 @@ import (
 func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	keyID string, versionID string, versionOpLabel string, diags *diag.Diagnostics) string {
 
-	keyJSON := getOciKey(ctx, id, client, "", keyID, "reading", diags)
+	keyJSON, _ := getOciKey(ctx, id, client, "", keyID, "reading", diags)
 	if diags.HasError() || keyJSON == "" {
 		return "" // parent key not found or error - version kept in state
 	}
@@ -37,7 +37,12 @@ func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	response, err := client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			msg := "OCI key version (" + versionID + ") was not found."
+			var msg string
+			if versionOpLabel == "deleting" {
+				msg = "OCI key version was not found. It will be removed from state."
+			} else {
+				msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key version")
+			}
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 			if versionOpLabel == "deleting" {
 				tflog.Warn(ctx, details)
@@ -68,8 +73,8 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 	}
 
 	versionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-	if versionState == keyStateScheduledForDeletion {
-		msg := "OCI key version is already scheduled for deletion, it will be removed from state."
+	if versionState == keyStateScheduledForDeletion || versionState == keyStatePendingDeletion {
+		msg := "OCI key version is already scheduled for or pending deletion, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
 		diags.AddWarning(details, "")
@@ -187,20 +192,7 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 
 	keyVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
-	tStart := time.Now()
 	for retry := 0; retry < numRetries && keyVersionState != expectedState; retry++ {
-		if time.Since(tStart).Seconds() > refreshTokenSeconds {
-			if err = client.RefreshToken(ctx, id); err != nil {
-				msg := "Error refreshing authentication token."
-				details := utils.ApiError(msg, map[string]interface{}{
-					"error":  err.Error(),
-					"key_id": keyID,
-				})
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-				return
-			}
-		}
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
 		response, err = client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 		if err != nil {

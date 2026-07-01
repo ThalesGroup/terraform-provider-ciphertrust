@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -26,8 +27,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEClientGroupGP{}
-	_ resource.ResourceWithConfigure = &resourceCTEClientGroupGP{}
+	_ resource.Resource                = &resourceCTEClientGroupGP{}
+	_ resource.ResourceWithConfigure   = &resourceCTEClientGroupGP{}
+	_ resource.ResourceWithImportState = &resourceCTEClientGroupGP{}
 )
 
 func NewResourceCTEClientGroupGP() resource.Resource {
@@ -337,12 +339,12 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 				GPType:         types.StringValue(gp.GuardPointType),
 				IsMFAEnabled:   types.BoolValue(gp.MFAEnabled),
 				IsGuardEnabled: types.BoolValue(gp.GuardEnabled),
+				PolicyID:       types.StringValue(gp.PolicyID),
 			},
 		}
 
 		if hadPrior {
 			p := prevEntry.GuardPointParams
-			entry.GuardPointParams.PolicyID = p.PolicyID
 			entry.GuardPointParams.IsAutomountEnabled = p.IsAutomountEnabled
 			entry.GuardPointParams.IsCIFSEnabled = p.IsCIFSEnabled
 			entry.GuardPointParams.IsEarlyAccessEnabled = p.IsEarlyAccessEnabled
@@ -384,6 +386,12 @@ func (r *resourceCTEClientGroupGP) Update(ctx context.Context, req resource.Upda
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//immutable field handling for client group id
+	if state.CTEClientGroupID.ValueString() != plan.CTEClientGroupID.ValueString() {
+		resp.Diagnostics.AddError("Cannot change client_id", "client_id is an immutable field")
 		return
 	}
 
@@ -538,6 +546,39 @@ func (r *resourceCTEClientGroupGP) Update(ctx context.Context, req resource.Upda
 			stateEntry := state.GuardPoints[guardPath]
 			gpID = stateEntry.ID.ValueString()
 
+			// ---------------------------------------------------------------
+			// IMMUTABLE FIELD CHECK — policy_id and guard_point_type cannot change
+			// ---------------------------------------------------------------
+			statePolicyID := stateEntry.GuardPointParams.PolicyID.ValueString()
+			planPolicyID := planEntry.GuardPointParams.PolicyID.ValueString()
+			if statePolicyID != planPolicyID {
+				resp.Diagnostics.AddError(
+					"Cannot change policy_id for an existing GuardPoint",
+					fmt.Sprintf(
+						"guard_path %q has policy_id %q in state but %q in plan. "+
+							"policy_id is immutable once a GuardPoint is created. "+
+							"To change it, remove this guard_path and re-add it with the new policy_id.",
+						guardPath, statePolicyID, planPolicyID,
+					),
+				)
+				return
+			}
+
+			stateGPType := stateEntry.GuardPointParams.GPType.ValueString()
+			planGPType := planEntry.GuardPointParams.GPType.ValueString()
+			if stateGPType != planGPType {
+				resp.Diagnostics.AddError(
+					"Cannot change guard_point_type for an existing GuardPoint",
+					fmt.Sprintf(
+						"guard_path %q has guard_point_type %q in state but %q in plan. "+
+							"guard_point_type is immutable once a GuardPoint is created. "+
+							"To change it, remove this guard_path and re-add it with the new guard_point_type.",
+						guardPath, stateGPType, planGPType,
+					),
+				)
+				return
+			}
+
 			var payload UpdateCTEGuardPointJSON
 			if !planEntry.GuardPointParams.IsGuardEnabled.IsNull() {
 				v := planEntry.GuardPointParams.IsGuardEnabled.ValueBool()
@@ -684,4 +725,11 @@ func buildParamsPayload(p CTEClientGuardPointParamsTFSDK) CTEClientGuardPointPar
 		out.NWShareCredentialsID = p.NWShareCredentialsID.ValueString()
 	}
 	return out
+}
+
+func (r *resourceCTEClientGroupGP) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client_group_gp.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client_group_gp.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("client_group_id"), req, resp)
 }

@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -159,6 +160,14 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.Host.ValueString(), common.URL_NTP)
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				"NTP Server Not Found",
+				"The NTP Server resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM NTP on CipherTrust Manager: ",
@@ -171,12 +180,15 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	// API does not return id, use host as the identifier
 	state.ID = types.StringValue(state.Host.ValueString())
 	// key and key_type are only returned by API if user provided them
-	// Only update state if API returns non-empty values, otherwise preserve existing state
 	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
 		state.Key = types.StringValue(keyVal.String())
+	} else {
+		state.Key = types.StringNull()
 	}
 	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		state.KeyType = types.StringValue(keyTypeVal.String())
+	} else {
+		state.KeyType = types.StringNull()
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
@@ -208,6 +220,9 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust NTP",
 			"Could not delete NTP, unexpected error: "+err.Error(),

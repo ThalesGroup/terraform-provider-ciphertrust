@@ -1,14 +1,21 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+var _ = regexp.MustCompile
 
 // initCckmOCITest builds the Terraform resource configuration used as a shared setup by most CCKM OCI
 // tests. It creates an OCI connection and registers an OCI vault, exposing them as Terraform resources
@@ -55,7 +62,6 @@ func initCckmOCITest(t *testing.T) string {
 }
 
 func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
-	t.Skip("skipped")
 
 	connectionResource := initCckmOCITest(t)
 
@@ -78,13 +84,15 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 				length          = 256
 				protection_mode = "SOFTWARE"
 			}
-			name            = local.oci_key_name
-			vault           = %s
+			name                       = local.oci_key_name
+			schedule_for_deletion_days = 8
+			vault                      = %s
 		}
 
 		# Add a native version to the key
 		resource "ciphertrust_oci_key_version" "version" {
-			cckm_key_id = %s
+			cckm_key_id                = %s
+			schedule_for_deletion_days = 8
 		}
 
 		# List the key
@@ -161,12 +169,14 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
 					resource.TestCheckResourceAttrSet(keyResource, "oci_key_params.key_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "vault_id"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
 					// Version resource
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
 					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.vault_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.key_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "8"),
 					// Key list data source
 					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
 					resource.TestCheckResourceAttr(keysDataSource, "matched", "1"),
@@ -204,8 +214,10 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
 					// Version resource
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "8"),
 					// Key list data source
 					resource.TestCheckResourceAttrPair(keyResource, "id", keysDataSource, "keys.0.id"),
 					resource.TestCheckResourceAttr(keysDataSource, "matched", "1"),
@@ -239,6 +251,543 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 			{
 				Config:      modifyVersionConfigStr,
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+			},
+		},
+	})
+}
+
+// scheduleOciKeyDeletionOutOfBand calls the OCI key schedule-deletion API directly,
+// bypassing Terraform. Used in tests that verify provider behaviour when a key enters
+// SCHEDULING_DELETION state without Terraform's knowledge.
+// Failures are intentionally ignored - the test will catch any unexpected state.
+func scheduleOciKeyDeletionOutOfBand(keyID string) {
+	client, ok := createCMClient()
+	if !ok {
+		return
+	}
+	payload, _ := json.Marshal(map[string]int{"days": 7})
+	_, _ = client.PostDataV2(
+		context.Background(),
+		"oob-schedule-oci-key-deletion-"+keyID,
+		common.URL_OCI+"/keys/"+keyID+"/schedule-deletion",
+		payload,
+	)
+}
+
+// scheduleOciKeyVersionDeletionOutOfBand calls the OCI key version schedule-deletion API
+// directly, bypassing Terraform.
+// Failures are intentionally ignored - the test will catch any unexpected state.
+func scheduleOciKeyVersionDeletionOutOfBand(keyID, versionID string) {
+	client, ok := createCMClient()
+	if !ok {
+		return
+	}
+	payload, _ := json.Marshal(map[string]int{"days": 7})
+	_, _ = client.PostDataV2(
+		context.Background(),
+		"oob-schedule-oci-version-deletion-"+versionID,
+		common.URL_OCI+"/keys/"+keyID+"/versions/"+versionID+"/schedule-deletion",
+		payload,
+	)
+}
+
+// deleteOciVaultOOB removes a CipherTrust Manager OCI vault registration out-of-band
+// (i.e. without going through Terraform). It is idempotent - if the vault is already
+// gone it returns silently. Errors are logged as warnings; the function never fails
+// the test on its own because the test steps that follow will surface any real problem.
+func deleteOciVaultOOB(t *testing.T, vaultID string) {
+	t.Helper()
+	if vaultID == "" {
+		t.Log("deleteOciVaultOOB: vaultID is empty, skipping")
+		return
+	}
+	client, ok := createCMClient()
+	if !ok {
+		t.Log("deleteOciVaultOOB: could not create CM client, skipping OOB delete")
+		return
+	}
+	ctx := context.Background()
+	_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_OCI+"/vaults/"+vaultID)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			t.Logf("deleteOciVaultOOB: vault %s already absent", vaultID)
+			return
+		}
+		t.Logf("deleteOciVaultOOB: warning - failed to delete vault %s: %s", vaultID, err.Error())
+		return
+	}
+	t.Logf("deleteOciVaultOOB: deleted vault %s out-of-band", vaultID)
+}
+
+// TestCckmOCIKeyImmutabilityAndUpdate verifies that:
+//   - Changing immutable attributes (algorithm, length) produces a plan-time error
+//     and does NOT destroy and recreate the key.
+//   - After a rejected plan, RefreshState confirms the OCI key is still ENABLED and unchanged.
+//   - Valid updates (name, enable_key, freeform_tags) are applied correctly.
+func TestCckmOCIKeyImmutabilityAndUpdate(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyNameUpdated := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+
+	// createConfig: the baseline key used throughout the test.
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// badAlgorithmConfig: tries to change algorithm - immutable, should error at plan time.
+	badAlgorithmConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "AES"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// badLengthConfig: tries to change length - immutable, should error at plan time.
+	badLengthConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 512
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// updateConfig: valid update - new name, disable key, add freeform tag.
+	updateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = false
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				freeform_tags   = { env = "test" }
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyNameUpdated)
+
+	// restoreConfig: re-enable the key, remove freeform tag.
+	restoreConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = true
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				freeform_tags   = {}
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyNameUpdated)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create - verify key is ENABLED.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 2: attempting to change algorithm should fail at plan time - key must NOT be destroyed.
+				Config:      badAlgorithmConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			{
+				// Step 3: re-apply valid config to confirm key is still ENABLED and algorithm unchanged.
+				// (RefreshState cannot be used here because the previous PlanOnly step leaves the bad
+				// config in the working directory, which would trigger ModifyPlan again.)
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 4: attempting to change length should fail at plan time - key must NOT be destroyed.
+				Config:      badLengthConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			{
+				// Step 5: re-apply valid config to confirm key is still ENABLED and length unchanged.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+			{
+				// Step 6: valid update - disable key, update name, add freeform tag.
+				Config: updateConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "DISABLED"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.env", "test"),
+				),
+			},
+			{
+				// Step 7: re-enable key and remove freeform tag.
+				Config: restoreConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmOCIKeyScheduledForDeletionRefresh verifies that when an OCI key is scheduled
+// for deletion out-of-band (without Terraform), a subsequent terraform refresh retains
+// the resource in state and issues a warning rather than removing it from state.
+func TestCckmOCIKeyScheduledForDeletionRefresh(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	var capturedKeyID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create a minimal OCI key; capture the CM ID for OOB deletion.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						capturedKeyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule the key for deletion out-of-band, then refresh state.
+				// Expected: provider issues a warning (not an error) and retains the resource
+				// in state with lifecycle_state = "SCHEDULING_DELETION".
+				PreConfig: func() {
+					scheduleOciKeyDeletionOutOfBand(capturedKeyID)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						if rs.Primary.ID != capturedKeyID {
+							return fmt.Errorf("expected id %q, got %q", capturedKeyID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "SCHEDULING_DELETION"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmOCIKeyScheduledForDeletionUpdate verifies that when an OCI key is scheduled
+// for deletion out-of-band, a subsequent terraform apply that includes a name update
+// produces a "Provider produced inconsistent result" error. OCI auto-disables the key
+// when scheduling deletion, causing the actual state (enable_key=false) to differ from
+// the plan (enable_key=true from the schema default), which the Terraform framework
+// detects as an inconsistent result. The resource remains in state after this failure.
+func TestCckmOCIKeyScheduledForDeletionUpdate(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyNameUpdated := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	updateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyNameUpdated)
+
+	var capturedKeyID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create a minimal OCI key; capture the CM ID for OOB deletion.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[keyResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", keyResource)
+						}
+						capturedKeyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule the key for deletion out-of-band, then apply a name update.
+				// Expected: OCI auto-disables the key when scheduling deletion, causing the
+				// actual enable_key state (false) to differ from the plan (true from the schema
+				// default). The Terraform framework raises an inconsistent result error.
+				PreConfig: func() {
+					scheduleOciKeyDeletionOutOfBand(capturedKeyID)
+				},
+				Config:      updateConfig,
+				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
+			},
+		},
+	})
+}
+
+// TestCckmOCIKeyVersionScheduledForDeletionRefresh verifies that when an OCI native key
+// version is scheduled for deletion out-of-band, a subsequent terraform refresh retains
+// the resource in state and issues a warning rather than removing it from state.
+// Two versions are created so that v1 is non-current and eligible for deletion scheduling.
+func TestCckmOCIKeyVersionScheduledForDeletionRefresh(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+	v1Resource := "ciphertrust_oci_key_version.v1"
+	v2Resource := "ciphertrust_oci_key_version.v2"
+
+	// Create key + v1 + v2. v2 depends_on v1 so v1 is created first.
+	// After both are created, v2 is the current version and v1 is non-current.
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}
+		resource "ciphertrust_oci_key_version" "v1" {
+			cckm_key_id = ciphertrust_oci_key.key.id
+		}
+		resource "ciphertrust_oci_key_version" "v2" {
+			depends_on  = [ciphertrust_oci_key_version.v1]
+			cckm_key_id = ciphertrust_oci_key.key.id
+		}`, keyName)
+
+	var capturedKeyID, capturedV1ID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create key + two versions; capture parent key CM ID and v1 CM ID.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttrSet(v1Resource, "id"),
+					resource.TestCheckResourceAttrSet(v2Resource, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[v1Resource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", v1Resource)
+						}
+						capturedV1ID = rs.Primary.ID
+						capturedKeyID = rs.Primary.Attributes["cckm_key_id"]
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule v1 for deletion out-of-band, then refresh state.
+				// Expected: v1 is retained in state with lifecycle_state = "SCHEDULING_DELETION".
+				// v2 remains ENABLED.
+				PreConfig: func() {
+					scheduleOciKeyVersionDeletionOutOfBand(capturedKeyID, capturedV1ID)
+				},
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[v1Resource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", v1Resource)
+						}
+						if rs.Primary.ID != capturedV1ID {
+							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
+					resource.TestCheckResourceAttr(v2Resource, "oci_key_version_params.lifecycle_state", "ENABLED"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmOCIKeyVersionScheduledForDeletionUpdate verifies that when an OCI native key
+// version is scheduled for deletion out-of-band, a subsequent terraform apply that changes
+// schedule_for_deletion_days issues a warning, retains the resource in state, and does not error.
+func TestCckmOCIKeyVersionScheduledForDeletionUpdate(t *testing.T) {
+	connectionResource := initCckmOCITest(t)
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+	v1Resource := "ciphertrust_oci_key_version.v1"
+
+	createConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}
+		resource "ciphertrust_oci_key_version" "v1" {
+			cckm_key_id = ciphertrust_oci_key.key.id
+		}
+		resource "ciphertrust_oci_key_version" "v2" {
+			depends_on  = [ciphertrust_oci_key_version.v1]
+			cckm_key_id = ciphertrust_oci_key.key.id
+		}`, keyName)
+
+	updateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			name  = "%s"
+			vault = ciphertrust_oci_vault.vault.id
+		}
+		resource "ciphertrust_oci_key_version" "v1" {
+			cckm_key_id                = ciphertrust_oci_key.key.id
+			schedule_for_deletion_days = 10
+		}
+		resource "ciphertrust_oci_key_version" "v2" {
+			depends_on  = [ciphertrust_oci_key_version.v1]
+			cckm_key_id = ciphertrust_oci_key.key.id
+		}`, keyName)
+
+	var capturedKeyID, capturedV1ID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create key + two versions; capture parent key CM ID and v1 CM ID.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttrSet(v1Resource, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[v1Resource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", v1Resource)
+						}
+						capturedV1ID = rs.Primary.ID
+						capturedKeyID = rs.Primary.Attributes["cckm_key_id"]
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: schedule v1 for deletion out-of-band, then apply a schedule_for_deletion_days update.
+				// Expected: Update detects SCHEDULING_DELETION, issues a warning (not an error),
+				// and retains v1 in state.
+				PreConfig: func() {
+					scheduleOciKeyVersionDeletionOutOfBand(capturedKeyID, capturedV1ID)
+				},
+				Config: updateConfig,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[v1Resource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", v1Resource)
+						}
+						if rs.Primary.ID != capturedV1ID {
+							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
+				),
 			},
 		},
 	})

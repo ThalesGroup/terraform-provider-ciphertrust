@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cte_client_guardpoint Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  A GuardPoint specifies the list of folders that contains paths to be protected. Access to files and encryption of files under the GuardPoint is controlled by security policies.GuardPoints created on a client group are applied to all clients in the group.NOTE: Any updation performed will be applicable to each gurad paths.Terraform Destroy will unguard the paths.
+  A GuardPoint specifies the list of folders that contains paths to be protected. Access to files and encryption of files under the GuardPoint is controlled by security policies. Terraform Destroy will unguard the paths.
 ---
 
 # ciphertrust_cte_client_guardpoint (Resource)
 
-A GuardPoint specifies the list of folders that contains paths to be protected. Access to files and encryption of files under the GuardPoint is controlled by security policies.GuardPoints created on a client group are applied to all clients in the group.NOTE: Any updation performed will be applicable to each gurad paths.Terraform Destroy will unguard the paths.
+A GuardPoint specifies the list of folders that contains paths to be protected. Access to files and encryption of files under the GuardPoint is controlled by security policies. Terraform Destroy will unguard the paths.
 
 
 
@@ -17,34 +17,44 @@ A GuardPoint specifies the list of folders that contains paths to be protected. 
 
 ### Required
 
-- `client_id` (String) CTE Client ID to be updated
-- `guard_paths` (List of String) List of GuardPaths to be created.
-- `guard_point_params` (Attributes) Parameters for creating a GuardPoint (see [below for nested schema](#nestedatt--guard_point_params))
+- `client_id` (String) CTE Client ID.
+- `guard_points` (Attributes Map) Map of GuardPoints keyed by guard_path. Each key is the path to guard. (see [below for nested schema](#nestedatt--guard_points))
 
 ### Read-Only
 
-- `id` (String) CTE Client Guardpoint ID to be updated or deleted
+- `id` (String) Comma-separated list of GuardPoint IDs managed by this resource.
 
-<a id="nestedatt--guard_point_params"></a>
-### Nested Schema for `guard_point_params`
+<a id="nestedatt--guard_points"></a>
+### Nested Schema for `guard_points`
 
 Required:
 
-- `guard_point_type` (String) Type of the GuardPoint
-- `policy_id` (String) ID of the policy applied with this GuardPoint. This parameter is not valid for Ransomware GuardPoints as they will not be associated with any CTE policy.
+- `guard_point_params` (Attributes) Parameters for this GuardPoint. (see [below for nested schema](#nestedatt--guard_points--guard_point_params))
+
+Read-Only:
+
+- `id` (String) GuardPoint ID returned by the API.
+
+<a id="nestedatt--guard_points--guard_point_params"></a>
+### Nested Schema for `guard_points.guard_point_params`
+
+Required:
+
+- `guard_point_type` (String) Type of the GuardPoint.
+- `policy_id` (String) ID of the policy applied with this GuardPoint.
 
 Optional:
 
-- `automount_enabled` (Boolean) Whether automount is enabled with the GuardPoint. Supported for Standard and LDT policies.
-- `cifs_enabled` (Boolean) Whether to enable CIFS. Available on LDT enabled windows clients only. The default value is false. If you enable the setting, it cannot be disabled. Supported for only LDT policies.
-- `data_classification_enabled` (Boolean) Whether data classification (tagging) is enabled. Enabled by default if the aligned policy contains ClassificationTags. Supported for Standard and LDT policies.
-- `data_lineage_enabled` (Boolean) Whether data lineage (tracking) is enabled. Enabled only if data classification is enabled. Supported for Standard and LDT policies.
-- `disk_name` (String) Name of the disk if the selected raw partition is a member of an Oracle ASM disk group.
-- `diskgroup_name` (String) Name of the disk group if the selected raw partition is a member of an Oracle ASM disk group.
-- `early_access` (Boolean) Whether secure start (early access) is turned on. Secure start is applicable to Windows clients only. Supported for Standard and LDT policies. The default value is false.
-- `guard_enabled` (Boolean) Returned from POST api after creating Guardpoints, can be updated later.
-- `intelligent_protection` (Boolean) Flag to enable intelligent protection for this GuardPoint. This flag is valid for GuardPoints with classification based policy only. Can only be set during GuardPoint creation.
-- `is_idt_capable_device` (Boolean) Whether the device where GuardPoint is applied is IDT capable or not. Supported for IDT policies.
-- `mfa_enabled` (Boolean) Whether MFA is enabled
-- `network_share_credentials_id` (String) ID/Name of the credentials if the GuardPoint is applied to a network share. Supported for only LDT policies.
-- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions. Available on LDT enabled clients only. The default value is true. If you disable the setting, it cannot be enabled again. Supported for only LDT policies.
+- `automount_enabled` (Boolean) Whether automount is enabled with the GuardPoint.
+- `cifs_enabled` (Boolean) Whether to enable CIFS.
+- `data_classification_enabled` (Boolean) Whether data classification is enabled.
+- `data_lineage_enabled` (Boolean) Whether data lineage is enabled.
+- `disk_name` (String) Name of the disk for Oracle ASM disk group.
+- `diskgroup_name` (String) Name of the disk group for Oracle ASM.
+- `early_access` (Boolean) Whether secure start is turned on.
+- `guard_enabled` (Boolean) Whether the GuardPoint is enabled.
+- `intelligent_protection` (Boolean) Flag to enable intelligent protection.
+- `is_idt_capable_device` (Boolean) Whether the device is IDT capable.
+- `mfa_enabled` (Boolean) Whether MFA is enabled.
+- `network_share_credentials_id` (String) ID of the credentials for network share.
+- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions.

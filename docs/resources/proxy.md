@@ -3,12 +3,12 @@
 page_title: "ciphertrust_proxy Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Configures outbound HTTP/HTTPS proxy settings (with optional CA certificate and no_proxy bypass list) for the CipherTrust Manager appliance. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_proxy (Resource)
 
-
+Configures outbound HTTP/HTTPS proxy settings (with optional CA certificate and no_proxy bypass list) for the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 
@@ -62,6 +62,6 @@ output "proxie_id" {
 ### Optional
 
 - `certificate` (String) CA certificate to trust for proxy.
-- `http_proxy` (String) HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
-- `https_proxy` (String) HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
+- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
+- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
 - `no_proxy` (List of String) List of hosts for a proxy exception.
