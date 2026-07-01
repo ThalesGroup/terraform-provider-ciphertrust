@@ -531,10 +531,12 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 	// Connection identity fields returned by CM on every read.
 	data.Name = types.StringValue(gjson.Get(response, "name").String())
-	// description is Optional-only; only update from response when the API returns a value,
-	// otherwise the plan/state null is preserved (avoids null→"" inconsistency on apply).
+	// description: hydrate unconditionally so drift is detected. Clear to null when absent
+	// or empty-string so stale state is not preserved after a CM-side removal.
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
+	} else {
+		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
 	data.Region = types.StringValue(gjson.Get(response, "region").String())
