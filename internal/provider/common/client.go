@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -88,6 +89,9 @@ type Client struct {
 	// tenant (i.e. AuthData.AuthDomainPath is set). Resources that manage
 	// CipherTrust Manager infrastructure use this to refuse plan-time.
 	IsCDSPaaS bool
+	// Log is the provider-specific logger that writes to a dedicated log file,
+	// independent of Terraform's TF_LOG output.
+	Log hclog.Logger
 }
 
 // Bootstrap Client for CipherTrust Manager
@@ -96,6 +100,9 @@ type CMClientBootstrap struct {
 	HTTPClient       *http.Client
 	CCKMConfig       CCKMProviderConfig
 	ReplicationDelay int64
+	// Log is the provider-specific logger that writes to a dedicated log file,
+	// independent of Terraform's TF_LOG output.
+	Log hclog.Logger
 }
 
 // AuthStruct
@@ -137,6 +144,8 @@ func NewCMClientBoot(ctx context.Context, uuid string, address *string, tlsOpts 
 		},
 		// Default CM URL
 		CipherTrustURL: CipherTrustURL,
+		// Default no-op logger; replaced by the real logger in provider Configure().
+		Log: hclog.NewNullLogger(),
 	}
 
 	if address != nil {
@@ -175,6 +184,9 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 		// Default URL
 		CipherTrustURL: CipherTrustURL,
 	}
+
+	// Default no-op logger; replaced by the real logger in provider Configure().
+	c.Log = hclog.NewNullLogger()
 
 	// Wire back-reference so the transport can access/update c.Token etc.
 	refreshTransport.client = &c
@@ -229,9 +241,12 @@ func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, 
 	req.Header.Set("Authorization", bearer)
 	req.Header.Set("Content-Type", "application/json")
 
+	c.Log.Info("API request", "method", req.Method, "url", req.URL.String())
+
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequest]["+uuid+"]")
+		c.Log.Error("API request failed", "method", req.Method, "url", req.URL.String(), "error", err.Error())
 		return nil, err
 	}
 	defer res.Body.Close()
@@ -239,6 +254,7 @@ func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequest]["+uuid+"]")
+		c.Log.Error("Failed to read response body", "method", req.Method, "url", req.URL.String(), "error", err.Error())
 		return nil, err
 	}
 
@@ -248,9 +264,11 @@ func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, 
 		res.StatusCode == http.StatusAccepted ||
 		res.StatusCode == http.StatusNonAuthoritativeInfo ||
 		res.StatusCode == http.StatusNoContent {
+		c.Log.Info("API response", "method", req.Method, "url", req.URL.String(), "status", res.StatusCode)
 		tflog.Trace(ctx, MSG_METHOD_END+"[client.go -> doRequest]["+uuid+"]")
 		return body, err
 	} else {
+		c.Log.Error("API error response", "method", req.Method, "url", req.URL.String(), "status", res.StatusCode, "body", string(body))
 		tflog.Trace(ctx, MSG_METHOD_END+"[client.go -> doRequest]["+uuid+"]")
 		return nil, fmt.Errorf("status: %d, body: %s", res.StatusCode, body)
 	}
