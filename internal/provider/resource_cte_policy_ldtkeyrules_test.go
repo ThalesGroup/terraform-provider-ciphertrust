@@ -25,15 +25,20 @@ func TestResourceCTEPolicyLDTKeyRule(t *testing.T) {
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "key1" {
-  name         = %q
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                      = %q
+  algorithm                 = "aes"
+  key_size                  = 256
+  usage_mask                = 76
+  undeletable               = false
+  unexportable              = false
+  xts                       = false
+  remove_from_state_on_destroy = true
 
   meta = {
+    permissions = {
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
+    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"
@@ -72,15 +77,20 @@ resource "ciphertrust_cte_policy" "ldt_policy" {
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "key1" {
-  name         = %q
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  usage_mask                   = 76
+  undeletable                  = false
+  unexportable                 = false
+  xts                          = false
+  remove_from_state_on_destroy = true
 
   meta = {
+    permissions = {
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
+    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"
@@ -90,15 +100,20 @@ resource "ciphertrust_cm_key" "key1" {
 }
 
 resource "ciphertrust_cm_key" "key2" {
-  name         = %q
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  usage_mask                   = 76
+  undeletable                  = false
+  unexportable                 = false
+  xts                          = false
+  remove_from_state_on_destroy = true
 
   meta = {
+    permissions = {
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
+    }
     cte = {
       persistent_on_client = true
       encryption_mode      = "CBC"

@@ -16,14 +16,19 @@ func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
 
 	testConfig := fmt.Sprintf(`
 		resource "ciphertrust_cm_key" "idt_key" {
-			name         = "%s"
-			algorithm    = "aes"
-			key_size     = 256
-			usage_mask   = 76
-			undeletable  = false
-			unexportable = false
-			xts          = true
+			name                         = "%s"
+			algorithm                    = "aes"
+			key_size                     = 256
+			usage_mask                   = 76
+			undeletable                  = false
+			unexportable                 = false
+			xts                          = true
+			remove_from_state_on_destroy = true
 			meta = {
+				permissions = {
+					read_key   = ["CTE Clients"]
+					export_key = ["CTE Clients"]
+				}
 				cte = {
 					persistent_on_client = true
 					encryption_mode      = "XTS"
