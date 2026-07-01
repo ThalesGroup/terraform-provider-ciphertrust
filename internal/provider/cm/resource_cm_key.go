@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/google/uuid"
 
@@ -1836,6 +1837,11 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {
 			resp.Diagnostics.AddWarning("Ciphertrust key can't be deleted from CipherTrust Manager as it's undeletable but will be removed from state.",
 				"key id: "+state.ID.ValueString(),
+			)
+		} else if (strings.Contains(err.Error(), "403") || strings.Contains(strings.ToLower(err.Error()), "insufficientpermissions")) && state.RemoveFromStateOnDestroy.ValueBool() {
+			resp.Diagnostics.AddWarning(
+				"CipherTrust key could not be deleted due to insufficient permissions but will be removed from state.",
+				"key id: "+state.ID.ValueString()+". The key may remain in CipherTrust Manager. This can happen when meta.permissions restricts deletion to a specific group that the current user does not belong to.",
 			)
 		} else {
 			resp.Diagnostics.AddError(
