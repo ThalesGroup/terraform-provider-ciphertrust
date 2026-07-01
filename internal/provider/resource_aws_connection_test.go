@@ -363,6 +363,19 @@ func TestAccAWSConnection_immutableName(t *testing.T) {
 	})
 }
 
+// awsConnConfigWithRegion returns a ciphertrust_aws_connection config with the
+// given name and aws_region. Credentials are omitted from HCL to prevent
+// secret exposure in Terraform Plugin Testing logs; the resource's env-var
+// fallback in Create() supplies them.
+func awsConnConfigWithRegion(name, region string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name       = %q
+  aws_region = %q
+}
+`, name, region)
+}
+
 // awsConnConfigNoCredentials returns a ciphertrust_aws_connection config that
 // deliberately omits access_key_id and secret_access_key from HCL, relying on
 // the backwards-compatibility env-var fallback in Create().
@@ -448,6 +461,91 @@ func TestAccAWSConnection_updateComputedFields(t *testing.T) {
 						return nil
 					},
 				),
+			},
+		},
+	})
+}
+
+// TestAccAWSConnection_RegionValidation_Invalid verifies that an invalid
+// aws_region value is rejected at plan time with the expected diagnostic.
+func TestAccAWSConnection_RegionValidation_Invalid(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      awsConnConfigWithRegion("test-conn-invalid-region", "invalid-region-xyz"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`must be a valid AWS region identifier`),
+			},
+		},
+	})
+}
+
+// TestAccAWSConnection_RegionValidation_Boundaries verifies that GovCloud and
+// China region identifiers — boundary cases of the regex
+// — are accepted by the validator.
+func TestAccAWSConnection_RegionValidation_Boundaries(t *testing.T) {
+	RequireCM(t)
+	for _, region := range []string{"us-gov-east-1", "cn-north-1", "cn-northwest-1"} {
+		region := region
+		t.Run(region, func(t *testing.T) {
+			suffix := uuid.New().String()[:8]
+			name := "tf-acc-boundary-" + region + "-" + suffix
+			resource.Test(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config: awsConnConfigWithRegion(name, region),
+						Check: checkStep(t, "region boundary: "+region,
+							resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", region),
+							resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+						),
+					},
+				},
+			})
+		})
+	}
+}
+
+// TestAccAWSConnection_AWSRegion_Drift verifies that an out-of-band change to
+// aws_region in CM is detected as drift on the next terraform plan.
+func TestAccAWSConnection_AWSRegion_Drift(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	connName := "tf-acc-aws-region-drift-" + suffix
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnConfigWithRegion(connName, "us-east-1"),
+				Check: checkStep(t, "region drift: create",
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", "us-east-1"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_aws_connection.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM client unavailable for out-of-band mutation")
+					}
+					_, _ = client.UpdateData(
+						context.Background(),
+						capturedID,
+						common.URL_AWS_CONNECTION,
+						[]byte(`{"aws_region":"eu-west-1"}`),
+						"id",
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
