@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -181,8 +182,16 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	if err == nil {
 		var user CMUserJSON
 		if json.Unmarshal([]byte(userResponse), &user) == nil {
-			plan.Nickname = types.StringValue(user.Nickname)
-			plan.Name = types.StringValue(user.Name)
+			if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+				plan.Name = types.StringValue(gj.String())
+			} else {
+				plan.Name = types.StringNull()
+			}
+			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+				plan.Nickname = types.StringValue(gj.String())
+			} else {
+				plan.Nickname = types.StringNull()
+			}
 			plan.Email = types.StringValue(user.Email)
 		}
 	}
@@ -243,20 +252,16 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	state.PasswordChangeRequired = types.BoolValue(user.PasswordChangeRequired)
 	state.PreventUILogin = types.BoolValue(user.LoginFlags.PreventUILogin)
 
-	// Only update name if it's non-empty from API
-	// If user set name in config, it will be in state; if not, keep default
-	if user.Name != "" {
-		state.Name = types.StringValue(user.Name)
-	} else if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue("")
+	if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+		state.Name = types.StringValue(gj.String())
+	} else {
+		state.Name = types.StringNull()
 	}
 
-	// Only update nickname if it differs from username
-	// API may auto-populate nickname with username value when not explicitly set
-	if user.Nickname != "" && user.Nickname != user.UserName {
-		state.Nickname = types.StringValue(user.Nickname)
-	} else if state.Nickname.IsNull() || state.Nickname.ValueString() == "" {
-		state.Nickname = types.StringValue("")
+	if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+		state.Nickname = types.StringValue(gj.String())
+	} else {
+		state.Nickname = types.StringNull()
 	}
 	if user.Metadata != nil {
 		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
@@ -361,8 +366,16 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	if err == nil {
 		var user CMUserJSON
 		if json.Unmarshal([]byte(userResponse), &user) == nil {
-			plan.Nickname = types.StringValue(user.Nickname)
-			plan.Name = types.StringValue(user.Name)
+			if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+				plan.Name = types.StringValue(gj.String())
+			} else {
+				plan.Name = types.StringNull()
+			}
+			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+				plan.Nickname = types.StringValue(gj.String())
+			} else {
+				plan.Nickname = types.StringNull()
+			}
 			plan.Email = types.StringValue(user.Email)
 		}
 	}
