@@ -161,11 +161,11 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				Optional:    true,
 				ElementType: types.StringType,
 				Description: "Array of the CipherTrust products associated with the connection. " +
-					"Valid values are: cckm, backup/restore, ddc, cte, cmep. " +
+					"Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. " +
 					"Any other value is rejected by CipherTrust Manager with a 422 error.",
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(
-						stringvalidator.OneOf("cckm", "backup/restore", "ddc", "cte", "cmep"),
+						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
 					),
 				},
 			},
