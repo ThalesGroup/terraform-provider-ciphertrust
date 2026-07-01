@@ -11,3 +11,4 @@ definition-beta.json
 
 .repro_verify/
 dev.tfrc
+internal/provider/ctp.log
