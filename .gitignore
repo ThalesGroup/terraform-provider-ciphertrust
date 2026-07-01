@@ -8,3 +8,6 @@ terraform-provider-ciphertrust.exe
 definition-beta.json
 .claude/swagger/areas/
 .claude/swagger/definitions.json
+
+.repro_verify/
+dev.tfrc
