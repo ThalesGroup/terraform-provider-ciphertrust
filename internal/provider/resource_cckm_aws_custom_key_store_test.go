@@ -145,8 +145,6 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateVerifyIgnore: []string{
-					"access_key_id",                // credentials only returned on create POST, not on GET
-					"secret_access_key",            // credentials only returned on create POST, not on GET
 					"aws_param.key_store_password", // write-only; not returned by the API
 					"enable_credential_rotation",   // not surfaced in GET response; cannot round-trip
 					"updated_at",                   // timestamp; may differ between the import Read and the prior-state Read
