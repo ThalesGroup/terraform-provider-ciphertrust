@@ -1,146 +1,36 @@
-2026-07-01T17:13:38.190+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:38.437+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:38.667+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:39.054+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:39.303+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:39.543+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:39.781+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:40.005+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:40.268+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:40.522+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:40.772+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:41.013+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:41.252+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:41.482+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:41.720+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:41.958+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:42.184+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T17:13:42.428+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:45:52.930+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:45:53.925+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:45:54.747+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T18:45:55.121+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"e6ef5ab3-cfa9-4764-908b-632fc921bb2c"}
-  
-2026-07-01T18:52:12.499+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:12.722+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:12.945+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:13.337+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:13.586+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:13.813+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:14.051+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:14.297+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:14.534+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:14.758+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:14.987+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:15.223+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:15.458+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:15.692+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:15.922+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:16.146+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:16.394+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:52:16.627+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:17.831+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:18.081+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:18.299+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:18.675+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:18.923+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:19.169+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:19.407+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:19.650+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:19.912+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:20.166+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:20.410+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:20.663+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:20.910+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:21.146+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:21.409+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:21.652+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:21.899+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T18:53:22.148+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T19:59:44.280+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T19:59:45.299+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T19:59:46.120+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T19:59:46.495+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"1a196672-1e15-4601-88eb-ea7c5145029f"}
-  
-2026-07-01T19:59:56.172+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T19:59:57.127+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T19:59:57.950+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T19:59:58.335+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"f4ff906a-df29-42f5-9c08-d829fc63a6b1"}
-  
-2026-07-01T20:00:24.230+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:25.344+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:26.293+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T20:00:26.669+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"41c1ab10-c06c-40c3-9432-e8005a352a40"}
-  
-2026-07-01T20:00:36.099+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:37.144+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:38.041+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T20:00:38.415+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"9e56e3f8-0975-437e-a891-5deca31e2047"}
-  
-2026-07-01T20:00:38.693+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:39.688+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:40.549+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T20:00:41.015+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"d6f07a6c-55c1-4ba9-bc4e-e50e6cc7804e"}
-  
-2026-07-01T20:00:41.291+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:42.333+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:43.189+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T20:00:43.564+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"21b0837c-2209-4594-b7aa-38ae9503c862"}
-  
-2026-07-01T20:00:43.845+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:45.416+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:00:46.271+0530 [INFO]  ciphertrust: API request: method=POST url=https://10.171.98.28/api/v1/domains
-2026-07-01T20:00:46.654+0530 [ERROR] ciphertrust: API error response: method=POST url=https://10.171.98.28/api/v1/domains status=409
-  body=
-  | {"code":24,"codeDesc":"NCERRConflict: Failed due to a conflict with the current state of the target resource","message":"Operation not permitted by current license","requestID":"35e358aa-686a-45b3-a22e-06241750dfb4"}
-  
-2026-07-01T20:05:20.276+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:20.516+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:20.723+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:21.105+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:21.350+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:21.614+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:21.865+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:22.104+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:22.353+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:22.608+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:22.839+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:23.073+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:23.306+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:23.553+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:23.793+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:24.031+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:24.283+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:05:24.520+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:54.842+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:55.096+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:55.329+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:55.720+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:55.965+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:56.189+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:56.448+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:56.669+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:56.897+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:57.138+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:57.374+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:57.610+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:57.847+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:58.085+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:58.317+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:58.560+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:58.800+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
-2026-07-01T20:07:59.049+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:11.575+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:11.815+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:12.041+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:12.422+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:12.664+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:12.936+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:13.180+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:13.425+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:13.664+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:13.903+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:14.144+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:14.369+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:14.597+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:14.853+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:15.098+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:15.343+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:15.600+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:21:15.834+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:02.276+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:02.517+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:02.739+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:03.100+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:03.326+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:03.567+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:03.798+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:04.028+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:04.264+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:04.510+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:04.756+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:05.002+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:05.230+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:05.469+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:05.699+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:05.936+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:06.182+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
+2026-07-01T20:22:06.420+0530 [INFO]  ciphertrust: CipherTrust provider initialising: log_level=info log_file=ctp.log
