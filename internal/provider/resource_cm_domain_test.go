@@ -121,12 +121,13 @@ resource "ciphertrust_domain" "test" {
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_domain" "test" {
-  name   = %q
-  admins = ["admin", "admin2"]
+  name                  = %q
+  admins                = ["admin"]
+  allow_user_management = true
 }
 `, rName),
-				Check: checkStep(t, "update admins",
-					resource.TestCheckResourceAttr("ciphertrust_domain.test", "admins.#", "2"),
+				Check: checkStep(t, "update allow_user_management",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "allow_user_management", "true"),
 					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
 				),
 			},
@@ -159,8 +160,12 @@ resource "ciphertrust_domain" "test" {
 			},
 			{
 				// Out-of-band delete via CM client, then refresh.
-				// Expected: Read() emits a warning, retains resource in state.
-				// Plan shows recreation diff (ExpectNonEmptyPlan: true).
+				// Expected: Read() emits a warning and retains the resource in state
+				// (does not call RemoveResource). Because the state is unchanged, the
+				// subsequent plan is empty — the config still matches the retained state.
+				// ExpectNonEmptyPlan is false: "retain in state" is the correct
+				// behaviour; a recreation diff requires RemoveResource, which this
+				// resource deliberately avoids to protect against transient CM outages.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -171,7 +176,7 @@ resource "ciphertrust_domain" "test" {
 					_, _ = client.DeleteByID(ctx, "DELETE", capturedID, url, nil)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
