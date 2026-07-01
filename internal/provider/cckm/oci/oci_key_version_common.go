@@ -73,8 +73,8 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 	}
 
 	versionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-	if versionState == keyStateScheduledForDeletion {
-		msg := "OCI key version is already scheduled for deletion, it will be removed from state."
+	if versionState == keyStateScheduledForDeletion || versionState == keyStatePendingDeletion {
+		msg := "OCI key version is already scheduled for or pending deletion, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
 		diags.AddWarning(details, "")
