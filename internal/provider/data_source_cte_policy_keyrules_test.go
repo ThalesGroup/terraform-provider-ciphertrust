@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCiphertrustCTEPolicyKeyRulesDataSource(t *testing.T) {
+func TestCTEPolicyKeyRulesDataSource(t *testing.T) {
 	policyName := "tf-policy-kr-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

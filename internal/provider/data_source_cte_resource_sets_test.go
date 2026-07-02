@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTEResourceSetsDataSource(t *testing.T) {
+func TestCTEResourceSetsDataSource(t *testing.T) {
 	resourceSetName := "tf-resourceset-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

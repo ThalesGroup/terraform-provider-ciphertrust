@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
+func TestCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
 	RequireCM(t)
 
 	policyName := "tf-policy-ldt-" + uuid.New().String()[:8]
@@ -26,7 +26,7 @@ func TestCiphertrustCTEPolicyLDTKeyRulesDataSource(t *testing.T) {
 			remove_from_state_on_destroy = true
 			meta = {
 				permissions = {
-					read_key   = ["CTE Clients"]
+          read_key   = ["CTE Clients"]
 					export_key = ["CTE Clients"]
 				}
 				cte = {

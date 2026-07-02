@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
+func TestCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
 	RequireCM(t)
 
 	policyName := "tf-policy-idt-" + uuid.New().String()[:8]

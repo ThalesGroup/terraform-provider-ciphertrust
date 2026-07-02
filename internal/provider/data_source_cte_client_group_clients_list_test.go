@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEClientGroupClientsDataSource(t *testing.T) {
+func TestCTEClientGroupClientsDataSource(t *testing.T) {
 	clientGroupName := "tf-cg-" + uuid.New().String()[:8]
 	clientName := "tf-client-" + uuid.New().String()[:8]
 	profileName := "tf-profile-" + uuid.New().String()[:8]
