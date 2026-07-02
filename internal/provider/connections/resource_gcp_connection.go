@@ -206,6 +206,11 @@ func (r *resourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_GCP_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_gcp_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_gcp_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading GCP Connection on CipherTrust Manager: ",
