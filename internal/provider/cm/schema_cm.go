@@ -1132,7 +1132,7 @@ type CMLogForwardersSyslogParamsTFSDK struct {
 }
 
 type CMLogForwardersSyslogTFSDK struct {
-	SyslogParams *CMLogForwardersSyslogParamsTFSDK `tfsdk:"syslog_params"`
+	SyslogParams *CMLogForwardersSyslogParamsTFSDK `tfsdk:"forward_logs"`
 }
 
 type CMLogForwardersTFSDK struct {
