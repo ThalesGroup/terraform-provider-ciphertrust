@@ -121,6 +121,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 		"updated_at": schema.StringAttribute{
 			Computed: true,
+			PlanModifiers: []planmodifier.String{
+				stringplanmodifier.UseStateForUnknown(),
+			},
 		},
 		},
 	}
@@ -196,7 +199,11 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
+	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
+		plan.AllowUserManagement = types.BoolValue(r.Bool())
+	} else {
+		plan.AllowUserManagement = types.BoolNull()
+	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
 	hsmConnectionIdResp := gjson.Get(response, "hsm_connection_id").String()
@@ -246,12 +253,11 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
 				"Domain Not Found",
-				"The Domain resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"The Domain resource was not found on CipherTrust Manager (HTTP 404). The resource has been left in Terraform state. If the domain was intentionally deleted outside Terraform, run 'terraform state rm' to remove it manually.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Read]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager: ",
 			"Could not read CM Domain id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -284,7 +290,11 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		state.ParentCAId = types.StringValue(parentCaId)
 	}
 
-	state.AllowUserManagement = types.BoolValue(gjson.Get(response, "allow_user_management").Bool())
+	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
+		state.AllowUserManagement = types.BoolValue(r.Bool())
+	} else {
+		state.AllowUserManagement = types.BoolNull()
+	}
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	state.Application = types.StringValue(gjson.Get(response, "application").String())
@@ -300,16 +310,16 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 			admins = append(admins, types.StringValue(admin.String()))
 		}
 		state.Admins = admins
+	} else {
+		state.Admins = []types.String{}
 	}
 
-	// Read meta_data map — only set state if the server returned non-empty meta.
-	// When the server returns {} we leave state.Meta unchanged (preserving null
-	// if the user did not configure meta_data) to avoid spurious plan drift.
+	// Read meta_data map — two-branch: absent or {} → MapNull; non-empty → MapValueFrom
 	metaResult := gjson.Get(response, "meta")
 	if metaResult.Exists() && len(metaResult.Map()) > 0 {
-		metaMap := make(map[string]types.String)
+		metaMap := make(map[string]string)
 		metaResult.ForEach(func(key, value gjson.Result) bool {
-			metaMap[key.String()] = types.StringValue(value.String())
+			metaMap[key.String()] = value.String()
 			return true
 		})
 		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
@@ -318,9 +328,11 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		} else {
 			state.Meta = mapValue
 		}
+	} else {
+		state.Meta = types.MapNull(types.StringType)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Read]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -332,6 +344,8 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_domain.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Update]["+id+"]")
 	var plan CMDomainTFSDK
 	var state CMDomainTFSDK
 	var payload CMDomainJSON
@@ -377,6 +391,10 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
+	if !plan.AllowUserManagement.Equal(state.AllowUserManagement) {
+		hasChanges = true
+	}
+
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
 		tflog.Debug(ctx, "[resource_cm_domain.go -> Update] No changes detected, preserving state")
@@ -392,6 +410,18 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if plan.HSMConnectionId.ValueString() != "" && plan.HSMConnectionId.ValueString() != types.StringNull().ValueString() {
 		payload.HSMConnectionId = plan.HSMConnectionId.ValueString()
 	}
+
+	var adminsPayload []string
+	for _, a := range plan.Admins {
+		adminsPayload = append(adminsPayload, a.ValueString())
+	}
+	payload.Admins = adminsPayload
+
+	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
+		val := plan.AllowUserManagement.ValueBool()
+		payload.AllowUserManagement = &val
+	}
+
 	metadataPayload := make(map[string]interface{})
 	for k, v := range plan.Meta.Elements() {
 		metadataPayload[k] = v.(types.String).ValueString()
@@ -408,9 +438,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	_, err = r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+plan.Name.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating domain on CipherTrust Manager: ",
 			"Could not update domain, unexpected error: "+err.Error(),
@@ -437,7 +467,11 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	plan.DevAccount = types.StringValue(gjson.Get(readResponse, "devAccount").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(readResponse, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(readResponse, "updatedAt").String())
-	plan.AllowUserManagement = types.BoolValue(gjson.Get(readResponse, "allow_user_management").Bool())
+	if r := gjson.Get(readResponse, "allow_user_management"); r.Exists() {
+		plan.AllowUserManagement = types.BoolValue(r.Bool())
+	} else {
+		plan.AllowUserManagement = types.BoolNull()
+	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
 	hsmConnectionIdUpdate := gjson.Get(readResponse, "hsm_connection_id").String()
@@ -461,6 +495,34 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		plan.ParentCAId = types.StringValue(parentCaIdUpdate)
 	}
 
+	adminsReadResult := gjson.Get(readResponse, "admins")
+	if adminsReadResult.Exists() && adminsReadResult.IsArray() {
+		var admins []types.String
+		for _, a := range adminsReadResult.Array() {
+			admins = append(admins, types.StringValue(a.String()))
+		}
+		plan.Admins = admins
+	} else {
+		plan.Admins = []types.String{}
+	}
+
+	metaReadResult := gjson.Get(readResponse, "meta")
+	if metaReadResult.Exists() && len(metaReadResult.Map()) > 0 {
+		metaMap := make(map[string]string)
+		metaReadResult.ForEach(func(key, value gjson.Result) bool {
+			metaMap[key.String()] = value.String()
+			return true
+		})
+		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
+		if diags2.HasError() {
+			resp.Diagnostics.Append(diags2...)
+		} else {
+			plan.Meta = mapValue
+		}
+	} else {
+		plan.Meta = types.MapNull(types.StringType)
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -471,6 +533,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_domain.go -> Delete]["+id+"]")
+
 	var state CMDomainTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -478,11 +543,14 @@ func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.Name.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
+	// Delete existing domain
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.ID.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Domain",
 			"Could not delete domain, unexpected error: "+err.Error(),
