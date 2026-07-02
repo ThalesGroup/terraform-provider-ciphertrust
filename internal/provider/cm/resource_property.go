@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -58,6 +59,9 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 			"description": schema.StringAttribute{
 				Computed:    true,
 				Description: "Description of the property and its value (read-only from API)",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -133,6 +137,8 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMPropertyTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -142,33 +148,32 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"Property Not Found",
-				"The Property resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
-			)
-			resp.State.RemoveResource(ctx)
+		if strings.Contains(err.Error(), notFoundError) {
+			// Keep the resource in Terraform state. Do not call RemoveResource:
+			// removing on 404 causes confusing behaviour when CM is temporarily
+			// unreachable (Terraform would silently drop the resource from state).
+			tflog.Debug(ctx, common.ERR_METHOD_END+"property not found (404) [resource_property.go -> Read]["+id+"]")
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Property on CipherTrust Manager: ",
-			"Could not read CM Property : ,"+state.Name.ValueString()+"unexpected error: "+err.Error(),
+			"Could not read CM Property: "+state.Name.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
 
-	state.Value = types.StringValue(gjson.Get(response, "value").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	vr := gjson.Get(response, "value")
+	if vr.Exists() {
+		state.Value = types.StringValue(vr.String())
+	} else {
+		state.Value = types.StringNull()
+	}
 	state.Description = types.StringValue(gjson.Get(response, "description").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Read]["+id+"]")
-	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -235,6 +240,10 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMPropertyTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Delete]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Delete]["+id+"]")
+
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -248,9 +257,14 @@ func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequ
 		state.Name.ValueString(),
 		common.URL_CM_PROPERTIES+"/"+state.Name.ValueString()+"/reset",
 		payload)
-	tflog.Debug(ctx, "[resource_property.go -> delete -> Response]["+response+"]")
+	tflog.Debug(ctx, "[resource_property.go -> Delete -> Response]["+response+"]")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> delete]["+state.Name.ValueString()+"]")
+		if strings.Contains(err.Error(), notFoundError) {
+			// Property was already reset or does not exist as a customisable
+			// property on this CM version — treat as success.
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Delete]["+state.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error resetting property on CipherTrust Manager: ",
 			"Could not reset property "+state.Name.ValueString()+", unexpected error: "+err.Error(),
