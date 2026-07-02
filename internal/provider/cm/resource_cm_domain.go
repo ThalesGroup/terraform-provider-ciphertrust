@@ -166,12 +166,13 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 		payload.ParentCAId = plan.ParentCAId.ValueString()
 	}
 
-	// Add labels to payload
-	metadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		metadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		metadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			metadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = metadataPayload
 	}
-	payload.Meta = metadataPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -311,7 +312,8 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		}
 		state.Admins = admins
 	} else {
-		state.Admins = []types.String{}
+		// Required field — CM should always return it.
+		// If omitted, preserve prior state to avoid false drift.
 	}
 
 	// Read meta_data map — two-branch: absent or {} → MapNull; non-empty → MapValueFrom
@@ -398,7 +400,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
 		tflog.Debug(ctx, "[resource_cm_domain.go -> Update] No changes detected, preserving state")
-		diags = resp.State.Set(ctx, state)
+		diags = resp.State.Set(ctx, plan)
 		resp.Diagnostics.Append(diags...)
 		return
 	}
@@ -422,11 +424,13 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		payload.AllowUserManagement = &val
 	}
 
-	metadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		metadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		metadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			metadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = metadataPayload
 	}
-	payload.Meta = metadataPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -503,7 +507,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		}
 		plan.Admins = admins
 	} else {
-		plan.Admins = []types.String{}
+		// Required field — CM should always return it.
+		// If omitted, preserve prior state to avoid false drift.
 	}
 
 	metaReadResult := gjson.Get(readResponse, "meta")

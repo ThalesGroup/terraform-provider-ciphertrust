@@ -249,17 +249,19 @@ func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band delete: resource stays in state, warning emitted.
+				// Step 2: OOB delete + refresh.
+				// Read() gets 404, emits warning, keeps resource in state.
+				// State is unchanged → config matches state → plan is empty.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						return
 					}
-					url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
-					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, url, nil)
+					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
+					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				ExpectNonEmptyPlan: false, // correct: keep-in-state leaves no diff
 			},
 		},
 	})
