@@ -223,87 +223,103 @@ func (r *resourceCMPolicy) Create(ctx context.Context, req resource.CreateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
+	// effect is Optional+Computed with Default="deny" — always hydrate.
 	if r := gjson.Get(response, "effect"); r.Exists() {
 		plan.Effect = types.StringValue(r.String())
 	} else {
 		plan.Effect = types.StringNull()
 	}
 
-	if r := gjson.Get(response, "name"); r.Exists() {
-		plan.Name = types.StringValue(r.String())
-	} else {
-		plan.Name = types.StringNull()
-	}
-
-	if r := gjson.Get(response, "allow"); r.Exists() {
-		plan.Allow = types.BoolValue(r.Bool())
-	} else {
-		plan.Allow = types.BoolNull()
-	}
-
-	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
-		plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-	} else {
-		plan.IncludeDescendantAccounts = types.BoolNull()
-	}
-
-	rResources := gjson.Get(response, "resources")
-	if !rResources.Exists() {
-		plan.Resources = nil
-	} else {
-		var respResources []types.String
-		for _, res := range rResources.Array() {
-			respResources = append(respResources, types.StringValue(res.String()))
+	// Optional-only fields: only hydrate from API response when user configured them.
+	// CM may return server-assigned defaults; setting them when plan had null causes
+	// a plan-consistency error ("was null, but now <value>").
+	if !plan.Name.IsNull() {
+		if r := gjson.Get(response, "name"); r.Exists() {
+			plan.Name = types.StringValue(r.String())
+		} else {
+			plan.Name = types.StringNull()
 		}
-		plan.Resources = respResources
 	}
 
-	rActions := gjson.Get(response, "actions")
-	if !rActions.Exists() {
-		plan.Actions = nil
-	} else {
-		var respActions []types.String
-		for _, act := range rActions.Array() {
-			respActions = append(respActions, types.StringValue(act.String()))
+	if !plan.Allow.IsNull() {
+		if r := gjson.Get(response, "allow"); r.Exists() {
+			plan.Allow = types.BoolValue(r.Bool())
+		} else {
+			plan.Allow = types.BoolNull()
 		}
-		plan.Actions = respActions
 	}
 
-	rConditions := gjson.Get(response, "conditions")
-	if !rConditions.Exists() {
-		plan.Conditions = nil
-	} else {
-		var respConditions []CMPolicyConditionTFSDK
-		for _, c := range rConditions.Array() {
-			var cond CMPolicyConditionTFSDK
-			if nr := c.Get("negate"); nr.Exists() {
-				cond.Negate = types.BoolValue(nr.Bool())
-			} else {
-				cond.Negate = types.BoolNull()
+	if !plan.IncludeDescendantAccounts.IsNull() {
+		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
+			plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
+		} else {
+			plan.IncludeDescendantAccounts = types.BoolNull()
+		}
+	}
+
+	if plan.Resources != nil {
+		rResources := gjson.Get(response, "resources")
+		if !rResources.Exists() {
+			plan.Resources = nil
+		} else {
+			var respResources []types.String
+			for _, res := range rResources.Array() {
+				respResources = append(respResources, types.StringValue(res.String()))
 			}
-			if or_ := c.Get("op"); or_.Exists() {
-				cond.Op = types.StringValue(or_.String())
-			} else {
-				cond.Op = types.StringNull()
+			plan.Resources = respResources
+		}
+	}
+
+	if plan.Actions != nil {
+		rActions := gjson.Get(response, "actions")
+		if !rActions.Exists() {
+			plan.Actions = nil
+		} else {
+			var respActions []types.String
+			for _, act := range rActions.Array() {
+				respActions = append(respActions, types.StringValue(act.String()))
 			}
-			if pr := c.Get("path"); pr.Exists() {
-				cond.Path = types.StringValue(pr.String())
-			} else {
-				cond.Path = types.StringNull()
-			}
-			rVals := c.Get("values")
-			if !rVals.Exists() {
-				cond.Values = nil
-			} else {
-				var vals []types.String
-				for _, v := range rVals.Array() {
-					vals = append(vals, types.StringValue(v.String()))
+			plan.Actions = respActions
+		}
+	}
+
+	if plan.Conditions != nil {
+		rConditions := gjson.Get(response, "conditions")
+		if !rConditions.Exists() {
+			plan.Conditions = nil
+		} else {
+			var respConditions []CMPolicyConditionTFSDK
+			for _, c := range rConditions.Array() {
+				var cond CMPolicyConditionTFSDK
+				if nr := c.Get("negate"); nr.Exists() {
+					cond.Negate = types.BoolValue(nr.Bool())
+				} else {
+					cond.Negate = types.BoolNull()
 				}
-				cond.Values = vals
+				if or_ := c.Get("op"); or_.Exists() {
+					cond.Op = types.StringValue(or_.String())
+				} else {
+					cond.Op = types.StringNull()
+				}
+				if pr := c.Get("path"); pr.Exists() {
+					cond.Path = types.StringValue(pr.String())
+				} else {
+					cond.Path = types.StringNull()
+				}
+				rVals := c.Get("values")
+				if !rVals.Exists() {
+					cond.Values = nil
+				} else {
+					var vals []types.String
+					for _, v := range rVals.Array() {
+						vals = append(vals, types.StringValue(v.String()))
+					}
+					cond.Values = vals
+				}
+				respConditions = append(respConditions, cond)
 			}
-			respConditions = append(respConditions, cond)
+			plan.Conditions = respConditions
 		}
-		plan.Conditions = respConditions
 	}
 
 	diags = resp.State.Set(ctx, plan)
@@ -350,87 +366,103 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
+	// effect is Optional+Computed with Default="deny" — always hydrate unconditionally.
 	if r := gjson.Get(response, "effect"); r.Exists() {
 		state.Effect = types.StringValue(r.String())
 	} else {
 		state.Effect = types.StringNull()
 	}
 
-	if r := gjson.Get(response, "name"); r.Exists() {
-		state.Name = types.StringValue(r.String())
-	} else {
-		state.Name = types.StringNull()
-	}
-
-	if r := gjson.Get(response, "allow"); r.Exists() {
-		state.Allow = types.BoolValue(r.Bool())
-	} else {
-		state.Allow = types.BoolNull()
-	}
-
-	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
-		state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-	} else {
-		state.IncludeDescendantAccounts = types.BoolNull()
-	}
-
-	rResources := gjson.Get(response, "resources")
-	if !rResources.Exists() {
-		state.Resources = nil
-	} else {
-		var respResources []types.String
-		for _, res := range rResources.Array() {
-			respResources = append(respResources, types.StringValue(res.String()))
+	// Optional-only fields: only hydrate when prior state is non-null (i.e. user configured
+	// the field). CM may return server-assigned defaults; overwriting state when the user
+	// never configured the field creates perpetual drift (state=<value> vs config=null).
+	if !state.Name.IsNull() {
+		if r := gjson.Get(response, "name"); r.Exists() {
+			state.Name = types.StringValue(r.String())
+		} else {
+			state.Name = types.StringNull()
 		}
-		state.Resources = respResources
 	}
 
-	rActions := gjson.Get(response, "actions")
-	if !rActions.Exists() {
-		state.Actions = nil
-	} else {
-		var respActions []types.String
-		for _, act := range rActions.Array() {
-			respActions = append(respActions, types.StringValue(act.String()))
+	if !state.Allow.IsNull() {
+		if r := gjson.Get(response, "allow"); r.Exists() {
+			state.Allow = types.BoolValue(r.Bool())
+		} else {
+			state.Allow = types.BoolNull()
 		}
-		state.Actions = respActions
 	}
 
-	rConditions := gjson.Get(response, "conditions")
-	if !rConditions.Exists() {
-		state.Conditions = nil
-	} else {
-		var respConditions []CMPolicyConditionTFSDK
-		for _, c := range rConditions.Array() {
-			var cond CMPolicyConditionTFSDK
-			if nr := c.Get("negate"); nr.Exists() {
-				cond.Negate = types.BoolValue(nr.Bool())
-			} else {
-				cond.Negate = types.BoolNull()
+	if !state.IncludeDescendantAccounts.IsNull() {
+		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
+			state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
+		} else {
+			state.IncludeDescendantAccounts = types.BoolNull()
+		}
+	}
+
+	if state.Resources != nil {
+		rResources := gjson.Get(response, "resources")
+		if !rResources.Exists() {
+			state.Resources = nil
+		} else {
+			var respResources []types.String
+			for _, res := range rResources.Array() {
+				respResources = append(respResources, types.StringValue(res.String()))
 			}
-			if or_ := c.Get("op"); or_.Exists() {
-				cond.Op = types.StringValue(or_.String())
-			} else {
-				cond.Op = types.StringNull()
+			state.Resources = respResources
+		}
+	}
+
+	if state.Actions != nil {
+		rActions := gjson.Get(response, "actions")
+		if !rActions.Exists() {
+			state.Actions = nil
+		} else {
+			var respActions []types.String
+			for _, act := range rActions.Array() {
+				respActions = append(respActions, types.StringValue(act.String()))
 			}
-			if pr := c.Get("path"); pr.Exists() {
-				cond.Path = types.StringValue(pr.String())
-			} else {
-				cond.Path = types.StringNull()
-			}
-			rVals := c.Get("values")
-			if !rVals.Exists() {
-				cond.Values = nil
-			} else {
-				var vals []types.String
-				for _, v := range rVals.Array() {
-					vals = append(vals, types.StringValue(v.String()))
+			state.Actions = respActions
+		}
+	}
+
+	if state.Conditions != nil {
+		rConditions := gjson.Get(response, "conditions")
+		if !rConditions.Exists() {
+			state.Conditions = nil
+		} else {
+			var respConditions []CMPolicyConditionTFSDK
+			for _, c := range rConditions.Array() {
+				var cond CMPolicyConditionTFSDK
+				if nr := c.Get("negate"); nr.Exists() {
+					cond.Negate = types.BoolValue(nr.Bool())
+				} else {
+					cond.Negate = types.BoolNull()
 				}
-				cond.Values = vals
+				if or_ := c.Get("op"); or_.Exists() {
+					cond.Op = types.StringValue(or_.String())
+				} else {
+					cond.Op = types.StringNull()
+				}
+				if pr := c.Get("path"); pr.Exists() {
+					cond.Path = types.StringValue(pr.String())
+				} else {
+					cond.Path = types.StringNull()
+				}
+				rVals := c.Get("values")
+				if !rVals.Exists() {
+					cond.Values = nil
+				} else {
+					var vals []types.String
+					for _, v := range rVals.Array() {
+						vals = append(vals, types.StringValue(v.String()))
+					}
+					cond.Values = vals
+				}
+				respConditions = append(respConditions, cond)
 			}
-			respConditions = append(respConditions, cond)
+			state.Conditions = respConditions
 		}
-		state.Conditions = respConditions
 	}
 
 	diags = resp.State.Set(ctx, &state)
@@ -529,7 +561,7 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, id, common.URL_CM_POLICIES, payloadJSON, state.ID.ValueString())
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICIES, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -544,87 +576,102 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 
+	// effect is Optional+Computed with Default="deny" — always hydrate.
 	if r := gjson.Get(response, "effect"); r.Exists() {
 		plan.Effect = types.StringValue(r.String())
 	} else {
 		plan.Effect = types.StringNull()
 	}
 
-	if r := gjson.Get(response, "name"); r.Exists() {
-		plan.Name = types.StringValue(r.String())
-	} else {
-		plan.Name = types.StringNull()
-	}
-
-	if r := gjson.Get(response, "allow"); r.Exists() {
-		plan.Allow = types.BoolValue(r.Bool())
-	} else {
-		plan.Allow = types.BoolNull()
-	}
-
-	if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
-		plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-	} else {
-		plan.IncludeDescendantAccounts = types.BoolNull()
-	}
-
-	rResources := gjson.Get(response, "resources")
-	if !rResources.Exists() {
-		plan.Resources = nil
-	} else {
-		var respResources []types.String
-		for _, res := range rResources.Array() {
-			respResources = append(respResources, types.StringValue(res.String()))
+	// Optional-only fields: only hydrate when the new plan (desired config) is non-null.
+	// This prevents CM's server defaults from overwriting null plan values and causing drift.
+	if !plan.Name.IsNull() {
+		if r := gjson.Get(response, "name"); r.Exists() {
+			plan.Name = types.StringValue(r.String())
+		} else {
+			plan.Name = types.StringNull()
 		}
-		plan.Resources = respResources
 	}
 
-	rActions := gjson.Get(response, "actions")
-	if !rActions.Exists() {
-		plan.Actions = nil
-	} else {
-		var respActions []types.String
-		for _, act := range rActions.Array() {
-			respActions = append(respActions, types.StringValue(act.String()))
+	if !plan.Allow.IsNull() {
+		if r := gjson.Get(response, "allow"); r.Exists() {
+			plan.Allow = types.BoolValue(r.Bool())
+		} else {
+			plan.Allow = types.BoolNull()
 		}
-		plan.Actions = respActions
 	}
 
-	rConditions := gjson.Get(response, "conditions")
-	if !rConditions.Exists() {
-		plan.Conditions = nil
-	} else {
-		var respConditions []CMPolicyConditionTFSDK
-		for _, c := range rConditions.Array() {
-			var cond CMPolicyConditionTFSDK
-			if nr := c.Get("negate"); nr.Exists() {
-				cond.Negate = types.BoolValue(nr.Bool())
-			} else {
-				cond.Negate = types.BoolNull()
+	if !plan.IncludeDescendantAccounts.IsNull() {
+		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
+			plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
+		} else {
+			plan.IncludeDescendantAccounts = types.BoolNull()
+		}
+	}
+
+	if plan.Resources != nil {
+		rResources := gjson.Get(response, "resources")
+		if !rResources.Exists() {
+			plan.Resources = nil
+		} else {
+			var respResources []types.String
+			for _, res := range rResources.Array() {
+				respResources = append(respResources, types.StringValue(res.String()))
 			}
-			if or_ := c.Get("op"); or_.Exists() {
-				cond.Op = types.StringValue(or_.String())
-			} else {
-				cond.Op = types.StringNull()
+			plan.Resources = respResources
+		}
+	}
+
+	if plan.Actions != nil {
+		rActions := gjson.Get(response, "actions")
+		if !rActions.Exists() {
+			plan.Actions = nil
+		} else {
+			var respActions []types.String
+			for _, act := range rActions.Array() {
+				respActions = append(respActions, types.StringValue(act.String()))
 			}
-			if pr := c.Get("path"); pr.Exists() {
-				cond.Path = types.StringValue(pr.String())
-			} else {
-				cond.Path = types.StringNull()
-			}
-			rVals := c.Get("values")
-			if !rVals.Exists() {
-				cond.Values = nil
-			} else {
-				var vals []types.String
-				for _, v := range rVals.Array() {
-					vals = append(vals, types.StringValue(v.String()))
+			plan.Actions = respActions
+		}
+	}
+
+	if plan.Conditions != nil {
+		rConditions := gjson.Get(response, "conditions")
+		if !rConditions.Exists() {
+			plan.Conditions = nil
+		} else {
+			var respConditions []CMPolicyConditionTFSDK
+			for _, c := range rConditions.Array() {
+				var cond CMPolicyConditionTFSDK
+				if nr := c.Get("negate"); nr.Exists() {
+					cond.Negate = types.BoolValue(nr.Bool())
+				} else {
+					cond.Negate = types.BoolNull()
 				}
-				cond.Values = vals
+				if or_ := c.Get("op"); or_.Exists() {
+					cond.Op = types.StringValue(or_.String())
+				} else {
+					cond.Op = types.StringNull()
+				}
+				if pr := c.Get("path"); pr.Exists() {
+					cond.Path = types.StringValue(pr.String())
+				} else {
+					cond.Path = types.StringNull()
+				}
+				rVals := c.Get("values")
+				if !rVals.Exists() {
+					cond.Values = nil
+				} else {
+					var vals []types.String
+					for _, v := range rVals.Array() {
+						vals = append(vals, types.StringValue(v.String()))
+					}
+					cond.Values = vals
+				}
+				respConditions = append(respConditions, cond)
 			}
-			respConditions = append(respConditions, cond)
+			plan.Conditions = respConditions
 		}
-		plan.Conditions = respConditions
 	}
 
 	diags = resp.State.Set(ctx, plan)

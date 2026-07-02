@@ -405,7 +405,7 @@ func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.Up
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, id, common.URL_CM_POLICY_ATTACHMENTS, payloadJSON, state.ID.ValueString())
+	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -438,42 +438,51 @@ func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.Up
 		plan.PrincipalSelector = psMap
 	}
 
-	if r2 := gjson.Get(response, "jurisdiction"); r2.Exists() {
-		plan.Jurisdiction = types.StringValue(r2.String())
-	} else {
-		plan.Jurisdiction = types.StringNull()
+	// Optional fields: only hydrate from PATCH response when plan had them non-null.
+	// CM may return server-assigned values (e.g. jurisdiction resolved to an internal URI)
+	// even when not configured; overwriting plan causes plan-consistency errors.
+	if !plan.Jurisdiction.IsNull() {
+		if r2 := gjson.Get(response, "jurisdiction"); r2.Exists() {
+			plan.Jurisdiction = types.StringValue(r2.String())
+		} else {
+			plan.Jurisdiction = types.StringNull()
+		}
 	}
 
-	if r2 := gjson.Get(response, "actions"); r2.Exists() {
-		actArr := r2.Array()
-		actElems := make([]attr.Value, len(actArr))
-		for i, a := range actArr {
-			actElems[i] = types.StringValue(a.String())
+	if !plan.Actions.IsNull() {
+		if r2 := gjson.Get(response, "actions"); r2.Exists() {
+			actArr := r2.Array()
+			actElems := make([]attr.Value, len(actArr))
+			for i, a := range actArr {
+				actElems[i] = types.StringValue(a.String())
+			}
+			actList, diags3 := types.ListValue(types.StringType, actElems)
+			resp.Diagnostics.Append(diags3...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			plan.Actions = actList
+		} else {
+			plan.Actions = types.ListNull(types.StringType)
 		}
-		actList, diags3 := types.ListValue(types.StringType, actElems)
-		resp.Diagnostics.Append(diags3...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		plan.Actions = actList
-	} else {
-		plan.Actions = types.ListNull(types.StringType)
 	}
 
-	if r2 := gjson.Get(response, "resources"); r2.Exists() {
-		resArr := r2.Array()
-		resElems := make([]attr.Value, len(resArr))
-		for i, res := range resArr {
-			resElems[i] = types.StringValue(res.String())
+	if !plan.Resources.IsNull() {
+		if r2 := gjson.Get(response, "resources"); r2.Exists() {
+			resArr := r2.Array()
+			resElems := make([]attr.Value, len(resArr))
+			for i, res := range resArr {
+				resElems[i] = types.StringValue(res.String())
+			}
+			resList, diags4 := types.ListValue(types.StringType, resElems)
+			resp.Diagnostics.Append(diags4...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			plan.Resources = resList
+		} else {
+			plan.Resources = types.ListNull(types.StringType)
 		}
-		resList, diags4 := types.ListValue(types.StringType, resElems)
-		resp.Diagnostics.Append(diags4...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		plan.Resources = resList
-	} else {
-		plan.Resources = types.ListNull(types.StringType)
 	}
 
 	diags = resp.State.Set(ctx, plan)
