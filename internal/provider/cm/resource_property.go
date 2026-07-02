@@ -153,6 +153,10 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 			// removing on 404 causes confusing behaviour when CM is temporarily
 			// unreachable (Terraform would silently drop the resource from state).
 			tflog.Debug(ctx, common.ERR_METHOD_END+"property not found (404) [resource_property.go -> Read]["+id+"]")
+			resp.Diagnostics.AddWarning(
+				"CipherTrust property not found",
+				"The property "+state.Name.ValueString()+" was not found on the CipherTrust Manager instance. It may have been deleted outside of Terraform. The resource will remain in state.",
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Read]["+id+"]")

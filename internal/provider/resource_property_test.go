@@ -59,7 +59,7 @@ func TestAccCipherTrustProperty_drift(t *testing.T) {
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 
 	config := providerConfig + `
-resource "ciphertrust_property" "test" {
+resource "ciphertrust_property" "test_drift" {
     name  = "` + propertyName + `"
     value = "false"
 }
@@ -70,8 +70,8 @@ resource "ciphertrust_property" "test" {
 			{
 				Config: config,
 				Check: checkStep(t, "initial apply",
-					resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "false"),
-					resource.TestCheckResourceAttrSet("ciphertrust_property.test", "description"),
+					resource.TestCheckResourceAttr("ciphertrust_property.test_drift", "value", "false"),
+					resource.TestCheckResourceAttrSet("ciphertrust_property.test_drift", "description"),
 				),
 			},
 			{
@@ -109,7 +109,7 @@ func TestAccCipherTrustProperty_basicApplyNoDrift(t *testing.T) {
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 
 	config := providerConfig + `
-resource "ciphertrust_property" "test" {
+resource "ciphertrust_property" "test_no_drift" {
     name  = "` + propertyName + `"
     value = "false"
 }
@@ -120,8 +120,8 @@ resource "ciphertrust_property" "test" {
 			{
 				Config: config,
 				Check: checkStep(t, "apply",
-					resource.TestCheckResourceAttrSet("ciphertrust_property.test", "description"),
-					resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "false"),
+					resource.TestCheckResourceAttrSet("ciphertrust_property.test_no_drift", "description"),
+					resource.TestCheckResourceAttr("ciphertrust_property.test_no_drift", "value", "false"),
 				),
 			},
 			{
@@ -138,7 +138,7 @@ func TestAccCipherTrustProperty_destroyOutOfBand(t *testing.T) {
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 
 	config := providerConfig + `
-resource "ciphertrust_property" "test" {
+resource "ciphertrust_property" "test_oob_destroy" {
     name  = "` + propertyName + `"
     value = "true"
 }
@@ -149,7 +149,7 @@ resource "ciphertrust_property" "test" {
 			{
 				Config: config,
 				Check: checkStep(t, "apply",
-					resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_property.test_oob_destroy", "value", "true"),
 				),
 			},
 			{
@@ -167,7 +167,7 @@ resource "ciphertrust_property" "test" {
 						nil,
 					)
 				},
-				Config:  config,
+				Config: config,
 				Destroy: true,
 			},
 		},
