@@ -203,7 +203,9 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
 		plan.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		plan.AllowUserManagement = types.BoolNull()
+		// CM omits allow_user_management when it equals the default (false).
+		// Treat absence as false to avoid a plan/actual mismatch.
+		plan.AllowUserManagement = types.BoolValue(false)
 	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
@@ -294,7 +296,9 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
 		state.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		state.AllowUserManagement = types.BoolNull()
+		// CM omits allow_user_management when it equals the default (false).
+		// Treat absence as false to prevent false drift for users who set it to false.
+		state.AllowUserManagement = types.BoolValue(false)
 	}
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
@@ -474,7 +478,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if r := gjson.Get(readResponse, "allow_user_management"); r.Exists() {
 		plan.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		plan.AllowUserManagement = types.BoolNull()
+		// CM omits allow_user_management when it equals the default (false).
+		// Treat absence as false to prevent a plan/actual mismatch.
+		plan.AllowUserManagement = types.BoolValue(false)
 	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
