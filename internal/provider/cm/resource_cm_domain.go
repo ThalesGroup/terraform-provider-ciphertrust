@@ -203,9 +203,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
 		plan.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		// CM omits allow_user_management when it equals the default (false).
-		// Treat absence as false to avoid a plan/actual mismatch.
-		plan.AllowUserManagement = types.BoolValue(false)
+		plan.AllowUserManagement = types.BoolNull()
 	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
@@ -296,9 +294,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
 		state.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		// CM omits allow_user_management when it equals the default (false).
-		// Treat absence as false to prevent false drift for users who set it to false.
-		state.AllowUserManagement = types.BoolValue(false)
+		state.AllowUserManagement = types.BoolNull()
 	}
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
 	state.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
@@ -354,7 +350,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Update]["+id+"]")
 	var plan CMDomainTFSDK
 	var state CMDomainTFSDK
-	var payload CMDomainJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -409,34 +404,32 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Build payload only if there are changes
-	if plan.HSMKEKLabel.ValueString() != "" && plan.HSMKEKLabel.ValueString() != types.StringNull().ValueString() {
-		payload.HSMKEKLabel = plan.HSMKEKLabel.ValueString()
-	}
-	if plan.HSMConnectionId.ValueString() != "" && plan.HSMConnectionId.ValueString() != types.StringNull().ValueString() {
-		payload.HSMConnectionId = plan.HSMConnectionId.ValueString()
-	}
-
+	// Build PATCH payload as a targeted map to avoid sending server-assigned
+	// computed fields (id, name, uri, account, etc.) as empty strings to CM,
+	// which can cause CM to reset user-controlled fields unexpectedly.
 	var adminsPayload []string
 	for _, a := range plan.Admins {
 		adminsPayload = append(adminsPayload, a.ValueString())
 	}
-	payload.Admins = adminsPayload
 
-	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
-		val := plan.AllowUserManagement.ValueBool()
-		payload.AllowUserManagement = &val
+	patchMap := map[string]interface{}{
+		"admins":           adminsPayload,
+		"hsm_kek_label":    plan.HSMKEKLabel.ValueString(),
+		"hsm_connection_id": plan.HSMConnectionId.ValueString(),
+		"parent_ca_id":     plan.ParentCAId.ValueString(),
 	}
-
+	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
+		patchMap["allow_user_management"] = plan.AllowUserManagement.ValueBool()
+	}
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 		metadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
 			metadataPayload[k] = v.(types.String).ValueString()
 		}
-		payload.Meta = metadataPayload
+		patchMap["meta"] = metadataPayload
 	}
 
-	payloadJSON, err := json.Marshal(payload)
+	payloadJSON, err := json.Marshal(patchMap)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -478,9 +471,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if r := gjson.Get(readResponse, "allow_user_management"); r.Exists() {
 		plan.AllowUserManagement = types.BoolValue(r.Bool())
 	} else {
-		// CM omits allow_user_management when it equals the default (false).
-		// Treat absence as false to prevent a plan/actual mismatch.
-		plan.AllowUserManagement = types.BoolValue(false)
+		plan.AllowUserManagement = types.BoolNull()
 	}
 
 	// Handle optional fields - set to null if empty string to avoid inconsistent state
