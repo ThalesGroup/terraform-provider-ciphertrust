@@ -170,15 +170,21 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 		state.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve state values when masked
+	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve state values when masked.
+	// When the API returns an empty string the field has been removed OOB; surface that as null so Terraform
+	// can detect the drift.
 	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
-	if httpProxyFromAPI != "" && !containsMaskedPassword(httpProxyFromAPI) {
+	if httpProxyFromAPI == "" {
+		state.HTTPProxy = types.StringNull()
+	} else if !containsMaskedPassword(httpProxyFromAPI) {
 		state.HTTPProxy = types.StringValue(httpProxyFromAPI)
 	}
 	// If masked (contains xxxxxx), keep the existing state value (don't update)
 
 	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
-	if httpsProxyFromAPI != "" && !containsMaskedPassword(httpsProxyFromAPI) {
+	if httpsProxyFromAPI == "" {
+		state.HTTPSProxy = types.StringNull()
+	} else if !containsMaskedPassword(httpsProxyFromAPI) {
 		state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
 	}
 	// If masked (contains xxxxxx), keep the existing state value (don't update)
