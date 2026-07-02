@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -215,7 +214,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Computed:    true,
 				Description: "Parameter to indicate if AWS CloudHSM key is blocked for any data plane operation.",
 			},
-			"key_policy":      keyPolicySchemaAttribute(),
+			"key_policy":      keyStoreKeyPolicySchemaAttribute(),
 			"enable_rotation": enableRotationSchemaAttribute(),
 		},
 	}
@@ -224,11 +223,6 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 // Create creates a new AWS CloudHSM key in a custom key store via CipherTrust Manager and sets Terraform state.
 // After the key is successfully created, the following post-creation operations are attempted but only
 // produce warnings (not errors) on failure, ensuring the key is always saved to state:
-//   - Adding additional aliases beyond the first  -  only applied when the key is linked (linked_state = true);
-//     unlinked keys do not support alias management via AWS
-//   - Registering the key with a CipherTrust Manager scheduled rotation job (enable_rotation block)
-//   - Disabling the key if enable_key = false  -  only applied when the key is linked
-//   - Refreshing final state from the API after all post-creation operations
 func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
@@ -248,13 +242,13 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 			base = &cloudHSMP.AWSKeyStoreCommonAwsParamTFSDK
 		}
 	}
-	awsParams := getKeyStoreKeyAWSParams(ctx, plan.KeyPolicy, base, &resp.Diagnostics)
+	awsParamsPayload := getKeyStoreKeyAWSParams(ctx, plan.KeyPolicy, base, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	payload := CreateCloudHSMKeyInputPayloadJSON{}
-	if awsParams != nil {
-		payload.AWSParams = *awsParams
+	if awsParamsPayload != nil {
+		payload.AWSParams = *awsParamsPayload
 	}
 	keyPolicy := getKeyPolicyParams(ctx, plan.KeyPolicy, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -301,16 +295,8 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	// Do not return error after this
 
 	keyID := gjson.Get(response, "id").String()
-	if !gjson.Get(response, "linked_state").Bool() && !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-			msg := "Multiple aliases cannot be added to an unlinked CloudHSM key. Only the first alias was applied."
-			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-			tflog.Warn(ctx, details)
-			resp.Diagnostics.AddWarning(details, "")
-		}
-	}
-	if gjson.Get(response, "linked_state").Bool() && !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+
+	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
 			var diags diag.Diagnostics
@@ -327,7 +313,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
-	if gjson.Get(response, "linked_state").Bool() && !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
 		var diags diag.Diagnostics
 		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
@@ -667,92 +653,44 @@ func (r *resourceAWSCloudHSMKey) decodeCloudHSMKeyTerraformResourceID(resourceID
 	return
 }
 
-// getAwsCloudHsmKey fetches an AWS CloudHSM key from CipherTrust Manager using the Terraform resource ID.
-// If customKeyStoreID is not empty, the custom key store is verified to exist before fetching the key;
-// a missing or unreachable key store is always a hard error regardless of opLabel.
-// If terraformID has no backslash (new format - CM resource UUID), the key is fetched directly by ID.
-// If terraformID has a backslash (legacy region\aws-key-id format), the key is fetched via list query.
-// A 404 on the key itself is treated according to opLabel: when opLabel is "deleting" a warning is
-// added and an empty string is returned; for any other opLabel an error is added and an empty string is returned.
-func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id string, customKeyStoreID string, terraformID string, opLabel string, diags *diag.Diagnostics) string {
-	if customKeyStoreID != "" {
-		getAwsCustomKeyStore(ctx, r.client, id, customKeyStoreID, "reading", diags)
-		if diags.HasError() {
-			return ""
-		}
+// setCloudHSMKeyResourceState populates the full Terraform state for an aws_cloudhsm_key resource.
+// Identical to setXKSKeyResourceState except it uses the CloudHSM-typed aws_param struct and
+// sets key_rotation_enabled instead of xks_key_configuration.
+func setCloudHSMKeyResourceState(ctx context.Context, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
+	setKeyStoreResourceCommonTopLevel(ctx, response, state, diags)
+	if diags.HasError() {
+		return
 	}
-	region, kid, err := r.decodeCloudHSMKeyTerraformResourceID(terraformID)
-	if err != nil {
-		diags.AddError("Failed to decode terraform ID "+terraformID+".", err.Error())
-		return ""
+	p := extractCloudHSMKeyAwsParam(ctx, state.AWSParam, diags)
+	if p == nil {
+		p = &AWSCloudHSMKeyAwsParamTFSDK{}
 	}
-	if region == "" {
-		// New format: terraformID is the CM resource UUID. Fetch directly.
-		keyJSON, err := r.client.GetById(ctx, id, terraformID, common.URL_AWS_KEY)
-		if err != nil {
-			if strings.Contains(err.Error(), notFoundError) {
-				if opLabel == "deleting" {
-					msg := "AWS CloudHSM key (" + terraformID + ") was not found. It will be removed from state."
-					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
-					tflog.Warn(ctx, details)
-					diags.AddWarning(details, "")
-				} else {
-					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
-					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
-					tflog.Error(ctx, details)
-					diags.AddError(details, "")
-				}
-				return ""
-			}
-			msg := "Error reading AWS CloudHSM key."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": terraformID})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-			return ""
-		}
-		return keyJSON
+	setAliases(response, &p.AWSKeyStoreCommonAwsParamTFSDK.Alias, diags)
+	setKeyTags(ctx, response, &p.AWSKeyStoreCommonAwsParamTFSDK.Tags, diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	p.AWSKeyStoreCommonAwsParamTFSDK.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	p.AWSKeyStoreCommonAwsParamTFSDK.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
+	p.AWSKeyStoreCommonAwsParamTFSDK.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	policy := gjson.Get(response, "aws_param.Policy").String()
+	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
+		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
+		!getPoliciesAreEqual(ctx, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
+		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
 	}
-	// Legacy format: region\aws-key-id. Use list query for backwards compatibility.
-	filters := url.Values{}
-	filters.Add("keyid", kid)
-	filters.Add("region", region)
-	response, err := r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
-	if err != nil {
-		msg := "Failed to read AWS CloudHSM key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kid": kid, "region": region})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return ""
-	}
-	total := gjson.Get(response, "total").Int()
-	if total == 0 {
-		var msg string
-		if opLabel == "deleting" {
-			msg = "AWS CloudHSM key was not found. It will be removed from state."
-		} else {
-			msg = fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
-		}
-		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
-		if opLabel == "deleting" {
-			tflog.Warn(ctx, details)
-			diags.AddWarning(details, "")
-		} else {
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-		}
-		return ""
-	}
-	if total != 1 {
-		msg := "Error reading AWS CloudHSM key, failed to list just one key."
-		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
-		tflog.Error(ctx, details)
-		diags.AddError(details, "")
-		return ""
-	}
-	resources := gjson.Get(response, "resources").Array()
-	var keyJSON string
-	for _, keyResourceJSON := range resources {
-		keyJSON = keyResourceJSON.Raw
-	}
-	return keyJSON
+	// CloudHSM-specific computed field.
+	p.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
+	state.AWSParam = packCloudHSMKeyAwsParam(ctx, p, diags)
 }

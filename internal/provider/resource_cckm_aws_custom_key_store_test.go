@@ -30,8 +30,8 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
+			#unexportable = true
+			#undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
@@ -64,8 +64,6 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
@@ -147,8 +145,6 @@ func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateVerifyIgnore: []string{
-					"access_key_id",                // credentials only returned on create POST, not on GET
-					"secret_access_key",            // credentials only returned on create POST, not on GET
 					"aws_param.key_store_password", // write-only; not returned by the API
 					"enable_credential_rotation",   // not surfaced in GET response; cannot round-trip
 					"updated_at",                   // timestamp; may differ between the import Read and the prior-state Read
@@ -258,8 +254,6 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 			name         = "%s"
 			algorithm    = "AES"
 			usage_mask   = local.cm_key_usage_mask
-			unexportable = true
-			undeletable  = true
 			remove_from_state_on_destroy = true
 		}
 
