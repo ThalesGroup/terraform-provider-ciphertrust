@@ -55,7 +55,7 @@ func cteClientGP1(guardEnabled string) string {
     }`
 }
 
-func TestResourceCTEClientGuardPoint(t *testing.T) {
+func TestCTEClientGuardPointResource(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	policyName := "TF_CTE_Policy_Test-" + suffix
 	clientName := "TF_CTE_Client_Test-" + suffix

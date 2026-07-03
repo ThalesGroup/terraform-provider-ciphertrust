@@ -2,11 +2,12 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
-	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -45,6 +46,88 @@ resource "ciphertrust_user" "testUser" {
 				),
 			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+// TestAccCMUser_NameNicknameDrift verifies that OOB changes to name are detected
+// as drift, and that no spurious drift is introduced by the gjson-based Read fix.
+//
+// The CM API auto-sets nickname to username and does not accept custom nickname
+// values via PATCH, so nickname OOB mutations cannot be exercised directly.
+// Correctness of the nickname fix is validated by the no-spurious-drift check
+// (Step 2) — if Read stored "" instead of the username value, a diff would appear.
+func TestAccCMUser_NameNicknameDrift(t *testing.T) {
+	RequireCM(t)
+
+	username := fmt.Sprintf("testdrift%d", time.Now().Unix())
+	var capturedUserID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "driftUser" {
+  username = "%s"
+  password = "CHAnge012!@#"
+  name     = "Alice Example"
+}
+`, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: baseline apply with explicit name; capture user ID.
+			// Also verifies nickname is stored as the API-returned username value
+			// (not empty string), validating the gjson nickname fix.
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: baseline create with name",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.driftUser", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_user.driftUser", "name", "Alice Example"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.driftUser", "nickname"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.driftUser"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.driftUser not found in state")
+						}
+						capturedUserID = rs.Primary.ID
+						nick := rs.Primary.Attributes["nickname"]
+						uname := rs.Primary.Attributes["username"]
+						if nick == "" {
+							return fmt.Errorf("nickname is empty string in state; gjson fix should store %q", uname)
+						}
+						return nil
+					},
+				),
+			},
+			// Step 2: no perpetual drift immediately after apply.
+			// Validates that storing nickname=username does not produce a spurious diff.
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: OOB change of name — plan must detect drift.
+			{
+				Config: cfg,
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("createCMClient failed — skipping OOB mutation")
+					}
+					payload, err := json.Marshal(map[string]interface{}{"name": "OOB Changed Name"})
+					if err != nil {
+						t.Fatalf("Step 3 PreConfig: marshal failed: %v", err)
+					}
+					if _, err := client.UpdateData(context.Background(), capturedUserID, common.URL_USER_MANAGEMENT, payload, "user_id"); err != nil {
+						t.Fatalf("Step 3 PreConfig: UpdateData failed: %v", err)
+					}
+				},
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 4: apply to resync state after OOB name change.
+			{
+				Config: cfg,
+			},
 		},
 	})
 }

@@ -19,7 +19,7 @@ resource "ciphertrust_cte_ldtgroupcomms" "ldt" {
 `, name, description)
 }
 
-func TestResourceCTELDTGroupComm(t *testing.T) {
+func TestCTELDTGroupCommResource(t *testing.T) {
 	name := "tf-ldtgc-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_ldtgroupcomms.ldt"
 

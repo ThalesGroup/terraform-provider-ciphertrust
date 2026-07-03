@@ -35,7 +35,7 @@ resource "ciphertrust_cte_policy_security_rule" "secrule" {
 `, policyName, action, effect, partialMatch)
 }
 
-func TestResourceCTEPolicySecurityRule(t *testing.T) {
+func TestCTEPolicySecurityRuleResource(t *testing.T) {
 	policyName := "tf-secrule-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_policy_security_rule.secrule"
 

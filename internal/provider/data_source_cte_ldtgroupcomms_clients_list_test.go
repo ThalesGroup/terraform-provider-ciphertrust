@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTELDTGroupCommSvcClientsDataSource(t *testing.T) {
+func TestCTELDTGroupCommSvcClientsDataSource(t *testing.T) {
 	groupName := "tf-ldt-group-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

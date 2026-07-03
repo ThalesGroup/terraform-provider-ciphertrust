@@ -45,7 +45,7 @@ resource "ciphertrust_cte_csigroup" "csigroup" {
 `, name, op, description)
 }
 
-func TestResourceCTECSIGroup(t *testing.T) {
+func TestCTECSIGroupResource(t *testing.T) {
 	name := "tf-csi-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_csigroup.csigroup"
 

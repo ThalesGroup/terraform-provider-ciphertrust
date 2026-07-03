@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTESignatureSetsDataSource(t *testing.T) {
+func TestCTESignatureSetsDataSource(t *testing.T) {
 	signatureSetName := "tf-sigset-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

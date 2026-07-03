@@ -43,7 +43,7 @@ resource "ciphertrust_cte_user_set" "user_set" {
 // TestResourceCTEUserSet exercises Create -> Read -> Update -> Delete with
 // assertions on the computed fields, then verifies a clean plan (no drift) on
 // re-apply and a successful import.
-func TestResourceCTEUserSet(t *testing.T) {
+func TestCTEUserSetResource(t *testing.T) {
 	name := "tf-userset-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

@@ -40,7 +40,7 @@ resource "ciphertrust_cte_process_set" "process_set" {
 `, name, desc, processes)
 }
 
-func TestResourceCTEProcessSet(t *testing.T) {
+func TestCTEProcessSetResource(t *testing.T) {
 	name := "tf-procset-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

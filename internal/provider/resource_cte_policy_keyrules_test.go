@@ -32,7 +32,7 @@ resource "ciphertrust_cte_policy_key_rule" "keyrule" {
 `, policyName, keyID)
 }
 
-func TestResourceCTEPolicyKeyRule(t *testing.T) {
+func TestCTEPolicyKeyRuleResource(t *testing.T) {
 	policyName := "tf-keyrule-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_policy_key_rule.keyrule"
 

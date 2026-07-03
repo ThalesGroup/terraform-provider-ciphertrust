@@ -1000,24 +1000,24 @@ type CMPolicyTFSDK struct {
 }
 
 type CMPolicyConditionJSON struct {
-	Negate bool     `json:"negate"`
-	Op     string   `json:"op"`
-	Path   string   `json:"path"`
-	Values []string `json:"values"`
+	Negate *bool    `json:"negate,omitempty"`
+	Op     string   `json:"op,omitempty"`
+	Path   string   `json:"path,omitempty"`
+	Values []string `json:"values,omitempty"`
 }
 
 type CMPolicyJSON struct {
-	ID                        string                  `json:"id"`
-	Actions                   []string                `json:"actions"`
-	Allow                     bool                    `json:"allow"`
-	Conditions                []CMPolicyConditionJSON `json:"conditions"`
-	Effect                    string                  `json:"effect"`
-	IncludeDescendantAccounts bool                    `json:"include_descendant_accounts"`
-	Name                      string                  `json:"name"`
-	Resources                 []string                `json:"resources"`
-	URI                       string                  `json:"uri"`
-	Account                   string                  `json:"account"`
-	CreatedAt                 string                  `json:"createdAt"`
+	ID                        string                  `json:"id,omitempty"`
+	Actions                   []string                `json:"actions,omitempty"`
+	Allow                     *bool                   `json:"allow,omitempty"`
+	Conditions                []CMPolicyConditionJSON `json:"conditions,omitempty"`
+	Effect                    *string                 `json:"effect,omitempty"`
+	IncludeDescendantAccounts *bool                   `json:"include_descendant_accounts,omitempty"`
+	Name                      *string                 `json:"name,omitempty"`
+	Resources                 []string                `json:"resources,omitempty"`
+	URI                       string                  `json:"uri,omitempty"`
+	Account                   string                  `json:"account,omitempty"`
+	CreatedAt                 string                  `json:"createdAt,omitempty"`
 }
 
 type CMPolicyAttachmentTFSDK struct {
@@ -1033,13 +1033,15 @@ type CMPolicyAttachmentTFSDK struct {
 }
 
 type CMPolicyAttachmentJSON struct {
-	ID                string                 `json:"id"`
-	Policy            string                 `json:"policy"`
-	PrincipalSelector map[string]interface{} `json:"principalSelector"`
-	Jurisdiction      string                 `json:"jurisdiction"`
-	URI               string                 `json:"uri"`
-	Account           string                 `json:"account"`
-	CreatedAt         string                 `json:"createdAt"`
+	ID                string                 `json:"id,omitempty"`
+	Policy            string                 `json:"policy,omitempty"`
+	PrincipalSelector map[string]interface{} `json:"principalSelector,omitempty"`
+	Jurisdiction      string                 `json:"jurisdiction,omitempty"`
+	Actions           []string               `json:"actions,omitempty"`
+	Resources         []string               `json:"resources,omitempty"`
+	URI               string                 `json:"uri,omitempty"`
+	Account           string                 `json:"account,omitempty"`
+	CreatedAt         string                 `json:"createdAt,omitempty"`
 }
 
 type CMSyslogTFSDK struct {
@@ -1132,7 +1134,7 @@ type CMLogForwardersSyslogParamsTFSDK struct {
 }
 
 type CMLogForwardersSyslogTFSDK struct {
-	SyslogParams *CMLogForwardersSyslogParamsTFSDK `tfsdk:"syslog_params"`
+	SyslogParams *CMLogForwardersSyslogParamsTFSDK `tfsdk:"forward_logs"`
 }
 
 type CMLogForwardersTFSDK struct {

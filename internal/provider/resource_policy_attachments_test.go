@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -97,27 +99,216 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Step 1: Create the attachment, then delete it from CM directly.
-			// ExpectNonEmptyPlan: true because the OOB delete causes the resource
-			// to disappear from state during the post-step refresh check.
+			// With the new 404 behavior: Read() adds a warning but keeps the
+			// resource in state (no RemoveResource). No diff is produced.
 			{
 				Config: providerConfig + policyConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.oob_attachment", "id"),
 					deleteOutOfBand("ciphertrust_policy_attachments.oob_attachment"),
 				),
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
-			// Step 2: RefreshState — Read() detects 404, removes from state, no error.
-			// ExpectNonEmptyPlan: true because after removal the plan shows +create.
+			// Step 2: RefreshState — Read() gets 404, adds warning, preserves state.
+			// No diff because resource is still in state with same values.
 			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func TestAccCMPolicyAttachment_drift(t *testing.T) {
+	RequireCM(t)
+	var attachmentID string
+
+	policyName := fmt.Sprintf("tf-acc-attach-drift-pol-%d", time.Now().Unix())
+
+	initialConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  actions    = ["CreateKey"]
+  resources  = ["kylo://"]
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: initialConfig,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "actions.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "resources.#", "1"),
+					func(s *terraform.State) error {
+						attachmentID = s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM client unavailable")
+					}
+					modifiedPayload, _ := json.Marshal(map[string]interface{}{
+						"actions":   []string{"CreateKey", "DeleteKey"},
+						"resources": []string{"kylo://", "kylo://other"},
+					})
+					_, _ = client.UpdateDataV2(context.Background(), attachmentID, common.URL_CM_POLICY_ATTACHMENTS, modifiedPayload)
+				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
 			},
-			// Step 3: Plan — attachment gone from state, Terraform proposes +create.
+		},
+	})
+}
+
+func TestAccCMPolicyAttachment_update(t *testing.T) {
+	RequireCM(t)
+	var attachmentID string
+
+	policyName := fmt.Sprintf("tf-acc-attach-upd-pol-%d", time.Now().Unix())
+
+	initialConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName)
+
+	updatedConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser2"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
 			{
-				Config:             providerConfig + policyConfig,
+				Config: initialConfig,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "principal_selector.user", "apitestuser"),
+					func(s *terraform.State) error {
+						attachmentID = s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: updatedConfig,
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "principal_selector.user", "apitestuser2"),
+					func(s *terraform.State) error {
+						updatedID := s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
+						if updatedID != attachmentID {
+							return fmt.Errorf("expected no destroy+recreate: ID changed from %s to %s", attachmentID, updatedID)
+						}
+						return nil
+					},
+				),
+			},
+			{
+				Config:             updatedConfig,
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+func TestAccCMPolicyAttachment_immutablePolicy(t *testing.T) {
+	RequireCM(t)
+
+	policyName := fmt.Sprintf("tf-acc-attach-immut-pol-%d", time.Now().Unix())
+
+	initialConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName)
+
+	changedPolicyConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = "some-other-policy-id"
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: initialConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test", "id"),
+				),
+			},
+			{
+				Config:      changedPolicyConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 		},
 	})

@@ -45,7 +45,7 @@ resource "ciphertrust_cte_resource_set" "resource_set" {
 `, name, desc, resources)
 }
 
-func TestResourceCTEResourceSet(t *testing.T) {
+func TestCTEResourceSetResource(t *testing.T) {
 	name := "tf-resset-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

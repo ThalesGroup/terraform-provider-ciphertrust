@@ -36,7 +36,7 @@ resource "ciphertrust_cte_policy_data_tx_rule" "datatx" {
 `, policyName)
 }
 
-func TestResourceCTEPolicyDataTXRule(t *testing.T) {
+func TestCTEPolicyDataTXRuleResource(t *testing.T) {
 	policyName := "tf-datatx-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_policy_data_tx_rule.datatx"
 

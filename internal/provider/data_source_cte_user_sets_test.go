@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTEUserSetsDataSource(t *testing.T) {
+func TestCTEUserSetsDataSource(t *testing.T) {
 	userSetName := "tf-userset-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

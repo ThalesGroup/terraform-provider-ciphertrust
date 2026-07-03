@@ -31,7 +31,7 @@ resource "ciphertrust_cte_signature_set" "signature_set" {
 `, name, desc, sources)
 }
 
-func TestResourceCTESignatureSet(t *testing.T) {
+func TestCTESignatureSetResource(t *testing.T) {
 	name := "tf-sigset-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

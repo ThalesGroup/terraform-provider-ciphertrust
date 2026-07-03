@@ -37,7 +37,7 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 // TestResourceCTEPolicy exercises Create -> Read -> Update -> Delete plus plan
 // stability and import. policy_type and name are immutable, so only description
 // and the security rule action change across steps.
-func TestResourceCTEPolicy(t *testing.T) {
+func TestCTEPolicyResource(t *testing.T) {
 	name := "tf-policy-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

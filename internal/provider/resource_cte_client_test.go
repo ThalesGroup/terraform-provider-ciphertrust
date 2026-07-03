@@ -29,7 +29,7 @@ resource "ciphertrust_cte_client" "client" {
 `, name, extra)
 }
 
-func TestResourceCTEClient(t *testing.T) {
+func TestCTEClientResource(t *testing.T) {
 	name := "tf-client-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"
 

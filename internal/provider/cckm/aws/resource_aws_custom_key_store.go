@@ -85,12 +85,6 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"access_key_id": schema.StringAttribute{
-				Computed: true,
-			},
-			"secret_access_key": schema.StringAttribute{
-				Computed: true,
-			},
 			"cloud_name": schema.StringAttribute{
 				Computed: true,
 			},
@@ -461,10 +455,6 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Create][response:"+redactAWSResponse(response)+"]")
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	// Capture credentials from initial create response - the GET endpoint does not return them.
-	createdAccessKeyID := gjson.Get(response, "access_key_id").String()
-	createdSecretAccessKey := gjson.Get(response, "secret_access_key").String()
-
 	// No error after this
 
 	if plan.EnableCredentialRotation != nil {
@@ -546,14 +536,6 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	r.setCustomKeyStoreState(ctx, response, &plan, nil, &warningDiags)
 	for _, d := range warningDiags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-	}
-
-	// Restore credentials captured from the initial create response if the GET response omitted them.
-	if createdAccessKeyID != "" {
-		plan.AccessKeyID = types.StringValue(createdAccessKeyID)
-	}
-	if createdSecretAccessKey != "" {
-		plan.SecretAccessKey = types.StringValue(createdSecretAccessKey)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -1095,12 +1077,6 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 		}
 	}
 
-	plan.AccessKeyID = types.StringValue(gjson.Get(response, "access_key_id").String())
-	plan.SecretAccessKey = types.StringValue(gjson.Get(response, "secret_access_key").String())
-	if state != nil {
-		plan.AccessKeyID = state.AccessKeyID
-		plan.SecretAccessKey = state.SecretAccessKey
-	}
 	plan.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	plan.CredentialVersion = types.Int64Value(gjson.Get(response, "credential_version").Int())
 	plan.VersionCount = types.Int64Value(gjson.Get(response, "version_count").Int())

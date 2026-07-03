@@ -62,7 +62,7 @@ resource "ciphertrust_cte_profile" "profile" {
 `, name)
 }
 
-func TestResourceCTEProfile(t *testing.T) {
+func TestCTEProfileResource(t *testing.T) {
 	name := "tf-profile-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
 
