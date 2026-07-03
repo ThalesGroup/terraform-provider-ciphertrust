@@ -389,9 +389,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		}
 	}
 
-	if !plan.AllowUserManagement.Equal(state.AllowUserManagement) {
-		hasChanges = true
-	}
+	// allow_user_management is not updatable via PATCH; omit from hasChanges.
 
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
@@ -421,9 +419,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	if !plan.ParentCAId.IsNull() && !plan.ParentCAId.IsUnknown() {
 		patchMap["parent_ca_id"] = plan.ParentCAId.ValueString()
 	}
-	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
-		patchMap["allow_user_management"] = plan.AllowUserManagement.ValueBool()
-	}
+	// allow_user_management is not updatable via PATCH — CM ignores it and returns
+	// the original value. Omit from the payload to prevent plan inconsistency.
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 		metadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {

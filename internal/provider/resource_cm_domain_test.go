@@ -268,7 +268,8 @@ func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 }
 
 // TestAccCipherTrustCMDomain_updatePathKey verifies that Update() sends state.ID
-// (UUID) as the PATCH path parameter and that allow_user_management changes are applied.
+// (UUID) as the PATCH path parameter. Uses meta_data change as the trigger because
+// allow_user_management is not updatable via PATCH on CM domains.
 func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
@@ -280,20 +281,21 @@ func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 			{
 				PreConfig: func() { domainSweep() },
 				Config:    domainConfig(rName, []string{"admin"}, false, nil),
-				Check: checkStep(t, "updatePathKey: create with false",
+				Check: checkStep(t, "updatePathKey: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_domain.test", "allow_user_management", "false"),
 				),
 			},
 			{
-				Config: domainConfig(rName, []string{"admin"}, true, nil),
-				Check: checkStep(t, "updatePathKey: change to true",
-					resource.TestCheckResourceAttr("ciphertrust_domain.test", "allow_user_management", "true"),
+				// Change meta_data — this is definitely updatable via PATCH and confirms
+				// that Update() issues PATCH to /v1/domains/{uuid} (not /v1/domains/{name}).
+				Config: domainConfig(rName, []string{"admin"}, false, map[string]string{"env": "test"}),
+				Check: checkStep(t, "updatePathKey: add meta_data",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "test"),
 				),
 			},
 			{
 				// No-drift check after update.
-				Config:             domainConfig(rName, []string{"admin"}, true, nil),
+				Config:             domainConfig(rName, []string{"admin"}, false, map[string]string{"env": "test"}),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
