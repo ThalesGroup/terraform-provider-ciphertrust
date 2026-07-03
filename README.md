@@ -51,6 +51,7 @@ CipherTrust authentication parameters can also be provided as environment variab
 
 The following table illustrates which parameters can be provided as environment variables or in the configuration file.
 
+
 | Provider Parameter   | Environment Variable | Config File | Required  | Default Value              |
 |:---------------------|:---------------------|:------------|:----------|:---------------------------|
 | address              | CM_ADDRESS           | address     | Yes       | N/A                        |
