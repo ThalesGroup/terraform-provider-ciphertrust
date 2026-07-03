@@ -360,6 +360,25 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	plan.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 
+	// access_key_id / secret_access_key are Optional+Computed. When neither config nor the
+	// env-var fallback supplied a value (e.g. iam_role_anywhere connections), plan still holds
+	// the Unknown value from req.Plan.Get; resolve it to a known value before State.Set, or
+	// Terraform rejects the apply with "provider returned invalid result object".
+	if plan.AccessKeyID.IsUnknown() {
+		if r := gjson.Get(response, "access_key_id"); r.Exists() {
+			plan.AccessKeyID = types.StringValue(r.String())
+		} else {
+			plan.AccessKeyID = types.StringNull()
+		}
+	}
+	if plan.SecretAccessKey.IsUnknown() {
+		if r := gjson.Get(response, "secret_access_key"); r.Exists() {
+			plan.SecretAccessKey = types.StringValue(r.String())
+		} else {
+			plan.SecretAccessKey = types.StringNull()
+		}
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
