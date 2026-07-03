@@ -1,10 +1,10 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -205,12 +205,10 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	} else {
 		state.CACert = types.StringNull()
 	}
-	if !state.MessageFormat.IsNull() {
-		state.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
-	}
-	if !state.Port.IsNull() {
-		state.Port = types.Int64Value(gjson.Get(response, "port").Int())
-	}
+	// Always hydrate message_format and port from the API response so that
+	// out-of-band changes made directly via the CM API are surfaced during
+	// drift detection, even when the user never set these fields in their .tf.
+	hydrateSyslogOptionalFields(&state, response)
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
@@ -333,6 +331,25 @@ func (r *resourceCMSyslog) Delete(ctx context.Context, req resource.DeleteReques
 			"Could not delete Syslog, unexpected error: "+err.Error(),
 		)
 		return
+	}
+}
+
+// hydrateSyslogOptionalFields copies message_format and port from the raw API
+// JSON response into state.  Both fields are Optional-only in the schema, so
+// they can legitimately be absent from state when a user omits them from their
+// .tf configuration.  By deriving the values unconditionally from the API
+// response, Read surfaces any out-of-band changes an operator made directly via
+// the CM API, enabling Terraform to detect drift even for those fields.
+func hydrateSyslogOptionalFields(state *CMSyslogTFSDK, response string) {
+	if mf := gjson.Get(response, "messageFormat"); mf.Exists() && mf.String() != "" {
+		state.MessageFormat = types.StringValue(mf.String())
+	} else {
+		state.MessageFormat = types.StringNull()
+	}
+	if p := gjson.Get(response, "port"); p.Exists() && p.Int() > 0 {
+		state.Port = types.Int64Value(p.Int())
+	} else {
+		state.Port = types.Int64Null()
 	}
 }
 

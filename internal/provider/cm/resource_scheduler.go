@@ -844,6 +844,11 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	plan.StartDate = types.StringValue(gjson.Get(response, "start_date").String())
 	plan.EndDate = types.StringValue(gjson.Get(response, "end_date").String())
 
+	// Derive the operation from the API response (source of truth) so that
+	// Read correctly hydrates params even when plan.Operation is unset or stale.
+	if op := gjson.Get(response, "operation").String(); op != "" {
+		plan.Operation = types.StringValue(op)
+	}
 	operation := plan.Operation.ValueString()
 	switch operation {
 	case "database_backup":
