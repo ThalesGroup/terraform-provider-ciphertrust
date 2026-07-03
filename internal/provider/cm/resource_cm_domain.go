@@ -121,9 +121,6 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 		"updated_at": schema.StringAttribute{
 			Computed: true,
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
-			},
 		},
 		},
 	}
