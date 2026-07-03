@@ -413,10 +413,16 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	patchMap := map[string]interface{}{
-		"admins":           adminsPayload,
-		"hsm_kek_label":    plan.HSMKEKLabel.ValueString(),
-		"hsm_connection_id": plan.HSMConnectionId.ValueString(),
-		"parent_ca_id":     plan.ParentCAId.ValueString(),
+		"admins": adminsPayload,
+	}
+	if !plan.HSMKEKLabel.IsNull() && !plan.HSMKEKLabel.IsUnknown() {
+		patchMap["hsm_kek_label"] = plan.HSMKEKLabel.ValueString()
+	}
+	if !plan.HSMConnectionId.IsNull() && !plan.HSMConnectionId.IsUnknown() {
+		patchMap["hsm_connection_id"] = plan.HSMConnectionId.ValueString()
+	}
+	if !plan.ParentCAId.IsNull() && !plan.ParentCAId.IsUnknown() {
+		patchMap["parent_ca_id"] = plan.ParentCAId.ValueString()
 	}
 	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
 		patchMap["allow_user_management"] = plan.AllowUserManagement.ValueBool()
