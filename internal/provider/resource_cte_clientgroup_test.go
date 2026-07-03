@@ -10,10 +10,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestResourceCTEClientGroup walks a client group through create -> attribute
+// TestCTEClientGroupResource walks a client group through create -> attribute
 // update -> add-clients -> remove-clients -> import. name and cluster_type are
 // immutable; attribute edits use op_type = "update".
-func TestResourceCTEClientGroup(t *testing.T) {
+func TestCTEClientGroupResource(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-" + suffix
 	c1 := "tf-cg-c1-" + suffix
