@@ -106,7 +106,7 @@ resource "ciphertrust_interface" "test" {
 resource "ciphertrust_interface" "test" {
   port           = 9010
   interface_type = "nae"
-  mode           = "no-tls-pw-req"
+  mode           = "tls-pw-opt"
 }
 `,
 				Check: checkStep(t, "update: mode change",
@@ -121,7 +121,7 @@ resource "ciphertrust_interface" "test" {
 						return nil
 					},
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "updated_at"),
-					resource.TestCheckResourceAttr("ciphertrust_interface.test", "mode", "no-tls-pw-req"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "mode", "tls-pw-opt"),
 				),
 			},
 		},

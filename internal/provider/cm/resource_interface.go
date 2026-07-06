@@ -372,9 +372,9 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
 		payload.RegToken = plan.RegToken.ValueString()
 	}
-	var trustedCAs CMInterfacTrustedCAsJSON
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
 		tflog.Debug(ctx, "Trusted CAs should not be empty at this point")
+		var trustedCAs CMInterfacTrustedCAsJSON
 		if len(plan.TrustedCAs.External) > 0 {
 			var externalCAs []string
 			for _, str := range plan.TrustedCAs.External {
@@ -389,7 +389,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 			}
 			trustedCAs.Local = localCAs
 		}
-		payload.TrustedCAs = trustedCAs
+		payload.TrustedCAs = &trustedCAs
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -432,85 +432,115 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		plan.InterfaceType = types.StringNull()
 	}
 
-	// Optional scalars — unconditional r.Exists() hydration.
-	if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
-		plan.AllowUnregistered = types.BoolValue(r.Bool())
-	} else {
-		plan.AllowUnregistered = types.BoolNull()
+	// Optional scalars — only hydrate when the user configured the field (plan is non-null).
+	// If the plan is null the API may return a server default; preserving null avoids the
+	// "Provider produced inconsistent result after apply" framework error.
+	if !plan.AllowUnregistered.IsNull() && !plan.AllowUnregistered.IsUnknown() {
+		if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
+			plan.AllowUnregistered = types.BoolValue(r.Bool())
+		} else {
+			plan.AllowUnregistered = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
-		plan.AutogenCAId = types.StringValue(r.String())
-	} else {
-		plan.AutogenCAId = types.StringNull()
+	if !plan.AutogenCAId.IsNull() && !plan.AutogenCAId.IsUnknown() {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+			plan.AutogenCAId = types.StringValue(r.String())
+		} else {
+			plan.AutogenCAId = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
-		plan.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
-	} else {
-		plan.AutogenDaysBeforeExpiry = types.Int64Null()
+	if !plan.AutogenDaysBeforeExpiry.IsNull() && !plan.AutogenDaysBeforeExpiry.IsUnknown() {
+		if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
+			plan.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
+		} else {
+			plan.AutogenDaysBeforeExpiry = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "auto_registration"); r.Exists() {
-		plan.AutoRegistration = types.BoolValue(r.Bool())
-	} else {
-		plan.AutoRegistration = types.BoolNull()
+	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
+		if r := gjson.Get(response, "auto_registration"); r.Exists() {
+			plan.AutoRegistration = types.BoolValue(r.Bool())
+		} else {
+			plan.AutoRegistration = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
-		plan.CertUserField = types.StringValue(r.String())
-	} else {
-		plan.CertUserField = types.StringNull()
+	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
+		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
+			plan.CertUserField = types.StringValue(r.String())
+		} else {
+			plan.CertUserField = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
-		plan.CustomUIDSize = types.Int64Value(r.Int())
-	} else {
-		plan.CustomUIDSize = types.Int64Null()
+	if !plan.CustomUIDSize.IsNull() && !plan.CustomUIDSize.IsUnknown() {
+		if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
+			plan.CustomUIDSize = types.Int64Value(r.Int())
+		} else {
+			plan.CustomUIDSize = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
-		plan.CustomUIDv2 = types.BoolValue(r.Bool())
-	} else {
-		plan.CustomUIDv2 = types.BoolNull()
+	if !plan.CustomUIDv2.IsNull() && !plan.CustomUIDv2.IsUnknown() {
+		if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
+			plan.CustomUIDv2 = types.BoolValue(r.Bool())
+		} else {
+			plan.CustomUIDv2 = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
-		plan.DefaultConnection = types.StringValue(r.String())
-	} else {
-		plan.DefaultConnection = types.StringNull()
+	if !plan.DefaultConnection.IsNull() && !plan.DefaultConnection.IsUnknown() {
+		if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
+			plan.DefaultConnection = types.StringValue(r.String())
+		} else {
+			plan.DefaultConnection = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
-		plan.KMIPEnableHardDelete = types.Int64Value(r.Int())
-	} else {
-		plan.KMIPEnableHardDelete = types.Int64Null()
+	if !plan.KMIPEnableHardDelete.IsNull() && !plan.KMIPEnableHardDelete.IsUnknown() {
+		if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
+			plan.KMIPEnableHardDelete = types.Int64Value(r.Int())
+		} else {
+			plan.KMIPEnableHardDelete = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
-		plan.MaximumTLSVersion = types.StringValue(r.String())
-	} else {
-		plan.MaximumTLSVersion = types.StringNull()
+	if !plan.MaximumTLSVersion.IsNull() && !plan.MaximumTLSVersion.IsUnknown() {
+		if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
+			plan.MaximumTLSVersion = types.StringValue(r.String())
+		} else {
+			plan.MaximumTLSVersion = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
-		plan.MinimumTLSVersion = types.StringValue(r.String())
-	} else {
-		plan.MinimumTLSVersion = types.StringNull()
+	if !plan.MinimumTLSVersion.IsNull() && !plan.MinimumTLSVersion.IsUnknown() {
+		if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
+			plan.MinimumTLSVersion = types.StringValue(r.String())
+		} else {
+			plan.MinimumTLSVersion = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
-		plan.Mode = types.StringValue(r.String())
-	} else {
-		plan.Mode = types.StringNull()
+	if !plan.Mode.IsNull() && !plan.Mode.IsUnknown() {
+		if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
+			plan.Mode = types.StringValue(r.String())
+		} else {
+			plan.Mode = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
-		plan.NetworkInterface = types.StringValue(r.String())
-	} else {
-		plan.NetworkInterface = types.StringNull()
+	if !plan.NetworkInterface.IsNull() && !plan.NetworkInterface.IsUnknown() {
+		if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
+			plan.NetworkInterface = types.StringValue(r.String())
+		} else {
+			plan.NetworkInterface = types.StringNull()
+		}
 	}
 
-	// tls_ciphers
-	if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
-		var ciphers []TLSCiphersTFSDK
-		for _, c := range ciphersResult.Array() {
-			ciphers = append(ciphers, TLSCiphersTFSDK{
-				CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
-				Enabled:     types.BoolValue(c.Get("enabled").Bool()),
-			})
+	// tls_ciphers — only hydrate when the user configured it; server always returns defaults.
+	if plan.TLSCiphers != nil {
+		if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
+			var ciphers []TLSCiphersTFSDK
+			for _, c := range ciphersResult.Array() {
+				ciphers = append(ciphers, TLSCiphersTFSDK{
+					CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
+					Enabled:     types.BoolValue(c.Get("enabled").Bool()),
+				})
+			}
+			plan.TLSCiphers = ciphers
+		} else {
+			plan.TLSCiphers = nil
 		}
-		plan.TLSCiphers = ciphers
-	} else {
-		plan.TLSCiphers = nil
 	}
 
 	// registration_token — write-only; plan.RegToken already holds the user's configured value.
@@ -538,8 +568,9 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	// Use state.ID (UUID) as the lookup key per plan specification.
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_INTERFACE)
+	// CM interface API uses NAME (not UUID) as the path key — UUID lookup returns 404.
+	// This is a documented exception to the general CM CRUD convention.
+	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_INTERFACE)
 	if err != nil {
 		// A 404 reliably indicates the interface no longer exists on CM. RemoveResource allows
 		// Terraform to plan a clean recreate on the next apply.
@@ -576,109 +607,141 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		state.InterfaceType = types.StringNull()
 	}
 
-	// Optional scalars — unconditional r.Exists() hydration.
-	if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
-		state.AllowUnregistered = types.BoolValue(r.Bool())
-	} else {
-		state.AllowUnregistered = types.BoolNull()
+	// Optional scalars — only hydrate when state already holds a non-null value.
+	// For fields the user never set, preserve null to avoid perpetual server-default drift.
+	if !state.AllowUnregistered.IsNull() {
+		if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
+			state.AllowUnregistered = types.BoolValue(r.Bool())
+		} else {
+			state.AllowUnregistered = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
-		state.AutogenCAId = types.StringValue(r.String())
-	} else {
-		state.AutogenCAId = types.StringNull()
+	if !state.AutogenCAId.IsNull() {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+			state.AutogenCAId = types.StringValue(r.String())
+		} else {
+			state.AutogenCAId = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
-		state.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
-	} else {
-		state.AutogenDaysBeforeExpiry = types.Int64Null()
+	if !state.AutogenDaysBeforeExpiry.IsNull() {
+		if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
+			state.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
+		} else {
+			state.AutogenDaysBeforeExpiry = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "auto_registration"); r.Exists() {
-		state.AutoRegistration = types.BoolValue(r.Bool())
-	} else {
-		state.AutoRegistration = types.BoolNull()
+	if !state.AutoRegistration.IsNull() {
+		if r := gjson.Get(response, "auto_registration"); r.Exists() {
+			state.AutoRegistration = types.BoolValue(r.Bool())
+		} else {
+			state.AutoRegistration = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
-		state.CertUserField = types.StringValue(r.String())
-	} else {
-		state.CertUserField = types.StringNull()
+	if !state.CertUserField.IsNull() {
+		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
+			state.CertUserField = types.StringValue(r.String())
+		} else {
+			state.CertUserField = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
-		state.CustomUIDSize = types.Int64Value(r.Int())
-	} else {
-		state.CustomUIDSize = types.Int64Null()
+	if !state.CustomUIDSize.IsNull() {
+		if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
+			state.CustomUIDSize = types.Int64Value(r.Int())
+		} else {
+			state.CustomUIDSize = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
-		state.CustomUIDv2 = types.BoolValue(r.Bool())
-	} else {
-		state.CustomUIDv2 = types.BoolNull()
+	if !state.CustomUIDv2.IsNull() {
+		if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
+			state.CustomUIDv2 = types.BoolValue(r.Bool())
+		} else {
+			state.CustomUIDv2 = types.BoolNull()
+		}
 	}
-	if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
-		state.DefaultConnection = types.StringValue(r.String())
-	} else {
-		state.DefaultConnection = types.StringNull()
+	if !state.DefaultConnection.IsNull() {
+		if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
+			state.DefaultConnection = types.StringValue(r.String())
+		} else {
+			state.DefaultConnection = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
-		state.KMIPEnableHardDelete = types.Int64Value(r.Int())
-	} else {
-		state.KMIPEnableHardDelete = types.Int64Null()
+	if !state.KMIPEnableHardDelete.IsNull() {
+		if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
+			state.KMIPEnableHardDelete = types.Int64Value(r.Int())
+		} else {
+			state.KMIPEnableHardDelete = types.Int64Null()
+		}
 	}
-	if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
-		state.MaximumTLSVersion = types.StringValue(r.String())
-	} else {
-		state.MaximumTLSVersion = types.StringNull()
+	if !state.MaximumTLSVersion.IsNull() {
+		if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
+			state.MaximumTLSVersion = types.StringValue(r.String())
+		} else {
+			state.MaximumTLSVersion = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
-		state.MinimumTLSVersion = types.StringValue(r.String())
-	} else {
-		state.MinimumTLSVersion = types.StringNull()
+	if !state.MinimumTLSVersion.IsNull() {
+		if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
+			state.MinimumTLSVersion = types.StringValue(r.String())
+		} else {
+			state.MinimumTLSVersion = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
-		state.Mode = types.StringValue(r.String())
-	} else {
-		state.Mode = types.StringNull()
+	if !state.Mode.IsNull() {
+		if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
+			state.Mode = types.StringValue(r.String())
+		} else {
+			state.Mode = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
-		state.NetworkInterface = types.StringValue(r.String())
-	} else {
-		state.NetworkInterface = types.StringNull()
+	if !state.NetworkInterface.IsNull() {
+		if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
+			state.NetworkInterface = types.StringValue(r.String())
+		} else {
+			state.NetworkInterface = types.StringNull()
+		}
 	}
 
-	// Nested: meta
-	if metaResult := gjson.Get(response, "meta"); metaResult.Exists() && metaResult.Type != gjson.Null {
-		naeResult := gjson.Get(response, "meta.nae")
-		if naeResult.Exists() && naeResult.Type != gjson.Null {
-			state.Meta = &CMInterfaceMetadataTFSDK{
-				NAE: &CMInterfaceMetadataNAETFSDK{
-					MaskSystemGroups: types.BoolValue(gjson.Get(response, "meta.nae.mask_system_groups").Bool()),
-				},
+	// Nested: meta — only hydrate when user configured it (state non-nil).
+	if state.Meta != nil {
+		if metaResult := gjson.Get(response, "meta"); metaResult.Exists() && metaResult.Type != gjson.Null {
+			naeResult := gjson.Get(response, "meta.nae")
+			if naeResult.Exists() && naeResult.Type != gjson.Null {
+				state.Meta = &CMInterfaceMetadataTFSDK{
+					NAE: &CMInterfaceMetadataNAETFSDK{
+						MaskSystemGroups: types.BoolValue(gjson.Get(response, "meta.nae.mask_system_groups").Bool()),
+					},
+				}
+			} else {
+				state.Meta = &CMInterfaceMetadataTFSDK{NAE: nil}
 			}
 		} else {
-			state.Meta = &CMInterfaceMetadataTFSDK{NAE: nil}
+			state.Meta = nil
 		}
-	} else {
-		state.Meta = nil
 	}
 
-	// Nested: trusted_cas
-	if tcResult := gjson.Get(response, "trusted_cas"); tcResult.Exists() && tcResult.Type != gjson.Null {
-		var ext []types.String
-		for _, v := range gjson.Get(response, "trusted_cas.external").Array() {
-			ext = append(ext, types.StringValue(v.String()))
+	// Nested: trusted_cas — only hydrate when user configured it (state non-nil).
+	if state.TrustedCAs != nil {
+		if tcResult := gjson.Get(response, "trusted_cas"); tcResult.Exists() && tcResult.Type != gjson.Null {
+			var ext []types.String
+			for _, v := range gjson.Get(response, "trusted_cas.external").Array() {
+				ext = append(ext, types.StringValue(v.String()))
+			}
+			var loc []types.String
+			for _, v := range gjson.Get(response, "trusted_cas.local").Array() {
+				loc = append(loc, types.StringValue(v.String()))
+			}
+			state.TrustedCAs = &CMInterfacTrustedCAsTFSDK{External: ext, Local: loc}
+		} else {
+			state.TrustedCAs = nil
 		}
-		var loc []types.String
-		for _, v := range gjson.Get(response, "trusted_cas.local").Array() {
-			loc = append(loc, types.StringValue(v.String()))
-		}
-		state.TrustedCAs = &CMInterfacTrustedCAsTFSDK{External: ext, Local: loc}
-	} else {
-		state.TrustedCAs = nil
 	}
 
-	// Nested: local_auto_gen_attributes
+	// Nested: local_auto_gen_attributes — only hydrate when user configured it (state non-nil).
 	// CM is expected to always return dns_names, email_addresses, and ip_addresses when the
 	// local_auto_gen_attributes block is present in the response — these are Required sub-fields.
 	// When a sub-field is absent (anomalous CM behaviour), the field is left at its zero value
 	// (nil slice from struct initialisation) rather than explicitly assigned nil.
+	if state.LocalAutogenAttributes != nil {
 	if lagaResult := gjson.Get(response, "local_auto_gen_attributes"); lagaResult.Exists() && lagaResult.Type != gjson.Null {
 			var laga CMInterfaceLocalAutogenAttrTFSDK
 			if r := gjson.Get(response, "local_auto_gen_attributes.cn"); r.Exists() && r.String() != "" {
@@ -759,19 +822,22 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		} else {
 			state.LocalAutogenAttributes = nil
 		}
+	} // end if state.LocalAutogenAttributes != nil
 
-	// tls_ciphers
-	if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
-		var ciphers []TLSCiphersTFSDK
-		for _, c := range ciphersResult.Array() {
-			ciphers = append(ciphers, TLSCiphersTFSDK{
-				CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
-				Enabled:     types.BoolValue(c.Get("enabled").Bool()),
-			})
+	// tls_ciphers — only hydrate when user configured it; server always returns defaults.
+	if state.TLSCiphers != nil {
+		if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
+			var ciphers []TLSCiphersTFSDK
+			for _, c := range ciphersResult.Array() {
+				ciphers = append(ciphers, TLSCiphersTFSDK{
+					CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
+					Enabled:     types.BoolValue(c.Get("enabled").Bool()),
+				})
+			}
+			state.TLSCiphers = ciphers
+		} else {
+			state.TLSCiphers = nil
 		}
-		state.TLSCiphers = ciphers
-	} else {
-		state.TLSCiphers = nil
 	}
 
 	// registration_token — write-only; state.RegToken already holds prior value.
@@ -921,9 +987,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload.TLSCiphers = ciphers
 	}
 
-	var trustedCAsUpd CMInterfacTrustedCAsJSON
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
 		tflog.Debug(ctx, "Trusted CAs should not be empty at this point")
+		var trustedCAsUpd CMInterfacTrustedCAsJSON
 		if len(plan.TrustedCAs.External) > 0 {
 			var externalCAs []string
 			for _, str := range plan.TrustedCAs.External {
@@ -938,7 +1004,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			}
 			trustedCAsUpd.Local = localCAs
 		}
-		payload.TrustedCAs = trustedCAsUpd
+		payload.TrustedCAs = &trustedCAsUpd
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -951,10 +1017,10 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// Use state.ID (UUID) as path key per plan specification.
-	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_INTERFACE, payloadJSON, "updatedAt")
+	// CM interface API uses NAME (not UUID) as the path key — UUID lookup returns 404.
+	response, err := r.client.UpdateData(ctx, state.Name.ValueString(), common.URL_INTERFACE, payloadJSON, "updatedAt")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+state.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+state.Name.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating interface on CipherTrust Manager: ",
 			"Could not update interface, unexpected error: "+err.Error(),
@@ -998,9 +1064,10 @@ func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_INTERFACE, state.ID.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	// CM interface API uses NAME (not UUID) as the path key — UUID lookup returns 404.
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_INTERFACE, state.Name.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return
