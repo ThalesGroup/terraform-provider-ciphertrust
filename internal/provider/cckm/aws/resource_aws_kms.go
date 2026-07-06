@@ -24,6 +24,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const kmsStatusArchived = "ARCHIVED"
+
 var (
 	_ resource.Resource                = &resourceCCKMAWSKMS{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMAWSKMS{}
@@ -94,6 +96,11 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"application": schema.StringAttribute{
 				Description: "The application this resource belongs to.",
 				Computed:    true,
+			},
+			"archive": schema.BoolAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations.",
 			},
 			"arn": schema.StringAttribute{
 				Computed:    true,
@@ -224,7 +231,28 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	tflog.Debug(ctx, "[resource_aws_kms.go -> Create][response:"+redactAWSResponse(response)+"]")
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+	kmsID := gjson.Get(response, "id").String()
+	plan.ID = types.StringValue(kmsID)
+
+	// Archive immediately after creation if requested.
+	if plan.Archive.ValueBool() {
+		var archiveDiags diag.Diagnostics
+		archiveKMS(ctx, id, r.client, kmsID, &archiveDiags)
+		for _, d := range archiveDiags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+	}
+
+	// Always re-read so state reflects the current server status (including archived state).
+	response, err = r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
+	if err != nil {
+		msg := "Error reading AWS KMS after create."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
+		tflog.Error(ctx, details)
+		resp.Diagnostics.AddError(details, "")
+		return
+	}
+
 	var stateDiags diag.Diagnostics
 	r.setKmsState(ctx, id, response, &plan, &stateDiags)
 	for _, d := range stateDiags {
@@ -325,6 +353,15 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	// Recover before the PATCH so the KMS is active and can accept other updates.
+	currentlyArchived := gjson.Get(kmsResponse, "status").String() == kmsStatusArchived
+	if !plan.Archive.IsNull() && !plan.Archive.ValueBool() && currentlyArchived {
+		recoverKMS(ctx, id, r.client, kmsID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	_, err = r.client.UpdateDataV2(ctx, kmsID, common.URL_AWS_KMS, payloadJSON)
 	if err != nil {
 		msg := "Error updating AWS KMS."
@@ -333,14 +370,25 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
+	// Archive after the PATCH so it is the last operation.
+	if !plan.Archive.IsNull() && plan.Archive.ValueBool() && !currentlyArchived {
+		archiveKMS(ctx, id, r.client, kmsID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	// Always re-read so state reflects the current server status.
 	response, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
-		msg := "Error reading AWS KMS."
+		msg := "Error reading AWS KMS after update."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
 		tflog.Error(ctx, details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+
 	tflog.Debug(ctx, "[resource_aws_kms.go -> Update][response:"+redactAWSResponse(response)+"]")
 	r.setKmsState(ctx, id, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -441,6 +489,7 @@ func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, reqID string, resp
 	state.Status = types.StringValue(gjson.Get(response, "status").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	state.URI = types.StringValue(gjson.Get(response, "uri").String())
+	state.Archive = types.BoolValue(gjson.Get(response, "status").String() == kmsStatusArchived)
 	r.resolveConnectionByIDOrName(ctx, reqID, gjson.Get(response, "connection").String(), state, diags)
 }
 
@@ -489,4 +538,38 @@ func (r *resourceCCKMAWSKMS) resolveConnectionByIDOrName(ctx context.Context, re
 	}
 	state.ConnectionID = types.StringValue(connID)
 	state.ConnectionName = types.StringValue(resources[0].Get("name").String())
+}
+
+// archiveKMS archives a KMS registration.
+// Used by resourceCCKMAWSKMS Create and Update.
+func archiveKMS(ctx context.Context, id string, client *common.Client, kmsID string, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> archiveKMS]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> archiveKMS]["+id+"]")
+	response, err := client.PostNoData(ctx, id, common.URL_AWS_KMS+"/"+kmsID+"/archive")
+	if err != nil {
+		msg := "Error archiving AWS KMS"
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
+	}
+	tflog.Info(ctx, fmt.Sprintf("[resource_aws_kms.go -> archiveKMS] KMS archived successfully. kms_id: %s", kmsID))
+	tflog.Debug(ctx, "[resource_aws_kms.go -> archiveKMS][response:"+redactAWSResponse(response)+"]")
+}
+
+// recoverKMS recovers an archived KMS registration.
+// Used by resourceCCKMAWSKMS Update.
+func recoverKMS(ctx context.Context, id string, client *common.Client, kmsID string, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> recoverKMS]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> recoverKMS]["+id+"]")
+	response, err := client.PostNoData(ctx, id, common.URL_AWS_KMS+"/"+kmsID+"/recover")
+	if err != nil {
+		msg := "Error recovering AWS KMS"
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
+	}
+	tflog.Info(ctx, fmt.Sprintf("[resource_aws_kms.go -> recoverKMS] KMS recovered successfully. kms_id: %s", kmsID))
+	tflog.Debug(ctx, "[resource_aws_kms.go -> recoverKMS][response:"+redactAWSResponse(response)+"]")
 }
