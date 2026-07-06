@@ -12,9 +12,11 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -57,16 +59,19 @@ func (r *resourceCMCluster) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"local_node_host": schema.StringAttribute{
 				Required:    true,
-				Description: "The hostname or IP of this node. Must be reachable by all nodes in the cluster, including this one.",
+				Description: "(Immutable) The hostname or IP of this node. Must be reachable by all nodes in the cluster, including this one.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"local_node_port": schema.Int64Attribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     int64default.StaticInt64(5432),
-				Description: "The port of this node. Defaults to 5432.",
+				Description: "(Immutable) The port of this node. Defaults to 5432.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"public_address": schema.StringAttribute{
 				Optional:    true,
@@ -82,14 +87,27 @@ func (r *resourceCMCluster) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"node_count": schema.Int64Attribute{
 				Computed:    true,
 				Description: "Total number of nodes in the cluster.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"status_code": schema.StringAttribute{
 				Computed:    true,
 				Description: "Short cluster status code (e.g., 'r' = ready).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"status_description": schema.StringAttribute{
 				Computed:    true,
 				Description: "Human-readable cluster status description.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"raft_status": schema.StringAttribute{
+				Computed:    true,
+				Description: "Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response. UseStateForUnknown() is intentionally absent — value changes on leader elections and suppressing it causes 'inconsistent result after apply' errors.",
 			},
 		},
 	}
@@ -145,6 +163,9 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 	plan.NodeCount = types.Int64Value(gjson.Get(response, "nodeCount").Int())
 	plan.StatusCode = types.StringValue(gjson.Get(response, "status.code").String())
 	plan.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
+	// ClusterJoinResponse (POST /v1/cluster/new) does not include raftStatus per swagger definition.
+	// gjson returns "" — acceptable for Computed-only. Read() will populate the real value on next refresh.
+	plan.RaftStatus = types.StringValue(gjson.Get(response, "raftStatus").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -155,6 +176,8 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMClusterTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_cluster.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -162,9 +185,18 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	// GET /v1/cluster
+	// GET /v1/cluster — returns ClusterInfo{nodeID, status{code,description}, nodeCount, raftStatus}
 	response, err := r.client.ReadDataByParam(ctx, id, "", common.URL_CLUSTER_INFO)
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not found (404); keeping in state [resource_cm_cluster.go -> Read]["+id+"]")
+			resp.Diagnostics.AddWarning(
+				"CipherTrust Cluster Not Found",
+				"Cluster "+state.ID.ValueString()+" was not found in CM and has been kept in Terraform state. "+
+					"If it was intentionally deleted, run terraform state rm before the next apply.",
+			)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading cluster information from CipherTrust Manager",
@@ -173,13 +205,15 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	// Update computed fields from API response
+	// Hydrate Computed fields from ClusterInfo.
+	// local_node_host, local_node_port, public_address, and id are absent from ClusterInfo
+	// and are preserved from prior state (loaded above via req.State.Get).
 	state.NodeId = types.StringValue(gjson.Get(response, "nodeID").String())
 	state.NodeCount = types.Int64Value(gjson.Get(response, "nodeCount").Int())
 	state.StatusCode = types.StringValue(gjson.Get(response, "status.code").String())
 	state.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
+	state.RaftStatus = types.StringValue(gjson.Get(response, "raftStatus").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }

@@ -60,9 +60,17 @@ func (m immutableInt64Modifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
-	if req.StateValue.IsNull() {
+	// Allow creation (no prior state).
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
 		return
 	}
+	// Allow plan values that are null or unknown (e.g., Optional field removed from config
+	// with no default, or value not yet known). The framework will resolve these; do not
+	// block them here.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	// No change — allow.
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}

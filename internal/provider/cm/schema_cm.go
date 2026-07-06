@@ -713,6 +713,7 @@ type CMClusterTFSDK struct {
 	NodeId            types.String `tfsdk:"node_id"`
 	StatusCode        types.String `tfsdk:"status_code"`
 	StatusDescription types.String `tfsdk:"status_description"`
+	RaftStatus        types.String `tfsdk:"raft_status"`
 }
 
 type CMClusterNodeJSON struct {
