@@ -552,6 +552,7 @@ type KMSModelTFSDK struct {
 	AccountID            types.String `tfsdk:"account_id"`
 	Acls                 types.Set    `tfsdk:"acls"`
 	Application          types.String `tfsdk:"application"`
+	Archive              types.Bool   `tfsdk:"archive"`
 	Arn                  types.String `tfsdk:"arn"`
 	AssumeRoleARN        types.String `tfsdk:"assume_role_arn"`
 	AssumeRoleExternalID types.String `tfsdk:"assume_role_external_id"`

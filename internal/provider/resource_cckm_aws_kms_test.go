@@ -103,11 +103,12 @@ func TestCckmAWSKms(t *testing.T) {
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
 		t.Skip("AWS credentials not set")
 	}
-	uid := "tf-" + uuid.New().String()[:8]
-	updatedConnName := uid + "-upd"
 
-	createKmsConfig := fmt.Sprintf(`
+	createKmsConfig := `
 		resource "ciphertrust_aws_connection" "aws_connection" {
+			name = "%s"
+		}
+		resource "ciphertrust_aws_connection" "new_aws_connection" {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
@@ -122,27 +123,13 @@ func TestCckmAWSKms(t *testing.T) {
 				data.ciphertrust_aws_account_details.account_details.regions[1],
 				data.ciphertrust_aws_account_details.account_details.regions[2]
 			]
-		}`, uid, uid)
+		}`
 
-	updateKmsRegionsConfig := fmt.Sprintf(`
+	updateKmsConfig := `
 		resource "ciphertrust_aws_connection" "aws_connection" {
 			name = "%s"
 		}
-		data "ciphertrust_aws_account_details" "account_details" {
-			connection_id = ciphertrust_aws_connection.aws_connection.id
-		}
-		resource "ciphertrust_aws_kms" "kms" {
-			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-			connection_id  = ciphertrust_aws_connection.aws_connection.id
-			name           = "%s"
-			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
-		}`, uid, uid)
-
-	updateKmsConnectionConfig := `
 		resource "ciphertrust_aws_connection" "new_aws_connection" {
-			name = "%s"
-		}
-		resource "ciphertrust_aws_connection" "aws_connection" {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
@@ -150,26 +137,68 @@ func TestCckmAWSKms(t *testing.T) {
 		}
 		resource "ciphertrust_aws_kms" "kms" {
 			account_id     = %s
-			connection_id  = ciphertrust_aws_connection.new_aws_connection.id
+			connection_id  = %s
 			name           = "%s"
+			# Place holder for archive attrib
+			%s
 			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 		}`
-	updateKmsConnectionConfigStr := fmt.Sprintf(updateKmsConnectionConfig,
-		updatedConnName, uid, "data.ciphertrust_aws_account_details.account_details.account_id", uid)
-	modifyPlanConfigStr := fmt.Sprintf(updateKmsConnectionConfig,
-		updatedConnName, uid, `"000000000000"`, uid)
+
+	createArchivedConfig := `
+		resource "ciphertrust_aws_connection" "aws_connection" {
+			name = "%s"
+		}
+		data "ciphertrust_aws_account_details" "account_details" {
+			connection_id = ciphertrust_aws_connection.aws_connection.id
+		}
+		resource "ciphertrust_aws_kms" "archived_kms" {
+			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
+			connection_id  = ciphertrust_aws_connection.aws_connection.id
+			name           = "%s"
+			archive        = true
+			regions = [
+				data.ciphertrust_aws_account_details.account_details.regions[0],
+				data.ciphertrust_aws_account_details.account_details.regions[1],
+				data.ciphertrust_aws_account_details.account_details.regions[2]
+			]
+		}`
+
+	connNameA := "tf-A" + uuid.New().String()[:8]
+	connNameB := "tf-B" + uuid.New().String()[:8]
+	kmsNameA := "tf-" + uuid.New().String()[:8]
+	kmsNameB := "tf-" + uuid.New().String()[:8]
+	connectionID := "ciphertrust_aws_connection.aws_connection.id"
+	updatedConnectionID := "ciphertrust_aws_connection.new_aws_connection.id"
+	accountID := "data.ciphertrust_aws_account_details.account_details.account_id"
+	invalidAccountID := "000000000000"
+
+	createKmsConfigStr := fmt.Sprintf(createKmsConfig, connNameA, connNameB, kmsNameA)
+	// update regions and archive the kms
+	updateKmsConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, connectionID, kmsNameA, "archive = true")
+	// un-archive the kms
+	recoverKmsConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, connectionID, kmsNameA, "archive = false")
+	// change the kms'es connection
+	updateConnConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, updatedConnectionID, kmsNameA, "archive = false")
+	// try to change account
+	modifyPlanConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, invalidAccountID, updatedConnectionID, accountID, "archive = false")
+	// create a kms in archived state
+	createArchivedConfigStr := fmt.Sprintf(createArchivedConfig, connNameA, kmsNameB)
 
 	resourceName := "ciphertrust_aws_kms.kms"
+	archivedResourceName := "ciphertrust_aws_kms.archived_kms"
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: createKmsConfig,
+				Config: createKmsConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "arn"),
-					resource.TestCheckResourceAttr(resourceName, "name", uid),
+					resource.TestCheckResourceAttr(resourceName, "name", kmsNameA),
 					resource.TestCheckResourceAttrSet(resourceName, "regions.#"),
+					resource.TestCheckResourceAttr(resourceName, "archive", "false"),
+					resource.TestCheckResourceAttr(resourceName, "status", "ACTIVE"),
 				),
 			},
 			{
@@ -182,16 +211,29 @@ func TestCckmAWSKms(t *testing.T) {
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"updated_at"},
 			},
+			// Reduce regions and archive
 			{
-				Config: updateKmsRegionsConfig,
+				Config: updateKmsConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "regions.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "archive", "true"),
+					resource.TestCheckResourceAttr(resourceName, "status", "ARCHIVED"),
 				),
 			},
+			// Unarchive via update
 			{
-				Config: updateKmsConnectionConfigStr,
+				Config: recoverKmsConfigStr,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "connection_name", updatedConnName),
+					resource.TestCheckResourceAttr(resourceName, "regions.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "archive", "false"),
+					resource.TestCheckResourceAttr(resourceName, "status", "ACTIVE"),
+				),
+			},
+			// Update connection
+			{
+				Config: updateConnConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "connection_name", connNameB),
 					resource.TestCheckResourceAttr(resourceName, "regions.#", "1"),
 				),
 			},
@@ -200,6 +242,14 @@ func TestCckmAWSKms(t *testing.T) {
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			// Archive via create: destroy the existing KMS and recreate with archive=true.
+			{
+				Config: createArchivedConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(archivedResourceName, "archive", "true"),
+					resource.TestCheckResourceAttr(archivedResourceName, "status", "ARCHIVED"),
+				),
 			},
 		},
 	})
