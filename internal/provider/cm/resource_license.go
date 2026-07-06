@@ -1,10 +1,10 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -69,25 +70,46 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"hash": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"type": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
+			// state: NO UseStateForUnknown — license state changes over lifecycle
+			// (e.g. "Pending" → "Active" → "Expired").
 			"state": schema.StringAttribute{
 				Computed: true,
 			},
 			"start": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"expiration": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"version": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"license_count": schema.Int64Attribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
+			// trial_seconds_remaining: NO UseStateForUnknown — continuously decrementing countdown.
 			"trial_seconds_remaining": schema.StringAttribute{
 				Computed: true,
 			},
@@ -217,53 +239,15 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		tflog.Debug(ctx, "[resource_license.go -> Create] Fetched license details for ID: "+newLicenseID)
 	}
 
-	if gjson.Get(response, "expiration").Exists() {
-		plan.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
-	} else {
-		plan.Expiration = types.StringNull()
-	}
-
-	if gjson.Get(response, "hash").Exists() {
-		plan.Hash = types.StringValue(gjson.Get(response, "hash").String())
-	} else {
-		plan.Hash = types.StringNull()
-	}
-
-	if gjson.Get(response, "type").Exists() {
-		plan.Type = types.StringValue(gjson.Get(response, "type").String())
-	} else {
-		plan.Type = types.StringNull()
-	}
-
-	if gjson.Get(response, "state").Exists() {
-		plan.State = types.StringValue(gjson.Get(response, "state").String())
-	} else {
-		plan.State = types.StringNull()
-	}
-
-	if gjson.Get(response, "start").Exists() {
-		plan.Start = types.StringValue(gjson.Get(response, "start").String())
-	} else {
-		plan.Start = types.StringNull()
-	}
-
-	if gjson.Get(response, "version").Exists() {
-		plan.Version = types.StringValue(gjson.Get(response, "version").String())
-	} else {
-		plan.Version = types.StringNull()
-	}
-
-	if gjson.Get(response, "license_count").Exists() {
-		plan.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
-	} else {
-		plan.LicenseCount = types.Int64Null()
-	}
-
-	if gjson.Get(response, "trial_seconds_remaining").Exists() {
-		plan.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
-	} else {
-		plan.TrialSecondsRemaining = types.StringNull()
-	}
+	// Computed-only — unconditional hydration.
+	plan.Hash = types.StringValue(gjson.Get(response, "hash").String())
+	plan.Type = types.StringValue(gjson.Get(response, "type").String())
+	plan.State = types.StringValue(gjson.Get(response, "state").String())
+	plan.Start = types.StringValue(gjson.Get(response, "start").String())
+	plan.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
+	plan.Version = types.StringValue(gjson.Get(response, "version").String())
+	plan.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
+	plan.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
 
 	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
 		plan.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
@@ -312,64 +296,23 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-
-	if gjson.Get(response, "license").Exists() && gjson.Get(response, "license").String() != "" {
-		state.License = types.StringValue(gjson.Get(response, "license").String())
-	}
-
-	if gjson.Get(response, "bind_type").Exists() && gjson.Get(response, "bind_type").String() != "" {
-		state.BindType = types.StringValue(gjson.Get(response, "bind_type").String())
+	// Required — swagger Licenses definition confirms license is returned in GET response.
+	state.License = types.StringValue(gjson.Get(response, "license").String())
+	// Optional+Computed
+	if r := gjson.Get(response, "bind_type"); r.Exists() && r.String() != "" {
+		state.BindType = types.StringValue(r.String())
 	} else {
 		state.BindType = types.StringNull()
 	}
-
-	if gjson.Get(response, "hash").Exists() && gjson.Get(response, "hash").String() != "" {
-		state.Hash = types.StringValue(gjson.Get(response, "hash").String())
-	} else {
-		state.Hash = types.StringNull()
-	}
-
-	if gjson.Get(response, "type").Exists() && gjson.Get(response, "type").String() != "" {
-		state.Type = types.StringValue(gjson.Get(response, "type").String())
-	} else {
-		state.Type = types.StringNull()
-	}
-
-	if gjson.Get(response, "state").Exists() && gjson.Get(response, "state").String() != "" {
-		state.State = types.StringValue(gjson.Get(response, "state").String())
-	} else {
-		state.State = types.StringNull()
-	}
-
-	if gjson.Get(response, "start").Exists() && gjson.Get(response, "start").String() != "" {
-		state.Start = types.StringValue(gjson.Get(response, "start").String())
-	} else {
-		state.Start = types.StringNull()
-	}
-
-	if gjson.Get(response, "expiration").Exists() && gjson.Get(response, "expiration").String() != "" {
-		state.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
-	} else {
-		state.Expiration = types.StringNull()
-	}
-
-	if gjson.Get(response, "version").Exists() && gjson.Get(response, "version").String() != "" {
-		state.Version = types.StringValue(gjson.Get(response, "version").String())
-	} else {
-		state.Version = types.StringNull()
-	}
-
-	if gjson.Get(response, "license_count").Exists() {
-		state.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
-	} else {
-		state.LicenseCount = types.Int64Null()
-	}
-
-	if gjson.Get(response, "trial_seconds_remaining").Exists() && gjson.Get(response, "trial_seconds_remaining").String() != "" {
-		state.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
-	} else {
-		state.TrialSecondsRemaining = types.StringNull()
-	}
+	// Computed-only — unconditional hydration.
+	state.Hash = types.StringValue(gjson.Get(response, "hash").String())
+	state.Type = types.StringValue(gjson.Get(response, "type").String())
+	state.State = types.StringValue(gjson.Get(response, "state").String())
+	state.Start = types.StringValue(gjson.Get(response, "start").String())
+	state.Expiration = types.StringValue(gjson.Get(response, "expiration").String())
+	state.Version = types.StringValue(gjson.Get(response, "version").String())
+	state.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
+	state.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Read]["+id+"]")
 	// Set refreshed state

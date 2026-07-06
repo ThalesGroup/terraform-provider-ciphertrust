@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -91,13 +93,18 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"interface_type": schema.StringAttribute{
 				Optional:    true,
-				Description: "This parameter is used to identify the type of interface, what service to run on the interface.",
+				Computed:    true,
+				Description: "(Immutable) This parameter is used to identify the type of interface, what service to run on the interface.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"web",
 						"kmip",
 						"nae",
 						"snmp"}...),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"kmip_enable_hard_delete": schema.Int64Attribute{
@@ -158,7 +165,11 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "The name of the interface. Not valid for interface_type nae.",
+				Description: "(Immutable) The name of the interface. Not valid for interface_type nae.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
+				},
 			},
 			"network_interface": schema.StringAttribute{
 				Optional:    true,
@@ -273,9 +284,13 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"created_at": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"updated_at": schema.StringAttribute{
 				Computed: true,
+				// No UseStateForUnknown — CM writes a new timestamp on every PATCH.
 			},
 		},
 	}
@@ -297,7 +312,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	payload.Port = plan.Port.ValueInt64()
-	if plan.AllowUnregistered.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.AllowUnregistered.IsNull() && !plan.AllowUnregistered.IsUnknown() {
 		payload.AllowUnregistered = plan.AllowUnregistered.ValueBool()
 	}
 	if plan.AutogenCAId.ValueString() != "" && plan.AutogenCAId.ValueString() != types.StringNull().ValueString() {
@@ -396,10 +411,110 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		)
 		return
 	}
+
+	// Computed-only — hydrate unconditionally.
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.Name = types.StringValue(gjson.Get(response, "name").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+
+	// Required.
+	plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
+
+	// Optional+Computed: hydrate unconditionally — framework allows server values for Computed fields.
+	if r := gjson.Get(response, "name"); r.Exists() && r.String() != "" {
+		plan.Name = types.StringValue(r.String())
+	} else {
+		plan.Name = types.StringNull()
+	}
+	if r := gjson.Get(response, "interface_type"); r.Exists() && r.String() != "" {
+		plan.InterfaceType = types.StringValue(r.String())
+	} else {
+		plan.InterfaceType = types.StringNull()
+	}
+
+	// Optional scalars — unconditional r.Exists() hydration.
+	if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
+		plan.AllowUnregistered = types.BoolValue(r.Bool())
+	} else {
+		plan.AllowUnregistered = types.BoolNull()
+	}
+	if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		plan.AutogenCAId = types.StringValue(r.String())
+	} else {
+		plan.AutogenCAId = types.StringNull()
+	}
+	if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
+		plan.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
+	} else {
+		plan.AutogenDaysBeforeExpiry = types.Int64Null()
+	}
+	if r := gjson.Get(response, "auto_registration"); r.Exists() {
+		plan.AutoRegistration = types.BoolValue(r.Bool())
+	} else {
+		plan.AutoRegistration = types.BoolNull()
+	}
+	if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
+		plan.CertUserField = types.StringValue(r.String())
+	} else {
+		plan.CertUserField = types.StringNull()
+	}
+	if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
+		plan.CustomUIDSize = types.Int64Value(r.Int())
+	} else {
+		plan.CustomUIDSize = types.Int64Null()
+	}
+	if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
+		plan.CustomUIDv2 = types.BoolValue(r.Bool())
+	} else {
+		plan.CustomUIDv2 = types.BoolNull()
+	}
+	if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
+		plan.DefaultConnection = types.StringValue(r.String())
+	} else {
+		plan.DefaultConnection = types.StringNull()
+	}
+	if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
+		plan.KMIPEnableHardDelete = types.Int64Value(r.Int())
+	} else {
+		plan.KMIPEnableHardDelete = types.Int64Null()
+	}
+	if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
+		plan.MaximumTLSVersion = types.StringValue(r.String())
+	} else {
+		plan.MaximumTLSVersion = types.StringNull()
+	}
+	if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
+		plan.MinimumTLSVersion = types.StringValue(r.String())
+	} else {
+		plan.MinimumTLSVersion = types.StringNull()
+	}
+	if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
+		plan.Mode = types.StringValue(r.String())
+	} else {
+		plan.Mode = types.StringNull()
+	}
+	if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
+		plan.NetworkInterface = types.StringValue(r.String())
+	} else {
+		plan.NetworkInterface = types.StringNull()
+	}
+
+	// tls_ciphers
+	if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
+		var ciphers []TLSCiphersTFSDK
+		for _, c := range ciphersResult.Array() {
+			ciphers = append(ciphers, TLSCiphersTFSDK{
+				CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
+				Enabled:     types.BoolValue(c.Get("enabled").Bool()),
+			})
+		}
+		plan.TLSCiphers = ciphers
+	} else {
+		plan.TLSCiphers = nil
+	}
+
+	// registration_token — write-only; plan.RegToken already holds the user's configured value.
+	// certificate — write-only; plan.Certificate already holds the user's configured value.
 
 	tflog.Debug(ctx, "[resource_interface.go -> Create Output]["+response+"]")
 
@@ -415,6 +530,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMInterfaceTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -422,26 +538,246 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_INTERFACE)
+	// Use state.ID (UUID) as the lookup key per plan specification.
+	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_INTERFACE)
 	if err != nil {
+		// A 404 reliably indicates the interface no longer exists on CM. RemoveResource allows
+		// Terraform to plan a clean recreate on the next apply.
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM interface on CipherTrust Manager: ",
-			"Could not read CM interface id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Could not read CM interface id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
 
+	// Computed-only — hydrate unconditionally.
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Mode = types.StringValue(gjson.Get(response, "mode").String())
-	state.CertUserField = types.StringValue(gjson.Get(response, "cert_user_field").String())
-	state.AutogenCAId = types.StringValue(gjson.Get(response, "auto_gen_ca_id").String())
+
+	// Required.
+	state.Port = types.Int64Value(gjson.Get(response, "port").Int())
+
+	// Optional+Computed: hydrate unconditionally.
+	if r := gjson.Get(response, "name"); r.Exists() && r.String() != "" {
+		state.Name = types.StringValue(r.String())
+	} else {
+		state.Name = types.StringNull()
+	}
+	if r := gjson.Get(response, "interface_type"); r.Exists() && r.String() != "" {
+		state.InterfaceType = types.StringValue(r.String())
+	} else {
+		state.InterfaceType = types.StringNull()
+	}
+
+	// Optional scalars — unconditional r.Exists() hydration.
+	if r := gjson.Get(response, "allow_unregistered"); r.Exists() {
+		state.AllowUnregistered = types.BoolValue(r.Bool())
+	} else {
+		state.AllowUnregistered = types.BoolNull()
+	}
+	if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		state.AutogenCAId = types.StringValue(r.String())
+	} else {
+		state.AutogenCAId = types.StringNull()
+	}
+	if r := gjson.Get(response, "auto_gen_days_before_expiry"); r.Exists() {
+		state.AutogenDaysBeforeExpiry = types.Int64Value(r.Int())
+	} else {
+		state.AutogenDaysBeforeExpiry = types.Int64Null()
+	}
+	if r := gjson.Get(response, "auto_registration"); r.Exists() {
+		state.AutoRegistration = types.BoolValue(r.Bool())
+	} else {
+		state.AutoRegistration = types.BoolNull()
+	}
+	if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
+		state.CertUserField = types.StringValue(r.String())
+	} else {
+		state.CertUserField = types.StringNull()
+	}
+	if r := gjson.Get(response, "custom_uid_size"); r.Exists() {
+		state.CustomUIDSize = types.Int64Value(r.Int())
+	} else {
+		state.CustomUIDSize = types.Int64Null()
+	}
+	if r := gjson.Get(response, "custom_uid_v2"); r.Exists() {
+		state.CustomUIDv2 = types.BoolValue(r.Bool())
+	} else {
+		state.CustomUIDv2 = types.BoolNull()
+	}
+	if r := gjson.Get(response, "default_connection"); r.Exists() && r.String() != "" {
+		state.DefaultConnection = types.StringValue(r.String())
+	} else {
+		state.DefaultConnection = types.StringNull()
+	}
+	if r := gjson.Get(response, "kmip_enable_hard_delete"); r.Exists() {
+		state.KMIPEnableHardDelete = types.Int64Value(r.Int())
+	} else {
+		state.KMIPEnableHardDelete = types.Int64Null()
+	}
+	if r := gjson.Get(response, "maximum_tls_version"); r.Exists() && r.String() != "" {
+		state.MaximumTLSVersion = types.StringValue(r.String())
+	} else {
+		state.MaximumTLSVersion = types.StringNull()
+	}
+	if r := gjson.Get(response, "minimum_tls_version"); r.Exists() && r.String() != "" {
+		state.MinimumTLSVersion = types.StringValue(r.String())
+	} else {
+		state.MinimumTLSVersion = types.StringNull()
+	}
+	if r := gjson.Get(response, "mode"); r.Exists() && r.String() != "" {
+		state.Mode = types.StringValue(r.String())
+	} else {
+		state.Mode = types.StringNull()
+	}
+	if r := gjson.Get(response, "network_interface"); r.Exists() && r.String() != "" {
+		state.NetworkInterface = types.StringValue(r.String())
+	} else {
+		state.NetworkInterface = types.StringNull()
+	}
+
+	// Nested: meta
+	if metaResult := gjson.Get(response, "meta"); metaResult.Exists() && metaResult.Type != gjson.Null {
+		naeResult := gjson.Get(response, "meta.nae")
+		if naeResult.Exists() && naeResult.Type != gjson.Null {
+			state.Meta = &CMInterfaceMetadataTFSDK{
+				NAE: &CMInterfaceMetadataNAETFSDK{
+					MaskSystemGroups: types.BoolValue(gjson.Get(response, "meta.nae.mask_system_groups").Bool()),
+				},
+			}
+		} else {
+			state.Meta = &CMInterfaceMetadataTFSDK{NAE: nil}
+		}
+	} else {
+		state.Meta = nil
+	}
+
+	// Nested: trusted_cas
+	if tcResult := gjson.Get(response, "trusted_cas"); tcResult.Exists() && tcResult.Type != gjson.Null {
+		var ext []types.String
+		for _, v := range gjson.Get(response, "trusted_cas.external").Array() {
+			ext = append(ext, types.StringValue(v.String()))
+		}
+		var loc []types.String
+		for _, v := range gjson.Get(response, "trusted_cas.local").Array() {
+			loc = append(loc, types.StringValue(v.String()))
+		}
+		state.TrustedCAs = &CMInterfacTrustedCAsTFSDK{External: ext, Local: loc}
+	} else {
+		state.TrustedCAs = nil
+	}
+
+	// Nested: local_auto_gen_attributes
+	// CM is expected to always return dns_names, email_addresses, and ip_addresses when the
+	// local_auto_gen_attributes block is present in the response — these are Required sub-fields.
+	// When a sub-field is absent (anomalous CM behaviour), the field is left at its zero value
+	// (nil slice from struct initialisation) rather than explicitly assigned nil.
+	if lagaResult := gjson.Get(response, "local_auto_gen_attributes"); lagaResult.Exists() && lagaResult.Type != gjson.Null {
+			var laga CMInterfaceLocalAutogenAttrTFSDK
+			if r := gjson.Get(response, "local_auto_gen_attributes.cn"); r.Exists() && r.String() != "" {
+				laga.CN = types.StringValue(r.String())
+			} else {
+				laga.CN = types.StringNull()
+			}
+			// dns_names — Required. Hydrate when present; leave zero value (nil) when absent.
+			if dnsResult := gjson.Get(response, "local_auto_gen_attributes.dns_names"); dnsResult.Exists() {
+				var dnsNames []types.String
+				for _, v := range dnsResult.Array() {
+					dnsNames = append(dnsNames, types.StringValue(v.String()))
+				}
+				if dnsNames == nil {
+					dnsNames = []types.String{}
+				}
+				laga.DNSNames = dnsNames
+			}
+			// email_addresses — Required. Hydrate when present; leave zero value (nil) when absent.
+			if emailResult := gjson.Get(response, "local_auto_gen_attributes.email_addresses"); emailResult.Exists() {
+				var emails []types.String
+				for _, v := range emailResult.Array() {
+					emails = append(emails, types.StringValue(v.String()))
+				}
+				if emails == nil {
+					emails = []types.String{}
+				}
+				laga.Emails = emails
+			}
+			// ip_addresses — Required. Hydrate when present; leave zero value (nil) when absent.
+			if ipResult := gjson.Get(response, "local_auto_gen_attributes.ip_addresses"); ipResult.Exists() {
+				var ips []types.String
+				for _, v := range ipResult.Array() {
+					ips = append(ips, types.StringValue(v.String()))
+				}
+				if ips == nil {
+					ips = []types.String{}
+				}
+				laga.IPAddresses = ips
+			}
+			var names []NamesParamsTFSDK
+			for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
+				entry := NamesParamsTFSDK{}
+				if r := n.Get("C"); r.Exists() {
+					entry.C = types.StringValue(r.String())
+				} else {
+					entry.C = types.StringNull()
+				}
+				if r := n.Get("L"); r.Exists() {
+					entry.L = types.StringValue(r.String())
+				} else {
+					entry.L = types.StringNull()
+				}
+				if r := n.Get("O"); r.Exists() {
+					entry.O = types.StringValue(r.String())
+				} else {
+					entry.O = types.StringNull()
+				}
+				if r := n.Get("OU"); r.Exists() {
+					entry.OU = types.StringValue(r.String())
+				} else {
+					entry.OU = types.StringNull()
+				}
+				if r := n.Get("ST"); r.Exists() {
+					entry.ST = types.StringValue(r.String())
+				} else {
+					entry.ST = types.StringNull()
+				}
+				names = append(names, entry)
+			}
+			laga.Names = names
+			if r := gjson.Get(response, "local_auto_gen_attributes.uid"); r.Exists() && r.String() != "" {
+				laga.UID = types.StringValue(r.String())
+			} else {
+				laga.UID = types.StringNull()
+			}
+			state.LocalAutogenAttributes = &laga
+		} else {
+			state.LocalAutogenAttributes = nil
+		}
+
+	// tls_ciphers
+	if ciphersResult := gjson.Get(response, "tls_ciphers"); ciphersResult.Exists() {
+		var ciphers []TLSCiphersTFSDK
+		for _, c := range ciphersResult.Array() {
+			ciphers = append(ciphers, TLSCiphersTFSDK{
+				CipherSuite: types.StringValue(c.Get("cipher_suite").String()),
+				Enabled:     types.BoolValue(c.Get("enabled").Bool()),
+			})
+		}
+		state.TLSCiphers = ciphers
+	} else {
+		state.TLSCiphers = nil
+	}
+
+	// registration_token — write-only; state.RegToken already holds prior value.
+	// certificate — write-only; state.Certificate already holds prior value.
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Read]["+id+"]")
-	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -452,10 +788,18 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Update]["+id+"]")
 	var plan CMInterfaceTFSDK
+	var state CMInterfaceTFSDK
 	var payload CMInterfaceJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// Load prior state to obtain the stable resource UUID.
+	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -488,9 +832,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.KMIPEnableHardDelete.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.KMIPEnableHardDelete = plan.KMIPEnableHardDelete.ValueInt64()
 	}
-	var attributes CMInterfaceLocalAutogenAttrJSON
 	if !reflect.DeepEqual((*CMInterfaceLocalAutogenAttrTFSDK)(nil), plan.LocalAutogenAttributes) {
 		tflog.Debug(ctx, "local_auto_gen_attributes should not be empty at this point")
+		var attributes CMInterfaceLocalAutogenAttrJSON
 		if plan.LocalAutogenAttributes.CN.ValueString() != "" && plan.LocalAutogenAttributes.CN.ValueString() != types.StringNull().ValueString() {
 			attributes.CN = plan.LocalAutogenAttributes.CN.ValueString()
 		}
@@ -556,9 +900,8 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload.NetworkInterface = plan.NetworkInterface.ValueString()
 	}
-	if plan.Port.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.Port = plan.Port.ValueInt64()
-	}
+	// Port cannot be changed after creation — CM returns 409 when port is included in a PATCH body.
+	// Omit port from the update payload entirely.
 	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
 		payload.RegToken = plan.RegToken.ValueString()
 	}
@@ -578,7 +921,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload.TLSCiphers = ciphers
 	}
 
-	var trustedCAs CMInterfacTrustedCAsJSON
+	var trustedCAsUpd CMInterfacTrustedCAsJSON
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
 		tflog.Debug(ctx, "Trusted CAs should not be empty at this point")
 		if len(plan.TrustedCAs.External) > 0 {
@@ -586,31 +929,32 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			for _, str := range plan.TrustedCAs.External {
 				externalCAs = append(externalCAs, str.ValueString())
 			}
-			trustedCAs.External = externalCAs
+			trustedCAsUpd.External = externalCAs
 		}
 		if len(plan.TrustedCAs.Local) > 0 {
 			var localCAs []string
 			for _, str := range plan.TrustedCAs.Local {
 				localCAs = append(localCAs, str.ValueString())
 			}
-			trustedCAs.Local = localCAs
+			trustedCAsUpd.Local = localCAs
 		}
-		payload.TrustedCAs = trustedCAs
+		payload.TrustedCAs = trustedCAsUpd
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Create]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Invalid data input: interface Creation",
+			"Invalid data input: interface Update",
 			err.Error(),
 		)
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	// Use state.ID (UUID) as path key per plan specification.
+	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_INTERFACE, payloadJSON, "updatedAt")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+plan.Name.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating interface on CipherTrust Manager: ",
 			"Could not update interface, unexpected error: "+err.Error(),
@@ -618,28 +962,49 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 	plan.UpdatedAt = types.StringValue(response)
+	// Preserve stable Computed-only fields from prior state.
+	plan.ID = state.ID
+	plan.CreatedAt = state.CreatedAt
+	// Preserve Optional+Computed name from prior state when user has not set it.
+	if plan.Name.IsNull() || plan.Name.IsUnknown() {
+		plan.Name = state.Name
+	}
+	// certificate — write-only; preserve from prior state.
+	if plan.Certificate == nil {
+		plan.Certificate = state.Certificate
+	}
+	// registration_token — write-only; preserve from prior state.
+	if plan.RegToken.IsNull() {
+		plan.RegToken = state.RegToken
+	}
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMInterfaceTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Delete]["+id+"]")
+
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Delete existing order
-	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_INTERFACE, state.Name.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
+	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_INTERFACE, state.ID.ValueString())
+	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust interface",
 			"Could not delete interface, unexpected error: "+err.Error(),
