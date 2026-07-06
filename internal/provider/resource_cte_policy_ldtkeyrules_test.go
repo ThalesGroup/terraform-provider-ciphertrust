@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -173,9 +174,44 @@ resource "ciphertrust_cte_policy_ldtkey_rule" "ldt_rule" {
 `, key1Name, key2Name, rsName, policyName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "rule.id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "policy_id"),
 				),
 			},
+			// Import via composite "<policy_id>:<rule_id>".
+			{
+				ResourceName:      "ciphertrust_cte_policy_ldtkey_rule.ldt_rule",
+				ImportState:       true,
+				ImportStateIdFunc: cteRuleImportID("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "rule.id"),
+				ImportStateCheck:  importStateCheckAttrsSet("policy_id", "rule.id"),
+			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+// TestResourceCTEPolicyLDTKeyRule_missingPolicyID: omitting required policy_id fails at plan.
+func TestResourceCTEPolicyLDTKeyRule_missingPolicyID(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cte_policy_ldtkey_rule" "ldt_rule" {
+  rule = {
+    is_exclusion_rule = false
+    current_key = {
+      key_id   = "clear_key"
+      key_type = ""
+    }
+    transformation_key = {
+      key_id   = "clear_key"
+      key_type = ""
+    }
+  }
+}
+`,
+				ExpectError: regexp.MustCompile(`(?i)policy_id`),
+			},
 		},
 	})
 }
