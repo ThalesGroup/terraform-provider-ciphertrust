@@ -96,13 +96,11 @@ func TestCipherTrust_CMRegToken_drift(t *testing.T) {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_cm_reg_token" "test" {
-  lifetime    = "30m"
   max_clients = 5
 }
 `,
 				Check: checkStep(t, "drift: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "30m"),
 					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "max_clients", "5"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_cm_reg_token.test"].Primary.ID
@@ -111,8 +109,11 @@ resource "ciphertrust_cm_reg_token" "test" {
 				),
 			},
 			{
+				// OOB change: update max_clients to 10; Read() must surface the drift.
+				// lifetime is intentionally excluded: CM does not echo lifetime in GET
+				// responses, so it cannot be used to test drift detection.
 				PreConfig: func() {
-					patchPayload, _ := json.Marshal(map[string]interface{}{"max_clients": 10, "lifetime": "60m"})
+					patchPayload, _ := json.Marshal(map[string]interface{}{"max_clients": 10})
 					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_REG_TOKEN, patchPayload, "id")
 				},
 				RefreshState:       true,
