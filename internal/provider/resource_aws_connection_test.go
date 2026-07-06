@@ -479,9 +479,6 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_updateComputedFields verifies that Computed fields are
-// refreshed from CM in state after an in-Terraform update, and that Update()
-// does not corrupt the resource ID.
 // awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
 // is_role_anywhere = true and an iam_role_anywhere block. private_key is
 // intentionally omitted from HCL — it is supplied via the
@@ -559,6 +556,9 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 	})
 }
 
+// TestAccAWSConnection_updateComputedFields verifies that Computed fields are
+// refreshed from CM in state after an in-Terraform update, and that Update()
+// does not corrupt the resource ID.
 func TestAccAWSConnection_updateComputedFields(t *testing.T) {
 	RequireCM(t)
 	suffix := uuid.New().String()[:8]
