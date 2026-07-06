@@ -100,7 +100,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"archive": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations.",
+				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
 			},
 			"arn": schema.StringAttribute{
 				Computed:    true,

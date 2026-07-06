@@ -58,7 +58,7 @@ resource "ciphertrust_aws_key" "aws_key" {
 
 ### Optional
 
-- `archive` (Boolean) (Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations.
+- `archive` (Boolean) (Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. **Only available on CipherTrust Manager - not supported on CDSPaaS.**
 - `assume_role_arn` (String) (Updatable) Amazon Resource Name (ARN) of the role to be assumed.
 - `assume_role_external_id` (String) (Updatable) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
 
