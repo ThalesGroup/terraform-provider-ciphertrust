@@ -63,7 +63,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"algorithm": schema.StringAttribute{
 				Optional:    true,
-				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'. Immutable after creation.",
+				Description: "Cryptographic algorithm this key is used with. Defaults to 'aes'. Supported values: aes, tdes, rsa, ec, hmac-sha1, hmac-sha256, hmac-sha384, hmac-sha512, seed, aria, opaque, ml-dsa. Immutable after creation.",
 				PlanModifiers: []planmodifier.String{
 					StringImmutableModifier{FieldName: "algorithm"},
 				},
@@ -77,8 +77,9 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed", "aria", "opaque",
 						"AES", "TDES", "RSA", "EC",
 						"HMAC-SHA1", "HMAC-SHA256", "HMAC-SHA384", "HMAC-SHA512",
-						"SEED", "ARIA", "OPAQUE",
-					}...),
+					"SEED", "ARIA", "OPAQUE",
+					"ml-dsa", "ML-DSA",
+				}...),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
