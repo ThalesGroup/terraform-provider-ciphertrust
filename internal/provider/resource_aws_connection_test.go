@@ -23,24 +23,14 @@ func awsAccessKeyID() string {
 	return "AKIAIOSFODNN7EXAMPLE"
 }
 
-// awsSecretAccessKey returns the AWS secret access key for acceptance tests.
-// Reads from the environment variable; falls back to the well-known placeholder
-// value from AWS documentation when the env var is not set.
-func awsSecretAccessKey() string {
-	if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
-		return v
-	}
-	return "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-}
-
 // awsConnConfig returns a minimal ciphertrust_aws_connection config.
+// secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
 func awsConnConfig(name, description string) string {
 	cfg := fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
   name              = %q
   access_key_id     = %q
-  secret_access_key = %q
-`, name, awsAccessKeyID(), awsSecretAccessKey())
+`, name, awsAccessKeyID())
 	if description != "" {
 		cfg += fmt.Sprintf("  description = %q\n", description)
 	}
@@ -53,11 +43,10 @@ func awsConnConfigWithScalars(name, region, cloudName string) string {
 resource "ciphertrust_aws_connection" "test" {
   name              = %q
   access_key_id     = %q
-  secret_access_key = %q
   aws_region        = %q
   cloud_name        = %q
 }
-`, name, awsAccessKeyID(), awsSecretAccessKey(), region, cloudName)
+`, name, awsAccessKeyID(), region, cloudName)
 }
 
 func awsConnConfigWithMapList(name string) string {
@@ -65,12 +54,11 @@ func awsConnConfigWithMapList(name string) string {
 resource "ciphertrust_aws_connection" "test" {
   name              = %q
   access_key_id     = %q
-  secret_access_key = %q
   labels            = { env = "test" }
   meta              = { owner = "qa" }
   products          = ["cckm"]
 }
-`, name, awsAccessKeyID(), awsSecretAccessKey())
+`, name, awsAccessKeyID())
 }
 
 // deleteAWSConnection deletes an AWS connection by ID from CM, ignoring errors.
@@ -422,14 +410,15 @@ resource "ciphertrust_aws_connection" "test" {
 }
 
 // awsConnConfigWithProducts returns HCL for an AWS connection with the given products literal.
-// Omits secret_access_key to avoid logging secrets in test output; relies on env-var fallback in Create().
+// secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
 func awsConnConfigWithProducts(name, productsLiteral string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
-  name     = %q
-  products = %s
+  name              = %q
+  access_key_id     = %q
+  products          = %s
 }
-`, name, productsLiteral)
+`, name, awsAccessKeyID(), productsLiteral)
 }
 
 // TestAccAWSConnection_InvalidProductRejected verifies that terraform plan produces
@@ -493,6 +482,83 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 // TestAccAWSConnection_updateComputedFields verifies that Computed fields are
 // refreshed from CM in state after an in-Terraform update, and that Update()
 // does not corrupt the resource ID.
+// awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
+// is_role_anywhere = true and an iam_role_anywhere block. private_key is
+// intentionally omitted from HCL — it is supplied via the
+// CIPHERTRUST_AWS_PRIVATE_KEY environment variable fallback in Create().
+func awsRoleAnywhereConfig(name, description, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = true
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+  }
+`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
+	if description != "" {
+		cfg += fmt.Sprintf("  description = %q\n", description)
+	}
+	cfg += "}\n"
+	return cfg
+}
+
+// TestCipherTrust_AWSConnectionRoleAnywhere verifies that Update() does not
+// re-send the iam_role_anywhere block when only an unrelated field (description)
+// changes, preventing the "Certificate from same CSR" 400 from CM.
+func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
+	RequireCM(t)
+
+	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
+	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
+	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
+	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
+	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
+		t.Skip("skipping TestCipherTrust_AWSConnectionRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
+	}
+
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-ra-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1 — create with iam_role_anywhere configured and initial description.
+			{
+				Config: awsRoleAnywhereConfig(name, "initial description", certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				Check: checkStep(t, "create role-anywhere connection",
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "initial description"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "is_role_anywhere", "true"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+				),
+			},
+			// Step 2 — update only description; iam_role_anywhere block is identical.
+			// Primary regression gate: if the bug were present, Update() would re-send
+			// the certificate and CM would return 400 "Certificate from same CSR".
+			{
+				Config: awsRoleAnywhereConfig(name, "updated description", certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				Check: checkStep(t, "update description only — iam_role_anywhere omitted from PATCH",
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "updated description"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "is_role_anywhere", "true"),
+				),
+			},
+			// Step 3 — plan-only: verify Terraform detects a changed profile_arn within
+			// iam_role_anywhere. ExpectNonEmptyPlan confirms the plan phase picks up the
+			// config-level diff. A full apply with a new certificate is deferred because
+			// it requires a freshly issued cert not available in the static test corpus.
+			{
+				Config: awsRoleAnywhereConfig(name, "updated description", certificate, anywhereRoleARN,
+					"arn:aws:rolesanywhere:us-east-1:123456789012:profile/new",
+					trustAnchorARN),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 func TestAccAWSConnection_updateComputedFields(t *testing.T) {
 	RequireCM(t)
 	suffix := uuid.New().String()[:8]
