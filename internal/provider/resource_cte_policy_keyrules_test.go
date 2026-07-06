@@ -63,8 +63,8 @@ func TestCTEPolicyKeyRuleResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEPolicyKeyRule_missingPolicyID: omitting required policy_id fails at plan.
-func TestResourceCTEPolicyKeyRule_missingPolicyID(t *testing.T) {
+// TestCTEPolicyKeyRuleResource_missingPolicyID: omitting required policy_id fails at plan.
+func TestCTEPolicyKeyRuleResource_missingPolicyID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{

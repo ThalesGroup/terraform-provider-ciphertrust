@@ -67,8 +67,8 @@ func TestCTEClientResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEClient_nameImmutable verifies a name change is rejected.
-func TestResourceCTEClient_nameImmutable(t *testing.T) {
+// TestCTEClientResource_nameImmutable verifies a name change is rejected.
+func TestCTEClientResource_nameImmutable(t *testing.T) {
 	name := "tf-client-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"
 
@@ -101,9 +101,9 @@ resource "ciphertrust_cte_client" "client" {
 `, name, clientType)
 }
 
-// TestResourceCTEClient_typeImmutable verifies a change to the (immutable)
+// TestCTEClientResource_typeImmutable verifies a change to the (immutable)
 // client_type is rejected.
-func TestResourceCTEClient_typeImmutable(t *testing.T) {
+func TestCTEClientResource_typeImmutable(t *testing.T) {
 	name := "tf-client-typeimm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"
 
@@ -124,9 +124,9 @@ func TestResourceCTEClient_typeImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEClient_drift mutates the description out-of-band and asserts the
+// TestCTEClientResource_drift mutates the description out-of-band and asserts the
 // next plan is non-empty.
-func TestResourceCTEClient_drift(t *testing.T) {
+func TestCTEClientResource_drift(t *testing.T) {
 	name := "tf-client-drift-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"
 	var capturedID string

@@ -40,7 +40,7 @@ resource "ciphertrust_cte_user_set" "user_set" {
 `, name, desc, users)
 }
 
-// TestResourceCTEUserSet exercises Create -> Read -> Update -> Delete with
+// TestCTEUserSetResource exercises Create -> Read -> Update -> Delete with
 // assertions on the computed fields, then verifies a clean plan (no drift) on
 // re-apply and a successful import.
 func TestCTEUserSetResource(t *testing.T) {
@@ -93,9 +93,9 @@ func TestCTEUserSetResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEUserSet_nameImmutable verifies the provider rejects a name change
+// TestCTEUserSetResource_nameImmutable verifies the provider rejects a name change
 // after creation (Update returns an immutable-field error).
-func TestResourceCTEUserSet_nameImmutable(t *testing.T) {
+func TestCTEUserSetResource_nameImmutable(t *testing.T) {
 	name := "tf-userset-imm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -115,9 +115,9 @@ func TestResourceCTEUserSet_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEUserSet_drift is the drift-detection test for the "set" category:
+// TestCTEUserSetResource_drift is the drift-detection test for the "set" category:
 // it mutates the description out-of-band and asserts the next plan is non-empty.
-func TestResourceCTEUserSet_drift(t *testing.T) {
+func TestCTEUserSetResource_drift(t *testing.T) {
 	name := "tf-userset-drift-" + uuid.New().String()[:8]
 	var capturedID string
 

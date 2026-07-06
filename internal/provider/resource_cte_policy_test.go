@@ -34,7 +34,7 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 `, name, desc, action)
 }
 
-// TestResourceCTEPolicy exercises Create -> Read -> Update -> Delete plus plan
+// TestCTEPolicyResource exercises Create -> Read -> Update -> Delete plus plan
 // stability and import. policy_type and name are immutable, so only description
 // and the security rule action change across steps.
 func TestCTEPolicyResource(t *testing.T) {
@@ -82,8 +82,8 @@ func TestCTEPolicyResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEPolicy_nameImmutable verifies a name change is rejected.
-func TestResourceCTEPolicy_nameImmutable(t *testing.T) {
+// TestCTEPolicyResource_nameImmutable verifies a name change is rejected.
+func TestCTEPolicyResource_nameImmutable(t *testing.T) {
 	name := "tf-policy-imm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -103,9 +103,9 @@ func TestResourceCTEPolicy_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEPolicy_drift is the drift-detection test for the "policy"
+// TestCTEPolicyResource_drift is the drift-detection test for the "policy"
 // category: mutate the description out-of-band, then assert a non-empty plan.
-func TestResourceCTEPolicy_drift(t *testing.T) {
+func TestCTEPolicyResource_drift(t *testing.T) {
 	name := "tf-policy-drift-" + uuid.New().String()[:8]
 	var capturedID string
 
@@ -150,9 +150,9 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 `, name, policyType)
 }
 
-// TestResourceCTEPolicy_typeImmutable verifies a change to the (immutable)
+// TestCTEPolicyResource_typeImmutable verifies a change to the (immutable)
 // policy_type is rejected.
-func TestResourceCTEPolicy_typeImmutable(t *testing.T) {
+func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 	name := "tf-policy-typeimm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{

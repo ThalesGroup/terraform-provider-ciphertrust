@@ -119,10 +119,10 @@ func TestCTEClientGuardPointResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEClientGuardPoint_drift is the drift-detection test for the
+// TestCTEClientGuardPointResource_drift is the drift-detection test for the
 // "guardpoint" category: flip guard_enabled out-of-band and assert a non-empty
 // plan. The guard point id and client id are captured after the create settles.
-func TestResourceCTEClientGuardPoint_drift(t *testing.T) {
+func TestCTEClientGuardPointResource_drift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	policyName := "TF_CTE_Policy_Drift-" + suffix
 	clientName := "TF_CTE_Client_Drift-" + suffix
@@ -152,9 +152,9 @@ func TestResourceCTEClientGuardPoint_drift(t *testing.T) {
 	})
 }
 
-// TestResourceCTEClientGuardPoint_missingClientID is the negative path: omitting
+// TestCTEClientGuardPointResource_missingClientID is the negative path: omitting
 // the required client_id fails at plan time.
-func TestResourceCTEClientGuardPoint_missingClientID(t *testing.T) {
+func TestCTEClientGuardPointResource_missingClientID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{

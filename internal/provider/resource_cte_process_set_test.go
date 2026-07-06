@@ -82,8 +82,8 @@ func TestCTEProcessSetResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEProcessSet_nameImmutable verifies a name change is rejected.
-func TestResourceCTEProcessSet_nameImmutable(t *testing.T) {
+// TestCTEProcessSetResource_nameImmutable verifies a name change is rejected.
+func TestCTEProcessSetResource_nameImmutable(t *testing.T) {
 	name := "tf-procset-imm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -103,9 +103,9 @@ func TestResourceCTEProcessSet_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEProcessSet_drift mutates the description out-of-band and asserts
+// TestCTEProcessSetResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
-func TestResourceCTEProcessSet_drift(t *testing.T) {
+func TestCTEProcessSetResource_drift(t *testing.T) {
 	name := "tf-procset-drift-" + uuid.New().String()[:8]
 	var capturedID string
 

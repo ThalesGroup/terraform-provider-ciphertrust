@@ -95,8 +95,8 @@ func TestCTEProfileResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEProfile_nameImmutable verifies a name change is rejected.
-func TestResourceCTEProfile_nameImmutable(t *testing.T) {
+// TestCTEProfileResource_nameImmutable verifies a name change is rejected.
+func TestCTEProfileResource_nameImmutable(t *testing.T) {
 	name := "tf-profile-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
 
@@ -117,9 +117,9 @@ func TestResourceCTEProfile_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEProfile_drift mutates the description out-of-band and asserts the
+// TestCTEProfileResource_drift mutates the description out-of-band and asserts the
 // next plan is non-empty.
-func TestResourceCTEProfile_drift(t *testing.T) {
+func TestCTEProfileResource_drift(t *testing.T) {
 	name := "tf-profile-drift-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
 	var capturedID string

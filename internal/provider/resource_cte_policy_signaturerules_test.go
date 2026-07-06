@@ -70,9 +70,9 @@ func TestCTEPolicySignatureRuleResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEPolicySignatureRule_missingPolicyID is the negative path:
+// TestCTEPolicySignatureRuleResource_missingPolicyID is the negative path:
 // omitting the required policy_id fails at plan time.
-func TestResourceCTEPolicySignatureRule_missingPolicyID(t *testing.T) {
+func TestCTEPolicySignatureRuleResource_missingPolicyID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{

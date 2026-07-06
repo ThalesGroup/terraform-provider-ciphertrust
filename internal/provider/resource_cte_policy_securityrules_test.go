@@ -72,9 +72,9 @@ func TestCTEPolicySecurityRuleResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEPolicySecurityRule_missingPolicyID is the negative-path test:
+// TestCTEPolicySecurityRuleResource_missingPolicyID is the negative-path test:
 // omitting the required policy_id must fail at plan time.
-func TestResourceCTEPolicySecurityRule_missingPolicyID(t *testing.T) {
+func TestCTEPolicySecurityRuleResource_missingPolicyID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -93,10 +93,10 @@ resource "ciphertrust_cte_policy_security_rule" "secrule" {
 	})
 }
 
-// TestResourceCTEPolicySecurityRule_drift is the drift-detection test for the
+// TestCTEPolicySecurityRuleResource_drift is the drift-detection test for the
 // "rule" category: change the rule's effect out-of-band, then assert the next
 // plan is non-empty.
-func TestResourceCTEPolicySecurityRule_drift(t *testing.T) {
+func TestCTEPolicySecurityRuleResource_drift(t *testing.T) {
 	policyName := "tf-secrule-drift-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_policy_security_rule.secrule"
 	var policyID, ruleID string

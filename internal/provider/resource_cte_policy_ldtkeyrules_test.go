@@ -189,8 +189,8 @@ resource "ciphertrust_cte_policy_ldtkey_rule" "ldt_rule" {
 	})
 }
 
-// TestResourceCTEPolicyLDTKeyRule_missingPolicyID: omitting required policy_id fails at plan.
-func TestResourceCTEPolicyLDTKeyRule_missingPolicyID(t *testing.T) {
+// TestCTEPolicyLDTKeyRuleResource_missingPolicyID: omitting required policy_id fails at plan.
+func TestCTEPolicyLDTKeyRuleResource_missingPolicyID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
