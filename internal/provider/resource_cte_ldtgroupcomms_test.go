@@ -54,8 +54,8 @@ func TestCTELDTGroupCommResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTELDTGroupComm_nameImmutable verifies a name change is rejected.
-func TestResourceCTELDTGroupComm_nameImmutable(t *testing.T) {
+// TestCTELDTGroupCommResource_nameImmutable verifies a name change is rejected.
+func TestCTELDTGroupCommResource_nameImmutable(t *testing.T) {
 	name := "tf-ldtgc-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_ldtgroupcomms.ldt"
 
@@ -76,9 +76,9 @@ func TestResourceCTELDTGroupComm_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTELDTGroupComm_drift mutates the description out-of-band and
+// TestCTELDTGroupCommResource_drift mutates the description out-of-band and
 // asserts the next plan is non-empty.
-func TestResourceCTELDTGroupComm_drift(t *testing.T) {
+func TestCTELDTGroupCommResource_drift(t *testing.T) {
 	name := "tf-ldtgc-drift-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_ldtgroupcomms.ldt"
 	var capturedID string

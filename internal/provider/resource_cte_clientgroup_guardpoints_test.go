@@ -99,9 +99,9 @@ func TestCTEClientGroupGuardPointResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEClientGroupGuardPoint_missingClientGroupID is the negative path:
+// TestCTEClientGroupGuardPointResource_missingClientGroupID is the negative path:
 // omitting the required client_group_id fails at plan time.
-func TestResourceCTEClientGroupGuardPoint_missingClientGroupID(t *testing.T) {
+func TestCTEClientGroupGuardPointResource_missingClientGroupID(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -124,9 +124,9 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
 	})
 }
 
-// TestResourceCTEClientGroupGuardPoint_drift flips guard_enabled out-of-band on
+// TestCTEClientGroupGuardPointResource_drift flips guard_enabled out-of-band on
 // the guard point and asserts the next plan is non-empty.
-func TestResourceCTEClientGroupGuardPoint_drift(t *testing.T) {
+func TestCTEClientGroupGuardPointResource_drift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	policyName := "TF_CTE_Policy_CGGPDrift-" + suffix
 	cgName := "TF_CTE_ClientGroup_GPDrift-" + suffix

@@ -122,8 +122,8 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
-// TestResourceCTEClientGroup_nameImmutable verifies a name change is rejected.
-func TestResourceCTEClientGroup_nameImmutable(t *testing.T) {
+// TestCTEClientGroupResource_nameImmutable verifies a name change is rejected.
+func TestCTEClientGroupResource_nameImmutable(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-imm-" + suffix
 	const rn = "ciphertrust_cte_client_group.cg"
@@ -162,9 +162,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
-// TestResourceCTEClientGroup_clusterTypeImmutable verifies a change to the
+// TestCTEClientGroupResource_clusterTypeImmutable verifies a change to the
 // (immutable) cluster_type is rejected.
-func TestResourceCTEClientGroup_clusterTypeImmutable(t *testing.T) {
+func TestCTEClientGroupResource_clusterTypeImmutable(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-ctimm-" + suffix
 	const rn = "ciphertrust_cte_client_group.cg"
@@ -196,9 +196,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
-// TestResourceCTEClientGroup_drift mutates the description out-of-band and asserts
+// TestCTEClientGroupResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
-func TestResourceCTEClientGroup_drift(t *testing.T) {
+func TestCTEClientGroupResource_drift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-drift-" + suffix
 	const rn = "ciphertrust_cte_client_group.cg"

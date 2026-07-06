@@ -88,8 +88,8 @@ func TestCTEResourceSetResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTEResourceSet_nameImmutable verifies a name change is rejected.
-func TestResourceCTEResourceSet_nameImmutable(t *testing.T) {
+// TestCTEResourceSetResource_nameImmutable verifies a name change is rejected.
+func TestCTEResourceSetResource_nameImmutable(t *testing.T) {
 	name := "tf-resset-imm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -109,9 +109,9 @@ func TestResourceCTEResourceSet_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTEResourceSet_drift mutates the description out-of-band and asserts
+// TestCTEResourceSetResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
-func TestResourceCTEResourceSet_drift(t *testing.T) {
+func TestCTEResourceSetResource_drift(t *testing.T) {
 	name := "tf-resset-drift-" + uuid.New().String()[:8]
 	var capturedID string
 

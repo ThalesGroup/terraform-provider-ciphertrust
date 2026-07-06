@@ -73,8 +73,8 @@ func TestCTESignatureSetResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTESignatureSet_nameImmutable verifies a name change is rejected.
-func TestResourceCTESignatureSet_nameImmutable(t *testing.T) {
+// TestCTESignatureSetResource_nameImmutable verifies a name change is rejected.
+func TestCTESignatureSetResource_nameImmutable(t *testing.T) {
 	name := "tf-sigset-imm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -106,9 +106,9 @@ resource "ciphertrust_cte_signature_set" "signature_set" {
 `, name, typ)
 }
 
-// TestResourceCTESignatureSet_typeImmutable verifies the provider rejects a
+// TestCTESignatureSetResource_typeImmutable verifies the provider rejects a
 // change to the (immutable) type field after creation.
-func TestResourceCTESignatureSet_typeImmutable(t *testing.T) {
+func TestCTESignatureSetResource_typeImmutable(t *testing.T) {
 	name := "tf-sigset-typeimm-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -128,9 +128,9 @@ func TestResourceCTESignatureSet_typeImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTESignatureSet_drift mutates the description out-of-band and
+// TestCTESignatureSetResource_drift mutates the description out-of-band and
 // asserts the next plan is non-empty (drift detection for the signature set).
-func TestResourceCTESignatureSet_drift(t *testing.T) {
+func TestCTESignatureSetResource_drift(t *testing.T) {
 	name := "tf-sigset-drift-" + uuid.New().String()[:8]
 	var capturedID string
 

@@ -75,8 +75,8 @@ func TestCTECSIGroupResource(t *testing.T) {
 	})
 }
 
-// TestResourceCTECSIGroup_nameImmutable verifies a name change is rejected.
-func TestResourceCTECSIGroup_nameImmutable(t *testing.T) {
+// TestCTECSIGroupResource_nameImmutable verifies a name change is rejected.
+func TestCTECSIGroupResource_nameImmutable(t *testing.T) {
 	name := "tf-csi-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_csigroup.csigroup"
 
@@ -97,9 +97,9 @@ func TestResourceCTECSIGroup_nameImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTECSIGroup_namespaceImmutable verifies a change to the (immutable)
+// TestCTECSIGroupResource_namespaceImmutable verifies a change to the (immutable)
 // kubernetes_namespace is rejected.
-func TestResourceCTECSIGroup_namespaceImmutable(t *testing.T) {
+func TestCTECSIGroupResource_namespaceImmutable(t *testing.T) {
 	name := "tf-csi-nsimm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_csigroup.csigroup"
 
@@ -120,9 +120,9 @@ func TestResourceCTECSIGroup_namespaceImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTECSIGroup_storageClassImmutable verifies a change to the
+// TestCTECSIGroupResource_storageClassImmutable verifies a change to the
 // (immutable) kubernetes_storage_class is rejected.
-func TestResourceCTECSIGroup_storageClassImmutable(t *testing.T) {
+func TestCTECSIGroupResource_storageClassImmutable(t *testing.T) {
 	name := "tf-csi-scimm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_csigroup.csigroup"
 
@@ -143,9 +143,9 @@ func TestResourceCTECSIGroup_storageClassImmutable(t *testing.T) {
 	})
 }
 
-// TestResourceCTECSIGroup_drift mutates the description out-of-band and asserts
+// TestCTECSIGroupResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
-func TestResourceCTECSIGroup_drift(t *testing.T) {
+func TestCTECSIGroupResource_drift(t *testing.T) {
 	name := "tf-csi-drift-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_csigroup.csigroup"
 	var capturedID string
