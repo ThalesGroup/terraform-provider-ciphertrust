@@ -916,9 +916,8 @@ type CreateJobConfigParamsTFSDKCommon struct {
 
 type CreateJobConfigParamsTFSDK struct {
 	CreateJobConfigParamsTFSDKCommon
-	CCKMKeyRotationParams          *CCKMKeyRotationParamsTFSDK          `tfsdk:"cckm_key_rotation_params"`
-	CCKMSynchronizationParams      *CCKMSynchronizationParamsTFSDK      `tfsdk:"cckm_synchronization_params"`
-	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsTFSDK `tfsdk:"cckm_xks_credential_rotation_params"`
+	CCKMKeyRotationParams     *CCKMKeyRotationParamsTFSDK     `tfsdk:"cckm_key_rotation_params"`
+	CCKMSynchronizationParams *CCKMSynchronizationParamsTFSDK `tfsdk:"cckm_synchronization_params"`
 }
 
 type JobConfigParamsTFSDK struct {
