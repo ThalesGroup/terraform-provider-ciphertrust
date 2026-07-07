@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -46,7 +47,11 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"username": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) Username of the user.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"nickname": schema.StringAttribute{
 				Optional: true,
@@ -66,9 +71,13 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Sensitive: true,
 			},
 			"is_domain_user": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+				Description: "(Immutable) Set to true if user is a domain user. Removing this attribute from config after setting it to true also triggers the immutability error — destroy and recreate to change.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"prevent_ui_login": schema.BoolAttribute{
 				Optional: true,
@@ -313,8 +322,6 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	if nickname := common.TrimString(plan.Nickname.ValueString()); nickname != "" {
 		payload.Nickname = nickname
 	}
-	payload.UserName = common.TrimString(plan.UserName.ValueString())
-
 	// Only include password in the update if it has changed
 	if plan.Password.ValueString() != state.Password.ValueString() {
 		payload.Password = common.TrimString(plan.Password.String())

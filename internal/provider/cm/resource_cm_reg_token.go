@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -68,7 +69,10 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			"label": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.",
+				Description: "(Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.ImmutableMap(),
+				},
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -85,7 +89,10 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name_prefix": schema.StringAttribute{
 				Optional:    true,
-				Description: "Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name will be constructed as 'name_prefix{nth client registered using this registation token}', If name_prefix is not specified, CipherTrust Manager server will generate a random name for the client.",
+				Description: "(Immutable) Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name will be constructed as 'name_prefix{nth client registered using this registation token}', If name_prefix is not specified, CipherTrust Manager server will generate a random name for the client.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 		},
 	}
@@ -341,20 +348,6 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 			labelsPayload[k] = v.(types.String).ValueString()
 		}
 		payload.Labels = labelsPayload
-	}
-
-	// Add label to payload — null guard
-	if !plan.Label.IsNull() && !plan.Label.IsUnknown() {
-		labelPayload := make(map[string]interface{})
-		for k, v := range plan.Label.Elements() {
-			labelPayload[k] = v.(types.String).ValueString()
-		}
-		payload.Label = labelPayload
-	}
-
-	// Add name_prefix to payload — null guard
-	if !plan.NamePrefix.IsNull() && !plan.NamePrefix.IsUnknown() {
-		payload.NamePrefix = plan.NamePrefix.ValueString()
 	}
 
 	if plan.Lifetime.ValueString() != "" && plan.Lifetime.ValueString() != types.StringNull().ValueString() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -170,6 +171,51 @@ resource "ciphertrust_user" "testUserNoName" {
 			// Delete testing automatically occurs in TestCase
 		},
 	})
+}
+
+// TestCipherTrust_CMUser_ImmutableFields verifies that username and is_domain_user
+// cannot be changed after resource creation.
+func TestCipherTrust_CMUser_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create baseline — username="alice-immut-test", is_domain_user omitted (default=false via schema Default)
+			{
+				Config: cmUserConfig("alice-immut-test"),
+			},
+			// Scenario A: username immutability
+			{
+				Config:      cmUserConfig("bob-immut-test"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+			// Scenario B: is_domain_user immutability
+			// State holds is_domain_user=false (from Default); attempting to change to true fires ImmutableBool.
+			{
+				Config:      cmUserConfigDomain("alice-immut-test", true),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+		},
+	})
+}
+
+func cmUserConfig(username string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, username)
+}
+
+func cmUserConfigDomain(username string, isDomainUser bool) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username       = %q
+  password       = "CHAnge012!@#"
+  is_domain_user = %t
+}`, username, isDomainUser)
 }
 
 // TestCMUserOutOfBandDeletion verifies that when a user is deleted directly on

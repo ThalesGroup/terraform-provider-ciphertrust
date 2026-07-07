@@ -171,7 +171,7 @@ func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
-	if req.StateValue.IsNull() || req.PlanValue.IsNull() {
+	if req.StateValue.IsNull() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
@@ -180,6 +180,43 @@ func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.
 	resp.Diagnostics.AddError(
 		"Attribute is immutable",
 		"This map attribute cannot be changed after creation. "+
+			"To change this attribute, destroy and recreate the resource.",
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// ImmutableObject returns an Object plan modifier that prevents in-place changes
+// to an object attribute after resource creation.
+func ImmutableObject() planmodifier.Object {
+	return immutableObjectModifier{}
+}
+
+type immutableObjectModifier struct{}
+
+func (m immutableObjectModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableObjectModifier) MarkdownDescription(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+// PlanModifyObject fires an error when a non-null state value is changed.
+// The IsUnknown() early-return prevents false errors when plan sub-attributes
+// are Unknown (e.g. populated by UseStateForUnknown() on nested attributes).
+func (m immutableObjectModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	if req.StateValue.IsNull() {
+		return
+	}
+	if req.PlanValue.IsUnknown() {
+		return
+	}
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"This object attribute cannot be changed after creation. "+
 			"To change this attribute, destroy and recreate the resource.",
 	)
 	resp.PlanValue = req.StateValue

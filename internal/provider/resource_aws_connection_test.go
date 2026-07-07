@@ -23,6 +23,16 @@ func awsAccessKeyID() string {
 	return "AKIAIOSFODNN7EXAMPLE"
 }
 
+// requireAWSIAMCredentials skips the test when AWS IAM credentials are absent.
+// Tests that create non-role-anywhere connections require both AWS_ACCESS_KEY_ID
+// and AWS_SECRET_ACCESS_KEY; without the secret key the CM API returns 422.
+func requireAWSIAMCredentials(t *testing.T) {
+	t.Helper()
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		t.Skip("skipping: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set for AWS Connection acceptance tests")
+	}
+}
+
 // awsConnConfig returns a minimal ciphertrust_aws_connection config.
 // secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
 func awsConnConfig(name, description string) string {
@@ -80,6 +90,7 @@ func deleteAWSConnection(id string) {
 // description change as drift.
 func TestAccAWSConnection_drift(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-drift-" + suffix
 	var capturedID string
@@ -127,6 +138,7 @@ func TestAccAWSConnection_drift(t *testing.T) {
 // fields: aws_region and cloud_name.
 func TestAccAWSConnection_driftScalars(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-scalar-" + suffix
 	var capturedID string
@@ -177,6 +189,7 @@ func TestAccAWSConnection_driftScalars(t *testing.T) {
 // and products.
 func TestAccAWSConnection_driftMapAndList(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-maplist-" + suffix
 	var capturedID string
@@ -298,6 +311,7 @@ resource "ciphertrust_aws_connection" "test" {
 // from state on 404, and that Delete() 404-guards the test teardown.
 func TestAccAWSConnection_outOfBandDelete(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-oob-del-" + suffix
 	var capturedID string
@@ -329,6 +343,7 @@ func TestAccAWSConnection_outOfBandDelete(t *testing.T) {
 // plan-time error from NameImmutableModifier, not a destroy+recreate diff.
 func TestAccAWSConnection_immutableName(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	original := "tf-acc-aws-orig-" + suffix
 	changed := "tf-acc-aws-chgd-" + suffix
@@ -444,6 +459,7 @@ func TestAccAWSConnection_InvalidProductRejected(t *testing.T) {
 // updated to a multi-value list, and Read() round-trips products without drift.
 func TestAccAWSConnection_ValidProducts(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	resourceName := "ciphertrust_aws_connection.test"
 	suffix := uuid.New().String()[:8]
 	connName := "tftest-valid-products-" + suffix
@@ -552,8 +568,34 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
+			// Step 4 — plan-only: attempt to flip is_role_anywhere from true to false.
+			// ImmutableBool must fire a plan-time error and prevent the change.
+			{
+				Config:      awsRoleAnywhereConfigBool(name, false, certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
 		},
 	})
+}
+
+// awsRoleAnywhereConfigBool returns an AWS connection config with is_role_anywhere
+// set to the given bool value. Uses the same resource label as awsRoleAnywhereConfig
+// so immutability steps run against the same state resource.
+func awsRoleAnywhereConfigBool(name string, isRoleAnywhere bool, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = %t
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+  }
+}
+`, name, isRoleAnywhere, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
+	return cfg
 }
 
 // TestAccAWSConnection_updateComputedFields verifies that Computed fields are
@@ -561,6 +603,7 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 // does not corrupt the resource ID.
 func TestAccAWSConnection_updateComputedFields(t *testing.T) {
 	RequireCM(t)
+	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-upd-" + suffix
 	var capturedID string
