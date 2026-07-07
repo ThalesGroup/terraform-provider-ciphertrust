@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -56,7 +57,10 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"license": schema.StringAttribute{
 				Required:    true,
-				Description: "License String",
+				Description: "(Immutable) License String",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"bind_type": schema.StringAttribute{
 				Optional: true,
@@ -66,7 +70,10 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 						"instance",
 						"cluster"}...),
 				},
-				Description: "Binding type for this license. Can be either 'instance' or 'cluster'. If omitted, then CM attempts to bind the license to the cluster. If this step fails with a lock code error, it will attempt to bind to the instance.",
+				Description: "(Immutable) Binding type for this license. Can be either 'instance' or 'cluster'. If omitted, then CM attempts to bind the license to the cluster. If this step fails with a lock code error, it will attempt to bind to the instance.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"hash": schema.StringAttribute{
 				Computed: true,
@@ -325,7 +332,12 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMLicense) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Updating License is not supported", "Please delete and recreate the license to apply changes.")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_license.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_license does not support updates. Delete and recreate this resource to change any field.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

@@ -171,8 +171,13 @@ resource "ciphertrust_policy_attachments" "test" {
 					})
 					_, _ = client.UpdateDataV2(context.Background(), attachmentID, common.URL_CM_POLICY_ATTACHMENTS, modifiedPayload)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				// Terraform refreshes state from API during plan, detects the out-of-band change
+				// (state now has ["CreateKey","DeleteKey"]), and plans to restore config values.
+				// ImmutableList() blocks that plan: the user sees an immutability error indicating
+				// they must delete and recreate the resource to resolve the drift.
+				Config:      initialConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
@@ -180,7 +185,6 @@ resource "ciphertrust_policy_attachments" "test" {
 
 func TestAccCMPolicyAttachment_update(t *testing.T) {
 	RequireCM(t)
-	var attachmentID string
 
 	policyName := fmt.Sprintf("tf-acc-attach-upd-pol-%d", time.Now().Unix())
 
@@ -202,6 +206,7 @@ resource "ciphertrust_policy_attachments" "test" {
 }
 `, policyName, policyName)
 
+	// principal_selector is now immutable — changing it must be rejected at plan time.
 	updatedConfig := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_policies" "test" {
   name    = %q
@@ -225,31 +230,79 @@ resource "ciphertrust_policy_attachments" "test" {
 		Steps: []resource.TestStep{
 			{
 				Config: initialConfig,
-				Check: checkStep(t, "create",
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "principal_selector.user", "apitestuser"),
-					func(s *terraform.State) error {
-						attachmentID = s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
-						return nil
-					},
 				),
 			},
+			// Changing principal_selector must be rejected at plan time by ImmutableMap().
 			{
-				Config: updatedConfig,
-				Check: checkStep(t, "update",
-					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "principal_selector.user", "apitestuser2"),
-					func(s *terraform.State) error {
-						updatedID := s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
-						if updatedID != attachmentID {
-							return fmt.Errorf("expected no destroy+recreate: ID changed from %s to %s", attachmentID, updatedID)
-						}
-						return nil
-					},
+				Config:      updatedConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// TestAccCipherTrust_PolicyAttachment_ImmutableFields verifies that changing the
+// immutable policy field on a ciphertrust_policy_attachments resource produces a
+// plan-time error from ImmutableString.
+func TestAccCipherTrust_PolicyAttachment_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+
+	policyName := fmt.Sprintf("tf-acc-attach-immf-pol-%d", time.Now().Unix())
+
+	initialConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName)
+
+	changedPolicyConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = "some-other-policy-immf"
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: initialConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test", "id"),
 				),
 			},
+			// Changing policy must produce an immutable error at plan time.
 			{
-				Config:             updatedConfig,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				Config:      changedPolicyConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
