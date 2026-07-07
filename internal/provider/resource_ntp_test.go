@@ -145,7 +145,7 @@ func TestAccCipherTrust_NTP_ImmutableFields(t *testing.T) {
 
 	initialConfig := providerConfig + `
 resource "ciphertrust_ntp" "test" {
-  host     = "pool.ntp.org"
+  host     = "time5.google.com"
   key      = "testkey123"
   key_type = "SHA-256"
 }
@@ -155,11 +155,11 @@ resource "ciphertrust_ntp" "test" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig: func() { ntpSweep("pool.ntp.org") },
+				PreConfig: func() { ntpSweep("time5.google.com") },
 				Config:    initialConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_ntp.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "pool.ntp.org"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time5.google.com"),
 				),
 			},
 			// Changing host must produce an immutable error at plan time.
@@ -178,7 +178,7 @@ resource "ciphertrust_ntp" "test" {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
-  host     = "pool.ntp.org"
+  host     = "time5.google.com"
   key      = "differentkey456"
   key_type = "SHA-256"
 }
@@ -190,7 +190,7 @@ resource "ciphertrust_ntp" "test" {
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
-  host     = "pool.ntp.org"
+  host     = "time5.google.com"
   key      = "testkey123"
   key_type = "MD5"
 }
