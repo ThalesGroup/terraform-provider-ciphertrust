@@ -655,6 +655,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	for k, v := range plan.Labels.Elements() {
 		labelsPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(labelsPayload, state.Labels.Elements())
 	payload.Labels = labelsPayload
 
 	// Add meta to payload
@@ -662,6 +663,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	for k, v := range plan.Meta.Elements() {
 		metaPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(metaPayload, state.Meta.Elements())
 	payload.Meta = metaPayload
 
 	var productsArr []string
@@ -760,6 +762,21 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 			"Could not delete AWS Connection, unexpected error: "+err.Error(),
 		)
 		return
+	}
+}
+
+// ApplyNullDeletes adds an explicit nil entry to payload for every key that is
+// present in stateElements (prior Terraform state) but absent from payload (the
+// desired plan). CipherTrust Manager uses JSON merge-patch semantics on its PATCH
+// endpoint: a key that is simply omitted from the request body is treated as
+// "leave unchanged", whereas a key set to null is treated as "delete". Without
+// this, keys removed from meta or labels in Terraform config can never actually
+// be deleted from CM — the resource becomes permanently out of sync.
+func ApplyNullDeletes(payload map[string]interface{}, stateElements map[string]attr.Value) {
+	for k := range stateElements {
+		if _, exists := payload[k]; !exists {
+			payload[k] = nil
+		}
 	}
 }
 

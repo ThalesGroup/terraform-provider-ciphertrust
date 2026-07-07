@@ -2,16 +2,125 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+// TestApplyNullDeletes verifies that connections.ApplyNullDeletes injects explicit
+// nil values for keys present in prior state but removed from plan. These nil
+// values marshal as JSON null, triggering CM's merge-patch delete semantics for
+// meta and labels keys.
+func TestApplyNullDeletes(t *testing.T) {
+	mkElems := func(kv map[string]string) map[string]attr.Value {
+		out := make(map[string]attr.Value, len(kv))
+		for k, v := range kv {
+			out[k] = types.StringValue(v)
+		}
+		return out
+	}
+
+	tests := []struct {
+		name        string
+		payload     map[string]interface{}
+		stateElems  map[string]attr.Value
+		wantNilKeys []string
+		wantNonNil  []string
+	}{
+		{
+			name:        "removed key gets explicit nil",
+			payload:     map[string]interface{}{"key2": "v2"},
+			stateElems:  mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNilKeys: []string{"key1"},
+			wantNonNil:  []string{"key2"},
+		},
+		{
+			name:        "all keys removed — empty plan flushes entire map via nulls",
+			payload:     map[string]interface{}{},
+			stateElems:  mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNilKeys: []string{"key1", "key2"},
+		},
+		{
+			name:       "no change — no nulls injected",
+			payload:    map[string]interface{}{"key1": "v1", "key2": "v2"},
+			stateElems: mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNonNil: []string{"key1", "key2"},
+		},
+		{
+			name:       "new key added — no null injection",
+			payload:    map[string]interface{}{"key1": "v1", "key2": "v2", "key3": "v3"},
+			stateElems: mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNonNil: []string{"key1", "key2", "key3"},
+		},
+		{
+			name:       "empty state — nothing to delete",
+			payload:    map[string]interface{}{"key1": "v1"},
+			stateElems: map[string]attr.Value{},
+			wantNonNil: []string{"key1"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			connections.ApplyNullDeletes(tc.payload, tc.stateElems)
+			for _, k := range tc.wantNilKeys {
+				v, ok := tc.payload[k]
+				if !ok {
+					t.Errorf("key %q: expected present with nil value, but absent", k)
+					continue
+				}
+				if v != nil {
+					t.Errorf("key %q: expected nil, got %v", k, v)
+				}
+			}
+			for _, k := range tc.wantNonNil {
+				v, ok := tc.payload[k]
+				if !ok {
+					t.Errorf("key %q: expected present with non-nil value, but absent", k)
+					continue
+				}
+				if v == nil {
+					t.Errorf("key %q: expected non-nil value, got nil", k)
+				}
+			}
+		})
+	}
+}
+
+// TestApplyNullDeletes_JSONMarshaling verifies that nil values injected by
+// ApplyNullDeletes marshal to JSON null — the signal CM needs to delete a key.
+func TestApplyNullDeletes_JSONMarshaling(t *testing.T) {
+	payload := map[string]interface{}{"key2": "v2"}
+	stateElems := map[string]attr.Value{
+		"key1": types.StringValue("v1"),
+		"key2": types.StringValue("v2"),
+	}
+	connections.ApplyNullDeletes(payload, stateElems)
+
+	body := map[string]interface{}{"meta": payload}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	jsonStr := string(raw)
+	if !strings.Contains(jsonStr, `"key1":null`) {
+		t.Errorf("expected JSON to contain %q for removed key, got: %s", `"key1":null`, jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"key2":"v2"`) {
+		t.Errorf("expected JSON to contain %q for retained key, got: %s", `"key2":"v2"`, jsonStr)
+	}
+}
 
 // awsAccessKeyID returns the AWS access key ID for acceptance tests.
 // Reads from the environment variable; falls back to the well-known placeholder
@@ -485,6 +594,74 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 				// verifying that Read() hydrates products correctly from the API response.
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// awsConnConfigWithTwoMetaKeys returns HCL with two meta keys: key1 and key2.
+func awsConnConfigWithTwoMetaKeys(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name              = %q
+  access_key_id     = %q
+  secret_access_key = %q
+  meta              = { key1 = "v1", key2 = "v2" }
+}
+`, name, awsAccessKeyID(), awsSecretAccessKey())
+}
+
+// awsConnConfigWithOneMetaKey returns HCL with only key2 in meta (key1 removed).
+func awsConnConfigWithOneMetaKey(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name              = %q
+  access_key_id     = %q
+  secret_access_key = %q
+  meta              = { key2 = "v2" }
+}
+`, name, awsAccessKeyID(), awsSecretAccessKey())
+}
+
+// TestAccAWSConnection_metaKeyRemovalIdempotent is a regression test for the bug
+// "ciphertrust_aws_connection: meta key removal not idempotent — provider never
+// sends null for removed keys". It verifies that:
+//  1. Removing a meta key from config and applying actually deletes it from CM
+//     (key1 disappears from state after the update step).
+//  2. Subsequent plans are empty (idempotent — the apply truly took effect).
+func TestAccAWSConnection_metaKeyRemovalIdempotent(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-meta-del-" + suffix
+	resourceName := "ciphertrust_aws_connection.test"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with two meta keys.
+				Config: awsConnConfigWithTwoMetaKeys(name),
+				Check: checkStep(t, "meta key removal: create with two keys",
+					resource.TestCheckResourceAttr(resourceName, "meta.key1", "v1"),
+					resource.TestCheckResourceAttr(resourceName, "meta.key2", "v2"),
+				),
+			},
+			{
+				// Step 2: Remove key1 from config and apply.
+				// After this step, key1 must be absent from state (CM deleted it).
+				Config: awsConnConfigWithOneMetaKey(name),
+				Check: checkStep(t, "meta key removal: after removing key1",
+					resource.TestCheckNoResourceAttr(resourceName, "meta.key1"),
+					resource.TestCheckResourceAttr(resourceName, "meta.key2", "v2"),
+				),
+			},
+			{
+				// Step 3: Idempotency — re-apply the same config; plan must be empty.
+				// If the provider had not sent null for key1, CM would still have it,
+				// Read() would surface it, and plan would propose removing it again.
+				Config:   awsConnConfigWithOneMetaKey(name),
+				PlanOnly: true,
+				// ExpectNonEmptyPlan intentionally omitted: we expect an EMPTY plan.
 			},
 		},
 	})
