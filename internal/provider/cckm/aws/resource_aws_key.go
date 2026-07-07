@@ -655,7 +655,6 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
 		return
 	}
-
 	var plan, state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
