@@ -637,7 +637,7 @@ type CMInterfaceJSON struct {
 	Name                    string                          `json:"name,omitempty"`
 	NetworkInterface        string                          `json:"network_interface,omitempty"`
 	RegToken                string                          `json:"registration_token,omitempty"`
-	TrustedCAs              CMInterfacTrustedCAsJSON        `json:"trusted_cas,omitempty"`
+	TrustedCAs              *CMInterfacTrustedCAsJSON       `json:"trusted_cas,omitempty"`
 	Certificate             *CMInterfacCertificateJSON      `json:"certificate,omitempty"`
 	LocalAutogenAttributes  CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
 	TLSCiphers              []TLSCiphersJSON                `json:"tls_ciphers,omitempty"`
