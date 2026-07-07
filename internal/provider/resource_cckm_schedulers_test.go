@@ -153,46 +153,15 @@ func TestCckmSchedulersRotationResource(t *testing.T) {
 					ImportStateVerifyIgnore: rotationImportIgnore,
 				},
 				{
-					Config: updateConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttrSet(maxParamsResource, "id"),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", expirationUpdate),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfterUpdate),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
-
-						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expiration", expirationUpdate),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfterUpdate),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedTrueValue),
-					),
+					// cckm_key_rotation_params is now immutable (TFIN-269): verify plan-time rejection.
+					Config:      updateConfig,
+					PlanOnly:    true,
+					ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
 				},
 				{
-					RefreshState: true,
-				},
-				{
-					Config: updateConfig2,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttrSet(maxParamsResource, "id"),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", ""),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", ""),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
-
-						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expiration", ""),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expire_in", ""),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
-					),
-				},
-				{
-					RefreshState: true,
+					// No-drift check: create config is stable after initial apply.
+					RefreshState:       true,
+					ExpectNonEmptyPlan: false,
 				},
 			},
 		})
