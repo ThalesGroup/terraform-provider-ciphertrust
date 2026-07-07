@@ -138,11 +138,11 @@ resource "ciphertrust_aws_connection" "test" {
 func awsConnConfigWithMapList(name string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
-  name          = %q
-  access_key_id = %q
-  labels        = { env = "test" }
-  meta          = { owner = "qa" }
-  products      = ["cckm"]
+  name              = %q
+  access_key_id     = %q
+  labels            = { env = "test" }
+  meta              = { owner = "qa" }
+  products          = ["cckm"]
 }
 `, name, awsAccessKeyID())
 }
@@ -481,9 +481,9 @@ resource "ciphertrust_aws_connection" "test" {
 func awsConnConfigWithProducts(name, productsLiteral string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
-  name          = %q
-  access_key_id = %q
-  products      = %s
+  name              = %q
+  access_key_id     = %q
+  products          = %s
 }
 `, name, awsAccessKeyID(), productsLiteral)
 }
@@ -614,6 +614,10 @@ resource "ciphertrust_aws_connection" "test" {
 // awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
 // is_role_anywhere = true and an iam_role_anywhere block. private_key is
 // intentionally omitted from HCL.
+// awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
+// is_role_anywhere = true and an iam_role_anywhere block. private_key is
+// intentionally omitted from HCL — it is supplied via the
+// CIPHERTRUST_AWS_PRIVATE_KEY environment variable fallback in Create().
 func awsRoleAnywhereConfig(name, description, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
 	cfg := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
@@ -634,9 +638,19 @@ resource "ciphertrust_aws_connection" "test" {
 }
 
 // TestCipherTrust_AWSConnectionRoleAnywhere verifies that Update() does not
-// re-send the iam_role_anywhere block when only an unrelated field changes,
-// preventing the "Certificate from same CSR" 400 from CM.
+// re-send the iam_role_anywhere block when only an unrelated field (description)
+// changes, preventing the "Certificate from same CSR" 400 from CM.
 func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
+	RequireCM(t)
+
+	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
+	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
+	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
+	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
+	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
+		t.Skip("skipping TestCipherTrust_AWSConnectionRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
+	}
+
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-ra-" + suffix
 

@@ -1,22 +1,25 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/hashicorp/terraform-plugin-framework/attr"
-	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -55,34 +58,58 @@ func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"type": schema.StringAttribute{
 				Required:    true,
-				Description: "Type of HSM server to setup, supported types are \"luna\", \"lunapci\", and \"lunatct\". \"luna\" refers to the Luna Network HSM version 5, 6, or 7, \"lunapci\" refers to the embedded Luna PCIe HSM, and \"lunatct\" refers to the Luna T-Series HSMs.",
+				Description: "(Immutable) Type of HSM server to setup. Supported values: \"luna\", \"lunapci\", \"lunatct\", \"protectserver\", \"aws\", \"dpod\", \"nshield\", \"ibmhpcs\". Must be lowercase.",
+				Validators: []validator.String{
+					stringvalidator.OneOf("luna", "lunapci", "lunatct", "protectserver", "aws", "dpod", "nshield", "ibmhpcs"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"conn_info": schema.MapAttribute{
 				ElementType: types.StringType,
 				Required:    true,
-				Description: "Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) and Luna PCIe, the required attributes are:\n\n- \"partition_name\"  \n  The name of the HSM partition to use.\n\n- \"partition_password\"  \n  The password of the initial partition to use. This will be the Crypto Officer role password or challenge secret. Luna documentation describes in detail how to set up a password for an application to access a partition.  \n  If you plan to use multiple Luna HSMs operating in high-availability (HA) mode, all HSMs must have the same password.\n\nLuna Network/PCIe HSM (including TCT) example:  \n\n{\n \"partition_name\": \"kylo-partition\",\n \"partition_password\": \"sOmeP@ssword\"\n}",
+				Description: "(Immutable) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) and Luna PCIe, the required attributes are:\n\n- \"partition_name\"  \n  The name of the HSM partition to use.\n\n- \"partition_password\"  \n  The password of the initial partition to use. This will be the Crypto Officer role password or challenge secret. Luna documentation describes in detail how to set up a password for an application to access a partition.  \n  If you plan to use multiple Luna HSMs operating in high-availability (HA) mode, all HSMs must have the same password.\n\nLuna Network/PCIe HSM (including TCT) example:  \n\n{\n \"partition_name\": \"kylo-partition\",\n \"partition_password\": \"sOmeP@ssword\"\n}",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.ImmutableMap(),
+				},
 			},
 			"initial_config": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n  For externally signed server certs (not supported on TCT), append all certificates in the signing chain.\n- \"client-cert\"\n  Client certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"client-cert-key\"\n  Client private key in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n\nFor Luna Network HSM using the STC protocol, the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"stc-par-identity\"\n  STC partition identity encoded as a base64 string without line breaks (base64 -w0 1234567890123.pid)\nNote that this instance's STC client identity (see /system/hsm/clients/stcidentity) must be registered externally prior to invoking this API.\n\nLuna PCIe HSM (including TCT) does not require any attribute. initialConfig shall be omitted.\n\nLuna Network HSM (including TCT) example:\n\n    {\n      \"host\": \"10.10.10.10\",\n      \"serial\": \"1234\",\n      \"server-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert-key\": \"-----BEGIN RSA PRIVATE KEY-----\\n...\\n-----END RSA PRIVATE KEY-----\"\n    }\n\nNote: JSON does not allow line-breaks, it needs to be replaced with \\n. Use \"sed -z 's/\\n/\\\\n/g' cert-file.pem\" command to format the certificate.\n",
+				Description: "(Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n  For externally signed server certs (not supported on TCT), append all certificates in the signing chain.\n- \"client-cert\"\n  Client certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"client-cert-key\"\n  Client private key in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n\nFor Luna Network HSM using the STC protocol, the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"stc-par-identity\"\n  STC partition identity encoded as a base64 string without line breaks (base64 -w0 1234567890123.pid)\nNote that this instance's STC client identity (see /system/hsm/clients/stcidentity) must be registered externally prior to invoking this API.\n\nLuna PCIe HSM (including TCT) does not require any attribute. initialConfig shall be omitted.\n\nLuna Network HSM (including TCT) example:\n\n    {\n      \"host\": \"10.10.10.10\",\n      \"serial\": \"1234\",\n      \"server-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert-key\": \"-----BEGIN RSA PRIVATE KEY-----\\n...\\n-----END RSA PRIVATE KEY-----\"\n    }\n\nNote: JSON does not allow line-breaks, it needs to be replaced with \\n. Use \"sed -z 's/\\n/\\\\n/g' cert-file.pem\" command to format the certificate.\n",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.ImmutableMap(),
+				},
 			},
 			"reset": schema.BoolAttribute{
 				Optional:    true,
-				Description: "If true CipherTrust Manager will perform a reset operation after the initial HSM setup.\n\nCurrently a reset is required for this operation to succeed.\n\nWARNING - Reset is a destructive operation and will wipe all\ndata in the CipherTrust Manager.\n",
+				Description: "(Immutable) If true CipherTrust Manager will perform a reset operation after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"delay": schema.Int64Attribute{
 				Optional:    true,
-				Description: "Delay in seconds before reset, defaults to 5 seconds",
+				Description: "(Immutable) Delay in seconds before reset, defaults to 5 seconds.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"sub_type": schema.StringAttribute{
 				Computed:    true,
 				Description: "The subtype of the HSM setup.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"config": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
 				Description: "Configuration of the HSM.",
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -157,9 +184,12 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 	}
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.Type = types.StringValue(gjson.Get(response, "type").String())
+	// Apply ToLower so state matches the lowercase value the user writes in config;
+	// the schema validator enforces lowercase at plan time, so this normalises any
+	// casing difference in CM's POST response.
+	plan.Type = types.StringValue(strings.ToLower(gjson.Get(response, "type").String()))
 	plan.SubType = types.StringValue(gjson.Get(response, "sub_type").String())
-	plan.Config = parseConfig(response, &resp.Diagnostics)
+	plan.Config = parseConfig(ctx, response, &resp.Diagnostics)
 
 	tflog.Debug(ctx, "[resource_hsm_rot.go -> Create Output]["+response+"]")
 
@@ -177,6 +207,7 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	var state HSMSetupTFSDK
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_hsm_rot.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -184,12 +215,18 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	_, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Documented deviation from standard keep-in-state convention:
+			// HSM root-of-trust setup is a destructive, one-way appliance operation.
+			// If the CM record is absent, the appliance state is indeterminate and
+			// cannot be safely reconciled without user intervention. RemoveResource +
+			// AddWarning surfaces the problem immediately. See ticket TFIN-DD-015.
 			resp.Diagnostics.AddWarning(
 				"HSM Root of Trust Not Found",
-				"The HSM Root of Trust resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"The HSM Root of Trust resource was not found on CipherTrust Manager (HTTP 404). "+
+					"It may have been deleted outside of Terraform. Removing it from state.",
 			)
 			resp.State.RemoveResource(ctx)
 			return
@@ -197,13 +234,81 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading HSM Server on CipherTrust Manager: ",
-			"Could not read HSM Server id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Could not read HSM Server id : ,"+state.ID.ValueString()+" unexpected error: "+err.Error(),
 		)
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Read]["+id+"]")
-	return
+	// Computed-only fields — hydrate unconditionally (always present in CM GET response).
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.SubType = types.StringValue(gjson.Get(response, "sub_type").String())
+	state.Config = parseConfig(ctx, response, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Required field: type — preserve from prior state.
+	// ImmutableString() prevents any plan change; Create() stores the lowercase value.
+	// (state.Type is left unchanged — no assignment needed)
+
+	// Required field: conn_info.
+	// HSMSetupJSON.ConnInfo is a plain string (JSON-encoded object) — use json.Unmarshal,
+	// not gjson.ForEach, to deserialise the nested object.
+	if r := gjson.Get(response, "connInfo"); r.Exists() {
+		connInfoMap := make(map[string]string)
+		if err := json.Unmarshal([]byte(r.String()), &connInfoMap); err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error parsing conn_info from CM response",
+				"Could not unmarshal connInfo JSON string: "+err.Error(),
+			)
+			return
+		}
+		m, d := types.MapValueFrom(ctx, types.StringType, connInfoMap)
+		resp.Diagnostics.Append(d...)
+		state.ConnInfo = m
+	} else {
+		state.ConnInfo = types.MapNull(types.StringType)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Optional field: initial_config.
+	// HSMSetupJSON.InitialConfig is map[string]interface{} — gjson.ForEach is correct here.
+	if r := gjson.Get(response, "initialConfig"); r.Exists() {
+		initialConfigMap := make(map[string]string)
+		r.ForEach(func(key, value gjson.Result) bool {
+			initialConfigMap[key.String()] = value.String()
+			return true
+		})
+		m, d := types.MapValueFrom(ctx, types.StringType, initialConfigMap)
+		resp.Diagnostics.Append(d...)
+		state.InitialConfig = m
+	} else {
+		state.InitialConfig = types.MapNull(types.StringType)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Optional field: reset
+	if r := gjson.Get(response, "reset"); r.Exists() {
+		state.Reset = types.BoolValue(r.Bool())
+	} else {
+		state.Reset = types.BoolNull()
+	}
+
+	// Optional field: delay
+	if r := gjson.Get(response, "delay"); r.Exists() {
+		state.Delay = types.Int64Value(r.Int())
+	} else {
+		state.Delay = types.Int64Null()
+	}
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
+	// defer fires MSG_METHOD_END after this return.
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -249,10 +354,15 @@ func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.Delete
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_HSM_Server, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, payloadBytes)
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Resource already deleted out-of-band; treat terraform destroy as successful.
+			tflog.Debug(ctx, "[resource_hsm_rot.go -> Delete] resource already absent, skipping ["+state.ID.ValueString()+"]")
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Delete]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting HSM Server on CipherTrust Manager: ",
-			"Could not Delete HSM Server : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Could not Delete HSM Server : ,"+state.ID.ValueString()+" unexpected error: "+err.Error(),
 		)
 		return
 	}
@@ -277,26 +387,22 @@ func (d *resourceHSMRootOfTrust) Configure(_ context.Context, req resource.Confi
 	d.client = client
 }
 
-func parseConfig(response string, diagnostics *diag.Diagnostics) types.Map {
-	// Parse the "config" field from the JSON response
-	configJSON := gjson.Get(response, "config").Raw
-
-	// Initialize a map to hold the parsed config
-	var configMap map[string]interface{}
-	if err := json.Unmarshal([]byte(configJSON), &configMap); err != nil {
-		diagnostics.AddError(
-			"Error parsing config",
-			"Unable to parse 'config' field: "+err.Error(),
-		)
-		return types.MapNull(types.StringType)
+// parseConfig extracts the "config" map from a CM JSON response string and
+// returns it as a types.Map. When "config" is absent from the response, an
+// empty map is returned (consistent with the pre-existing two-argument form —
+// this is a signature-only change; absent-branch behaviour is unchanged).
+// Any conversion error is appended to diags.
+func parseConfig(ctx context.Context, response string, diags *diag.Diagnostics) types.Map {
+	result := gjson.Get(response, "config")
+	if !result.Exists() {
+		return types.MapValueMust(types.StringType, map[string]attr.Value{})
 	}
-
-	// Convert map[string]interface{} to Terraform types.Map
-	convertedMap := make(map[string]attr.Value)
-	for key, value := range configMap {
-		// Convert each value to a Terraform String or dynamic value based on its type
-		convertedMap[key] = types.StringValue(fmt.Sprintf("%v", value))
-	}
-
-	return types.MapValueMust(types.StringType, convertedMap)
+	configMap := make(map[string]string)
+	result.ForEach(func(key, value gjson.Result) bool {
+		configMap[key.String()] = value.String()
+		return true
+	})
+	m, d := types.MapValueFrom(ctx, types.StringType, configMap)
+	diags.Append(d...)
+	return m
 }

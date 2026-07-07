@@ -14,7 +14,7 @@ provider "ciphertrust" {
 }
 
 data "ciphertrust_cte_ldtcommgroup_clients_list" "example" {
- #group_name = ""
+ group_name = ""
 }
 
 

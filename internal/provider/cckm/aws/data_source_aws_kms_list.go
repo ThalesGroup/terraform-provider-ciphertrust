@@ -48,7 +48,7 @@ type dataSourceAWSKms struct {
 type AWSKmsDataSourceModel struct {
 	Filters types.Map       `tfsdk:"filters"`
 	Matched types.Int64     `tfsdk:"matched"`
-	Kmses   []KMSModelTFSDK `tfsdk:"kms"`
+	Kmses   []KMSModelCommonTFSDK `tfsdk:"kms"`
 }
 
 func (d *dataSourceAWSKms) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -210,7 +210,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 
 	for ndx, kms := range kmsList.Resources {
-		kmsTFSDK := KMSModelTFSDK{
+		kmsTFSDK := KMSModelCommonTFSDK{
 			Account:              types.StringValue(kms.Account),
 			AccountID:            types.StringValue(kms.AccountID),
 			Application:          types.StringValue(kms.Application),

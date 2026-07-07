@@ -547,12 +547,13 @@ type AWSAccountDetailsModelTFSDK struct {
 	Validate             types.Bool   `tfsdk:"validate"`
 }
 
-type KMSModelTFSDK struct {
+// KMSModelCommonTFSDK holds the Terraform state fields shared by the aws_kms resource and
+// the aws_kms_list data source. The data source uses this struct directly.
+type KMSModelCommonTFSDK struct {
 	Account              types.String `tfsdk:"account"`
 	AccountID            types.String `tfsdk:"account_id"`
 	Acls                 types.Set    `tfsdk:"acls"`
 	Application          types.String `tfsdk:"application"`
-	Archive              types.Bool   `tfsdk:"archive"`
 	Arn                  types.String `tfsdk:"arn"`
 	AssumeRoleARN        types.String `tfsdk:"assume_role_arn"`
 	AssumeRoleExternalID types.String `tfsdk:"assume_role_external_id"`
@@ -567,6 +568,13 @@ type KMSModelTFSDK struct {
 	Status               types.String `tfsdk:"status"`
 	UpdatedAt            types.String `tfsdk:"updated_at"`
 	URI                  types.String `tfsdk:"uri"`
+}
+
+// KMSModelTFSDK extends KMSModelCommonTFSDK with the archive attribute used by the
+// aws_kms resource.
+type KMSModelTFSDK struct {
+	KMSModelCommonTFSDK
+	Archive types.Bool `tfsdk:"archive"`
 }
 
 // AWSKeyDSAwsParamTFSDK is the computed-only aws_param block for the aws_key data source.

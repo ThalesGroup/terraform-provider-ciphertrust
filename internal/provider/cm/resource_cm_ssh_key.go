@@ -103,6 +103,29 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Bootstrap-only resource: CMClientBootstrap does not expose GetById and
+	// the CM SSH key endpoint has no per-resource GET. State is preserved unchanged.
+	// Drift detection is intentionally not supported for this resource.
+	var state CMSSHKeyTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.AddWarning(
+		"Drift Detection Not Supported",
+		"ciphertrust_cm_ssh_key is a bootstrap-only resource backed by CMClientBootstrap, "+
+			"which does not expose a GET method. Terraform state is preserved unchanged on "+
+			"every plan/refresh. Out-of-band changes to this SSH key will not be detected.",
+	)
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

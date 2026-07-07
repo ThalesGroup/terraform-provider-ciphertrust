@@ -14,7 +14,7 @@ provider "ciphertrust" {
 }
 
 data "ciphertrust_cte_policy_signature_rules" "example" {
-  #policy = ""
+  policy = ""
 }
 
 output "rules" {

@@ -60,9 +60,17 @@ func (m immutableInt64Modifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
-	if req.StateValue.IsNull() {
+	// Allow creation (no prior state).
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
 		return
 	}
+	// Allow plan values that are null or unknown (e.g., Optional field removed from config
+	// with no default, or value not yet known). The framework will resolve these; do not
+	// block them here.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	// No change — allow.
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}
@@ -139,6 +147,39 @@ func (m immutableListModifier) PlanModifyList(_ context.Context, req planmodifie
 	resp.Diagnostics.AddError(
 		"Attribute is immutable",
 		"This list attribute cannot be changed after creation. "+
+			"To change this attribute, destroy and recreate the resource.",
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// ImmutableMap returns a Map plan modifier that prevents in-place changes
+// to a map attribute after resource creation. Any attempt to change the
+// value after creation results in a plan-time error directing the user to
+// destroy and recreate the resource.
+func ImmutableMap() planmodifier.Map {
+	return immutableMapModifier{}
+}
+
+type immutableMapModifier struct{}
+
+func (m immutableMapModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
+	if req.StateValue.IsNull() || req.PlanValue.IsNull() {
+		return
+	}
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"This map attribute cannot be changed after creation. "+
 			"To change this attribute, destroy and recreate the resource.",
 	)
 	resp.PlanValue = req.StateValue
