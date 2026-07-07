@@ -627,7 +627,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
-	if !reflect.DeepEqual((*IAMRoleAnywhereTFSDK)(nil), plan.IAMRoleAnywhere) {
+	if plan.IAMRoleAnywhere != nil && !reflect.DeepEqual(plan.IAMRoleAnywhere, state.IAMRoleAnywhere) {
 		if plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString() != "" && plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.AnywhereRoleARN = plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString()
 		}
