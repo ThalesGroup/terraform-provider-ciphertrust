@@ -28,21 +28,6 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-terraform {
-  required_providers {
-    ciphertrust = {
-      source = "ThalesGroup/CipherTrust"
-      version = "1.0.0-pre3"
-    }
-  }
-}
-
-provider "ciphertrust" {
-	address = "https://10.10.10.10"
-	username = "admin"
-	password = "ChangeMe101!"
-}
-
  # Add Standard policy
 resource "ciphertrust_cte_policy" "std_policy" {
     name            = "std_policy"
@@ -165,5 +150,5 @@ resource "ciphertrust_cte_policy" "csi_policy" {
 
 # Output the unique ID of the created CTE Policies 
 output "policy_id" {
-    value = ciphertrust_cte_policy.policy_name.id
+    value = ciphertrust_cte_policy.std_policy.id
 }
