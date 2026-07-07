@@ -3,12 +3,12 @@
 page_title: "ciphertrust_policy_attachments Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Attaches a CipherTrust Manager admin policy to a set of principals (matched by principal_selector), optionally scoped to a jurisdiction. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_policy_attachments (Resource)
 
-
+Attaches a CipherTrust Manager admin policy to a set of principals (matched by principal_selector), optionally scoped to a jurisdiction. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 

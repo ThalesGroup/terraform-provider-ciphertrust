@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_prometheus Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Enables and configures the Prometheus metrics endpoint on the CipherTrust Manager appliance. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_cm_prometheus (Resource)
 
-
+Enables and configures the Prometheus metrics endpoint on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 
 

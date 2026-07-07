@@ -3,12 +3,12 @@
 page_title: "ciphertrust_syslog Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Configures a syslog forwarding destination on the CipherTrust Manager appliance. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_syslog (Resource)
 
-
+Configures a syslog forwarding destination on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 

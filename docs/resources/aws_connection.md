@@ -40,7 +40,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -68,7 +68,7 @@ resource "ciphertrust_aws_connection" "aws_connection" {
   secret_access_key = "SECRET_ACCESS_KEY"
 
   # Name of the cloud.
-  cloud_name= "aws"
+  cloud_name = "aws"
 
   # AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given. For aws, default region will be "us-east-1".
   aws_region = "us-east-1"
@@ -78,14 +78,14 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 
   # Labels for categorizing the AWS connection
   labels = {
-      "environment" = "devenv"
+    "environment" = "devenv"
   }
 
   # Custom metadata for the AWS connection
   # This can be used to store additional information related to the AWS connection
   meta = {
-      "custom_meta_key1" = "custom_value1"
-      "customer_meta_key2" = "custom_value2"
+    "custom_meta_key1"   = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
   }
 }
 
@@ -107,11 +107,11 @@ output "aws_connection_name" {
 
 ### Required
 
-- `name` (String) Unique connection name
+- `name` (String) (Immutable) Unique connection name
 
 ### Optional
 
-- `access_key_id` (String) Key ID of the AWS user
+- `access_key_id` (String, Sensitive) Key ID of the AWS user
 - `assume_role_arn` (String) AWS IAM role ARN
 - `assume_role_external_id` (String) Specify AWS Role external ID
 - `aws_region` (String) AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given.Default values are: 
@@ -131,7 +131,7 @@ aws-cn
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products associated with the connection
-- `secret_access_key` (String) Secret associated with the access key ID of the AWS user
+- `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user
 
 ### Read-Only
 
@@ -161,4 +161,4 @@ Required:
 
 Optional:
 
-- `private_key` (String) The private key associated with the certificate
+- `private_key` (String, Sensitive) The private key associated with the certificate

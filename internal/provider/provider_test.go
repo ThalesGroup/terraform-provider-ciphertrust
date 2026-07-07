@@ -17,18 +17,87 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const (
-	providerConfig = `
-provider "ciphertrust" {
-	address = "https://192.168.2.135"
-	username = "admin"
-	password = "ChangeIt01!"
-	bootstrap = "no"
-	domain = "root"
-	auth_domain = "root"
+// Acceptance tests run against lab / CI CipherTrust Managers whose TLS
+// certificates are self-signed (often without IP SANs). With the secure-by-
+// default provider, this would block tests at plan time on certificate
+// verification. Set NO_SSL_VERIFY=true at package init unless the operator
+// has supplied a trusted CA bundle for the test target — this propagates
+// through the provider's standard env-var precedence and covers every
+// inline test provider block, not just `providerConfig`. End-user defaults
+// outside of `go test` are unchanged.
+func init() {
+	if os.Getenv("CIPHERTRUST_CA_CERT") != "" {
+		return
+	}
+	if _, set := os.LookupEnv("NO_SSL_VERIFY"); set {
+		return // honour an explicit override (including "false")
+	}
+	_ = os.Setenv("NO_SSL_VERIFY", "true")
 }
-`
-)
+
+// providerConfig is the HCL provider block injected at the front of every
+// acceptance-test config. It is built once from CIPHERTRUST_* environment
+// variables so that no sed-based source-file patching is needed in CI.
+// Hardcoded fallbacks preserve backward compatibility for local dev machines
+// that do not export these variables.
+//
+// CDSPaaS mode (CIPHERTRUST_TENANT set): includes `tenant`; omits
+// domain/auth_domain (they are irrelevant and provoke a provider warning).
+//
+// CM mode (CIPHERTRUST_TENANT empty): includes domain + auth_domain.
+var providerConfig = func() string {
+	address := os.Getenv("CIPHERTRUST_ADDRESS")
+	if address == "" {
+		address = "https://192.168.2.135"
+	}
+	username := os.Getenv("CIPHERTRUST_USERNAME")
+	if username == "" {
+		username = "admin"
+	}
+	password := os.Getenv("CIPHERTRUST_PASSWORD")
+	if password == "" {
+		password = "ChangeIt01!"
+	}
+	tenant := os.Getenv("CIPHERTRUST_TENANT")
+
+	cfg := fmt.Sprintf(`
+provider "ciphertrust" {
+  address   = %q
+  username  = %q
+  password  = %q
+  bootstrap = "no"
+`, address, username, password)
+
+	// Acceptance tests run against lab/CI CipherTrust Managers that present
+	// self-signed certificates (often without proper IP SANs). Honour
+	// CIPHERTRUST_CA_CERT if the operator has supplied a trusted bundle for
+	// the test target; otherwise opt into skip-verify so tests aren't blocked
+	// by the production-grade default introduced for end users.
+	if caCert := os.Getenv("CIPHERTRUST_CA_CERT"); caCert != "" {
+		cfg += fmt.Sprintf("  ca_cert = %q\n", caCert)
+	} else {
+		cfg += "  no_ssl_verify = true\n"
+	}
+
+	if tenant != "" {
+		// CDSPaaS: tenant drives auth_domain_path; domain/auth_domain unused.
+		cfg += fmt.Sprintf("  tenant = %q\n", tenant)
+	} else {
+		// On-prem CM: explicit domain and auth_domain.
+		domain := os.Getenv("CIPHERTRUST_DOMAIN")
+		if domain == "" {
+			domain = "root"
+		}
+		authDomain := os.Getenv("CIPHERTRUST_AUTH_DOMAIN")
+		if authDomain == "" {
+			authDomain = "root"
+		}
+		cfg += fmt.Sprintf("  domain      = %q\n", domain)
+		cfg += fmt.Sprintf("  auth_domain = %q\n", authDomain)
+	}
+	cfg += "}\n"
+	return cfg
+}()
 
 var (
 	testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
@@ -61,8 +130,8 @@ func getCipherTrustVersion() int {
 		return cipherTrustVersion
 	}
 	cipherTrustVersion = devCMVersionValue
-	if os.Getenv("CTAAS") == "true" {
-		fmt.Printf("CTAAS is true, returning %d\n", cipherTrustVersion)
+	if os.Getenv("CDSPAAS") == "true" {
+		fmt.Printf("CDSPAAS is true, returning %d\n", cipherTrustVersion)
 		return cipherTrustVersion
 	}
 	var (
@@ -78,7 +147,7 @@ func getCipherTrustVersion() int {
 		fmt.Printf("CIPHERTRUST_ADDRESS, CIPHERTRUST_USERNAME and CIPHERTRUST_PASSWORD environment variables must be set to get the system version, returning %d\n", devCMVersionValue)
 		return devCMVersionValue
 	}
-	client, err = common.NewClient(context.Background(), uuid.NewString(), &address, &domain, &domain, &username, &password, true, 180)
+	client, err = common.NewClient(context.Background(), uuid.NewString(), &address, &domain, &domain, &username, &password, nil, common.TLSOptions{InsecureSkipVerify: true}, 180)
 	if err != nil {
 		fmt.Printf("** Failed to create client, returning %d. err: %s\n", cipherTrustVersion, err.Error())
 		return cipherTrustVersion
@@ -207,9 +276,9 @@ func testVerifyResourceDeleted(resourceName string) resource.TestCheckFunc {
 // for a resource to stdout. It is not called by any test but is kept here because
 // it is very useful when writing or diagnosing new tests.
 // NOTE: calls to this function must not be left in committed source code.
-func testAccListResourceAttributes(resourceName string) resource.TestCheckFunc {
+func testAccListResourceAttributes(step string, resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		fmt.Printf("************ %s attributes\n", resourceName)
+		fmt.Printf("\n************ %s %s attributes\n", step, resourceName)
 		for rn, rs := range s.RootModule().Resources {
 			if rn != resourceName {
 				continue
@@ -225,7 +294,7 @@ func testAccListResourceAttributes(resourceName string) resource.TestCheckFunc {
 			for _, k := range keys {
 				fmt.Printf("k:%s v:%v\n", k, rs.Primary.Attributes[k])
 			}
-			fmt.Printf("**************** end %s attributes\n", resourceName)
+			fmt.Printf("**************** end %s %s attributes\n\n", step, resourceName)
 			return nil
 		}
 		return fmt.Errorf("error: did not find resource %s so can't list attributes", resourceName)
@@ -250,10 +319,11 @@ func testAccListResources() resource.TestCheckFunc {
 // false when any required variable is missing or the client cannot be created.
 // The caller is responsible for logging any skip/error message.
 //
-// When CTAAS=true the auth_domain is read from CIPHERTRUST_AUTH_DOMAIN and
-// domain is left empty (CTaaS does not use the domain field). Otherwise both
-// domain and auth_domain are read from CIPHERTRUST_DOMAIN and
-// CIPHERTRUST_AUTH_DOMAIN respectively.
+// When CDSPAAS=true the auth_domain is read from CIPHERTRUST_AUTH_DOMAIN,
+// domain is left empty, and tenant is read from CIPHERTRUST_TENANT (used as
+// auth_domain_path on the auth-token request). Otherwise both domain and
+// auth_domain are read from CIPHERTRUST_DOMAIN and CIPHERTRUST_AUTH_DOMAIN
+// respectively, and tenant is not used.
 func createCMClient() (*common.Client, bool) {
 	address := os.Getenv("CIPHERTRUST_ADDRESS")
 	username := os.Getenv("CIPHERTRUST_USERNAME")
@@ -264,12 +334,29 @@ func createCMClient() (*common.Client, bool) {
 	}
 	var domain string
 	authDomain := os.Getenv("CIPHERTRUST_AUTH_DOMAIN")
-	if os.Getenv("CTAAS") != "true" {
+	var tenant *string
+	if os.Getenv("CDSPAAS") == "true" {
+		t := os.Getenv("CIPHERTRUST_TENANT")
+		tenant = &t
+	} else {
 		domain = os.Getenv("CIPHERTRUST_DOMAIN")
 	}
-	client, err := common.NewClient(context.Background(), uuid.NewString(), &address, &authDomain, &domain, &username, &password, true, 180)
+	client, err := common.NewClient(context.Background(), uuid.NewString(), &address, &authDomain, &domain, &username, &password, tenant, common.TLSOptions{InsecureSkipVerify: true}, 180)
 	if err != nil {
-		fmt.Printf("createCMClient: failed to create client: %s\n", err.Error())
+		tenantVal := ""
+		if tenant != nil {
+			tenantVal = *tenant
+		}
+		fmt.Printf("createCMClient: failed to create client: \n"+
+			"Error: %s\n"+
+			"CIPHERTRUST_ADDRESS:     %s\n"+
+			"CIPHERTRUST_USERNAME:    %s\n"+
+			"CIPHERTRUST_AUTH_DOMAIN: %s\n"+
+			"CIPHERTRUST_DOMAIN:      %s\n"+
+			"CIPHERTRUST_TENANT:      %s\n"+
+			"CDSPAAS:                 %s\n",
+			err.Error(), address, username, authDomain, domain,
+			tenantVal, os.Getenv("CDSPAAS"))
 		return nil, false
 	}
 	return client, true

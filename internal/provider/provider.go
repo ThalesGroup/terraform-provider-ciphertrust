@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/go-hclog"
+
 	aws "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/aws"
 	oci "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
@@ -59,12 +61,16 @@ type ciphertrustProviderModel struct {
 	Domain               types.String `tfsdk:"domain"`
 	Bootstrap            types.String `tfsdk:"bootstrap"`
 	AuthDomain           types.String `tfsdk:"auth_domain"`
+	Tenant               types.String `tfsdk:"tenant"`
 	InsecureSkipVerify   types.Bool   `tfsdk:"no_ssl_verify"`
+	CACert               types.String `tfsdk:"ca_cert"`
 	RestOperationTimeout types.Int64  `tfsdk:"rest_api_timeout"`
 	Address              types.String `tfsdk:"address"`
 	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
 	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
 	ReplicationDelayMS   types.Int64  `tfsdk:"replication_delay_ms"`
+	LogFile              types.String `tfsdk:"log_file"`
+	LogLevel             types.String `tfsdk:"log_level"`
 }
 
 const (
@@ -87,16 +93,16 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 		Attributes: map[string]schema.Attribute{
 			"address": schema.StringAttribute{
 				Optional:    true,
-				Description: "HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "address", "CM_ADDRESS"),
+				Description: "HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "address", "CIPHERTRUST_ADDRESS"),
 			},
 			"username": schema.StringAttribute{
 				Optional:    true,
-				Description: "Username of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "username", "CM_USERNAME"),
+				Description: "Username of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "username", "CIPHERTRUST_USERNAME"),
 			},
 			"password": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Password of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "password", "CM_PASSWORD"),
+				Description: "Password of a CipherTrust user. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "password", "CIPHERTRUST_PASSWORD"),
 			},
 			"bootstrap": schema.StringAttribute{
 				Optional:    true,
@@ -110,9 +116,27 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "CipherTrust domain to log in to. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar+". Default is the empty string (root domain).", "domain", "CM_DOMAIN"),
 			},
+			"tenant": schema.StringAttribute{
+				Optional: true,
+				Description: "CDSPaaS tenant name (e.g. \"acme\") or tenant path (e.g. \"acme/eng/team\"). " +
+					"Setting this opts the provider into the CDSPaaS authentication path; leave unset for on-prem CipherTrust Manager. " +
+					fmt.Sprintf(providerDescNoDefaultWithEnvVar, "tenant", "CIPHERTRUST_TENANT"),
+			},
 			"no_ssl_verify": &schema.BoolAttribute{
-				Optional:    true,
-				Description: "Set as false to verify the server's certificate chain and host name. " + fmt.Sprintf(providerDescWithDefault, "no_ssl_verify", "true"),
+				Optional: true,
+				Description: "Disable TLS certificate chain and hostname verification when set to true. " +
+					"**WARNING:** disabling certificate verification exposes connections to man-in-the-middle attacks " +
+					"and should only be used for local development or testing — never in production. " +
+					"Set to false (the default) to enforce certificate validation; supply a custom CA bundle via " +
+					"`ca_cert` for private PKI or air-gapped environments. " +
+					fmt.Sprintf(providerDescWithDefault, "no_ssl_verify", "false"),
+			},
+			"ca_cert": schema.StringAttribute{
+				Optional: true,
+				Description: "Path to a PEM-encoded CA certificate bundle used to validate the CipherTrust server's TLS certificate. " +
+					"Use this for private PKI, internally-issued certificates, or air-gapped environments where the certificate chain is " +
+					"not in the system trust store. The file may contain one or more concatenated PEM certificates. " +
+					fmt.Sprintf(providerDescNoDefaultWithEnvVar, "ca_cert", "CIPHERTRUST_CA_CERT"),
 			},
 			"rest_api_timeout": schema.Int64Attribute{
 				Optional:    true,
@@ -129,6 +153,14 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			"replication_delay_ms": schema.Int64Attribute{
 				Optional:    true,
 				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CM_REPLICATION_DELAY", defaultReplicationDelay),
+			},
+			"log_file": schema.StringAttribute{
+				Optional:    true,
+				Description: "Path to the provider log file. Provider logs are written separately from Terraform debug logs. " + fmt.Sprintf(providerDescWithDefault, "log_file", "ctp.log"),
+			},
+			"log_level": schema.StringAttribute{
+				Optional:    true,
+				Description: "Logging level for the provider log file. " + fmt.Sprintf(providerDescWithDefault, "log_level", "info") + " Options: debug, info, warn, error, off.",
 			},
 		},
 	}
@@ -147,11 +179,15 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var domain string
 	var bootstrap string
 	var auth_domain string
+	var tenant string
 	var no_ssl_verify bool
+	var ca_cert string
 	var rest_api_timeout int64
 	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
 	var oci_operation_timeout = int64(defaultOciOperationTimeout)
 	var replication_delay_ms = int64(defaultReplicationDelay)
+	var log_file = "ctp.log"
+	var log_level = "info"
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -161,7 +197,9 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	//Some default values
 	bootstrap = "no"
-	no_ssl_verify = true
+	// Secure-by-default: TLS certificate verification is ENABLED unless the
+	// user explicitly opts out via no_ssl_verify=true (mitigates CWE-295).
+	no_ssl_verify = false
 	rest_api_timeout = 180
 
 	//First read from the config file
@@ -195,8 +233,12 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			domain = value
 		case "auth_domain":
 			auth_domain = value
+		case "tenant":
+			tenant = value
 		case "no_ssl_verify":
 			no_ssl_verify, _ = strconv.ParseBool(value)
+		case "ca_cert":
+			ca_cert = value
 		case "rest_api_timeout":
 			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
 		case "aws_operation_timeout":
@@ -205,6 +247,10 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
 		case "replication_delay_ms":
 			replication_delay_ms, _ = strconv.ParseInt(value, 10, 64)
+		case "log_file":
+			log_file = value
+		case "log_level":
+			log_level = value
 		}
 	}
 
@@ -233,9 +279,17 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	if authDomainEnvExists {
 		auth_domain = authDomainEnvVal
 	}
+	tenantEnvVal, tenantEnvExists := os.LookupEnv("CIPHERTRUST_TENANT")
+	if tenantEnvExists {
+		tenant = tenantEnvVal
+	}
 	noSSLVerifyEnvVal, noSSLVerifyEnvExists := os.LookupEnv("NO_SSL_VERIFY")
 	if noSSLVerifyEnvExists {
 		no_ssl_verify, _ = strconv.ParseBool(noSSLVerifyEnvVal)
+	}
+	caCertEnvVal, caCertEnvExists := os.LookupEnv("CIPHERTRUST_CA_CERT")
+	if caCertEnvExists {
+		ca_cert = caCertEnvVal
 	}
 	restAPITimeoutEnvVal, restAPITimeoutEnvExists := os.LookupEnv("REST_API_TIMEOUT")
 	if restAPITimeoutEnvExists {
@@ -247,6 +301,30 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	// Finally if the provider block has values, make that highest priority
+	if !config.LogFile.IsNull() && config.LogFile.ValueString() != "" {
+		log_file = config.LogFile.ValueString()
+	}
+	if !config.LogLevel.IsNull() && config.LogLevel.ValueString() != "" {
+		log_level = config.LogLevel.ValueString()
+	}
+
+	// Create the provider-specific logger that writes to a dedicated file,
+	// independent of Terraform's TF_LOG output.
+	logFileHandle, err := os.OpenFile(log_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Failed to open provider log file",
+			fmt.Sprintf("Could not open log file %q: %s", log_file, err.Error()),
+		)
+		return
+	}
+	providerLogger := hclog.New(&hclog.LoggerOptions{
+		Name:   "ciphertrust",
+		Level:  hclog.LevelFromString(log_level),
+		Output: logFileHandle,
+	})
+	providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+
 	if !config.Address.IsNull() {
 		address = config.Address.ValueString()
 	}
@@ -271,8 +349,16 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		auth_domain = config.AuthDomain.ValueString()
 	}
 
+	if !config.Tenant.IsNull() {
+		tenant = config.Tenant.ValueString()
+	}
+
 	if !config.InsecureSkipVerify.IsNull() {
 		no_ssl_verify = config.InsecureSkipVerify.ValueBool()
+	}
+
+	if !config.CACert.IsNull() {
+		ca_cert = config.CACert.ValueString()
 	}
 
 	if !config.RestOperationTimeout.IsNull() {
@@ -289,6 +375,36 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	if !config.ReplicationDelayMS.IsNull() {
 		oci_operation_timeout = config.ReplicationDelayMS.ValueInt64()
+	}
+
+	// Surface the insecure mode loudly — it should only be used in test
+	// environments, never in production (CWE-295).
+	if no_ssl_verify {
+		resp.Diagnostics.AddAttributeWarning(
+			path.Root("no_ssl_verify"),
+			"TLS certificate verification is disabled",
+			"`no_ssl_verify = true` disables TLS certificate chain and hostname validation for all "+
+				"CipherTrust API calls. This is intended for local development and testing only and "+
+				"must not be used in production. For private PKI or air-gapped environments supply a "+
+				"custom CA bundle via `ca_cert` instead.",
+		)
+	}
+
+	tlsOpts := common.TLSOptions{
+		InsecureSkipVerify: no_ssl_verify,
+		CACertPath:         ca_cert,
+	}
+
+	// auth_domain_path (sent when tenant is set) supersedes auth_domain server-side.
+	// Warn the user so they don't think their auth_domain value is being honoured.
+	if tenant != "" && auth_domain != "" {
+		resp.Diagnostics.AddAttributeWarning(
+			path.Root("auth_domain"),
+			"auth_domain is ignored when tenant is set",
+			"Both \"tenant\" and \"auth_domain\" are configured. The CDSPaaS "+
+				"authentication path uses auth_domain_path (derived from tenant), "+
+				"which supersedes auth_domain. Remove auth_domain to silence this warning.",
+		)
 	}
 
 	// If any of the expected configurations are missing, return
@@ -355,7 +471,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	if bootstrap == "no" {
 		// Create a new CipherTrust client using the configuration values
-		client, err := common.NewClient(ctx, id, &address, &auth_domain, &domain, &username, &password, no_ssl_verify, rest_api_timeout)
+		client, err := common.NewClient(ctx, id, &address, &auth_domain, &domain, &username, &password, &tenant, tlsOpts, rest_api_timeout)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Unable to Create CipherTrust API Client",
@@ -368,10 +484,11 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		client.ReplicationDelay = replication_delay_ms
+		client.Log = providerLogger
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	} else {
-		client, err := common.NewCMClientBoot(ctx, id, &address, no_ssl_verify, rest_api_timeout)
+		client, err := common.NewCMClientBoot(ctx, id, &address, tlsOpts, rest_api_timeout)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Unable to Create CipherTrust API Client",
@@ -384,6 +501,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
 		client.ReplicationDelay = replication_delay_ms
+		client.Log = providerLogger
 		resp.DataSourceData = client
 		resp.ResourceData = client
 	}
@@ -442,7 +560,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 }
 
 // Resources defines the resources implemented in the provider.
-func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Resource {
+func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		cm.NewResourceCMUser,
 		cm.NewResourceCMKey,
@@ -491,6 +609,8 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		cm.NewResourceCMSyslog,
 		aws.NewResourceCCKMAWSKMS,
 		aws.NewResourceAWSKey,
+		aws.NewResourceAWSByokKey,
+		aws.NewResourceAWSKeyMaterial,
 		aws.NewResourceAWSKeyRotation,
 		aws.NewResourceAWSPolicyTemplate,
 		aws.NewResourceAWSCustomKeyStore,
@@ -504,6 +624,5 @@ func (p *ciphertrustProvider) Resources(_ context.Context) []func() resource.Res
 		oci.NewResourceCCKMOCIVersion,
 		oci.NewResourceCCKMOCIKey,
 		aws.NewResourceCCKMAWSAcl,
-		aws.NewResourceAWSKeyImportMaterial,
 	}
 }

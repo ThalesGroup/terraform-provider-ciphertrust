@@ -7,6 +7,7 @@ import (
 )
 
 func TestCiphertrustCMPrometheusDataSource(t *testing.T) {
+	RequireCM(t)
 	// Config for the resource and data source
 	cmEnablePrometheusConfig := `
 		resource "ciphertrust_cm_prometheus" "cm_prometheus" {

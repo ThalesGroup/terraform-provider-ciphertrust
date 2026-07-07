@@ -8,25 +8,26 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
+func TestCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
+	RequireCM(t)
+
 	policyName := "tf-policy-idt-" + uuid.New().String()[:8]
 	keyName := "tf-key-idt-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`
 		resource "ciphertrust_cm_key" "idt_key" {
-			name         = "%s"
-			algorithm    = "aes"
-			key_size     = 256
-			usage_mask   = 76
-			undeletable  = false
-			unexportable = false
-			xts          = true
+			name                         = "%s"
+			algorithm                    = "aes"
+			key_size                     = 256
+			usage_mask                   = 76
+			undeletable                  = false
+			unexportable                 = false
+			xts                          = true
+			remove_from_state_on_destroy = true
 			meta = {
 				permissions = {
-					decrypt_with_key     = ["CTE Clients"]
-					encrypt_with_key     = ["CTE Clients"]
-					export_key           = ["CTE Clients"]
-					read_key             = ["CTE Clients"]
+					read_key   = ["CTE Clients"]
+					export_key = ["CTE Clients"]
 				}
 				cte = {
 					persistent_on_client = true

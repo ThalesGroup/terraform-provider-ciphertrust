@@ -61,8 +61,8 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 
 ### Required
 
-- `key_file` (String) Path to or data of the OCI private key file (PEM format).
-- `name` (String) Unique connection name
+- `key_file` (String, Sensitive) Path to or data of the OCI private key file (PEM format).
+- `name` (String) Unique connection name. Immutable after creation — changing this field will produce a plan-time error.
 - `pub_key_fingerprint` (String) Fingerprint of the public key added to the OCI user.
 - `region` (String) OCI connection region.
 - `tenancy_ocid` (String) Tenant OCID.
@@ -71,7 +71,7 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 ### Optional
 
 - `description` (String) Description about the connection. Once set, 'description' can be changed but not removed.
-- `key_file_pass_phrase` (String) Passphrase if the OCI key file is encrypted.
+- `key_file_pass_phrase` (String, Sensitive) Passphrase if the OCI key file is encrypted.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products to associate with the connection. Default is 'cckm'
 - `skip_connection_params_test` (Boolean) Set to true to skip connection parameter test.

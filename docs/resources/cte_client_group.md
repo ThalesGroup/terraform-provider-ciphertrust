@@ -24,7 +24,7 @@ description: |-
 
 - `auth_binaries` (String) Array of authorized binaries in the privilege-filename pair JSON format.
 - `client_id` (String) ID of the client to be removed from the client group.
-- `client_list` (List of String) List of Client identifier which are to be associated with clientgroup. This identifier can be the Name, ID (a UUIDv4), URI, or slug of the client.
+- `client_list` (Set of String)
 - `client_locked` (Boolean) Is FS Agent locked? Enables locking the configuration of the File System Agent on the client. This will prevent updates to any policies on the client. Default value is false.
 - `communication_enabled` (Boolean) Whether the File System communication is enabled.
 - `description` (String) Description of ClientGroup.

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -114,19 +116,23 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 		payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
 	}
 
-	// Add label to payload
-	labelPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelPayload[k] = v.(types.String).ValueString()
+	// Add label to payload — fix: both blocks previously iterated plan.Labels (bug); first block now iterates plan.Label
+	if !plan.Label.IsNull() && !plan.Label.IsUnknown() {
+		labelPayload := make(map[string]interface{})
+		for k, v := range plan.Label.Elements() {
+			labelPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Label = labelPayload
 	}
-	payload.Label = labelPayload
 
-	// Add labels to payload
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Add labels to payload — null guard prevents sending {} when unconfigured
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	if plan.Lifetime.ValueString() != "" && plan.Lifetime.ValueString() != types.StringNull().ValueString() {
 		payload.Lifetime = plan.Lifetime.ValueString()
@@ -171,12 +177,130 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Registration tokens are ephemeral; 404 means expired/deleted → RemoveResource
+	// so Terraform recreates on next apply. Intentional deviation from keep-in-state convention.
 	var state CMRegTokenTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Debug(ctx, common.ERR_METHOD_END+"resource removed from CM"+" [resource_cm_reg_token.go -> Read]["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading RegToken from CipherTrust Manager",
+			"Could not read RegToken id "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	// Computed-only fields — hydrate unconditionally
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Token = types.StringValue(gjson.Get(response, "token").String())
+
+	// Optional string scalars — CM may not echo back these fields in GET responses.
+	// The !state.X.IsNull() guard prevents null→"" drift for unconfigured fields.
+	// When the field IS configured (state non-null) and CM returns it, hydrate from CM.
+	// When CM doesn't return it, preserve the prior state to avoid perpetual drift.
+	if !state.CAID.IsNull() {
+		if r := gjson.Get(response, "ca_id"); r.Exists() {
+			state.CAID = types.StringValue(r.String())
+		} else {
+			state.CAID = types.StringNull()
+		}
+	}
+
+	if !state.ClientManagementProfileID.IsNull() {
+		if r := gjson.Get(response, "client_management_profile_id"); r.Exists() {
+			state.ClientManagementProfileID = types.StringValue(r.String())
+		} else {
+			state.ClientManagementProfileID = types.StringNull()
+		}
+	}
+
+	if !state.Lifetime.IsNull() {
+		if r := gjson.Get(response, "lifetime"); r.Exists() {
+			state.Lifetime = types.StringValue(r.String())
+		} else {
+			state.Lifetime = types.StringNull()
+		}
+	}
+
+	if !state.NamePrefix.IsNull() {
+		if r := gjson.Get(response, "name_prefix"); r.Exists() {
+			state.NamePrefix = types.StringValue(r.String())
+		} else {
+			state.NamePrefix = types.StringNull()
+		}
+	}
+
+	// Optional int64 scalars — CM returns 0 for unset non-pointer int64 fields; guard prevents null→0 drift
+	if !state.CertDuration.IsNull() {
+		if r := gjson.Get(response, "cert_duration"); r.Exists() {
+			state.CertDuration = types.Int64Value(r.Int())
+		} else {
+			state.CertDuration = types.Int64Null()
+		}
+	}
+
+	if !state.MaxClients.IsNull() {
+		if r := gjson.Get(response, "max_clients"); r.Exists() {
+			state.MaxClients = types.Int64Value(r.Int())
+		} else {
+			state.MaxClients = types.Int64Null()
+		}
+	}
+
+	// Optional map fields — three-branch: absent/null → MapNull, empty → MapValueMust({}), present → MapValueFrom
+	labelResult := gjson.Get(response, "label")
+	if !labelResult.Exists() || labelResult.Type == gjson.Null {
+		state.Label = types.MapNull(types.StringType)
+	} else if len(labelResult.Map()) == 0 {
+		state.Label = types.MapValueMust(types.StringType, map[string]attr.Value{})
+	} else {
+		labelMap := make(map[string]string)
+		labelResult.ForEach(func(k, v gjson.Result) bool {
+			labelMap[k.String()] = v.String()
+			return true
+		})
+		lv, diag := types.MapValueFrom(ctx, types.StringType, labelMap)
+		resp.Diagnostics.Append(diag...)
+		if !resp.Diagnostics.HasError() {
+			state.Label = lv
+		}
+	}
+
+	labelsResult := gjson.Get(response, "labels")
+	if !labelsResult.Exists() || labelsResult.Type == gjson.Null {
+		state.Labels = types.MapNull(types.StringType)
+	} else if len(labelsResult.Map()) == 0 {
+		state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+	} else {
+		labelsMap := make(map[string]string)
+		labelsResult.ForEach(func(k, v gjson.Result) bool {
+			labelsMap[k.String()] = v.String()
+			return true
+		})
+		lv, diag := types.MapValueFrom(ctx, types.StringType, labelsMap)
+		resp.Diagnostics.Append(diag...)
+		if !resp.Diagnostics.HasError() {
+			state.Labels = lv
+		}
+	}
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -210,12 +334,28 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 		payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
 	}
 
-	// Add labels to payload
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Add labels to payload — null guard prevents sending {} when unconfigured
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
+
+	// Add label to payload — null guard
+	if !plan.Label.IsNull() && !plan.Label.IsUnknown() {
+		labelPayload := make(map[string]interface{})
+		for k, v := range plan.Label.Elements() {
+			labelPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Label = labelPayload
+	}
+
+	// Add name_prefix to payload — null guard
+	if !plan.NamePrefix.IsNull() && !plan.NamePrefix.IsUnknown() {
+		payload.NamePrefix = plan.NamePrefix.ValueString()
+	}
 
 	if plan.Lifetime.ValueString() != "" && plan.Lifetime.ValueString() != types.StringNull().ValueString() {
 		payload.Lifetime = plan.Lifetime.ValueString()
@@ -226,7 +366,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+plan.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: RegToken Update",
 			err.Error(),
@@ -234,9 +374,10 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_REG_TOKEN, payloadJSON, "id")
+	// Fix: URL path must use state.ID (resource UUID from prior state), not plan.ID
+	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_REG_TOKEN, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+plan.ID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating RegToken on CipherTrust Manager: ",
 			"Could not upodate RegToken, unexpected error: "+err.Error(),
@@ -257,17 +398,24 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMRegTokenTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Delete]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Delete]["+id+"]")
+
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_REG_TOKEN, state.ID.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	_, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			// Token already deleted out-of-band — treat as success; defer emits MSG_METHOD_END
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Delete]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust RegToken",
 			"Could not delete RegToken, unexpected error: "+err.Error(),

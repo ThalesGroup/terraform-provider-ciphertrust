@@ -1,6 +1,47 @@
 package connections
 
-import "github.com/hashicorp/terraform-plugin-framework/types"
+import (
+	"context"
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+)
+
+// NameImmutableModifier is a plan modifier that prevents the 'name' attribute from
+// being changed after a connection resource is created. The CM API does not support
+// renaming connections; attempting to do so would orphan the original connection on CM.
+// The error is raised at plan time so the user gets immediate, actionable feedback
+// without needing to reach apply.
+type NameImmutableModifier struct{}
+
+func (m NameImmutableModifier) Description(_ context.Context) string {
+	return "Connection name is immutable after creation."
+}
+
+func (m NameImmutableModifier) MarkdownDescription(_ context.Context) string {
+	return "Connection name is immutable after creation."
+}
+
+// PlanModifyString errors when the planned name differs from the state name, i.e. when
+// the resource already exists and the user is trying to rename it.
+func (m NameImmutableModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// State is null on initial create — allow.
+	// Values are equal — no change, allow.
+	if req.StateValue.IsNull() || req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Connection name cannot be changed",
+		fmt.Sprintf(
+			"The 'name' field is immutable after creation. "+
+				"Current name on CipherTrust Manager: %q. "+
+				"To use a different name, remove this resource from Terraform state "+
+				"(terraform state rm) and import or recreate it with the desired name.",
+			req.StateValue.ValueString(),
+		),
+	)
+}
 
 type IAMRoleAnywhereTFSDK struct {
 	AnywhereRoleARN types.String `tfsdk:"anywhere_role_arn"`
@@ -44,7 +85,7 @@ type AWSConnectionModelJSON struct {
 	Application             types.String           `tfsdk:"application"`
 	DevAccount              types.String           `tfsdk:"dev_account"`
 	ID                      string                 `json:"id"`
-	Name                    string                 `json:"name"`
+	Name                    string                 `json:"name,omitempty"`
 	Description             string                 `json:"description"`
 	AccessKeyID             string                 `json:"access_key_id"`
 	AssumeRoleARN           string                 `json:"assume_role_arn"`
@@ -52,7 +93,7 @@ type AWSConnectionModelJSON struct {
 	AWSRegion               string                 `json:"aws_region"`
 	AWSSTSRegionalEndpoints string                 `json:"aws_sts_regional_endpoints"`
 	CloudName               string                 `json:"cloud_name"`
-	IsRoleAnywhere          bool                   `json:"is_role_anywhere"`
+	IsRoleAnywhere          bool                   `json:"is_role_anywhere,omitempty"`
 	IAMRoleAnywhere         *IAMRoleAnywhereJSON   `json:"iam_role_anywhere"`
 	Labels                  map[string]interface{} `json:"labels"`
 	Meta                    interface{}            `json:"meta"`

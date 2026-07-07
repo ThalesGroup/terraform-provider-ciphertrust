@@ -3,28 +3,18 @@
 page_title: "ciphertrust_cluster_node Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Adds a single node to an existing CipherTrust Manager cluster.
+  Adds a single node to an existing CipherTrust Manager cluster. The provider's configured address is used as the existing cluster member for signing the join request.
 ---
 
 # ciphertrust_cluster_node (Resource)
 
-Adds a single node to an existing CipherTrust Manager cluster using the three-step CSR workflow (generate CSR → sign on member → join cluster).
-
-## Workflow
-
-The resource performs these steps:
-1. Acquire mutex lock to ensure sequential joins
-2. Generate a CSR on the joining node
-3. Sign the CSR on an existing cluster member (specified by `member_host`)
-4. Join the cluster with the signed certificate (async with status polling)
-5. Poll cluster status until node reaches "ready" state
-6. Release mutex lock
+Adds a single node to an existing CipherTrust Manager cluster. The provider's configured address is used as the existing cluster member for signing the join request.
 
 ## Example Usage
 
-### Basic Usage
-
 ```terraform
+# Terraform Configuration for Adding Nodes to an Existing CipherTrust Manager Cluster
+
 terraform {
   required_providers {
     ciphertrust = {
@@ -34,96 +24,169 @@ terraform {
   }
 }
 
+# Configure the provider to point to an existing cluster member
 provider "ciphertrust" {
   address  = "https://10.10.10.11"
   username = "admin"
   password = "ChangeMe101!"
 }
 
+# Example 1: Add a single node to an existing cluster (On-Premises / Single Network)
+# ===================================================================================
 resource "ciphertrust_cluster_node" "node3" {
+  # host: Internal address sent in CM API payloads (CSR, join request).
+  # Must be reachable by other cluster members for internal cluster communication.
   host           = "10.10.10.13"
   port           = 5432
+
+  # public_address: Address for external connectors/applications.
+  # Can be same as host, or a public IP/FQDN/load balancer.
   public_address = "10.10.10.13"
-  
+
   member_host = "10.10.10.11"
   member_port = 5432
-  
+
   credentials = {
+    # address: The endpoint Terraform uses to connect to the joining node.
+    # On-premises (single network): same as host is fine.
+    address  = "10.10.10.13"
     username = "admin"
     password = "ChangeMe103!"
   }
 }
-```
 
-### Adding Multiple Nodes
-
-```terraform
-locals {
-  nodes = {
-    "node2" = { host = "10.10.10.12", password = "ChangeMe102!" }
-    "node3" = { host = "10.10.10.13", password = "ChangeMe103!" }
-    "node4" = { host = "10.10.10.14", password = "ChangeMe104!" }
-  }
-}
-
-resource "ciphertrust_cluster_node" "nodes" {
-  for_each = local.nodes
-  
-  host           = each.value.host
+# Example 2: Add node with custom credentials and domain
+# =======================================================
+resource "ciphertrust_cluster_node" "node4" {
+  host           = "10.10.10.14"
   port           = 5432
-  public_address = each.value.host
-  
+  public_address = "node4.example.com"
+
   member_host = "10.10.10.11"
   member_port = 5432
-  
+
   credentials = {
-    username = "admin"
-    password = each.value.password
+    address     = "10.10.10.14"
+    username    = "clusteradmin"
+    password    = "ChangeMe104!"
+    domain      = "root"
+    auth_domain = "local"
   }
 }
-```
 
-### AWS EC2 with FQDN
-
-```terraform
-resource "ciphertrust_cluster_node" "aws_node" {
-  host           = "ec2-3-232-96-8.compute-1.amazonaws.com"
+# Example 3: AWS EC2 (Terraform running outside VPC)
+# ====================================================
+# When running Terraform outside the VPC, the joining node cannot be reached
+# via its private IP. Use the FQDN in credentials.address so Terraform connects
+# via the public endpoint, while host holds the private IP that CM uses internally.
+#
+# Why FQDN and not public IP for credentials.address:
+#   EC2 instances cannot reach their own public IPs (AWS hairpin NAT).
+#   FQDNs resolve to private IPs from inside the VPC and public IPs from outside.
+resource "ciphertrust_cluster_node" "aws_node_external_terraform" {
+  # host: Private IP — sent in CM API payloads for internal cluster routing.
+  host           = "172.30.100.184"
   port           = 5432
+
+  # public_address: Public IP for external connectors.
   public_address = "3.232.96.8"
-  
+
   member_host = "ec2-3-239-247-150.compute-1.amazonaws.com"
   member_port = 5432
-  
+
   credentials = {
+    # address: FQDN so Terraform (running outside VPC) can reach the joining node.
+    address  = "ec2-3-232-96-8.compute-1.amazonaws.com"
     username = "admin"
     password = "Ssl12345#"
   }
 }
-```
 
-### With Cluster Created in Same Configuration
+# Example 3b: AWS EC2 (Terraform running inside same VPC)
+# ========================================================
+# When Terraform runs inside the same VPC, use private IPs everywhere.
+resource "ciphertrust_cluster_node" "aws_node_internal_terraform" {
+  host           = "172.30.100.184"
+  port           = 5432
+  public_address = "44.200.204.237"
 
-```terraform
+  member_host = "172.30.100.183"
+  member_port = 5432
+
+  credentials = {
+    address  = "172.30.100.184"
+    username = "admin"
+    password = "Ssl12345#"
+  }
+}
+
+# Example 4: Adding node to a cluster created in same configuration
+# ==================================================================
 resource "ciphertrust_cluster" "main" {
   local_node_host = "10.10.10.11"
+  local_node_port = 5432
   public_address  = "10.10.10.11"
 }
 
 resource "ciphertrust_cluster_node" "node2" {
   depends_on = [ciphertrust_cluster.main]
-  
+
   host           = "10.10.10.12"
   port           = 5432
   public_address = "10.10.10.12"
-  
+
   member_host = "10.10.10.11"
   member_port = 5432
-  
+
   credentials = {
+    address  = "10.10.10.12"
     username = "admin"
     password = "ChangeMe102!"
   }
 }
+
+# Outputs
+output "node_id" {
+  description = "CipherTrust Manager node ID"
+  value       = ciphertrust_cluster_node.node3.node_id
+}
+
+output "cluster_size" {
+  description = "Total nodes in cluster after adding this node"
+  value       = ciphertrust_cluster_node.node3.node_count
+}
+
+output "status" {
+  description = "Cluster status after node join"
+  value       = ciphertrust_cluster_node.node3.status_description
+}
+
+# Notes:
+# ======
+#
+# host vs credentials.address:
+# ----------------------------
+# - host: sent in CM API payloads (CSR generation, join request).
+#         Use the private/internal address that cluster members use to talk to each other.
+# - credentials.address: the endpoint Terraform connects to for API calls to the joining node.
+#         Use a publicly-reachable address or FQDN when Terraform runs outside the node's network.
+#
+# Removing a Node:
+# ----------------
+# - Running terraform destroy on this resource will:
+#   1. Remove the node from the cluster
+#   2. Clear cluster config on the removed node
+#
+# Member Host Selection:
+# ----------------------
+# - member_host can be ANY node that is already in the cluster.
+# - Does not have to be the original/first node.
+#
+# Sequential Joins:
+# -----------------
+# - When using for_each to add multiple nodes, they join one at a time automatically.
+# - The provider holds a lock until each join fully completes (joining node ready +
+#   cluster member confirmed stable) before starting the next join.
 ```
 
 <!-- schema generated by tfplugindocs -->
@@ -133,17 +196,17 @@ resource "ciphertrust_cluster_node" "node2" {
 
 - `host` (String) Hostname or IP address of the node to add to the cluster.
 - `port` (Number) Port of the node to add, typically 5432.
-- `public_address` (String) FQDN or public IP of the new node. Used by CipherTrust Manager connectors to reach this node remotely. Can be updated.
+- `public_address` (String) FQDN or public IP of the new node. Used by CipherTrust Manager connectors to reach this node remotely.
 
 ### Optional
 
 - `credentials` (Attributes) Credentials for the new node. If omitted, the provider's configured credentials are used. (see [below for nested schema](#nestedatt--credentials))
-- `member_host` (String) Hostname or FQDN of the existing cluster member. If omitted, the provider's configured address is used. Use an FQDN (e.g. ec2-1-2-3-4.compute-1.amazonaws.com) to match the member node's TLS certificate.
+- `member_host` (String) Hostname or FQDN of any existing cluster member to join through. Can be any node already in the cluster, not necessarily the first/original node. If omitted, the provider's configured address is used. Use an FQDN (e.g. ec2-1-2-3-4.compute-1.amazonaws.com) to match the member node's TLS certificate.
 - `member_port` (Number) Port of the existing cluster member (the provider's configured node). Defaults to 5432.
 
 ### Read-Only
 
-- `id` (String) The node ID.
+- `id` (String) The ID of this resource.
 - `node_count` (Number) Total number of nodes in the cluster after this node has joined.
 - `node_id` (String) CipherTrust Manager node ID assigned to the new node after joining the cluster.
 - `status_code` (String) Short cluster status code (e.g. 'r' = ready).
@@ -152,6 +215,10 @@ resource "ciphertrust_cluster_node" "node2" {
 <a id="nestedatt--credentials"></a>
 ### Nested Schema for `credentials`
 
+Required:
+
+- `address` (String) Address Terraform uses to connect to the joining node (e.g. public FQDN, public IP, or any reachable endpoint). Allows host to hold a private/internal address for CM API payloads while Terraform connects via a different endpoint.
+
 Optional:
 
 - `auth_domain` (String) CipherTrust authentication domain of the user on the new node.
@@ -159,45 +226,3 @@ Optional:
 - `no_ssl_verify` (Boolean) Set to false to verify the server's certificate chain and host name.
 - `password` (String, Sensitive) Password for the new node.
 - `username` (String) Username for the new node.
-
-## Operations
-
-### Create
-
-Performs the join workflow with mutex-based serialization:
-1. Acquire mutex lock (ensures only one node joins at a time)
-2. `POST /v1/cluster/csr` on the joining node (generate CSR)
-3. `POST /v1/nodes` on the existing member (sign CSR, with retry logic)
-4. `POST /v1/cluster/join` on the joining node with `blocking=false`
-5. Poll `GET /v1/cluster` until status is "r" (ready) - 10s interval, 30min timeout
-6. Release mutex lock
-
-The CSR signing step includes retry logic (up to 30 retries, 10s intervals) for consensus stabilization.
-Status polling checks for: "r" = ready (success), "j" = joining (continue), "d" = down (error).
-
-### Read
-
-Calls `GET /v1/cluster` on the joining node to refresh status.
-
-### Update
-
-Calls `PATCH /v1/nodes/{id}` on the cluster member to update `public_address`. This is the only updatable attribute.
-
-### Delete
-
-Performs two operations:
-1. `DELETE /v1/nodes/{id}` on the cluster member (remove from cluster)
-2. `DELETE /v1/cluster` on the removed node (clear cluster config)
-
-## Import
-
-Cluster node resources cannot be imported.
-
-## Notes
-
-- **Sequential Joins**: The provider uses an internal mutex to ensure only one node joins at a time, even with `for_each` parallel resource creation, preventing consensus issues during multi-node setup
-- **Consensus Retry**: The CSR signing step retries automatically if consensus is temporarily unavailable (common after recent node joins)
-- **Host Formats**: Supports bare IPs (`10.10.10.13`), bare hostnames (`cm-node-3`), FQDNs (`ec2-...`), and full URLs (`https://...`)
-- **TLS Certificates**: When using AWS EC2 or systems with FQDN-based TLS certs, use the FQDN for both `host` and `member_host`
-- **Credentials Fallback**: If `credentials` is omitted, the provider's configured credentials are used
-- **Removing Nodes**: Simply remove the node from your configuration and run `terraform apply` to remove it from the cluster

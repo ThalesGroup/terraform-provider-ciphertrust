@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTECSIGroupDataSource(t *testing.T) {
+func TestCTECSIGroupDataSource(t *testing.T) {
 	csiGroupName := "tf-csi-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

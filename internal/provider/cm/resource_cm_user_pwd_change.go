@@ -98,6 +98,14 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Intentionally empty. ciphertrust_cm_user_password_change is a one-shot action
+	// resource: it triggers a CM password change and has no retrievable state.
+	// The CM API provides no GET endpoint for password-change records.
+	//
+	// User-visible consequence: after the initial `terraform apply`, subsequent
+	// `terraform plan` runs will always show no changes — even if the password
+	// was changed or reset in CM outside of Terraform. This is a known,
+	// intentional limitation documented in TFIN-DD-015.
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

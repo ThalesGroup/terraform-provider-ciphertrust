@@ -48,7 +48,8 @@ Read-Only:
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_id` (String) The compartment's OCID.
 - `compartment_name` (String) Compartment name.
-- `connection_id` (String) CipherTrust Manager OCI connection ID or connection name.
+- `connection_id` (String) The connection ID of this vault.
+- `connection_name` (String) The connection name of this vault.
 - `created_at` (String) Date/time the vault was created in CipherTrust Manager.
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
 - `freeform_tags` (Map of String) The freeform tags of the vault.

@@ -34,10 +34,8 @@ A resource is a combination of a directory, a file, and patterns or special vari
 
 - `account` (String) The account which owns this resource.
 - `application` (String) The application this resource belongs to.
-- `created_at` (String) Date/time the application was created
 - `dev_account` (String) The developer account which owns this resource's application.
 - `id` (String) The unique identifier of the resource
-- `updated_at` (String) Date/time the application was updated
 - `uri` (String) A human readable unique identifier of the resource
 
 <a id="nestedatt--resources"></a>

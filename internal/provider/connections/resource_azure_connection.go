@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -65,7 +66,8 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name.",
+				Description: "Unique connection name. Immutable after creation.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"tenant_id": schema.StringAttribute{
 				Optional:    true,
@@ -99,6 +101,7 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"client_secret": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Secret key for the Azure application. Required in Azure Stack connection.",
 			},
 			"cloud_name": schema.StringAttribute{
@@ -321,6 +324,11 @@ func (r *resourceAzureConnection) Read(ctx context.Context, req resource.ReadReq
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AZURE_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_azure_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading Azure Connection on CipherTrust Manager: ",

@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -150,14 +149,14 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 				Description: "Date/time the key was refreshed.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Waiting period after the key is destroyed before the key is deleted. Only relevant when the resource is destroyed. Default is " + strconv.Itoa(scheduleForDeletionDays) + ". Must be between 7 and 30.",
-				Default:     int64default.StaticInt64(scheduleForDeletionDays),
-				Validators: []validator.Int64{
-					int64validator.AtLeast(scheduleForDeletionDays),
-					int64validator.AtMost(30),
-				},
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Number of days to wait before permanently deleting the OCI BYOK key version " +
+					"when this resource is destroyed. If omitted during resource creation, " +
+					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
+					"and is used during destroy unless changed explicitly.",
+				PlanModifiers: []planmodifier.Int64{retainOrDefaultInt64{defaultVal: scheduleForDeletionDays}},
+				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
 				Required:    true,
@@ -282,13 +281,11 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 		return
 	}
 	readVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-	if readVersionState == keyStateScheduledForDeletion {
-		msg := "OCI BYOK key version is scheduled for deletion, removing from state."
+	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
+		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
-		resp.State.RemoveResource(ctx)
-		return
 	}
 	setBYOOKKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -297,13 +294,46 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-// Update is a no-op. OCI BYOK key versions are immutable after creation.
-// The only schema attribute that can differ between plan and state is
-// schedule_for_deletion_days, which is stored locally and applied at destroy time only.
-func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, _ resource.UpdateRequest, _ *resource.UpdateResponse) {
+// Update checks the OCI BYOK key version state in CipherTrust Manager and retains
+// the resource in state if the version is scheduled for deletion. The only schema
+// attribute that can differ between plan and state is schedule_for_deletion_days,
+// which is stored locally and applied at destroy time only; its updated value is
+// preserved in state after the check.
+func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> Update]["+id+"]")
 	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> Update]["+id+"]")
+
+	var state models.BYOKKeyVersionTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	keyID := state.CCKMKeyID.ValueString()
+	versionID := state.ID.ValueString()
+
+	response := getOciKeyVersion(ctx, id, r.client, keyID, versionID, "updating", &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	updateVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
+	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
+		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key version", updateVersionState, "OCI")
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
+		tflog.Warn(ctx, details)
+		resp.Diagnostics.AddWarning(details, "")
+	}
+
+	var plan models.BYOKKeyVersionTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	setBYOOKKeyVersionState(ctx, response, &plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Delete schedules the OCI BYOK key version for deletion via deleteKeyVersion

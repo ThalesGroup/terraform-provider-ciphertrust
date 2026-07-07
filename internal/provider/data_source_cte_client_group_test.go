@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestCiphertrustCTEClientGroupDataSource(t *testing.T) {
+func TestCTEClientGroupDataSource(t *testing.T) {
 	clientGroupName := "tf-cg-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

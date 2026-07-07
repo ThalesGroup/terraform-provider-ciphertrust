@@ -9,6 +9,7 @@ import (
 
 type VaultTFSDK struct {
 	VaultCommonTFSDK
+	ConnectionID    types.String `tfsdk:"connection_id"`
 	BucketParamsTFSDK
 	FreeformTags types.Map `tfsdk:"freeform_tags"`
 	DefinedTags  types.Set `tfsdk:"defined_tags"`
@@ -109,7 +110,7 @@ type VaultCommonTFSDK struct {
 	ManagementEndpoint  types.String `tfsdk:"management_endpoint"`
 	TimeCreated         types.String `tfsdk:"time_created"`
 	CloudName           types.String `tfsdk:"cloud_name"`
-	Connection          types.String `tfsdk:"connection_id"`
+	ConnectionName      types.String `tfsdk:"connection_name"`
 	VaultType           types.String `tfsdk:"vault_type"`
 	WrappingkeyID       types.String `tfsdk:"wrappingkey_id"`
 	RestoredFromVaultID types.String `tfsdk:"restored_from_vault_id"`

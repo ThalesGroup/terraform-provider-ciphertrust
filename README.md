@@ -44,6 +44,7 @@ The following table illustrates which parameters can be provided as environment 
 | password             | CM_PASSWORD          | password    | Yes       | N/A                        |
 | domain               | CM_DOMAIN            | domain      | No        | Empty string (root domain) |
 | auth_domain          | CM_AUTH_DOMAIN       | auth_domain | No        | Empty string (root domain) |
+| tenant               | CIPHERTRUST_TENANT   | tenant      | No        | N/A (CDSPaaS only)         |
 | remaining parameters | no                   | yes         | No        | N/A                        |
 
 The order of precedence when determining the value of a provider parameter: 
@@ -89,14 +90,20 @@ provider "ciphertrust" {
 
 ### For CipherTrust Data Security Platform as a Service (CDSPaaS)
 
+Use the `tenant` parameter (not `auth_domain`) to specify the CDSPaaS tenant name.
+Setting `tenant` routes authentication through the CDSPaaS multi-tenant path.
+
 ```terraform
 provider "ciphertrust" {
-  address     = "cdsp-address"
-  username    = "cdsp-tenant-username"
-  password    = "cdsp-tenant-password"
-  auth_domain = "cdsp-tenant-name"
+  address  = "https://api.ciphertrust.cloud"
+  username = "admin@acme.com"
+  password = "cdsp-tenant-password"
+  tenant   = "acme"
 }
 ```
+
+The `auth_domain` parameter is still accepted for on-prem CipherTrust Manager domain routing
+but is not used for CDSPaaS tenant selection.
 ## Configuration File
 
 All provider parameters can be read from the configuration file.
@@ -123,6 +130,7 @@ export CM_USERNAME=cm-username
 export CM_PASSWORD=cm-password
 export CM_AUTH_DOMAIN=cm-auth-domain
 export CM_DOMAIN=cm-domain
+export CIPHERTRUST_TENANT=acme   # CDSPaaS only
 ```
 
 If environment variables required for authentication exist the provider block can be:
@@ -143,9 +151,11 @@ provider "ciphertrust" {}
 
 - **address** (String) HTTPS URL of the CipherTrust instance. address can be set in the provider block, via the CM_ADDRESS environment variable or in ~/.ciphertrust/config. An address need not be provided when creating a cluster of CipherTrust instances.
 - **auth_domain** (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CM_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
+- **bootstrap** (String) Set to `"yes"` to enable bootstrap mode (used during initial CipherTrust Manager setup, e.g. with `ciphertrust_cm_ssh_key`). bootstrap can be set in the provider block or in ~/.ciphertrust/config.
 - **domain** (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CM_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the root domain.
 - **no_ssl_verify** (Boolean) Set to false to verify the server's certificate chain and host name. no_ssl_verify can be set in the provider block or in ~/.ciphertrust/config. Default is true.
 - **rest_api_timeout** (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 60.
+- **tenant** (String) CDSPaaS tenant name (e.g. `"acme"`) or tenant path (e.g. `"acme/eng/team"`). Setting this opts the provider into the CDSPaaS multi-tenant authentication path; leave unset for on-prem CipherTrust Manager. tenant can be set in the provider block, via the CIPHERTRUST_TENANT environment variable or in ~/.ciphertrust/config.
 - **aws_operation_timeout** (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds.
 - **oci_operation_timeout** (Number) Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds.
 - **replication_delay_ms** (Number) In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances.

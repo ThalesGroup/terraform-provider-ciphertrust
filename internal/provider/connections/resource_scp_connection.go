@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -18,8 +19,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMScpConnection{}
-	_ resource.ResourceWithConfigure = &resourceCMScpConnection{}
+	_ resource.Resource                   = &resourceCMScpConnection{}
+	_ resource.ResourceWithConfigure      = &resourceCMScpConnection{}
+	_ resource.ResourceWithValidateConfig = &resourceCMScpConnection{}
 
 	labelsDescription = `Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 
@@ -80,9 +82,14 @@ func (r *resourceCMScpConnection) Metadata(_ context.Context, req resource.Metad
 	resp.TypeName = req.ProviderTypeName + "_scp_connection"
 }
 
+func (r *resourceCMScpConnection) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_scp_connection", resp)
+}
+
 // Schema defines the schema for the resource.
 func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Manages an SCP/SFTP connection used for backup/restore on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS, where backup/restore is managed by the platform.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -100,7 +107,8 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name.",
+				Description: "Unique connection name. Immutable after creation.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"path_to": schema.StringAttribute{
 				Required:    true,
@@ -287,6 +295,11 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCP_CONNECTION)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "[resource_scp_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading SCP Connection on CipherTrust Manager: ",

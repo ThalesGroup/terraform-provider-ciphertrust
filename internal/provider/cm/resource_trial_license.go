@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,8 +20,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMTrialLicense{}
-	_ resource.ResourceWithConfigure = &resourceCMTrialLicense{}
+	_ resource.Resource                   = &resourceCMTrialLicense{}
+	_ resource.ResourceWithConfigure      = &resourceCMTrialLicense{}
+	_ resource.ResourceWithValidateConfig = &resourceCMTrialLicense{}
 )
 
 func NewResourceCMTrialLicense() resource.Resource {
@@ -35,9 +37,14 @@ func (r *resourceCMTrialLicense) Metadata(_ context.Context, req resource.Metada
 	resp.TypeName = req.ProviderTypeName + "_trial_license"
 }
 
+func (r *resourceCMTrialLicense) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_trial_license", resp)
+}
+
 // Schema defines the schema for the resource.
 func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Activates a CipherTrust Manager trial license. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "ID of the trial license",
@@ -163,6 +170,10 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 	err := r.readTrialLicenseFromAPI(ctx, state.ID.ValueString(), &state)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Trial License Not Found",
+				"The Trial License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
 			resp.State.RemoveResource(ctx)
 			return
 		}

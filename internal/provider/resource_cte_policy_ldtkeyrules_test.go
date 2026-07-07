@@ -1,34 +1,44 @@
 package provider
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceCTEPolicyLDTKeyRule(t *testing.T) {
+func TestCTEPolicyLDTKeyRuleResource(t *testing.T) {
+	RequireCM(t)
+
+	suffix := uuid.New().String()[:8]
+	key1Name := "ldt-key-initial-" + suffix
+	key2Name := "ldt-key-new-" + suffix
+	policyName := "LDT_policy-" + suffix
+	rsName := "rs2-" + suffix
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 
 			// Step 1: Create LDT Policy
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "key1" {
-  name         = "ldt-key-initial"
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                      = %q
+  algorithm                 = "aes"
+  key_size                  = 256
+  usage_mask                = 76
+  undeletable               = false
+  unexportable              = false
+  xts                       = false
+  remove_from_state_on_destroy = true
 
   meta = {
     permissions = {
-      decrypt_with_key = ["CTE Clients"]
-      encrypt_with_key = ["CTE Clients"]
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
     }
     cte = {
       persistent_on_client = true
@@ -39,7 +49,7 @@ resource "ciphertrust_cm_key" "key1" {
 }
 
 resource "ciphertrust_cte_policy" "ldt_policy" {
-  name        = "LDT_policy"
+  name        = %q
   policy_type = "LDT"
   never_deny  = true
 
@@ -61,27 +71,26 @@ resource "ciphertrust_cte_policy" "ldt_policy" {
     partial_match = false
   }]
 }
-`,
+`, key1Name, policyName),
 			},
 
 			// Step 2: Add new LDT key rule (ONLY transformation key changes)
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "key1" {
-  name         = "ldt-key-initial"
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  usage_mask                   = 76
+  undeletable                  = false
+  unexportable                 = false
+  xts                          = false
+  remove_from_state_on_destroy = true
 
   meta = {
     permissions = {
-      decrypt_with_key = ["CTE Clients"]
-      encrypt_with_key = ["CTE Clients"]
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
     }
     cte = {
       persistent_on_client = true
@@ -92,20 +101,19 @@ resource "ciphertrust_cm_key" "key1" {
 }
 
 resource "ciphertrust_cm_key" "key2" {
-  name         = "ldt-key-new"
-  algorithm    = "aes"
-  key_size     = 256
-  usage_mask   = 76
-  undeletable  = false
-  unexportable = false
-  xts          = false
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  usage_mask                   = 76
+  undeletable                  = false
+  unexportable                 = false
+  xts                          = false
+  remove_from_state_on_destroy = true
 
   meta = {
     permissions = {
-      decrypt_with_key = ["CTE Clients"]
-      encrypt_with_key = ["CTE Clients"]
-      export_key       = ["CTE Clients"]
-      read_key         = ["CTE Clients"]
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
     }
     cte = {
       persistent_on_client = true
@@ -116,11 +124,11 @@ resource "ciphertrust_cm_key" "key2" {
 }
 
 resource "ciphertrust_cte_resource_set" "rs2" {
-  name = "rs2"
+  name = %q
 }
 
 resource "ciphertrust_cte_policy" "ldt_policy" {
-  name        = "LDT_policy"
+  name        = %q
   policy_type = "LDT"
   never_deny  = true
 
@@ -163,12 +171,47 @@ resource "ciphertrust_cte_policy_ldtkey_rule" "ldt_rule" {
     }
   }
 }
-`,
+`, key1Name, key2Name, rsName, policyName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "rule.id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "policy_id"),
 				),
 			},
+			// Import via composite "<policy_id>:<rule_id>".
+			{
+				ResourceName:      "ciphertrust_cte_policy_ldtkey_rule.ldt_rule",
+				ImportState:       true,
+				ImportStateIdFunc: cteRuleImportID("ciphertrust_cte_policy_ldtkey_rule.ldt_rule", "rule.id"),
+				ImportStateCheck:  importStateCheckAttrsSet("policy_id", "rule.id"),
+			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+// TestCTEPolicyLDTKeyRuleResource_missingPolicyID: omitting required policy_id fails at plan.
+func TestCTEPolicyLDTKeyRuleResource_missingPolicyID(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cte_policy_ldtkey_rule" "ldt_rule" {
+  rule = {
+    is_exclusion_rule = false
+    current_key = {
+      key_id   = "clear_key"
+      key_type = ""
+    }
+    transformation_key = {
+      key_id   = "clear_key"
+      key_type = ""
+    }
+  }
+}
+`,
+				ExpectError: regexp.MustCompile(`(?i)policy_id`),
+			},
 		},
 	})
 }

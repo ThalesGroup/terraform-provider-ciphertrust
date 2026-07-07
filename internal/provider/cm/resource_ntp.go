@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -20,8 +22,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMNTP{}
-	_ resource.ResourceWithConfigure = &resourceCMNTP{}
+	_ resource.Resource                   = &resourceCMNTP{}
+	_ resource.ResourceWithConfigure      = &resourceCMNTP{}
+	_ resource.ResourceWithValidateConfig = &resourceCMNTP{}
 )
 
 func NewResourceCMNTP() resource.Resource {
@@ -36,9 +39,14 @@ func (r *resourceCMNTP) Metadata(_ context.Context, req resource.MetadataRequest
 	resp.TypeName = req.ProviderTypeName + "_ntp"
 }
 
+func (r *resourceCMNTP) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_ntp", resp)
+}
+
 // Schema defines the schema for the resource.
 func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Configures an NTP server on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -77,6 +85,17 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	}
 }
 
+// ntpDaemonError is the substring returned by CM when its internal NTP Unix
+// socket is temporarily unavailable (e.g. after a rapid sequence of add/remove
+// operations overwhelms the daemon). Retrying after a short pause resolves it.
+const ntpDaemonError = "Local NTP Unix socket returned a non-successful HTTP code"
+
+// ntpMaxRetries is the number of additional attempts after the first failure.
+const ntpMaxRetries = 3
+
+// ntpRetryDelay is the pause between retry attempts.
+const ntpRetryDelay = 5 * time.Second
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -110,7 +129,17 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
-	response, err := r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+	var response string
+	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
+		if attempt > 0 {
+			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Create] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
+			time.Sleep(ntpRetryDelay)
+		}
+		response, err = r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
+		if err == nil || !strings.Contains(err.Error(), ntpDaemonError) {
+			break
+		}
+	}
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -141,6 +170,8 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 }
 
 // Read refreshes the Terraform state with the latest data.
+// The CM NTP API does not expose a GET-by-host endpoint; instead we list all
+// configured NTP servers and search for the one matching state.Host.
 func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMNTPTFSDK
 	id := uuid.New().String()
@@ -151,26 +182,50 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	response, err := r.client.ReadDataByParam(ctx, id, state.Host.ValueString(), common.URL_NTP)
+	// List all NTP servers and find the one matching our host.
+	listResponse, err := r.client.GetAll(ctx, id, common.URL_NTP)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM NTP on CipherTrust Manager: ",
-			"Could not read CM NTP id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
+			"Could not list NTP servers, unexpected error: "+err.Error(),
 		)
 		return
 	}
 
-	state.Host = types.StringValue(gjson.Get(response, "host").String())
+	// listResponse is the JSON array string returned by GetAll (the "resources" field).
+	targetHost := state.Host.ValueString()
+	var entry gjson.Result
+	gjson.Parse(listResponse).ForEach(func(_, v gjson.Result) bool {
+		if v.Get("host").String() == targetHost {
+			entry = v
+			return false // stop iterating
+		}
+		return true
+	})
+
+	if !entry.Exists() {
+		resp.Diagnostics.AddWarning(
+			"NTP Server Not Found",
+			"The NTP server '"+targetHost+"' was not found in the CipherTrust Manager NTP server list. It may have been deleted outside of Terraform. Removing it from state.",
+		)
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	state.Host = types.StringValue(entry.Get("host").String())
 	// API does not return id, use host as the identifier
 	state.ID = types.StringValue(state.Host.ValueString())
 	// key and key_type are only returned by API if user provided them
-	// Only update state if API returns non-empty values, otherwise preserve existing state
-	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
+	if keyVal := entry.Get("key"); keyVal.Exists() && keyVal.String() != "" {
 		state.Key = types.StringValue(keyVal.String())
+	} else {
+		state.Key = types.StringNull()
 	}
-	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
+	if keyTypeVal := entry.Get("key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 		state.KeyType = types.StringValue(keyTypeVal.String())
+	} else {
+		state.KeyType = types.StringNull()
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
@@ -197,11 +252,25 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	// Delete existing license
+	// Delete existing NTP server, retrying if the NTP daemon is temporarily busy.
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_NTP, state.Host.ValueString())
-	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+	var output string
+	var err error
+	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
+		if attempt > 0 {
+			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Delete] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, state.ID.ValueString()))
+			time.Sleep(ntpRetryDelay)
+		}
+		output, err = r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
+		if err == nil || !strings.Contains(err.Error(), ntpDaemonError) {
+			break
+		}
+	}
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust NTP",
 			"Could not delete NTP, unexpected error: "+err.Error(),

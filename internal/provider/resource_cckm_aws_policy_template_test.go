@@ -43,7 +43,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 
 	createJsonencodePolicyConfig := `
 		resource "ciphertrust_aws_policy_template" "policy_template_ex1" {
-			kms    = %s
+			kms_id = %s
 			name   = "%s"
 			policy = jsonencode(
 				{
@@ -65,7 +65,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 		}`
 	updateJsonencodePolicyConfigToUsersAndRoles := `
 		resource "ciphertrust_aws_policy_template" "policy_template_ex1" {
-			kms         = ciphertrust_aws_kms.kms.id
+			kms_id      = ciphertrust_aws_kms.kms.id
 			name        = "%s"
 			key_admins  = [%s]
 			key_users   = [%s]
@@ -73,7 +73,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 			key_users_roles   = [%s]
 			auto_push = true
 		}`
-	resourceNameEx1 := "ciphertrust_aws_policy_template.policy_template_ex1"
+	kpResourceEx1 := "ciphertrust_aws_policy_template.policy_template_ex1"
 	templateNameEx1 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx1 := fmt.Sprintf(createJsonencodePolicyConfig, "ciphertrust_aws_kms.kms.id", templateNameEx1)
 	modifyPlanConfigStr := awsConnectionResource + fmt.Sprintf(createJsonencodePolicyConfig, `"tf-fake-kms-id"`, templateNameEx1)
@@ -87,29 +87,29 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 			EOT
 		}
 		resource "ciphertrust_aws_policy_template" "policy_template_ex2" {
-			kms    = ciphertrust_aws_kms.kms.id
+			kms_id = ciphertrust_aws_kms.kms.id
 			name   = "%s"
 			policy = var.policy
 		}`
-	resourceNameEx2 := "ciphertrust_aws_policy_template.policy_template_ex2"
+	keyResourceEx2 := "ciphertrust_aws_policy_template.policy_template_ex2"
 	templateNameEx2 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx2 := fmt.Sprintf(createHeredocPolicyConfig, templateNameEx2)
 
 	ceateHeredocFormattedPolicyConfig := `
 		resource "ciphertrust_aws_policy_template" "policy_template_ex3" {
-			kms    = ciphertrust_aws_kms.kms.id
+			kms_id = ciphertrust_aws_kms.kms.id
 			name   = "%s"
 			policy = <<-EOT
 				%s
 			EOT
 		}`
-	resourceNameEx3 := "ciphertrust_aws_policy_template.policy_template_ex3"
+	kpResourceEx3 := "ciphertrust_aws_policy_template.policy_template_ex3"
 	templateNameEx3 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx3 := fmt.Sprintf(ceateHeredocFormattedPolicyConfig, templateNameEx3, defaultPolicy)
 
 	createUsersAndRolesPolicyConfig := `
 		resource "ciphertrust_aws_policy_template" "policy_template_without_policy" {
-			kms         = ciphertrust_aws_kms.kms.id
+			kms_id      = ciphertrust_aws_kms.kms.id
 			name        = "%s"
 			key_admins  = [%s]
 			key_users   = [%s]
@@ -118,7 +118,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 		}`
 	updateUsersAndRolesToJsonencodePolicy := `
 		resource "ciphertrust_aws_policy_template" "policy_template_without_policy" {
-			kms    = ciphertrust_aws_kms.kms.id
+			kms_id = ciphertrust_aws_kms.kms.id
 			name   = "%s"
 			policy = jsonencode(
 				{
@@ -138,7 +138,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 				}
 			)
 		}`
-	resourceNameEx4 := "ciphertrust_aws_policy_template.policy_template_without_policy"
+	kpResourceEx4 := "ciphertrust_aws_policy_template.policy_template_without_policy"
 	templateNameEx4 := "tf-template-" + uuid.New().String()[:8]
 	createConfigStrEx4 := fmt.Sprintf(createUsersAndRolesPolicyConfig, templateNameEx4, users, users, roles, roles)
 	updateConfigStrEx4 := fmt.Sprintf(updateUsersAndRolesToJsonencodePolicy, templateNameEx4)
@@ -150,59 +150,61 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 			{
 				Config: awsConnectionResource + createConfigStrEx1 + createConfigStrEx2 + createConfigStrEx3 + createConfigStrEx4,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "kms_id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "kms_name"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx2, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx2, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(keyResourceEx2, "id"),
+					resource.TestCheckResourceAttrSet(keyResourceEx2, "policy"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx3, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx3, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(kpResourceEx3, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx3, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users_roles.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users_roles.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins_roles.#", "2"),
+					testCheckAttributeContains(kpResourceEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
 			},
 			// Import all 4 templates immediately after creation to verify round-trip correctness.
 			// policy is ignored because the API returns compacted JSON while the config may use
 			// jsonencode() or a heredoc, producing a different string representation.
 			{
-				ResourceName:            resourceNameEx1,
+				ResourceName:            kpResourceEx1,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"policy"},
 			},
 			{
-				ResourceName:            resourceNameEx2,
+				ResourceName:            keyResourceEx2,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"policy"},
 			},
 			{
-				ResourceName:            resourceNameEx3,
+				ResourceName:            kpResourceEx3,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"policy"},
 			},
 			{
-				ResourceName:            resourceNameEx4,
+				ResourceName:            kpResourceEx4,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"policy"},
@@ -210,56 +212,56 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 			{
 				Config: awsConnectionResource + updateConfigStrEx1 + updateConfigStrEx4,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users_roles.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx1, "policy", append(keyUsers, keyRoles...), true),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users_roles.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins_roles.#", "2"),
+					testCheckAttributeContains(kpResourceEx1, "policy", append(keyUsers, keyRoles...), true),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins_roles.#", "0"),
 
-					testVerifyResourceDeleted(resourceNameEx2),
-					testVerifyResourceDeleted(resourceNameEx3),
+					testVerifyResourceDeleted(keyResourceEx2),
+					testVerifyResourceDeleted(kpResourceEx3),
 				),
 			},
 			{
 				Config: awsConnectionResource + createConfigStrEx1 + createConfigStrEx2 + createConfigStrEx3 + createConfigStrEx4,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx1, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx1, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx1, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx1, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx2, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx2, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx2, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(keyResourceEx2, "id"),
+					resource.TestCheckResourceAttrSet(keyResourceEx2, "policy"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(keyResourceEx2, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx3, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx3, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(resourceNameEx3, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(kpResourceEx3, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx3, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(kpResourceEx3, "key_admins_roles.#", "0"),
 
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "id"),
-					resource.TestCheckResourceAttrSet(resourceNameEx4, "policy"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_users_roles.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins.#", "2"),
-					resource.TestCheckResourceAttr(resourceNameEx4, "key_admins_roles.#", "2"),
-					testCheckAttributeContains(resourceNameEx4, "policy", append(keyUsers, keyRoles...), true),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "id"),
+					resource.TestCheckResourceAttrSet(kpResourceEx4, "policy"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_users_roles.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins.#", "2"),
+					resource.TestCheckResourceAttr(kpResourceEx4, "key_admins_roles.#", "2"),
+					testCheckAttributeContains(kpResourceEx4, "policy", append(keyUsers, keyRoles...), true),
 				),
 			},
 			{

@@ -58,7 +58,7 @@ func (d *dataSourceAWSAccountDetails) Schema(_ context.Context, _ datasource.Sch
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve the account and regions associated with the AWS connection.",
 		Attributes: map[string]schema.Attribute{
-			"aws_connection": schema.StringAttribute{
+			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "Name or ID of the AWS connection.",
 			},
@@ -97,9 +97,9 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 		resp.Diagnostics = append(resp.Diagnostics, diags...)
 		return
 	}
-	id := state.Connection.ValueString()
+	id := state.ConnectionID.ValueString()
 	var payload AccountDetailsInputModelJSON
-	payload.AWSConnection = state.Connection.ValueString()
+	payload.AWSConnection = state.ConnectionID.ValueString()
 	if !state.AssumeRoleArn.IsNull() {
 		payload.AssumeRoleArn = state.AssumeRoleArn.ValueString()
 	}

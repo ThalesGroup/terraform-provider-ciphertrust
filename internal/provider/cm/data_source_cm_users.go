@@ -171,13 +171,20 @@ func (d *dataSourceUsers) Configure(ctx context.Context, req datasource.Configur
 	d.client = client
 }
 
-func convertMetadata(m map[string]string) types.Map {
+func convertMetadata(m map[string]json.RawMessage) types.Map {
 	if len(m) == 0 {
 		return types.MapValueMust(types.StringType, map[string]attr.Value{})
 	}
 	result := make(map[string]attr.Value)
 	for k, v := range m {
-		result[k] = types.StringValue(v)
+		// Attempt to unquote plain JSON strings so "value" round-trips as value.
+		// Non-string values (objects, arrays) are stored as their raw JSON.
+		var s string
+		if json.Unmarshal(v, &s) == nil {
+			result[k] = types.StringValue(s)
+		} else {
+			result[k] = types.StringValue(string(v))
+		}
 	}
 	return types.MapValueMust(types.StringType, result)
 }

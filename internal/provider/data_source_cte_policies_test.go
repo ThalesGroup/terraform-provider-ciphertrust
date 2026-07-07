@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCTEPoliciesDataSource(t *testing.T) {
+func TestCTEPoliciesDataSource(t *testing.T) {
 	policyName := "tf-policy-" + uuid.New().String()[:8]
 
 	testConfig := fmt.Sprintf(`

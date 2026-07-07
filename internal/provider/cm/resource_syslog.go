@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -21,8 +22,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMSyslog{}
-	_ resource.ResourceWithConfigure = &resourceCMSyslog{}
+	_ resource.Resource                   = &resourceCMSyslog{}
+	_ resource.ResourceWithConfigure      = &resourceCMSyslog{}
+	_ resource.ResourceWithValidateConfig = &resourceCMSyslog{}
 )
 
 func NewResourceCMSyslog() resource.Resource {
@@ -37,9 +39,14 @@ func (r *resourceCMSyslog) Metadata(_ context.Context, req resource.MetadataRequ
 	resp.TypeName = req.ProviderTypeName + "_syslog"
 }
 
+func (r *resourceCMSyslog) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_syslog", resp)
+}
+
 // Schema defines the schema for the resource.
 func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Configures a syslog forwarding destination on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -187,6 +194,14 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_SYSLOG)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Syslog Not Found",
+				"The Syslog resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading Syslog configuration on CipherTrust Manager: ",
@@ -203,16 +218,10 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	} else {
 		state.CACert = types.StringNull()
 	}
-	if r := gjson.Get(response, "messageFormat"); r.Exists() {
-		state.MessageFormat = types.StringValue(r.String())
-	} else {
-		state.MessageFormat = types.StringNull()
-	}
-	if r := gjson.Get(response, "port"); r.Exists() {
-		state.Port = types.Int64Value(r.Int())
-	} else {
-		state.Port = types.Int64Null()
-	}
+	// Always hydrate message_format and port from the API response so that
+	// out-of-band changes made directly via the CM API are surfaced during
+	// drift detection, even when the user never set these fields in their .tf.
+	hydrateSyslogOptionalFields(&state, response)
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
@@ -339,6 +348,25 @@ func (r *resourceCMSyslog) Delete(ctx context.Context, req resource.DeleteReques
 			"Could not delete Syslog, unexpected error: "+err.Error(),
 		)
 		return
+	}
+}
+
+// hydrateSyslogOptionalFields copies message_format and port from the raw API
+// JSON response into state.  Both fields are Optional-only in the schema, so
+// they can legitimately be absent from state when a user omits them from their
+// .tf configuration.  By deriving the values unconditionally from the API
+// response, Read surfaces any out-of-band changes an operator made directly via
+// the CM API, enabling Terraform to detect drift even for those fields.
+func hydrateSyslogOptionalFields(state *CMSyslogTFSDK, response string) {
+	if mf := gjson.Get(response, "messageFormat"); mf.Exists() && mf.String() != "" {
+		state.MessageFormat = types.StringValue(mf.String())
+	} else {
+		state.MessageFormat = types.StringNull()
+	}
+	if p := gjson.Get(response, "port"); p.Exists() && p.Int() > 0 {
+		state.Port = types.Int64Value(p.Int())
+	} else {
+		state.Port = types.Int64Null()
 	}
 }
 

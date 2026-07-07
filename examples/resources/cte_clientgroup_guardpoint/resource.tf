@@ -45,7 +45,7 @@ resource "ciphertrust_cte_clientgroup_guardpoint" "dir_auto_gp_cg" {
         guard_point_type = "directory_auto"
 
          # ID/Name of the policy applied with this GuardPoint
-        policy_id        = ciphertrust_cte_policy.standard_policy.name
+        policy_id        = ciphertrust_cte_policy.standard_policy.id
         
         # These fields are ignored during intitial apply but can be updated, their default values are set (mfa_enabled=false, guard_enabled-true)
         #mfa_enabled = true

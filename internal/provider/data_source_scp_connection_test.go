@@ -7,6 +7,7 @@ import (
 )
 
 func TestCiphertrustSCPConnectionDataSource(t *testing.T) {
+	RequireCM(t)
 	// Config for the resource and data source
 	scpConnectionConfig := `
 		// Resource configuration for the SCP connection

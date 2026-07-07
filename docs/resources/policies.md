@@ -3,12 +3,12 @@
 page_title: "ciphertrust_policies Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager admin policy: an allow/deny rule that authorizes a set of actions (e.g. CreateKey, EncryptWithKey) with optional conditional clauses. Only available on CipherTrust Manager — not supported on CDSPaaS, where authorization is managed by the platform.
 ---
 
 # ciphertrust_policies (Resource)
 
-
+Manages a CipherTrust Manager admin policy: an allow/deny rule that authorizes a set of actions (e.g. CreateKey, EncryptWithKey) with optional conditional clauses. **Only available on CipherTrust Manager — not supported on CDSPaaS, where authorization is managed by the platform.**
 
 ## Example Usage
 
@@ -79,7 +79,7 @@ output "cm_policy_id" {
 - `actions` (List of String) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
 - `allow` (Boolean) Allow is the effect of the policy, either to allow the actions or to deny the actions.
 - `conditions` (Attributes List) Conditions are rules for matching the other attributes of the operation (see [below for nested schema](#nestedatt--conditions))
-- `effect` (String) Specifies the effect of the policy, either to allow or to deny.
+- `effect` (String) Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.
 - `include_descendant_accounts` (Boolean) When false, only the resources in the principal's account can be accessed if the policy allows it.
 - `name` (String) This is the name of the policy.
 - `resources` (List of String) Resources is a list of URI strings, which must be in URI format.

@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -78,6 +79,7 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"key_file": schema.StringAttribute{
 				Required:    true,
+				Sensitive:   true,
 				Description: "Path to or data of the OCI private key file (PEM format).",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -85,6 +87,7 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"key_file_pass_phrase": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Passphrase if the OCI key file is encrypted.",
 			},
 			"meta": schema.MapAttribute{
@@ -93,8 +96,9 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Description: "Optional end-user or service data stored with the connection.",
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Unique connection name",
+				Required:      true,
+				Description:   "Unique connection name. Immutable after creation — changing this field will produce a plan-time error.",
+				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
 			},
 			"pub_key_fingerprint": schema.StringAttribute{
 				Required:    true,
@@ -421,6 +425,10 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 		payload.UserOCID = plan.UserOcid.ValueString()
 	}
 
+	if plan.Region.ValueString() != gjson.Get(response, "region").String() {
+		payload.Region = plan.Region.ValueString()
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Update]["+id+"]")
@@ -523,10 +531,12 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 	// Connection identity fields returned by CM on every read.
 	data.Name = types.StringValue(gjson.Get(response, "name").String())
-	// description is Optional-only; only update from response when the API returns a value,
-	// otherwise the plan/state null is preserved (avoids null→"" inconsistency on apply).
+	// description: hydrate unconditionally so drift is detected. Clear to null when absent
+	// or empty-string so stale state is not preserved after a CM-side removal.
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
+	} else {
+		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
 	data.Region = types.StringValue(gjson.Get(response, "region").String())

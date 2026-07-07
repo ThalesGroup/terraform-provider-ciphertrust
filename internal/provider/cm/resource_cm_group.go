@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -32,7 +36,7 @@ type resourceCMGroup struct {
 }
 
 func (r *resourceCMGroup) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cm_group"
+	resp.TypeName = req.ProviderTypeName + "_groups"
 }
 
 // Schema defines the schema for the resource.
@@ -40,9 +44,10 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Unique group name. Immutable after creation.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					NameImmutableModifier{},
 				},
 			},
 			"app_metadata": schema.StringAttribute{
@@ -56,6 +61,15 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"user_metadata": schema.StringAttribute{
 				Optional: true,
+			},
+			"user_ids": schema.SetAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Set of user IDs that are members of this group. Managed declaratively: users in the set are added to the group; users removed from the set are removed from the group. If omitted, group membership is left as-is.",
+				PlanModifiers: []planmodifier.Set{
+					setplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -132,6 +146,22 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 	tflog.Debug(ctx, "[resource_cm_group.go -> Create Output]["+response+"]")
 
+	desiredUsers, diagsUsers := setToStringSlice(ctx, plan.UserIDs)
+	resp.Diagnostics.Append(diagsUsers...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	for _, uid := range desiredUsers {
+		if err := r.addUserToGroup(ctx, id, plan.Name.ValueString(), uid); err != nil {
+			resp.Diagnostics.AddError(
+				"Error Adding User to CipherTrust Group",
+				fmt.Sprintf("Could not add user %q to group %q: %s", uid, plan.Name.ValueString(), err.Error()),
+			)
+			return
+		}
+	}
+	plan.UserIDs = stringSliceToSet(desiredUsers)
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -173,32 +203,46 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.ID = state.Name
 
-	if v := gjson.Get(response, "description"); v.Exists() {
+	if v := gjson.Get(response, "description"); v.Exists() && v.String() != "" {
 		state.Description = types.StringValue(v.String())
 	} else {
 		state.Description = types.StringNull()
 	}
 
-	if v := gjson.Get(response, "app_metadata"); v.Exists() && v.Type != gjson.Null {
-		state.AppMetadata = types.StringValue(v.Raw)
+	if v := gjson.Get(response, "app_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
+		// Normalize to compact JSON so whitespace differences between CM and
+		// CDSPaaS responses don't surface as phantom drift in subsequent plans.
+		compacted := compactJSONString(v.Raw)
+		state.AppMetadata = types.StringValue(compacted)
 	} else {
 		state.AppMetadata = types.StringNull()
 	}
 
-	if v := gjson.Get(response, "client_metadata"); v.Exists() && v.Type != gjson.Null {
+	if v := gjson.Get(response, "client_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
 		state.ClientMetadata = types.StringValue(v.Raw)
 	} else {
 		state.ClientMetadata = types.StringNull()
 	}
 
-	if v := gjson.Get(response, "user_metadata"); v.Exists() && v.Type != gjson.Null {
+	if v := gjson.Get(response, "user_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
 		state.UserMetadata = types.StringValue(v.Raw)
 	} else {
 		state.UserMetadata = types.StringNull()
 	}
+
+	members, err := r.listGroupMembers(ctx, id, state.Name.ValueString())
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read members]["+resourceID+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Group Members",
+			"Could not list members of group "+resourceID+": "+err.Error(),
+		)
+		return
+	}
+	state.UserIDs = stringSliceToSet(members)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -206,11 +250,16 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	var plan CMGroupTFSDK
+	var plan, state CMGroupTFSDK
 	var payload CMGroupJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -264,6 +313,42 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	plan.Name = types.StringValue(response)
 	plan.ID = plan.Name
+
+	if !plan.UserIDs.IsNull() && !plan.UserIDs.IsUnknown() {
+		desired, diagsDes := setToStringSlice(ctx, plan.UserIDs)
+		resp.Diagnostics.Append(diagsDes...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		current, diagsCur := setToStringSlice(ctx, state.UserIDs)
+		resp.Diagnostics.Append(diagsCur...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		toAdd, toRemove := diffStringSlices(current, desired)
+		for _, uid := range toRemove {
+			if err := r.removeUserFromGroup(ctx, id, plan.Name.ValueString(), uid); err != nil {
+				resp.Diagnostics.AddError(
+					"Error Removing User from CipherTrust Group",
+					fmt.Sprintf("Could not remove user %q from group %q: %s", uid, plan.Name.ValueString(), err.Error()),
+				)
+				return
+			}
+		}
+		for _, uid := range toAdd {
+			if err := r.addUserToGroup(ctx, id, plan.Name.ValueString(), uid); err != nil {
+				resp.Diagnostics.AddError(
+					"Error Adding User to CipherTrust Group",
+					fmt.Sprintf("Could not add user %q to group %q: %s", uid, plan.Name.ValueString(), err.Error()),
+				)
+				return
+			}
+		}
+		plan.UserIDs = stringSliceToSet(desired)
+	} else {
+		plan.UserIDs = state.UserIDs
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -311,4 +396,112 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+// compactJSONString returns s compacted (no extra whitespace). If compaction
+// fails it returns s unchanged — keeps JSON round-trips safe when the server
+// returns pretty-printed JSON and the config stores compact JSON.
+func compactJSONString(s string) string {
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		return s
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return s
+	}
+	return string(b)
+}
+
+func (r *resourceCMGroup) addUserToGroup(ctx context.Context, uuid, groupName, userID string) error {
+	endpoint := fmt.Sprintf("%s/%s/users/%s", common.URL_GROUP, groupName, userID)
+	_, err := r.client.PostNoData(ctx, uuid, endpoint)
+	return err
+}
+
+// removeUserFromGroup is idempotent: per the swagger, DELETE /usermgmt/groups/{name}/users/{user_id}
+// returns 400 when the user is not a member of the group and 404 when the group
+// itself doesn't exist. Either condition means there's nothing to remove, so we
+// swallow both rather than fail the Update.
+func (r *resourceCMGroup) removeUserFromGroup(ctx context.Context, uuid, groupName, userID string) error {
+	endpoint := fmt.Sprintf("%s/%s/users/%s", common.URL_GROUP, groupName, userID)
+	_, err := r.client.DeleteByURL(ctx, uuid, endpoint)
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, notFoundError) || strings.Contains(msg, notMemberOfGroupErrorFragment) {
+		return nil
+	}
+	return err
+}
+
+// listGroupMembers returns the user IDs currently in groupName.
+// CipherTrust's user list endpoint (GET /usermgmt/users) supports filtering
+// by group via ?groups=<name>. limit=-1 returns all results in one page so
+// groups larger than the default page size don't have their tail dropped.
+func (r *resourceCMGroup) listGroupMembers(ctx context.Context, uuid, groupName string) ([]string, error) {
+	filters := url.Values{}
+	filters.Set("groups", groupName)
+	filters.Set("skip", "0")
+	filters.Set("limit", "-1")
+	body, err := r.client.ListWithFilters(ctx, uuid, common.URL_USER_MANAGEMENT, filters)
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	gjson.Get(body, "resources.#.user_id").ForEach(func(_, value gjson.Result) bool {
+		if v := value.String(); v != "" {
+			ids = append(ids, v)
+		}
+		return true
+	})
+	return ids, nil
+}
+
+// setToStringSlice extracts the strings from a types.Set; returns nil if the
+// set is null or unknown.
+func setToStringSlice(ctx context.Context, s types.Set) ([]string, diag.Diagnostics) {
+	if s.IsNull() || s.IsUnknown() {
+		return nil, nil
+	}
+	out := []string{}
+	d := s.ElementsAs(ctx, &out, false)
+	return out, d
+}
+
+// stringSliceToSet builds a types.Set[String] from the given slice. A nil slice
+// produces an empty (non-null) set so that Read can distinguish "no members"
+// from "unknown".
+func stringSliceToSet(in []string) types.Set {
+	elems := make([]attr.Value, 0, len(in))
+	for _, v := range in {
+		elems = append(elems, types.StringValue(v))
+	}
+	set, _ := types.SetValue(types.StringType, elems)
+	return set
+}
+
+// diffStringSlices returns (toAdd, toRemove) — the elements present in desired
+// but not current, and vice versa.
+func diffStringSlices(current, desired []string) (toAdd, toRemove []string) {
+	curSet := make(map[string]struct{}, len(current))
+	for _, v := range current {
+		curSet[v] = struct{}{}
+	}
+	desSet := make(map[string]struct{}, len(desired))
+	for _, v := range desired {
+		desSet[v] = struct{}{}
+	}
+	for _, v := range desired {
+		if _, ok := curSet[v]; !ok {
+			toAdd = append(toAdd, v)
+		}
+	}
+	for _, v := range current {
+		if _, ok := desSet[v]; !ok {
+			toRemove = append(toRemove, v)
+		}
+	}
+	return toAdd, toRemove
 }

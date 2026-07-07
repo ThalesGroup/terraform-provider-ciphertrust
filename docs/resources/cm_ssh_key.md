@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_ssh_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Adds an SSH public key to the CipherTrust Manager appliance during initial bootstrap (provider bootstrap = "yes"). Bootstrap mode is only available on CipherTrust Manager — this resource is implicitly unsupported on CDSPaaS.
 ---
 
 # ciphertrust_cm_ssh_key (Resource)
 
-
+Adds an SSH public key to the CipherTrust Manager appliance during initial bootstrap (provider `bootstrap = "yes"`). **Bootstrap mode is only available on CipherTrust Manager — this resource is implicitly unsupported on CDSPaaS.**
 
 ## Example Usage
 
@@ -63,3 +63,7 @@ output "key_id" {
 ### Required
 
 - `key` (String)
+
+### Read-Only
+
+- `id` (String) The ID of this resource.

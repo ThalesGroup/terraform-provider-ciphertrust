@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCMProxy{}
-	_ resource.ResourceWithConfigure = &resourceCMProxy{}
+	_ resource.Resource                   = &resourceCMProxy{}
+	_ resource.ResourceWithConfigure      = &resourceCMProxy{}
+	_ resource.ResourceWithValidateConfig = &resourceCMProxy{}
 )
 
 func NewResourceCMProxy() resource.Resource {
@@ -33,9 +34,14 @@ func (r *resourceCMProxy) Metadata(_ context.Context, req resource.MetadataReque
 	resp.TypeName = req.ProviderTypeName + "_proxy"
 }
 
+func (r *resourceCMProxy) ValidateConfig(ctx context.Context, _ resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	common.ValidateCMOnly(ctx, r.client, "ciphertrust_proxy", resp)
+}
+
 // Schema defines the schema for the resource.
 func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Configures outbound HTTP/HTTPS proxy settings (with optional CA certificate and no_proxy bypass list) for the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"certificate": schema.StringAttribute{
 				Optional:    true,
@@ -141,6 +147,10 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_CM_PROXY)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"Proxy Not Found",
+				"The Proxy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -160,15 +170,21 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 		state.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve state values when masked
+	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve state values when masked.
+	// When the API returns an empty string the field has been removed OOB; surface that as null so Terraform
+	// can detect the drift.
 	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
-	if httpProxyFromAPI != "" && !containsMaskedPassword(httpProxyFromAPI) {
+	if httpProxyFromAPI == "" {
+		state.HTTPProxy = types.StringNull()
+	} else if !containsMaskedPassword(httpProxyFromAPI) {
 		state.HTTPProxy = types.StringValue(httpProxyFromAPI)
 	}
 	// If masked (contains xxxxxx), keep the existing state value (don't update)
 
 	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
-	if httpsProxyFromAPI != "" && !containsMaskedPassword(httpsProxyFromAPI) {
+	if httpsProxyFromAPI == "" {
+		state.HTTPSProxy = types.StringNull()
+	} else if !containsMaskedPassword(httpsProxyFromAPI) {
 		state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
 	}
 	// If masked (contains xxxxxx), keep the existing state value (don't update)

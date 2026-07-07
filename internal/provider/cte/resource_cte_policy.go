@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -24,8 +27,9 @@ import (
 )
 
 var (
-	_ resource.Resource              = &resourceCTEPolicy{}
-	_ resource.ResourceWithConfigure = &resourceCTEPolicy{}
+	_ resource.Resource                = &resourceCTEPolicy{}
+	_ resource.ResourceWithConfigure   = &resourceCTEPolicy{}
+	_ resource.ResourceWithImportState = &resourceCTEPolicy{}
 )
 
 func NewResourceCTEPolicy() resource.Resource {
@@ -282,11 +286,14 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 						},
 						"action": schema.StringAttribute{
 							Optional:    true,
-							Description: "Actions applicable to the rule. Examples of actions are read, write, all_ops, and key_op.",
 							Computed:    true,
 							Default:     stringdefault.StaticString("all_ops"),
+							Description: "Actions applicable to the rule. Examples of actions are read, write, all_ops, and key_op. Separate multiple actions by commas.",
 							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"read", "write", "all_ops", "key_op"}...),
+								stringvalidator.RegexMatches(
+									regexp.MustCompile(`^(read|write|all_ops|key_op)(,(read|write|all_ops|key_op))*$`),
+									"must be a comma-separated list of: read, write, all_ops, key_op",
+								),
 							},
 						},
 						"effect": schema.StringAttribute{
@@ -662,6 +669,19 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	// Mutable fields — these can drift and need to be refreshed
 	state.Description = types.StringValue(apiResp.Description)
 	state.NeverDeny = types.BoolValue(apiResp.NeverDeny)
+	state.Name = types.StringValue(apiResp.Name)
+	policyTypeMap := map[string]string{
+		"STANDARD":             "Standard",
+		"LDT":                  "LDT",
+		"IDT":                  "IDT",
+		"CLOUD_OBJECT_STORAGE": "Cloud_Object_Storage",
+		"CSI":                  "CSI",
+	}
+	if normalized, ok := policyTypeMap[strings.ToUpper(apiResp.PolicyType)]; ok {
+		state.PolicyType = types.StringValue(normalized)
+	} else {
+		state.PolicyType = types.StringValue(apiResp.PolicyType)
+	}
 
 	// Metadata is a pointer in TFSDK; only set if the API returned it populated
 	state.Metadata = &CTEPolicyMetadataTFSDK{
@@ -860,6 +880,16 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	//immutable field handling
+	if plan.Name.ValueString() != state.Name.ValueString() {
+		resp.Diagnostics.AddError("Cannot change name of the policy once it is created", "Name is an immutable field")
+		return
+	}
+	if plan.PolicyType.ValueString() != state.PolicyType.ValueString() {
+		resp.Diagnostics.AddError("Cannot change type of the policy once it is created", "Policy Type is an immutable field")
 		return
 	}
 
@@ -1746,4 +1776,11 @@ func updateSignatureRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPol
 	}
 
 	return nil
+}
+
+func (r *resourceCTEPolicy) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	id := uuid.New().String()
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> ImportState]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> ImportState]["+id+"]")
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

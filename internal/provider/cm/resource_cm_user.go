@@ -1,6 +1,7 @@
 package cm
 
 import (
+	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -150,7 +152,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(metadata)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -180,8 +182,16 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	if err == nil {
 		var user CMUserJSON
 		if json.Unmarshal([]byte(userResponse), &user) == nil {
-			plan.Nickname = types.StringValue(user.Nickname)
-			plan.Name = types.StringValue(user.Name)
+			if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+				plan.Name = types.StringValue(gj.String())
+			} else {
+				plan.Name = types.StringNull()
+			}
+			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+				plan.Nickname = types.StringValue(gj.String())
+			} else {
+				plan.Nickname = types.StringNull()
+			}
 			plan.Email = types.StringValue(user.Email)
 		}
 	}
@@ -206,6 +216,14 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	userResponse, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_USER_MANAGEMENT)
 	tflog.Trace(ctx, userResponse)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				"CipherTrust User Not Found",
+				"The CipherTrust User resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+			)
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust User",
 			"Could not read CipherTrust user ID "+state.UserID.ValueString()+": "+err.Error(),
@@ -234,20 +252,16 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	state.PasswordChangeRequired = types.BoolValue(user.PasswordChangeRequired)
 	state.PreventUILogin = types.BoolValue(user.LoginFlags.PreventUILogin)
 
-	// Only update name if it's non-empty from API
-	// If user set name in config, it will be in state; if not, keep default
-	if user.Name != "" {
-		state.Name = types.StringValue(user.Name)
-	} else if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue("")
+	if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+		state.Name = types.StringValue(gj.String())
+	} else {
+		state.Name = types.StringNull()
 	}
 
-	// Only update nickname if it differs from username
-	// API may auto-populate nickname with username value when not explicitly set
-	if user.Nickname != "" && user.Nickname != user.UserName {
-		state.Nickname = types.StringValue(user.Nickname)
-	} else if state.Nickname.IsNull() || state.Nickname.ValueString() == "" {
-		state.Nickname = types.StringValue("")
+	if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+		state.Nickname = types.StringValue(gj.String())
+	} else {
+		state.Nickname = types.StringNull()
 	}
 	if user.Metadata != nil {
 		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
@@ -324,7 +338,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			return
 		}
 		// Convert map[string]string to map[string]interface{}
-		payload.Metadata = metadata
+		payload.Metadata = stringsToRawJSON(metadata)
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -352,8 +366,16 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	if err == nil {
 		var user CMUserJSON
 		if json.Unmarshal([]byte(userResponse), &user) == nil {
-			plan.Nickname = types.StringValue(user.Nickname)
-			plan.Name = types.StringValue(user.Name)
+			if gj := gjson.Get(userResponse, "name"); gj.Exists() {
+				plan.Name = types.StringValue(gj.String())
+			} else {
+				plan.Name = types.StringNull()
+			}
+			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+				plan.Nickname = types.StringValue(gj.String())
+			} else {
+				plan.Nickname = types.StringNull()
+			}
 			plan.Email = types.StringValue(user.Email)
 		}
 	}
@@ -380,6 +402,14 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Delete]["+state.UserID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			// Resource was already deleted outside of Terraform — desired state achieved.
+			resp.Diagnostics.AddWarning(
+				"CipherTrust User Not Found on Delete",
+				"The CipherTrust User resource returned HTTP 404 during deletion. It was likely removed outside of Terraform. Treating as successfully deleted.",
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust User",
 			"Could not delete user, unexpected error: "+err.Error(),

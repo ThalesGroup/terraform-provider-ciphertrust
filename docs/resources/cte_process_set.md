@@ -36,10 +36,8 @@ To remove all labels, set labels to null.
 
 - `account` (String) The account which owns this resource.
 - `application` (String) The application this resource belongs to.
-- `created_at` (String) Date/time the application was created
 - `dev_account` (String) The developer account which owns this resource's application.
 - `id` (String) The unique identifier of the resource
-- `updated_at` (String) Date/time the application was updated
 - `uri` (String) A human readable unique identifier of the resource
 
 <a id="nestedatt--processes"></a>
