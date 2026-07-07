@@ -121,8 +121,6 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 
 func TestAccCMPolicyAttachment_drift(t *testing.T) {
 	RequireCM(t)
-	var attachmentID string
-
 	policyName := fmt.Sprintf("tf-acc-attach-drift-pol-%d", time.Now().Unix())
 
 	initialConfig := providerConfig + fmt.Sprintf(`
@@ -153,29 +151,31 @@ resource "ciphertrust_policy_attachments" "test" {
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "actions.#", "1"),
 					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "resources.#", "1"),
-					func(s *terraform.State) error {
-						attachmentID = s.RootModule().Resources["ciphertrust_policy_attachments.test"].Primary.ID
-						return nil
-					},
 				),
 			},
 			{
-				PreConfig: func() {
-					client, ok := createCMClient()
-					if !ok {
-						t.Skip("CM client unavailable")
-					}
-					modifiedPayload, _ := json.Marshal(map[string]interface{}{
-						"actions":   []string{"CreateKey", "DeleteKey"},
-						"resources": []string{"kylo://", "kylo://other"},
-					})
-					_, _ = client.UpdateDataV2(context.Background(), attachmentID, common.URL_CM_POLICY_ATTACHMENTS, modifiedPayload)
-				},
-				// Terraform refreshes state from API during plan, detects the out-of-band change
-				// (state now has ["CreateKey","DeleteKey"]), and plans to restore config values.
-				// ImmutableList() blocks that plan: the user sees an immutability error indicating
-				// they must delete and recreate the resource to resolve the drift.
-				Config:      initialConfig,
+				// ciphertrust_policy_attachments has no PATCH endpoint so OOB updates cannot
+				// be applied. Instead, verify that changing 'actions' in Terraform config
+				// triggers ImmutableList() at plan time — no API call is made.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["CreateKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  actions    = ["CreateKey", "DeleteKey"]
+  resources  = ["kylo://"]
+  depends_on = [ciphertrust_policies.test]
+}
+`, policyName, policyName),
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
