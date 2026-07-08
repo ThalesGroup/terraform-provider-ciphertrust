@@ -10,11 +10,11 @@ import (
 // hydrateSyslogOptionalFields – drift detection for message_format and port
 // ---------------------------------------------------------------------------
 
-// TestHydrateSyslogOptionalFields_OOBMessageFormatSurfaced is the primary
+// Test_CM_HydrateSyslogOptionalFields_OOBMessageFormatSurfaced is the primary
 // regression test for the reported bug: if a user never sets message_format in
 // their .tf (state has null) and an operator adds it via the CM API, Read must
 // surface the value so Terraform can detect the drift.
-func TestHydrateSyslogOptionalFields_OOBMessageFormatSurfaced(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_OOBMessageFormatSurfaced(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringNull() // user never set it
 	state.Port = types.Int64Null()
@@ -30,9 +30,9 @@ func TestHydrateSyslogOptionalFields_OOBMessageFormatSurfaced(t *testing.T) {
 	}
 }
 
-// TestHydrateSyslogOptionalFields_OOBPortSurfaced verifies that a port added
+// Test_CM_HydrateSyslogOptionalFields_OOBPortSurfaced verifies that a port added
 // via the CM API is surfaced in state even when the user never set port in .tf.
-func TestHydrateSyslogOptionalFields_OOBPortSurfaced(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_OOBPortSurfaced(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringNull()
 	state.Port = types.Int64Null() // user never set it
@@ -48,10 +48,10 @@ func TestHydrateSyslogOptionalFields_OOBPortSurfaced(t *testing.T) {
 	}
 }
 
-// TestHydrateSyslogOptionalFields_MessageFormatAbsentBecomesNull ensures that
+// Test_CM_HydrateSyslogOptionalFields_MessageFormatAbsentBecomesNull ensures that
 // when the API response contains no messageFormat, the state field is set to
 // null (not left with a stale value from a previous state).
-func TestHydrateSyslogOptionalFields_MessageFormatAbsentBecomesNull(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_MessageFormatAbsentBecomesNull(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringValue("rfc5424") // stale prior value
 	state.Port = types.Int64Value(514)
@@ -65,9 +65,9 @@ func TestHydrateSyslogOptionalFields_MessageFormatAbsentBecomesNull(t *testing.T
 	}
 }
 
-// TestHydrateSyslogOptionalFields_PortAbsentBecomesNull ensures that when the
+// Test_CM_HydrateSyslogOptionalFields_PortAbsentBecomesNull ensures that when the
 // API response contains no port (or port = 0), state.Port is set to null.
-func TestHydrateSyslogOptionalFields_PortAbsentBecomesNull(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_PortAbsentBecomesNull(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringValue("plain_message")
 	state.Port = types.Int64Value(6514) // stale prior value
@@ -81,9 +81,9 @@ func TestHydrateSyslogOptionalFields_PortAbsentBecomesNull(t *testing.T) {
 	}
 }
 
-// TestHydrateSyslogOptionalFields_BothPresentAndPreserved verifies the happy
+// Test_CM_HydrateSyslogOptionalFields_BothPresentAndPreserved verifies the happy
 // path: both fields are present in the response and get written to state.
-func TestHydrateSyslogOptionalFields_BothPresentAndPreserved(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_BothPresentAndPreserved(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringNull()
 	state.Port = types.Int64Null()
@@ -99,10 +99,10 @@ func TestHydrateSyslogOptionalFields_BothPresentAndPreserved(t *testing.T) {
 	}
 }
 
-// TestHydrateSyslogOptionalFields_EmptyMessageFormatBecomesNull confirms that
+// Test_CM_HydrateSyslogOptionalFields_EmptyMessageFormatBecomesNull confirms that
 // an explicitly empty messageFormat string in the response is treated as absent
 // (set to null) rather than stored as an empty string.
-func TestHydrateSyslogOptionalFields_EmptyMessageFormatBecomesNull(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_EmptyMessageFormatBecomesNull(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringValue("rfc5424")
 	state.Port = types.Int64Null()
@@ -116,9 +116,9 @@ func TestHydrateSyslogOptionalFields_EmptyMessageFormatBecomesNull(t *testing.T)
 	}
 }
 
-// TestHydrateSyslogOptionalFields_ZeroPortBecomesNull confirms that a port
+// Test_CM_HydrateSyslogOptionalFields_ZeroPortBecomesNull confirms that a port
 // value of 0 in the API response is treated as absent (null in state).
-func TestHydrateSyslogOptionalFields_ZeroPortBecomesNull(t *testing.T) {
+func Test_CM_HydrateSyslogOptionalFields_ZeroPortBecomesNull(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringNull()
 	state.Port = types.Int64Value(514)
