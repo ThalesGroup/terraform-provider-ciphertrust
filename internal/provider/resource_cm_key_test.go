@@ -1049,6 +1049,186 @@ func TestCMKeyOutOfBandDeletion(t *testing.T) {
 	})
 }
 
+// TestCipherTrust_CMKey_ImmutableBool_xts verifies that changing xts after creation
+// produces a plan-time "Attribute is immutable" error from modifiers.ImmutableBool().
+func TestCipherTrust_CMKey_ImmutableBool_xts(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  xts       = false
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  xts       = true
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableString_state verifies that changing state after
+// creation produces a plan-time "Attribute is immutable" error from modifiers.ImmutableString().
+func TestCipherTrust_CMKey_ImmutableString_state(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  state     = "Pre-Active"
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  state     = "Active"
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableObject_wrapPbe verifies that changing wrap_pbe after
+// creation produces a plan-time "Attribute is immutable" error from modifiers.ImmutableObject().
+func TestCipherTrust_CMKey_ImmutableObject_wrapPbe(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  wrap_pbe = {
+    hash_algorithm = "hmac-sha256"
+    iteration      = 1000
+    dklen          = 32
+    password       = "changeme123"
+    salt           = "aabbccddeeff00112233445566778899"
+  }
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  wrap_pbe = {
+    hash_algorithm = "hmac-sha512"
+    iteration      = 1000
+    dklen          = 32
+    password       = "changeme123"
+    salt           = "aabbccddeeff00112233445566778899"
+  }
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableInt64_keySize validates the ImmutableInt64 contract
+// via the existing Int64ImmutableModifier on key_size.
+func TestCipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: aesKeyConfig(rName, 256),
+				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config:      aesKeyConfig(rName, 128),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`cannot be changed`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_MutableFieldsUnaffected confirms that mutable fields
+// (description, rotation_frequency_days, usage_mask) produce no immutable-field error.
+func TestCipherTrust_CMKey_MutableFieldsUnaffected(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name                    = %q
+  algorithm               = "aes"
+  key_size                = 256
+  description             = "v1"
+  rotation_frequency_days = "30"
+  usage_mask              = 4
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name                    = %q
+  algorithm               = "aes"
+  key_size                = 256
+  description             = "v2"
+  rotation_frequency_days = "60"
+  usage_mask              = 12
+}
+`, rName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "description", "v2"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "rotation_frequency_days", "60"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "usage_mask", "12"),
+				),
+			},
+		},
+	})
+}
+
 // TestCMKeyMaterialImmutable verifies that changing 'material' (key material)
 // after creation produces a clear plan-time error.
 func TestCMKeyMaterialImmutable(t *testing.T) {
@@ -1078,6 +1258,178 @@ resource "ciphertrust_cm_key" "test_key" {
 `, rName),
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`cannot be changed`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableAlgorithm verifies that changing algorithm after
+// creation produces a plan-time "Attribute is immutable" error.
+func TestCipherTrust_CMKey_ImmutableAlgorithm(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: aesKeyConfig(rName, 256),
+				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name      = %q
+  algorithm = "rsa"
+  key_size  = 2048
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableKeySize verifies that changing key_size after
+// creation produces a plan-time "Attribute is immutable" error.
+func TestCipherTrust_CMKey_ImmutableKeySize(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: aesKeyConfig(rName, 256),
+				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config:      aesKeyConfig(rName, 128),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableName verifies that changing name after creation
+// produces a plan-time "Attribute is immutable" error containing both current and
+// proposed values.
+func TestCipherTrust_CMKey_ImmutableName(t *testing.T) {
+	RequireCM(t)
+	rName := "test-key-immutable-name-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: aesKeyConfig(rName, 256),
+				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config:      aesKeyConfig("test-key-renamed-"+acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum), 256),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableCurveid verifies that changing curveid after
+// creation produces a plan-time "Attribute is immutable" error.
+func TestCipherTrust_CMKey_ImmutableCurveid(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name      = %q
+  algorithm = "ec"
+  curveid   = "prime256v1"
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name      = %q
+  algorithm = "ec"
+  curveid   = "secp384r1"
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_ImmutableObjectType verifies that changing object_type after
+// creation produces a plan-time "Attribute is immutable" error.
+func TestCipherTrust_CMKey_ImmutableObjectType(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  object_type = "Symmetric Key"
+}
+`, rName),
+				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  object_type = "Opaque Object"
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_MutableFieldsUpdate confirms that changing mutable fields
+// (description) does not produce an immutable error and terraform apply succeeds.
+func TestCipherTrust_CMKey_MutableFieldsUpdate(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  description = "initial"
+}
+`, rName),
+				Check: resource.TestCheckResourceAttr("ciphertrust_cm_key.test_key", "description", "initial"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test_key" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  description = "updated"
+}
+`, rName),
+				Check: resource.TestCheckResourceAttr("ciphertrust_cm_key.test_key", "description", "updated"),
 			},
 		},
 	})

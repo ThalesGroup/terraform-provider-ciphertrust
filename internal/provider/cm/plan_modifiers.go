@@ -7,6 +7,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 )
 
+// NameImmutableModifier, StringImmutableModifier, and Int64ImmutableModifier are
+// cm-package-local plan modifiers retained for backward compatibility with other
+// cm resources that still reference them (resource_cm_domain.go, resource_cm_group.go,
+// resource_log_forwarder.go, resource_property.go, resource_scheduler.go).
+// New resources should use the shared modifiers package instead:
+//   modifiers.ImmutableString(), modifiers.ImmutableInt64(), modifiers.ImmutableBool()
+// resource_cm_key.go was migrated to the shared package as part of TFIN-271.
+
 // NameImmutableModifier is a plan modifier that prevents the 'name' field from
 // being changed after resource creation. It produces a clear, actionable error
 // at plan time so the user is informed before any API call is made.
