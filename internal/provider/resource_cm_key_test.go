@@ -1167,7 +1167,7 @@ resource "ciphertrust_cm_key" "k" {
 }
 
 // TestCipherTrust_CMKey_ImmutableInt64_keySize validates the ImmutableInt64 contract
-// via the existing Int64ImmutableModifier on key_size.
+// via modifiers.ImmutableInt64() on key_size.
 func TestCipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -1181,7 +1181,7 @@ func TestCipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
 			{
 				Config:      aesKeyConfig(rName, 128),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`cannot be changed`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
