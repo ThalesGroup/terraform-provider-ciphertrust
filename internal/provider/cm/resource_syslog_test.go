@@ -10,10 +10,9 @@ import (
 // hydrateSyslogOptionalFields – drift detection for message_format and port
 // ---------------------------------------------------------------------------
 
-// Test_CM_HydrateSyslogOptionalFields_OOBMessageFormatSurfaced is the primary
-// regression test for the reported bug: if a user never sets message_format in
-// their .tf (state has null) and an operator adds it via the CM API, Read must
-// surface the value so Terraform can detect the drift.
+// Test_CM_HydrateSyslogOptionalFields_OOBMessageFormatSurfaced verifies that
+// if a user never sets message_format in .tf (state has null) and an operator
+// adds it via the CM API, Read surfaces the value so Terraform sees the drift.
 func Test_CM_HydrateSyslogOptionalFields_OOBMessageFormatSurfaced(t *testing.T) {
 	state := CMSyslogTFSDK{}
 	state.MessageFormat = types.StringNull() // user never set it

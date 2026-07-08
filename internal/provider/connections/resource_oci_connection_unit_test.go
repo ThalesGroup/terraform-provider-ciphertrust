@@ -8,11 +8,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Test_CM_GetOciParamsFromResponse_DescriptionDrift verifies that getOciParamsFromResponse
-// correctly syncs the description field from the CM API response, ensuring that:
-//   - A non-empty CM description overwrites any stale value in state (drift detected).
-//   - An empty/absent CM description sets state to null, clearing stale injected values
-//     (previously the bug: stale state was preserved when CM had no description).
+// Test_CM_GetOciParamsFromResponse_DescriptionDrift verifies that
+// getOciParamsFromResponse syncs description from the CM API response: a
+// non-empty value overwrites stale state, and an empty/absent one nulls it.
 func Test_CM_GetOciParamsFromResponse_DescriptionDrift(t *testing.T) {
 	r := &resourceCCKMOCIConnection{}
 
