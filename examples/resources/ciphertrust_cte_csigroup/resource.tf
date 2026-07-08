@@ -101,5 +101,5 @@ resource "ciphertrust_cte_csigroup" "test_csi_group" {
 
 # Output the unique ID of the created CTE CSIGroup
 output "cte_csigroup_id" {
-    value = ciphertrust_cte_csigroup.csigroup.id
+    value = ciphertrust_cte_csigroup.test_csi_group.id
 }

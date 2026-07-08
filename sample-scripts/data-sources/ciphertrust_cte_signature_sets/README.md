@@ -1,6 +1,6 @@
 # Google Cloud Connection Data Source
 
-This example demonstrates how the ciphertrust_cte_signarure_sets data source can be used.
+This example demonstrates how the ciphertrust_cte_signature_sets data source can be used.
 
 
 ## Configure CipherTrust Manager
@@ -23,7 +23,7 @@ provider "ciphertrust" {
 
 ```bash
 # Data source for retrieving Signature Sets
-data "ciphertrust_cte_signarure_sets" "example" {
+data "ciphertrust_cte_signature_sets" "example" {
 }
 
 output "signature_sets" {

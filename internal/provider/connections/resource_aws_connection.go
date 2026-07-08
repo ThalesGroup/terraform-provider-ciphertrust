@@ -145,7 +145,10 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"is_role_anywhere": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.",
+				Description: "(Immutable) Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -627,7 +630,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
-	if !reflect.DeepEqual((*IAMRoleAnywhereTFSDK)(nil), plan.IAMRoleAnywhere) {
+	if plan.IAMRoleAnywhere != nil && !reflect.DeepEqual(plan.IAMRoleAnywhere, state.IAMRoleAnywhere) {
 		if plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString() != "" && plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.AnywhereRoleARN = plan.IAMRoleAnywhere.AnywhereRoleARN.ValueString()
 		}
@@ -682,9 +685,9 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	// Fix: use plan.ID as the resource UUID (arg 1 → URL path); discard return value since we
+	// Fix: use state.ID as the resource UUID (arg 1 → URL path); discard return value since we
 	// do a GET read-back below to refresh all Computed fields correctly.
-	_, err = r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "id")
+	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "id")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(

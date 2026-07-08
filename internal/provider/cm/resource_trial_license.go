@@ -59,10 +59,16 @@ func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequ
 			"name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the trial license",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Computed:    true,
 				Description: "Description of the license",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"activated_at": schema.StringAttribute{
 				Computed:    true,
@@ -195,6 +201,12 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMTrialLicense) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_trial_license.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_trial_license does not support updates. The trial license state is managed by activation/deactivation via Create and Delete.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

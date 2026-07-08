@@ -8,8 +8,10 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -35,13 +37,39 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"username": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) Username of the CipherTrust Manager user whose password is being changed.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"password": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) Current password for the user.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"new_password": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) New password to set for the user.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
+			},
+			"auth_domain": schema.StringAttribute{
+				Optional:    true,
+				Description: "(Immutable) Authentication domain of the user whose password is being changed.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
+			},
+			"password_hint": schema.StringAttribute{
+				Optional:    true,
+				Description: "(Immutable) Optional hint for the new password.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 		},
 	}
@@ -65,6 +93,12 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 	payload.Username = plan.Username.ValueString()
 	payload.Password = plan.Password.ValueString()
 	payload.NewPassword = plan.NewPassword.ValueString()
+	if !plan.AuthDomain.IsNull() && !plan.AuthDomain.IsUnknown() {
+		payload.AuthDomain = plan.AuthDomain.ValueString()
+	}
+	if !plan.PasswordHint.IsNull() && !plan.PasswordHint.IsUnknown() {
+		payload.PasswordHint = plan.PasswordHint.ValueString()
+	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -98,10 +132,24 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Intentionally empty. ciphertrust_cm_user_password_change is a one-shot action
+	// resource: it triggers a CM password change and has no retrievable state.
+	// The CM API provides no GET endpoint for password-change records.
+	//
+	// User-visible consequence: after the initial `terraform apply`, subsequent
+	// `terraform plan` runs will always show no changes — even if the password
+	// was changed or reset in CM outside of Terraform. This is a known,
+	// intentional limitation documented in TFIN-DD-015.
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPwdChange) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_cm_user_password_change does not support updates. To change the password again, delete and recreate this resource.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

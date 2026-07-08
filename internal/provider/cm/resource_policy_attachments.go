@@ -64,23 +64,35 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 			"principal_selector": schema.MapAttribute{
 				ElementType: types.StringType,
 				Required:    true,
-				Description: "Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.",
+				Description: "(Immutable) Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.ImmutableMap(),
+				},
 			},
 			"jurisdiction": schema.StringAttribute{
 				Optional:    true,
-				Description: "Jurisdiction to which the policy applies.",
+				Description: "(Immutable) Jurisdiction to which the policy applies.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"resources": schema.ListAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Resources is a list of URI strings, which must be in URI format.",
+				Description: "(Immutable) Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				Computed: true,
@@ -352,144 +364,12 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Update]["+id+"]")
-
-	var plan CMPolicyAttachmentTFSDK
-	var state CMPolicyAttachmentTFSDK
-
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var payload CMPolicyAttachmentJSON
-
-	selectorsPayload := make(map[string]interface{})
-	for k, v := range plan.PrincipalSelector.Elements() {
-		selectorsPayload[k] = v.(types.String).ValueString()
-	}
-	payload.PrincipalSelector = selectorsPayload
-
-	if !plan.Jurisdiction.IsNull() && !plan.Jurisdiction.IsUnknown() {
-		payload.Jurisdiction = plan.Jurisdiction.ValueString()
-	}
-
-	if !plan.Actions.IsNull() && !plan.Actions.IsUnknown() {
-		var actions []string
-		for _, elem := range plan.Actions.Elements() {
-			actions = append(actions, elem.(types.String).ValueString())
-		}
-		payload.Actions = actions
-	}
-
-	if !plan.Resources.IsNull() && !plan.Resources.IsUnknown() {
-		var resources []string
-		for _, elem := range plan.Resources.Elements() {
-			resources = append(resources, elem.(types.String).ValueString())
-		}
-		payload.Resources = resources
-	}
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
-		resp.Diagnostics.AddError("Invalid data input: Policy Attachment Update", err.Error())
-		return
-	}
-
-	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS, payloadJSON)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Update]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error Updating CipherTrust Policy Attachment",
-			"Could not update attachment "+state.ID.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
-	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-
-	// policy is immutable — preserve from state (PATCH body does not include policy)
-	plan.Policy = state.Policy
-
-	psResult := gjson.Get(response, "principalSelector")
-	if psResult.Exists() {
-		psRaw := psResult.Map()
-		psElems := make(map[string]attr.Value, len(psRaw))
-		for k, v := range psRaw {
-			psElems[k] = types.StringValue(v.String())
-		}
-		psMap, diags2 := types.MapValue(types.StringType, psElems)
-		resp.Diagnostics.Append(diags2...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		plan.PrincipalSelector = psMap
-	}
-
-	// Optional fields: only hydrate from PATCH response when plan had them non-null.
-	// CM may return server-assigned values (e.g. jurisdiction resolved to an internal URI)
-	// even when not configured; overwriting plan causes plan-consistency errors.
-	if !plan.Jurisdiction.IsNull() {
-		if r2 := gjson.Get(response, "jurisdiction"); r2.Exists() {
-			plan.Jurisdiction = types.StringValue(r2.String())
-		} else {
-			plan.Jurisdiction = types.StringNull()
-		}
-	}
-
-	if !plan.Actions.IsNull() {
-		if r2 := gjson.Get(response, "actions"); r2.Exists() {
-			actArr := r2.Array()
-			actElems := make([]attr.Value, len(actArr))
-			for i, a := range actArr {
-				actElems[i] = types.StringValue(a.String())
-			}
-			actList, diags3 := types.ListValue(types.StringType, actElems)
-			resp.Diagnostics.Append(diags3...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			plan.Actions = actList
-		} else {
-			plan.Actions = types.ListNull(types.StringType)
-		}
-	}
-
-	if !plan.Resources.IsNull() {
-		if r2 := gjson.Get(response, "resources"); r2.Exists() {
-			resArr := r2.Array()
-			resElems := make([]attr.Value, len(resArr))
-			for i, res := range resArr {
-				resElems[i] = types.StringValue(res.String())
-			}
-			resList, diags4 := types.ListValue(types.StringType, resElems)
-			resp.Diagnostics.Append(diags4...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			plan.Resources = resList
-		} else {
-			plan.Resources = types.ListNull(types.StringType)
-		}
-	}
-
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_policy_attachment does not support updates. Delete and recreate this resource to change any field.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

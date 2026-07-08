@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -45,7 +46,11 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"key": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) SSH public key to add to the CipherTrust Manager appliance during initial bootstrap.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 		},
 	}
@@ -103,10 +108,39 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Bootstrap-only resource: CMClientBootstrap does not expose GetById and
+	// the CM SSH key endpoint has no per-resource GET. State is preserved unchanged.
+	// Drift detection is intentionally not supported for this resource.
+	var state CMSSHKeyTFSDK
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.AddWarning(
+		"Drift Detection Not Supported",
+		"ciphertrust_cm_ssh_key is a bootstrap-only resource backed by CMClientBootstrap, "+
+			"which does not expose a GET method. Terraform state is preserved unchanged on "+
+			"every plan/refresh. Out-of-band changes to this SSH key will not be detected.",
+	)
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMSSHKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_cm_ssh_key is a bootstrap-only resource and does not support updates. The SSH key cannot be modified after initial creation.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

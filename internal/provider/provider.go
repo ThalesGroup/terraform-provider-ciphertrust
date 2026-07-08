@@ -547,6 +547,8 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		aws.NewDataSourceAWSCustomKeyStore,
 		aws.NewDataSourceAWSXKSKeys,
 		aws.NewDataSourceAWSKms,
+		aws.NewDataSourceAWSIAMUsers,
+		aws.NewDataSourceAWSIAMRoles,
 		aws.NewDataSourceAWSCloudHSMKeys,
 		connections.NewDataSourceOCIConnection,
 		oci.NewDataSourceGetOCIRegions,

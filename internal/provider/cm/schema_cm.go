@@ -410,11 +410,11 @@ type CMRegTokenJSON struct {
 	CAID                      string                 `json:"ca_id"`
 	CertDuration              int64                  `json:"cert_duration"`
 	ClientManagementProfileID string                 `json:"client_management_profile_id"`
-	Label                     map[string]interface{} `json:"label"`
+	Label                     map[string]interface{} `json:"label,omitempty"`
 	Labels                    map[string]interface{} `json:"labels"`
 	Lifetime                  string                 `json:"lifetime"`
 	MaxClients                int64                  `json:"max_clients"`
-	NamePrefix                string                 `json:"name_prefix"`
+	NamePrefix                string                 `json:"name_prefix,omitempty"`
 }
 
 type CMUserTFSDK struct {
@@ -460,15 +460,19 @@ type CMSSHKeyJSON struct {
 }
 
 type CMPwdChangeTFSDK struct {
-	Username    types.String `tfsdk:"username"`
-	Password    types.String `tfsdk:"password"`
-	NewPassword types.String `tfsdk:"new_password"`
+	Username     types.String `tfsdk:"username"`
+	Password     types.String `tfsdk:"password"`
+	NewPassword  types.String `tfsdk:"new_password"`
+	AuthDomain   types.String `tfsdk:"auth_domain"`
+	PasswordHint types.String `tfsdk:"password_hint"`
 }
 
 type CMPwdChangeJSON struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	NewPassword string `json:"new_password"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	NewPassword  string `json:"new_password"`
+	AuthDomain   string `json:"auth_domain,omitempty"`
+	PasswordHint string `json:"password_hint,omitempty"`
 }
 
 type CMDomainTFSDK struct {
@@ -637,7 +641,7 @@ type CMInterfaceJSON struct {
 	Name                    string                          `json:"name,omitempty"`
 	NetworkInterface        string                          `json:"network_interface,omitempty"`
 	RegToken                string                          `json:"registration_token,omitempty"`
-	TrustedCAs              CMInterfacTrustedCAsJSON        `json:"trusted_cas,omitempty"`
+	TrustedCAs              *CMInterfacTrustedCAsJSON       `json:"trusted_cas,omitempty"`
 	Certificate             *CMInterfacCertificateJSON      `json:"certificate,omitempty"`
 	LocalAutogenAttributes  CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
 	TLSCiphers              []TLSCiphersJSON                `json:"tls_ciphers,omitempty"`
@@ -713,6 +717,7 @@ type CMClusterTFSDK struct {
 	NodeId            types.String `tfsdk:"node_id"`
 	StatusCode        types.String `tfsdk:"status_code"`
 	StatusDescription types.String `tfsdk:"status_description"`
+	RaftStatus        types.String `tfsdk:"raft_status"`
 }
 
 type CMClusterNodeJSON struct {
@@ -867,14 +872,14 @@ type CreateJobConfigParamsJSON struct {
 type UpdateJobConfigParamsJSON struct {
 	Name                      string                         `json:"name"`
 	Description               string                         `json:"description"`
-	Operation                 string                         `json:"operation"`
+	Operation                 string                         `json:"operation,omitempty"`
 	RunAt                     string                         `json:"run_at"`
 	RunOn                     string                         `json:"run_on"`
 	Disabled                  bool                           `json:"disabled"`
 	StartDate                 time.Time                      `json:"start_date"`
 	EndDate                   time.Time                      `json:"end_date"`
 	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
-	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params"`
+	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params,omitempty"`
 	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
 }
 type DatabaseBackupParamsJSON struct {

@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -74,6 +77,9 @@ resource "ciphertrust_scheduler" "scheduler" {
 // after creation produces a plan-time error, not a silent no-op.
 func TestAccScheduler_nameImmutable(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping TestAccScheduler_nameImmutable: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable (requires scheduler license)")
+	}
 	t.Log("======== CHECK: scheduler name immutable ========")
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -113,6 +119,85 @@ resource "ciphertrust_scheduler" "sched" {
 		},
 	})
 	t.Log("======== PASSED: scheduler name immutable ========")
+}
+
+// TestCipherTrust_Scheduler_ImmutableFields verifies that the operation field
+// cannot be changed after scheduler creation (ImmutableString modifier).
+// Requires a CipherTrust license that permits scheduler creation.
+// Set CIPHERTRUST_SCHEDULER_ENABLED=1 to opt in; the test is skipped otherwise
+// to avoid failing in environments where the license is absent.
+func TestCipherTrust_Scheduler_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping TestCipherTrust_Scheduler_ImmutableFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "immut-sched-" + uuid.New().String()[:8]
+	uniqueName2 := "immut-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Scenario A Step 1: create baseline using database_backup
+			{
+				Config: schedulerConfigOp(uniqueName, "database_backup", "0 0 * * *"),
+			},
+			// Scenario A Step 2: attempt to change operation — must produce immutability error, NOT destroy+recreate
+			// (PlanOnly: ImmutableString fires at plan time before any API call, so the target
+			// operation value "cckm_synchronization" does not need a CCKM license to test the modifier.)
+			{
+				Config:      schedulerConfigOp(uniqueName, "cckm_synchronization", "0 0 * * *"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+			// Scenario B Step 1: create second resource with cckm_key_rotation baseline
+			{
+				Config: schedulerConfigKeyRotation(uniqueName2, "0 0 * * *", false),
+			},
+			// Scenario B Step 2: attempt to change cckm_key_rotation_params — must produce immutability error
+			{
+				Config:      schedulerConfigKeyRotation(uniqueName2, "0 0 * * *", true),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+		},
+	})
+}
+
+func schedulerConfigOp(name, operation, runAt string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test_op" {
+  name      = %q
+  operation = %q
+  run_at    = %q
+  database_backup_params = {
+    scope = "system"
+  }
+}`, name, operation, runAt)
+}
+
+func schedulerConfigOpDB(name, operation, runAt string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test_key_rotation" {
+  name      = %q
+  operation = %q
+  run_at    = %q
+  database_backup_params = {
+    scope = "system"
+  }
+}`, name, operation, runAt)
+}
+
+func schedulerConfigKeyRotation(name, runAt string, retainAlias bool) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test_key_rotation" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = %q
+  cckm_key_rotation_params = {
+    cloud_name       = "aws"
+    aws_retain_alias = %t
+  }
+}`, name, runAt, retainAlias)
 }
 
 // terraform destroy will perform automatically at the end of the test

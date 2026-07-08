@@ -1,15 +1,17 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -43,10 +45,15 @@ func (r *resourceCMPrometheus) Schema(_ context.Context, _ resource.SchemaReques
 		Description: "Enables and configures the Prometheus metrics endpoint on the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"token": schema.StringAttribute{
-				Computed: true,
+				Computed:  true,
+				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"enabled": schema.BoolAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Whether the Prometheus metrics endpoint is enabled on the CipherTrust Manager appliance.",
 			},
 		},
 	}
@@ -108,31 +115,55 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 
 func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_prometheus.go -> Read]["+id+"]")
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Read]["+id+"]")
 
+	// Load prior state to preserve the token when the API returns empty (e.g. Prometheus disabled).
+	var priorState CMPrometheusMetricsConfigTFSDK
+	diags := req.State.Get(ctx, &priorState)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// GET /v1/system/metrics/prometheus/status
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_PROMETHEUS_STATUS)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Debug(ctx, common.ERR_METHOD_END+"prometheus not found (404); keeping in state [resource_cm_prometheus.go -> Read]["+id+"]")
 			resp.Diagnostics.AddWarning(
-				"Prometheus Integration Not Found",
-				"The Prometheus Integration resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"CipherTrust Prometheus Not Found",
+				"Prometheus status was not found in CM and has been kept in Terraform state. "+
+					"If it was intentionally deleted, run terraform state rm before the next apply.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_prometheus.go -> Read]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching Prometheus status: "+err.Error())
 		return
 	}
 
-	state := &CMPrometheusMetricsConfigTFSDK{
-		Enabled: types.BoolValue(gjson.Get(response, "enabled").Bool()),
-		Token:   types.StringValue(gjson.Get(response, "token").String()),
+	// Three-branch token resolution:
+	// 1. API returned a non-empty token — use it.
+	// 2. API returned empty (Prometheus disabled, token omitted) and prior state has a
+	//    non-empty token — preserve it to avoid spurious drift on re-enable.
+	// 3. No prior token (first apply or import scenario) — store "".
+	tokenFromAPI := gjson.Get(response, "token").String()
+	var resolvedToken types.String
+	if tokenFromAPI != "" {
+		resolvedToken = types.StringValue(tokenFromAPI)
+	} else if !priorState.Token.IsNull() && !priorState.Token.IsUnknown() && priorState.Token.ValueString() != "" {
+		resolvedToken = priorState.Token
+	} else {
+		resolvedToken = types.StringValue("")
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_prometheus.go -> Read]["+id+"]")
+	newState := CMPrometheusMetricsConfigTFSDK{
+		Enabled: types.BoolValue(gjson.Get(response, "enabled").Bool()),
+		Token:   resolvedToken,
+	}
 
-	diags := resp.State.Set(ctx, state)
+	diags = resp.State.Set(ctx, newState)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -146,9 +177,17 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Enable/Disable - Update]")
 
 	var plan CMPrometheusMetricsConfigTFSDK
+	var state CMPrometheusMetricsConfigTFSDK
 	var payload CMPrometheusMetricsConfigJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Load prior state to preserve token across enable/disable transitions.
+	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -162,7 +201,7 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update]")
 		resp.Diagnostics.AddError(
 			"Invalid data input for disabling Prometheus",
 			err.Error(),
@@ -172,15 +211,30 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 
 	response, err := r.client.PostDataV2(ctx, "", url, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update]")
 		resp.Diagnostics.AddError(
 			"Invalid data input for updating Prometheus state",
 			"unexpected error: "+err.Error(),
 		)
 		return
 	}
-	plan.Token = types.StringValue(gjson.Get(response, "token").String())
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Update")
+
+	// Three-branch token resolution (same logic as Read()):
+	// 1. API returned a non-empty token — use it.
+	// 2. API returned empty and prior state has a non-empty token — preserve it.
+	// 3. No prior token — store "".
+	tokenFromAPI := gjson.Get(response, "token").String()
+	var resolvedToken types.String
+	if tokenFromAPI != "" {
+		resolvedToken = types.StringValue(tokenFromAPI)
+	} else if !state.Token.IsNull() && !state.Token.IsUnknown() && state.Token.ValueString() != "" {
+		resolvedToken = state.Token
+	} else {
+		resolvedToken = types.StringValue("")
+	}
+	plan.Token = resolvedToken
+
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Update]")
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
