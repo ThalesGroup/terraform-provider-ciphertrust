@@ -164,7 +164,7 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-drift-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	var domainID string
+	var domainName string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -183,7 +183,8 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 						if !ok {
 							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
 						}
-						domainID = rs.Primary.ID
+						// CM domain PATCH uses name as the path key, not UUID.
+						domainName = rs.Primary.Attributes["name"]
 						return nil
 					},
 				),
@@ -204,7 +205,8 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 					patchPayload, _ := json.Marshal(map[string]interface{}{
 						"admins": []string{"admin", "admin2"},
 					})
-					_, _ = client.UpdateData(context.Background(), domainID, common.URL_DOMAIN, patchPayload, "id")
+					// CM domain PATCH endpoint uses the domain name as the URL path key.
+					_, _ = client.UpdateData(context.Background(), domainName, common.URL_DOMAIN, patchPayload, "id")
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -267,9 +269,10 @@ func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_updatePathKey verifies that Update() sends state.ID
-// (UUID) as the PATCH path parameter. Uses meta_data change as the trigger because
-// allow_user_management is not updatable via PATCH on CM domains.
+// TestAccCipherTrustCMDomain_updatePathKey verifies that Update() successfully PATCHes
+// a domain using the domain name as the path parameter (CM domain PATCH requires name,
+// not UUID). Uses meta_data change as the trigger because allow_user_management is
+// not updatable via PATCH on CM domains.
 func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
@@ -310,7 +313,7 @@ func TestAccCipherTrustCMDomain_hsmDrift(t *testing.T) {
 	requireDomainCreationLicensed(t)
 	hsmConnID := getEnvOrSkip(t, "CIPHERTRUST_TEST_HSM_CONNECTION_ID")
 	rName := "tf-domain-hsm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	var domainID string
+	var domainName string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -331,7 +334,8 @@ resource "ciphertrust_domain" "test" {
 						if !ok {
 							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
 						}
-						domainID = rs.Primary.ID
+						// CM domain PATCH uses name as the path key, not UUID.
+						domainName = rs.Primary.Attributes["name"]
 						return nil
 					},
 				),
@@ -346,7 +350,8 @@ resource "ciphertrust_domain" "test" {
 					patchPayload, _ := json.Marshal(map[string]interface{}{
 						"hsm_connection_id": "",
 					})
-					_, _ = client.UpdateData(context.Background(), domainID, common.URL_DOMAIN, patchPayload, "id")
+					// CM domain PATCH endpoint uses the domain name as the URL path key.
+					_, _ = client.UpdateData(context.Background(), domainName, common.URL_DOMAIN, patchPayload, "id")
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -497,8 +502,9 @@ resource "ciphertrust_domain" "testDomain" {
 	})
 }
 
-// TestAccCMDomain_MutableFieldUpdate verifies that Update() uses state.ID as the
-// PATCH path key by successfully updating meta_data (a mutable field) after creation.
+// TestAccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
+// mutable field (meta_data) after creation. The CM domain PATCH endpoint uses the
+// domain name as the path key.
 func TestAccCMDomain_MutableFieldUpdate(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)

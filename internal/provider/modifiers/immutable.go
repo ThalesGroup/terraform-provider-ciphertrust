@@ -106,6 +106,13 @@ func (m immutableBoolModifier) PlanModifyBool(_ context.Context, req planmodifie
 	if req.StateValue.IsNull() {
 		return
 	}
+	// When an Optional+Computed bool is omitted from config, the framework sets
+	// the plan value to Unknown before UseStateForUnknown resolves it. Allow
+	// null/unknown plan values so that only an explicit user-supplied change fires
+	// the immutability error.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}

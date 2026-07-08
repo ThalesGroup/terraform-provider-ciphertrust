@@ -453,6 +453,29 @@ func TestAccCMGroup_userIDsOmittedUnmanaged(t *testing.T) {
 	})
 }
 
+// TestAccCMGroup_NameImmutable verifies that modifiers.ImmutableString() blocks a
+// group rename at plan time before any API call is made.
+func TestAccCMGroup_NameImmutable(t *testing.T) {
+	RequireCM(t)
+	name := "TFTestGroupImm-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig(name, "Original", ""),
+				Check: checkStep(t, "name immutable: create",
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", name),
+				),
+			},
+			{
+				Config:      cmGroupConfig(name+"-renamed", "Original", ""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
 func TestAccCMGroup_attributeDrift(t *testing.T) {
 	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string

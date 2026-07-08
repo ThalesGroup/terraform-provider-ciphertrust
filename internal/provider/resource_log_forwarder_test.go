@@ -106,6 +106,40 @@ resource "ciphertrust_log_forwarder" "test_lf" {
 	})
 }
 
+// TestAccCMLogForwarder_TypeImmutable verifies that attempting to change the
+// 'type' field after creation produces a clear immutable-field plan-time error.
+func TestAccCMLogForwarder_TypeImmutable(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-imm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test_lf" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, rName),
+				Check: resource.TestCheckResourceAttrSet(logForwarderResource, "id"),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test_lf" {
+  connection_id = %q
+  name          = %q
+  type          = "loki"
+}
+`, connID, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
 // requireLogForwarderESConnID skips the calling test when the environment variable
 // that holds a pre-existing elasticsearch log-forwarder connection ID is not set.
 func requireLogForwarderESConnID(t *testing.T) string {

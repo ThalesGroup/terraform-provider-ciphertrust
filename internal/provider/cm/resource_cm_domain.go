@@ -385,17 +385,10 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		hasChanges = true
 	}
 
-	// Check admins list
-	if len(plan.Admins) != len(state.Admins) {
-		hasChanges = true
-	} else {
-		for i := range plan.Admins {
-			if plan.Admins[i].ValueString() != state.Admins[i].ValueString() {
-				hasChanges = true
-				break
-			}
-		}
-	}
+	// admins, allow_user_management, name, and parent_ca_id are immutable —
+	// ImmutableList/ImmutableBool/ImmutableString modifiers block plan-time changes
+	// before Update() is ever called. Do not include them in hasChanges or the
+	// PATCH payload.
 
 	// allow_user_management is not updatable via PATCH; omit from hasChanges.
 
@@ -407,17 +400,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Build PATCH payload as a targeted map to avoid sending server-assigned
-	// computed fields (id, name, uri, account, etc.) as empty strings to CM,
-	// which can cause CM to reset user-controlled fields unexpectedly.
-	var adminsPayload []string
-	for _, a := range plan.Admins {
-		adminsPayload = append(adminsPayload, a.ValueString())
-	}
-
-	patchMap := map[string]interface{}{
-		"admins": adminsPayload,
-	}
+	// Build PATCH payload with only the mutable fields.
+	patchMap := map[string]interface{}{}
 	if !plan.HSMKEKLabel.IsNull() && !plan.HSMKEKLabel.IsUnknown() {
 		patchMap["hsm_kek_label"] = plan.HSMKEKLabel.ValueString()
 	}
@@ -447,7 +431,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	// CM domain PATCH endpoint uses the domain name (not the UUID) as the URL path segment.
+	_, err = r.client.UpdateData(ctx, state.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -457,13 +442,13 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Read back the domain to get all computed fields with current values
-	readResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
+	// Read back the domain using the name (CM domains are looked up by name after PATCH).
+	readResponse, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager after update: ",
-			"Could not read CM Domain id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
+			"Could not read CM Domain name: "+state.Name.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
