@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMRegToken(t *testing.T) {
+func Test_CM_ResourceCMRegToken(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -82,7 +82,7 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_drift(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_drift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -124,7 +124,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_deleteOOB(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_deleteOOB(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -176,7 +176,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_labelCreate(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_labelCreate(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -204,7 +204,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_labelDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_labelDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -243,7 +243,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_labelsDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_labelsDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -282,7 +282,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-func TestCipherTrust_CMRegToken_namePrefixDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_namePrefixDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -324,9 +324,9 @@ resource "ciphertrust_cm_reg_token" "test" {
 	})
 }
 
-// TestCipherTrust_CMRegToken_ImmutableFields verifies that name_prefix and label
+// Test_CM_CipherTrust_CMRegToken_ImmutableFields verifies that name_prefix and label
 // cannot be changed after registration token creation.
-func TestCipherTrust_CMRegToken_ImmutableFields(t *testing.T) {
+func Test_CM_CipherTrust_CMRegToken_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

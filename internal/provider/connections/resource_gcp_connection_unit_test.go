@@ -40,10 +40,10 @@ func gcpResponse(fields map[string]string) string {
 	)
 }
 
-// TestGetGcpParamsFromResponse_PlainDrift verifies that getGcpParamsFromResponse
+// Test_CM_GetGcpParamsFromResponse_PlainDrift verifies that getGcpParamsFromResponse
 // correctly refreshes plain attributes from the CM API response so that attribute
 // drift (e.g. description changed in CM UI) is visible to Terraform.
-func TestGetGcpParamsFromResponse_PlainDrift(t *testing.T) {
+func Test_CM_GetGcpParamsFromResponse_PlainDrift(t *testing.T) {
 	t.Run("all plain fields are populated from the response", func(t *testing.T) {
 		response := `{
 			"id":"gcp-id","name":"my-gcp-conn",
@@ -137,10 +137,10 @@ func TestGetGcpParamsFromResponse_PlainDrift(t *testing.T) {
 	})
 }
 
-// TestGCPRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
+// Test_CM_GCPRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
 // by doRequest for a 404 response (format "status: 404, body: ...") matches the
 // sentinel checked in resourceGCPConnection.Read so that OOB deletes are caught.
-func TestGCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
+func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 	simulatedErr := fmt.Errorf("status: 404, body: {\"error\":\"not found\"}")
 
 	if !strings.Contains(simulatedErr.Error(), "status: 404") {

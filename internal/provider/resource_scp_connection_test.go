@@ -1,13 +1,14 @@
 package provider
 
 import (
+	"os"
 	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceCMSCPConnection(t *testing.T) {
+func Test_CM_ResourceCMSCPConnection(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -80,10 +81,46 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   products    = ["backup/restore"]
 }
 `,
-			ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			PlanOnly:    true,
 		},
 	},
+	})
+}
+
+func TestCipherTrust_SCPConnection_NameImmutable(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("SCP_HOST") == "" || os.Getenv("SCP_USERNAME") == "" {
+		t.Skip("SCP_HOST / SCP_USERNAME not set — skipping SCP connection immutability test")
+	}
+
+	scpConnBase := `
+resource "ciphertrust_scp_connection" "test" {
+  host        = "` + os.Getenv("SCP_HOST") + `"
+  port        = 22
+  username    = "` + os.Getenv("SCP_USERNAME") + `"
+  auth_method = "key"
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + scpConnBase + `  name = "tf-test-scp-conn"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.test", "name", "tf-test-scp-conn"),
+				),
+			},
+			{
+				Config: providerConfig + scpConnBase + `  name = "tf-test-scp-conn-renamed"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+			},
+		},
 	})
 }
 

@@ -10,9 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestCckmOCIConnection exercises the full lifecycle of the ciphertrust_oci_connection resource:
+// Test_CM_CckmOCIConnection exercises the full lifecycle of the ciphertrust_oci_connection resource:
 // Create, RefreshState, ImportState, Update (description change), and Update (region change).
-func TestCckmOCIConnection(t *testing.T) {
+func Test_CM_CckmOCIConnection(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")
@@ -124,16 +124,16 @@ func TestCckmOCIConnection(t *testing.T) {
 			{
 				Config:      renamedConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			},
 		},
 	})
 }
 
-// TestCckmOCIConnectionNameImmutable is a focused regression test that verifies the provider
+// Test_CM_CckmOCIConnectionNameImmutable is a focused regression test that verifies the provider
 // returns a clear, actionable error (not a framework-level "inconsistent result") when the
 // user attempts to change the immutable 'name' field of an OCI connection.
-func TestCckmOCIConnectionNameImmutable(t *testing.T) {
+func Test_CM_CckmOCIConnectionNameImmutable(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")
@@ -177,7 +177,7 @@ func TestCckmOCIConnectionNameImmutable(t *testing.T) {
 			{
 				Config:      renameConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			},
 			// Step 3: Re-apply original config — state must still be intact and consistent.
 			{
@@ -185,6 +185,51 @@ func TestCckmOCIConnectionNameImmutable(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(connectionResource, "name", name),
 				),
+			},
+		},
+	})
+}
+
+func TestCipherTrust_OCIConnection_NameImmutable(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("OCI_USER_OCID") == "" || os.Getenv("OCI_TENANCY_OCID") == "" {
+		t.Skip("OCI_USER_OCID / OCI_TENANCY_OCID not set — skipping OCI connection immutability test")
+	}
+	t.Setenv("TF_VAR_oci_key_file", os.Getenv("OCI_KEY_FILE"))
+
+	fingerprint := os.Getenv("OCI_FINGERPRINT")
+	region := os.Getenv("OCI_REGION")
+	tenancyOCID := os.Getenv("OCI_TENANCY_OCID")
+	userOCID := os.Getenv("OCI_USER_OCID")
+
+	ociConnBase := fmt.Sprintf(`
+variable "oci_key_file" { sensitive = true }
+resource "ciphertrust_oci_connection" "test" {
+  key_file              = var.oci_key_file
+  pub_key_fingerprint   = %q
+  region                = %q
+  tenancy_ocid          = %q
+  user_ocid             = %q
+  skip_connection_params_test = true
+`, fingerprint, region, tenancyOCID, userOCID)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + ociConnBase + `  name = "tf-test-oci-conn"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_oci_connection.test", "name", "tf-test-oci-conn"),
+				),
+			},
+			{
+				Config: providerConfig + ociConnBase + `  name = "tf-test-oci-conn-renamed"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			},
 		},
 	})

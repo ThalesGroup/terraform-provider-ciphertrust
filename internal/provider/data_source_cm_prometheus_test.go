@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustCMPrometheusDataSource(t *testing.T) {
+func Test_CM_CiphertrustCMPrometheusDataSource(t *testing.T) {
 	RequireCM(t)
 	// Config for the resource and data source
 	cmEnablePrometheusConfig := `

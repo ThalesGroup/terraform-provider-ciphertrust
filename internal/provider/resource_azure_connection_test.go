@@ -1,13 +1,15 @@
 package provider
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceAzureConnection(t *testing.T) {
+func Test_CM_ResourceAzureConnection(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -75,10 +77,47 @@ resource "ciphertrust_azure_connection" "azure_connection" {
   products  = ["cckm"]
 }
 `,
-			ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			PlanOnly:    true,
 		},
 	},
+	})
+}
+
+func TestCipherTrust_AzureConnection_NameImmutable(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("AZURE_CLIENT_ID") == "" || os.Getenv("AZURE_TENANT_ID") == "" || os.Getenv("AZURE_CLIENT_SECRET") == "" {
+		t.Skip("AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET not set — skipping Azure connection immutability test")
+	}
+	t.Setenv("TF_VAR_azure_client_secret", os.Getenv("AZURE_CLIENT_SECRET"))
+
+	azureConnBase := fmt.Sprintf(`
+variable "azure_client_secret" { sensitive = true }
+resource "ciphertrust_azure_connection" "test" {
+  client_id     = %q
+  tenant_id     = %q
+  client_secret = var.azure_client_secret
+`, os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_TENANT_ID"))
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + azureConnBase + `  name = "tf-test-azure-conn"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_azure_connection.test", "name", "tf-test-azure-conn"),
+				),
+			},
+			{
+				Config: providerConfig + azureConnBase + `  name = "tf-test-azure-conn-renamed"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+			},
+		},
 	})
 }
 

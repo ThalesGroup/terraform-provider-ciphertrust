@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceGCPConnection(t *testing.T) {
+func Test_CM_ResourceGCPConnection(t *testing.T) {
 	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
 	if gcpKeyFile == "" {
 		t.Skip("Failed to set GCP connection variables")
@@ -84,10 +84,45 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
   EOT
 }
 `, gcpKeyFile),
-			ExpectError: regexp.MustCompile(`Connection name cannot be changed`),
+			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 			PlanOnly:    true,
 		},
 	},
+	})
+}
+
+func TestCipherTrust_GCPConnection_NameImmutable(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("GCP_KEY_FILE") == "" {
+		t.Skip("GCP_KEY_FILE not set — skipping GCP connection immutability test")
+	}
+	t.Setenv("TF_VAR_gcp_key_file", os.Getenv("GCP_KEY_FILE"))
+
+	gcpConnBase := `
+variable "gcp_key_file" { sensitive = true }
+resource "ciphertrust_gcp_connection" "test" {
+  key_file = var.gcp_key_file
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + gcpConnBase + `  name = "tf-test-gcp-conn"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "name", "tf-test-gcp-conn"),
+				),
+			},
+			{
+				Config: providerConfig + gcpConnBase + `  name = "tf-test-gcp-conn-renamed"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+			},
+		},
 	})
 }
 

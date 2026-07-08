@@ -39,9 +39,9 @@ provider "ciphertrust" {
 	return cfg
 }
 
-// TestAccCipherTrust_CMSSHKey_ImmutableKey verifies that changing the key on a
+// Test_CM_AccCipherTrust_CMSSHKey_ImmutableKey verifies that changing the key on a
 // ciphertrust_cm_ssh_key resource produces a plan-time error from ImmutableString.
-func TestAccCipherTrust_CMSSHKey_ImmutableKey(t *testing.T) {
+func Test_CM_AccCipherTrust_CMSSHKey_ImmutableKey(t *testing.T) {
 	RequireCM(t)
 	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
 	if sshKey == "" {
@@ -75,7 +75,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 	})
 }
 
-func TestCipherTrust_CMSSHKey_noopRead(t *testing.T) {
+func Test_CM_CipherTrust_CMSSHKey_noopRead(t *testing.T) {
 	RequireCM(t)
 	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
 	if sshKey == "" {

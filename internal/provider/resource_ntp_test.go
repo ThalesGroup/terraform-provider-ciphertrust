@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMNTP(t *testing.T) {
+func Test_CM_ResourceCMNTP(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -58,8 +58,8 @@ func ntpSweep(host string) {
 	)
 }
 
-// TestAccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
-func TestAccCMNTP_NoDrift(t *testing.T) {
+// Test_CM_AccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
+func Test_CM_AccCMNTP_NoDrift(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -85,8 +85,8 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestAccCMNTP_Delete404Guard verifies that Delete() succeeds when the resource was already deleted out-of-band.
-func TestAccCMNTP_Delete404Guard(t *testing.T) {
+// Test_CM_AccCMNTP_Delete404Guard verifies that Delete() succeeds when the resource was already deleted out-of-band.
+func Test_CM_AccCMNTP_Delete404Guard(t *testing.T) {
 	RequireCM(t)
 	var hostVal string
 
@@ -138,9 +138,9 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestAccCipherTrust_NTP_ImmutableFields verifies that changing any immutable field on
+// Test_CM_AccCipherTrust_NTP_ImmutableFields verifies that changing any immutable field on
 // ciphertrust_ntp produces a plan-time error from the ImmutableString modifier.
-func TestAccCipherTrust_NTP_ImmutableFields(t *testing.T) {
+func Test_CM_AccCipherTrust_NTP_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 
 	initialConfig := providerConfig + `
@@ -202,10 +202,10 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestAccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
+// Test_CM_AccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
 // NOTE: This test performs an out-of-band deletion that disturbs the NTP daemon; it runs last
 // so that earlier tests are not affected by the daemon's recovery period.
-func TestAccCMNTP_DriftDetection(t *testing.T) {
+func Test_CM_AccCMNTP_DriftDetection(t *testing.T) {
 	RequireCM(t)
 	var hostVal string
 

@@ -12,13 +12,10 @@ import (
 // getParamsFromResponse – cckm_key_rotation_params hydration
 // ---------------------------------------------------------------------------
 
-// TestGetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse verifies the
-// primary bug fix: cckm_key_rotation_params must be populated by Read even when
-// plan.Operation starts as empty (e.g. partial import state). Previously the
-// function read plan.Operation before the API response was consulted, so any
-// empty/stale state value caused the switch to fall through, leaving the params
-// block unset.
-func TestGetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testing.T) {
+// Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse verifies
+// cckm_key_rotation_params is populated by Read even when plan.Operation
+// starts empty (e.g. partial import state).
+func Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testing.T) {
 	response := `{
 		"id":        "sched-1",
 		"uri":       "scheduler/sched-1",
@@ -79,10 +76,10 @@ func TestGetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testing.T
 	}
 }
 
-// TestGetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState confirms
+// Test_CM_GetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState confirms
 // that the fix is backward-compatible: when plan.Operation is already set
 // (the normal steady-state Read path) the params are still hydrated correctly.
-func TestGetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState(t *testing.T) {
+func Test_CM_GetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState(t *testing.T) {
 	response := `{
 		"id":        "sched-2",
 		"operation": "cckm_key_rotation",
@@ -115,9 +112,9 @@ func TestGetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState(t *testin
 	}
 }
 
-// TestGetParamsFromResponse_DatabaseBackup verifies that the database_backup
+// Test_CM_GetParamsFromResponse_DatabaseBackup verifies that the database_backup
 // case is unaffected by the operation-derivation change.
-func TestGetParamsFromResponse_DatabaseBackup(t *testing.T) {
+func Test_CM_GetParamsFromResponse_DatabaseBackup(t *testing.T) {
 	response := `{
 		"id":        "sched-3",
 		"operation": "database_backup",
@@ -155,9 +152,9 @@ func TestGetParamsFromResponse_DatabaseBackup(t *testing.T) {
 	}
 }
 
-// TestGetParamsFromResponse_CCKMXKSCredentialRotation ensures the
+// Test_CM_GetParamsFromResponse_CCKMXKSCredentialRotation ensures the
 // cckm_xks_credential_rotation case hydrates correctly.
-func TestGetParamsFromResponse_CCKMXKSCredentialRotation(t *testing.T) {
+func Test_CM_GetParamsFromResponse_CCKMXKSCredentialRotation(t *testing.T) {
 	response := `{
 		"id":        "sched-4",
 		"operation": "cckm_xks_credential_rotation",
@@ -183,10 +180,10 @@ func TestGetParamsFromResponse_CCKMXKSCredentialRotation(t *testing.T) {
 	}
 }
 
-// TestGetParamsFromResponse_NoOperationInResponse confirms that when the API
+// Test_CM_GetParamsFromResponse_NoOperationInResponse confirms that when the API
 // response omits the "operation" field (unusual but defensive), the existing
 // plan.Operation value is retained as-is and no panic occurs.
-func TestGetParamsFromResponse_NoOperationInResponse(t *testing.T) {
+func Test_CM_GetParamsFromResponse_NoOperationInResponse(t *testing.T) {
 	response := `{"id": "sched-5"}`
 
 	plan := &CreateJobConfigParamsTFSDK{}

@@ -6,15 +6,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestAccCipherTrust_Prometheus_ImmutableFields verifies ciphertrust_cm_prometheus behaviour:
-// - Step 1: resource is created with enabled=true.
-// - Step 2: changing enabled (the only user-configurable field) is accepted — it is mutable,
-//   so no immutability error is expected.
-//
-// Note: ciphertrust_cm_prometheus has only two attributes — token (Computed) and enabled
-// (Required). There are no non-'enabled' Required/Optional fields, so no ImmutableX()
-// modifiers apply to this resource. The test verifies the mutable field works correctly.
-func TestAccCipherTrust_Prometheus_ImmutableFields(t *testing.T) {
+// Test_CM_AccCipherTrust_Prometheus_ImmutableFields verifies ciphertrust_cm_prometheus is
+// created with enabled=true, and that changing enabled (the only user-configurable field)
+// is accepted since it is mutable and no ImmutableX() modifiers apply to this resource.
+func Test_CM_AccCipherTrust_Prometheus_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
