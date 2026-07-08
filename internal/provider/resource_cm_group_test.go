@@ -46,7 +46,7 @@ func TestAccCMGroup_nameImmutable(t *testing.T) {
 			// Renaming must be blocked at plan time with a clear error.
 			{
 				Config:      cmGroupConfig(testGroupName+"ImmutableRenamed", "Original", ""),
-				ExpectError: regexp.MustCompile(`Name cannot be changed`),
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 				PlanOnly:    true,
 			},
 		},
@@ -134,7 +134,7 @@ func cmGroupWithUsersConfig(groupName string, usernames []string, userIDsExpr st
 		b.WriteString(fmt.Sprintf(`
 resource "ciphertrust_user" "%s" {
   username = %q
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
 }
 `, sanitizeTFName(u), u))
 	}

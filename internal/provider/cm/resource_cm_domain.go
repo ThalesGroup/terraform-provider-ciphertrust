@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -54,21 +55,25 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"admins": schema.ListAttribute{
 				Required:    true,
-				Description: "List of administrators for the domain",
+				Description: "(Immutable) List of administrators for the domain",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "The name of the domain",
+				Description: "(Immutable) The name of the domain",
 				PlanModifiers: []planmodifier.String{
-					NameImmutableModifier{},
+					modifiers.ImmutableString(),
 				},
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "To allow user creation and management in the domain, set it to true. The default value is false.",
+				Description: "(Immutable) To allow user creation and management in the domain, set it to true. The default value is false.",
 				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -87,7 +92,10 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"parent_ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
+				Description: "(Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				Computed: true,

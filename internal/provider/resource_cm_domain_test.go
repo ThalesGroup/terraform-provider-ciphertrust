@@ -367,6 +367,89 @@ resource "ciphertrust_domain" "test" {
 	})
 }
 
+// TestAccCMDomain_ImmutableFields verifies that name, admins, and
+// allow_user_management are each blocked at plan time by the immutable modifier.
+func TestAccCMDomain_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-imm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, nil),
+				Check: checkStep(t, "ImmutableFields: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "name", rName),
+				),
+			},
+			// Rename attempt must be blocked at plan time.
+			{
+				Config:      domainConfig(rName+"-renamed", []string{"admin"}, false, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// Admins change must be blocked at plan time.
+			{
+				Config:      domainConfig(rName, []string{"admin", "admin2"}, false, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// allow_user_management change must be blocked at plan time.
+			{
+				Config:      domainConfig(rName, []string{"admin"}, true, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// TestAccCMDomain_ParentCAIdImmutable verifies that parent_ca_id is blocked at
+// plan time when a change is attempted after creation. Requires
+// CIPHERTRUST_TEST_PARENT_CA_ID to be set to a valid CA ID on the CM instance
+// (analogous to CIPHERTRUST_TEST_HSM_CONNECTION_ID for HSM tests).
+func TestAccCMDomain_ParentCAIdImmutable(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	parentCAID := getEnvOrSkip(t, "CIPHERTRUST_TEST_PARENT_CA_ID")
+	rName := "tf-domain-pca-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID),
+				Check: checkStep(t, "ParentCAIdImmutable: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "parent_ca_id", parentCAID),
+				),
+			},
+			// Changing parent_ca_id must be blocked at plan time.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID+"-changed"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
 // getEnvOrSkip returns the value of an env var, skipping the test if unset.
 func getEnvOrSkip(t *testing.T, key string) string {
 	t.Helper()

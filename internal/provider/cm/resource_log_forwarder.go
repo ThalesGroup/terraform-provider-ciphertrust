@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -57,14 +58,14 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"type": schema.StringAttribute{
 				Required:    true,
-				Description: "Type of the Log Forwarder",
+				Description: "(Immutable) Type of the log forwarder. Allowed values: elasticsearch, loki, syslog.",
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"elasticsearch",
 						"loki",
 						"syslog"}...),
 				},
 				PlanModifiers: []planmodifier.String{
-					StringImmutableModifier{FieldName: "type"},
+					modifiers.ImmutableString(),
 				},
 			},
 			"elasticsearch_params": schema.SingleNestedAttribute{
