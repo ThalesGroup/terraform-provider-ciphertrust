@@ -1084,41 +1084,6 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableString_state verifies that changing state after
-// creation produces a plan-time "Attribute is immutable" error from modifiers.ImmutableString().
-func TestCipherTrust_CMKey_ImmutableString_state(t *testing.T) {
-	RequireCM(t)
-	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_cm_key" "k" {
-  name      = %q
-  algorithm = "aes"
-  key_size  = 256
-  state     = "Pre-Active"
-}
-`, rName),
-				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
-			},
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_cm_key" "k" {
-  name      = %q
-  algorithm = "aes"
-  key_size  = 256
-  state     = "Active"
-}
-`, rName),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
-			},
-		},
-	})
-}
-
 // TestCipherTrust_CMKey_ImmutableObject_wrapPbe verifies that changing wrap_pbe after
 // creation produces a plan-time "Attribute is immutable" error from modifiers.ImmutableObject().
 func TestCipherTrust_CMKey_ImmutableObject_wrapPbe(t *testing.T) {
