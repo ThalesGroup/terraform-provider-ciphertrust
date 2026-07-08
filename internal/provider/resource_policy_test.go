@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -122,6 +123,47 @@ resource "ciphertrust_policies" "test" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCipherTrust_Policy_ImmutableName verifies that changing the name on a
+// ciphertrust_policies resource produces a plan-time error from ImmutableString.
+func TestAccCipherTrust_Policy_ImmutableName(t *testing.T) {
+	RequireCM(t)
+
+	initialConfig := providerConfig + `
+resource "ciphertrust_policies" "test" {
+  name    = "tf-acc-immut-name-policy"
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: initialConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "name", "tf-acc-immut-name-policy"),
+				),
+			},
+			// Changing name must produce an immutable error at plan time.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "test" {
+  name    = "tf-acc-immut-name-policy-changed"
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})

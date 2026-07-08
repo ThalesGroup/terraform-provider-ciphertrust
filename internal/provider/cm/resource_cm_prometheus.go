@@ -52,7 +52,8 @@ func (r *resourceCMPrometheus) Schema(_ context.Context, _ resource.SchemaReques
 				},
 			},
 			"enabled": schema.BoolAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Whether the Prometheus metrics endpoint is enabled on the CipherTrust Manager appliance.",
 			},
 		},
 	}
