@@ -29,7 +29,7 @@ provider "ciphertrust" {
 }
 
 # Data source for retrieving Signature Sets
-data "ciphertrust_cte_signarure_sets" "example" {
+data "ciphertrust_cte_signature_sets" "example" {
 }
 
 output "signature_sets" {

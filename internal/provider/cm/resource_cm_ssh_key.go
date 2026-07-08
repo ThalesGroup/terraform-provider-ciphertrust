@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -45,7 +46,11 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"key": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "(Immutable) SSH public key to add to the CipherTrust Manager appliance during initial bootstrap.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 		},
 	}
@@ -130,6 +135,12 @@ func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, r
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMSSHKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_cm_ssh_key is a bootstrap-only resource and does not support updates. The SSH key cannot be modified after initial creation.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

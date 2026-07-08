@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceCMProperty(t *testing.T) {
+func Test_CM_ResourceCMProperty(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -54,7 +54,7 @@ resource "ciphertrust_property" "property_1" {
 	})
 }
 
-func TestAccCipherTrustProperty_drift(t *testing.T) {
+func Test_CM_AccCipherTrustProperty_drift(t *testing.T) {
 	RequireCM(t)
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 
@@ -104,7 +104,7 @@ resource "ciphertrust_property" "test_drift" {
 	})
 }
 
-func TestAccCipherTrustProperty_basicApplyNoDrift(t *testing.T) {
+func Test_CM_AccCipherTrustProperty_basicApplyNoDrift(t *testing.T) {
 	RequireCM(t)
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 
@@ -133,7 +133,7 @@ resource "ciphertrust_property" "test_no_drift" {
 	})
 }
 
-func TestAccCipherTrustProperty_destroyOutOfBand(t *testing.T) {
+func Test_CM_AccCipherTrustProperty_destroyOutOfBand(t *testing.T) {
 	RequireCM(t)
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"
 

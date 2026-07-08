@@ -31,7 +31,7 @@ provider "ciphertrust" {
 # Data source for retrieving CTE DP set in client group details
 data "ciphertrust_cte_client_group_dp_set" "example" {
   # The name filter to specify for which CTE Group Designated Primary Set to retrieve (replace with actual client group name)
- client_group_ name = ""
+ client_group_name = ""
 }
 
 output "client_group_dp_set" {

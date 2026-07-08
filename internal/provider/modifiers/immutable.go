@@ -1,3 +1,9 @@
+// Package modifiers provides shared Terraform plan modifiers for the
+// CipherTrust provider. ImmutableString, ImmutableInt64, ImmutableBool,
+// ImmutableList, ImmutableMap, and ImmutableObject each enforce that a
+// given schema attribute cannot change after resource creation, emitting
+// a plan-time diagnostic error so no API call is made and no
+// destroy+recreate occurs.
 package modifiers
 
 import (
@@ -60,9 +66,17 @@ func (m immutableInt64Modifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
-	if req.StateValue.IsNull() {
+	// Allow creation (no prior state).
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
 		return
 	}
+	// Allow plan values that are null or unknown (e.g., Optional field removed from config
+	// with no default, or value not yet known). The framework will resolve these; do not
+	// block them here.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	// No change — allow.
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}
@@ -96,6 +110,13 @@ func (m immutableBoolModifier) MarkdownDescription(_ context.Context) string {
 
 func (m immutableBoolModifier) PlanModifyBool(_ context.Context, req planmodifier.BoolRequest, resp *planmodifier.BoolResponse) {
 	if req.StateValue.IsNull() {
+		return
+	}
+	// When an Optional+Computed bool is omitted from config, the framework sets
+	// the plan value to Unknown before UseStateForUnknown resolves it. Allow
+	// null/unknown plan values so that only an explicit user-supplied change fires
+	// the immutability error.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
@@ -163,7 +184,7 @@ func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
-	if req.StateValue.IsNull() || req.PlanValue.IsNull() {
+	if req.StateValue.IsNull() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
@@ -172,6 +193,43 @@ func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.
 	resp.Diagnostics.AddError(
 		"Attribute is immutable",
 		"This map attribute cannot be changed after creation. "+
+			"To change this attribute, destroy and recreate the resource.",
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// ImmutableObject returns an Object plan modifier that prevents in-place changes
+// to an object attribute after resource creation.
+func ImmutableObject() planmodifier.Object {
+	return immutableObjectModifier{}
+}
+
+type immutableObjectModifier struct{}
+
+func (m immutableObjectModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableObjectModifier) MarkdownDescription(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+// PlanModifyObject fires an error when a non-null state value is changed.
+// The IsUnknown() early-return prevents false errors when plan sub-attributes
+// are Unknown (e.g. populated by UseStateForUnknown() on nested attributes).
+func (m immutableObjectModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	if req.StateValue.IsNull() {
+		return
+	}
+	if req.PlanValue.IsUnknown() {
+		return
+	}
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"This object attribute cannot be changed after creation. "+
 			"To change this attribute, destroy and recreate the resource.",
 	)
 	resp.PlanValue = req.StateValue

@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustAzureConnectionDataSource(t *testing.T) {
+func Test_CM_CiphertrustAzureConnectionDataSource(t *testing.T) {
 	name := "test-azure-conn-" + uuid.New().String()[:8]
 
 	// On CDSPaaS the labels query-parameter format ("key=value" string) is not

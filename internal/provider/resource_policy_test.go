@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -11,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMPolicy(t *testing.T) {
+func Test_CM_ResourceCMPolicy(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -39,7 +40,7 @@ resource "ciphertrust_policies" "policy" {
 	})
 }
 
-func TestResourceCMPolicyEffectDefault(t *testing.T) {
+func Test_CM_ResourceCMPolicyEffectDefault(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -68,7 +69,7 @@ resource "ciphertrust_policies" "policy_no_effect" {
 	})
 }
 
-func TestAccCMPolicy_drift(t *testing.T) {
+func Test_CM_AccCMPolicy_drift(t *testing.T) {
 	RequireCM(t)
 	var policyID string
 
@@ -127,7 +128,48 @@ resource "ciphertrust_policies" "test" {
 	})
 }
 
-func TestAccCMPolicy_update(t *testing.T) {
+// Test_CM_AccCipherTrust_Policy_ImmutableName verifies that changing the name on a
+// ciphertrust_policies resource produces a plan-time error from ImmutableString.
+func Test_CM_AccCipherTrust_Policy_ImmutableName(t *testing.T) {
+	RequireCM(t)
+
+	initialConfig := providerConfig + `
+resource "ciphertrust_policies" "test" {
+  name    = "tf-acc-immut-name-policy"
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: initialConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "name", "tf-acc-immut-name-policy"),
+				),
+			},
+			// Changing name must produce an immutable error at plan time.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "test" {
+  name    = "tf-acc-immut-name-policy-changed"
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+func Test_CM_AccCMPolicy_update(t *testing.T) {
 	RequireCM(t)
 	var policyID string
 

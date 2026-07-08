@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestGCPConnectionDataSource(t *testing.T) {
+func Test_CM_GCPConnectionDataSource(t *testing.T) {
 	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
 	if gcpKeyFile == "" {
 		t.Skip("Failed to set GCP connection variables")

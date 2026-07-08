@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -38,7 +39,43 @@ provider "ciphertrust" {
 	return cfg
 }
 
-func TestCipherTrust_CMSSHKey_noopRead(t *testing.T) {
+// Test_CM_AccCipherTrust_CMSSHKey_ImmutableKey verifies that changing the key on a
+// ciphertrust_cm_ssh_key resource produces a plan-time error from ImmutableString.
+func Test_CM_AccCipherTrust_CMSSHKey_ImmutableKey(t *testing.T) {
+	RequireCM(t)
+	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
+	if sshKey == "" {
+		t.Skip("skipping TestAccCipherTrust_CMSSHKey_ImmutableKey: TEST_SSH_PUBLIC_KEY not set")
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, sshKey),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+				),
+			},
+			// Changing key must produce an immutable error at plan time.
+			{
+				Config: bootstrapProviderConfig() + `
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7differentkey test-key-2"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+func Test_CM_CipherTrust_CMSSHKey_noopRead(t *testing.T) {
 	RequireCM(t)
 	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
 	if sshKey == "" {

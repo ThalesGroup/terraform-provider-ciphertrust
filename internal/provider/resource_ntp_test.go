@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -10,12 +11,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMNTP(t *testing.T) {
+func Test_CM_ResourceCMNTP(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				PreConfig: func() { ntpSweep("time1.google.com") },
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "ntp_server_1" {
   host = "time1.google.com"
@@ -26,15 +28,14 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 				),
 			},
 			{
-				// Update test - this will trigger a replace (delete + create) due to RequiresReplace
+				// host is now immutable — changing it must produce an error at plan time.
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "ntp_server_1" {
   host = "time2.google.com"
 }
 `,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("ciphertrust_ntp.ntp_server_1", "host", "time2.google.com"),
-				),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -57,8 +58,8 @@ func ntpSweep(host string) {
 	)
 }
 
-// TestAccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
-func TestAccCMNTP_NoDrift(t *testing.T) {
+// Test_CM_AccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
+func Test_CM_AccCMNTP_NoDrift(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -84,8 +85,8 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestAccCMNTP_Delete404Guard verifies that Delete() succeeds when the resource was already deleted out-of-band.
-func TestAccCMNTP_Delete404Guard(t *testing.T) {
+// Test_CM_AccCMNTP_Delete404Guard verifies that Delete() succeeds when the resource was already deleted out-of-band.
+func Test_CM_AccCMNTP_Delete404Guard(t *testing.T) {
 	RequireCM(t)
 	var hostVal string
 
@@ -137,10 +138,74 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestAccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
+// Test_CM_AccCipherTrust_NTP_ImmutableFields verifies that changing any immutable field on
+// ciphertrust_ntp produces a plan-time error from the ImmutableString modifier.
+func Test_CM_AccCipherTrust_NTP_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+
+	initialConfig := providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time5.google.com"
+  key      = "testkey123"
+  key_type = "SHA-256"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time5.google.com") },
+				Config:    initialConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_ntp.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time5.google.com"),
+				),
+			},
+			// Changing host must produce an immutable error at plan time.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time.google.com"
+  key      = "testkey123"
+  key_type = "SHA-256"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// Changing key must produce an immutable error at plan time.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time5.google.com"
+  key      = "differentkey456"
+  key_type = "SHA-256"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// Changing key_type must produce an immutable error at plan time.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time5.google.com"
+  key      = "testkey123"
+  key_type = "MD5"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMNTP_DriftDetection verifies that an out-of-band deletion is detected as drift.
 // NOTE: This test performs an out-of-band deletion that disturbs the NTP daemon; it runs last
 // so that earlier tests are not affected by the daemon's recovery period.
-func TestAccCMNTP_DriftDetection(t *testing.T) {
+func Test_CM_AccCMNTP_DriftDetection(t *testing.T) {
 	RequireCM(t)
 	var hostVal string
 

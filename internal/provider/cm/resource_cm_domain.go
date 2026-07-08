@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -54,21 +55,25 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"admins": schema.ListAttribute{
 				Required:    true,
-				Description: "List of administrators for the domain",
+				Description: "(Immutable) List of administrators for the domain",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "The name of the domain",
+				Description: "(Immutable) The name of the domain",
 				PlanModifiers: []planmodifier.String{
-					NameImmutableModifier{},
+					modifiers.ImmutableString(),
 				},
 			},
 			"allow_user_management": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "To allow user creation and management in the domain, set it to true. The default value is false.",
+				Description: "(Immutable) To allow user creation and management in the domain, set it to true. The default value is false.",
 				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
 					boolplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -87,7 +92,10 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"parent_ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
+				Description: "(Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				Computed: true,
@@ -377,17 +385,10 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		hasChanges = true
 	}
 
-	// Check admins list
-	if len(plan.Admins) != len(state.Admins) {
-		hasChanges = true
-	} else {
-		for i := range plan.Admins {
-			if plan.Admins[i].ValueString() != state.Admins[i].ValueString() {
-				hasChanges = true
-				break
-			}
-		}
-	}
+	// admins, allow_user_management, name, and parent_ca_id are immutable —
+	// ImmutableList/ImmutableBool/ImmutableString modifiers block plan-time changes
+	// before Update() is ever called. Do not include them in hasChanges or the
+	// PATCH payload.
 
 	// allow_user_management is not updatable via PATCH; omit from hasChanges.
 
@@ -399,17 +400,8 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Build PATCH payload as a targeted map to avoid sending server-assigned
-	// computed fields (id, name, uri, account, etc.) as empty strings to CM,
-	// which can cause CM to reset user-controlled fields unexpectedly.
-	var adminsPayload []string
-	for _, a := range plan.Admins {
-		adminsPayload = append(adminsPayload, a.ValueString())
-	}
-
-	patchMap := map[string]interface{}{
-		"admins": adminsPayload,
-	}
+	// Build PATCH payload with only the mutable fields.
+	patchMap := map[string]interface{}{}
 	if !plan.HSMKEKLabel.IsNull() && !plan.HSMKEKLabel.IsUnknown() {
 		patchMap["hsm_kek_label"] = plan.HSMKEKLabel.ValueString()
 	}
@@ -449,7 +441,6 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Read back the domain to get all computed fields with current values
 	readResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update -> Read]["+id+"]")
