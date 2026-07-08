@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -151,6 +152,9 @@ func Test_CM_CckmSchedulersRotationDataSource(t *testing.T) {
 	})
 
 	t.Run("oci", func(t *testing.T) {
+		if os.Getenv("CCKM_OCI_CONN_TENANCY") == "" {
+			t.Skip("CCKM_OCI_CONN_TENANCY not set — skipping OCI scheduler rotation test")
+		}
 		createConfig := `
 			resource "ciphertrust_scheduler" "oci_rotation_scheduler" {
 				cckm_key_rotation_params = {

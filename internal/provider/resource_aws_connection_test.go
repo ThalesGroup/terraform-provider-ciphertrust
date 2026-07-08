@@ -498,16 +498,16 @@ func Test_CM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
 resource "ciphertrust_aws_connection" "test" {
   name             = %q
   is_role_anywhere = true
-  iam_role_anywhere {
+  iam_role_anywhere = {
     anywhere_role_arn = %q
     trust_anchor_arn  = %q
     profile_arn       = %q
     certificate       = %q
   }
 }
-`, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert)
+`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
 
-	altRoleARN := testIAMAnywhereRoleARN + "-changed"
+	altRoleARN := anywhereRoleARN + "-changed"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -756,7 +756,7 @@ func Test_CM_AWSConnection_createIAMAnywhere(t *testing.T) {
 resource "ciphertrust_aws_connection" "test" {
   name             = %q
   is_role_anywhere = true
-  iam_role_anywhere {
+  iam_role_anywhere = {
     anywhere_role_arn = %q
     trust_anchor_arn  = %q
     profile_arn       = %q
@@ -774,9 +774,9 @@ resource "ciphertrust_aws_connection" "test" {
 				Check: checkStep(t, "create IAM Anywhere connection",
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "is_role_anywhere", "true"),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.anywhere_role_arn", testIAMAnywhereRoleARN),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.trust_anchor_arn", testIAMAnywhereTrustAnchorARN),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.profile_arn", testIAMAnywhereProfileARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.anywhere_role_arn", testIAMAnywhereRoleARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.trust_anchor_arn", testIAMAnywhereTrustAnchorARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.profile_arn", testIAMAnywhereProfileARN),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "updated_at"),
