@@ -563,7 +563,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testGetAWSAccessKeyID(), testGetAWSSecretAccessKey())
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -601,7 +601,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert, testIAMAnywherePrivateKey)
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -645,6 +645,21 @@ resource "ciphertrust_aws_connection" "test" {
 	}
 	cfg += "}\n"
 	return cfg
+}
+
+// awsRoleAnywhereConfigBool returns a ciphertrust_aws_connection config with
+// is_role_anywhere set to isRoleAnywhere. When true, includes the iam_role_anywhere
+// block; when false, only sets is_role_anywhere = false (used to test ImmutableBool).
+func awsRoleAnywhereConfigBool(name string, isRoleAnywhere bool, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	if isRoleAnywhere {
+		return awsRoleAnywhereConfig(name, "", certificate, anywhereRoleARN, profileARN, trustAnchorARN)
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = false
+}
+`, name)
 }
 
 // TestCipherTrust_AWSConnectionRoleAnywhere verifies that Update() does not
