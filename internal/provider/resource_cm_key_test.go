@@ -27,7 +27,7 @@ resource "ciphertrust_cm_key" "test_key" {
 `, name, keySize)
 }
 
-func TestAccCMKey_undeletableDrift(t *testing.T) {
+func Test_CM_AccCMKey_undeletableDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -72,7 +72,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestAccCMKey_xtsDrift(t *testing.T) {
+func Test_CM_AccCMKey_xtsDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -117,7 +117,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestAccCMKey_aliasHydration(t *testing.T) {
+func Test_CM_AccCMKey_aliasHydration(t *testing.T) {
 	RequireCM(t)
 
 	suffix := uuid.New().String()[:8]
@@ -164,7 +164,7 @@ resource "ciphertrust_cm_key" "k" {
 	_ = capturedID
 }
 
-func TestAccCMKey_metaHydration(t *testing.T) {
+func Test_CM_AccCMKey_metaHydration(t *testing.T) {
 	RequireCM(t)
 
 	ownerID := os.Getenv("TEST_CM_KEY_OWNER_ID")
@@ -212,7 +212,7 @@ resource "ciphertrust_cm_key" "k" {
 	_ = capturedID
 }
 
-func TestAccCMKey_metaDrift(t *testing.T) {
+func Test_CM_AccCMKey_metaDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -269,7 +269,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestAccCMKey_labelsDrift(t *testing.T) {
+func Test_CM_AccCMKey_labelsDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -316,7 +316,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestAccCMKey_aliasDrift(t *testing.T) {
+func Test_CM_AccCMKey_aliasDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -371,9 +371,10 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestAccCMKey_aliasDeletion verifies that removing an alias from config causes the
-// PATCH to emit a delta-delete entry ({"index": N}) and the alias is removed from the server.
-func TestAccCMKey_aliasDeletion(t *testing.T) {
+// Test_CM_AccCMKey_aliasDeletion verifies that removing an alias from config
+// causes the PATCH to emit a delta-delete entry ({"index": N}) and the alias
+// is removed from the server.
+func Test_CM_AccCMKey_aliasDeletion(t *testing.T) {
 	RequireCM(t)
 
 	suffix := uuid.New().String()[:8]
@@ -432,9 +433,10 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestAccCMKey_undeletableExplicitFalse verifies that setting undeletable=false (after true)
-// actually sends the value to the API. Previously the boolean-false gate swallowed it.
-func TestAccCMKey_undeletableExplicitFalse(t *testing.T) {
+// Test_CM_AccCMKey_undeletableExplicitFalse verifies that setting
+// undeletable=false (after true) actually sends the value to the API.
+// Previously the boolean-false gate swallowed it.
+func Test_CM_AccCMKey_undeletableExplicitFalse(t *testing.T) {
 	RequireCM(t)
 
 	suffix := uuid.New().String()[:8]
@@ -481,13 +483,10 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestAccCMKey_rotationFrequencyDays covers the full rotation_frequency_days lifecycle:
-//  1. Create with a numeric rotation window → state stores that value.
-//  2. Update to a different window → change reaches the server.
-//  3. Drift: out-of-band PATCH changes the window → Read() detects the change.
-//  4. Disable rotation by setting "0" → server stores ""; state preserves "0"
-//     to avoid the perpetual diff caused by the API normalisation.
-func TestAccCMKey_rotationFrequencyDays(t *testing.T) {
+// Test_CM_AccCMKey_rotationFrequencyDays covers the rotation_frequency_days
+// lifecycle: create, update, out-of-band drift detection, and disabling via
+// "0" (which the server normalises to "" but state must preserve as "0").
+func Test_CM_AccCMKey_rotationFrequencyDays(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -575,16 +574,10 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestAccCMKey_templateId verifies that a key can be created from a template.
-// Set CIPHERTRUST_TEST_TEMPLATE_ID to the ID or name of an existing key template on the
-// target CM / CDSPaaS instance before running. The test is skipped when the variable is unset.
-//
-// CDSPaaS restricted-user flow: on CDSPaaS, Restricted Key Users must supply a
-// template_id and may only include owner_id in meta. To exercise that enforcement,
-// also set CDSPAAS=true, CIPHERTRUST_TENANT, and use a restricted-user credential pair
-// (CIPHERTRUST_USERNAME / CIPHERTRUST_PASSWORD). When run with admin credentials the
-// test still validates that template_id propagates to the API and the key is created.
-func TestAccCMKey_templateId(t *testing.T) {
+// Test_CM_AccCMKey_templateId verifies that a key can be created from a
+// template. Set CIPHERTRUST_TEST_TEMPLATE_ID to an existing key template's
+// ID/name; the test is skipped when unset.
+func Test_CM_AccCMKey_templateId(t *testing.T) {
 	RequireCM(t)
 
 	templateID := os.Getenv("CIPHERTRUST_TEST_TEMPLATE_ID")
@@ -630,11 +623,10 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestAccCMKey_import verifies that an existing key can be brought under Terraform
-// management with `terraform import`. The test creates a key out-of-band via the CM
-// client, then imports it into a Terraform config by ID, and finally confirms that
-// a subsequent plan produces no diff (state matches server).
-func TestAccCMKey_import(t *testing.T) {
+// Test_CM_AccCMKey_import verifies that an existing key can be brought under
+// Terraform management with `terraform import`, and that a subsequent plan
+// produces no diff (state matches server).
+func Test_CM_AccCMKey_import(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -698,11 +690,10 @@ resource "ciphertrust_cm_key" "imported" {
 	})
 }
 
-// TestAccCMKey_labelsEmptyMapDrift verifies that a key created without labels does not
-// develop perpetual drift when the server returns "labels": {} in the GET response.
-// Previously, Read() turned {} into an empty map in state, which differed from
-// the null value expected when no labels are configured.
-func TestAccCMKey_labelsEmptyMapDrift(t *testing.T) {
+// Test_CM_AccCMKey_labelsEmptyMapDrift verifies that a key created without
+// labels does not develop perpetual drift when the server returns "labels":
+// {} in the GET response (previously read as a non-null empty map).
+func Test_CM_AccCMKey_labelsEmptyMapDrift(t *testing.T) {
 	RequireCM(t)
 
 	suffix := uuid.New().String()[:8]
@@ -736,7 +727,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestAccCMKey_readNotFound(t *testing.T) {
+func Test_CM_AccCMKey_readNotFound(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -778,7 +769,7 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-func TestResourceCMKey(t *testing.T) {
+func Test_CM_ResourceCMKey(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	keyName := "terraform-" + suffix
 
@@ -823,9 +814,9 @@ resource "ciphertrust_cm_key" "cte_key" {
 	})
 }
 
-// TestCMKeyBasicCRUD creates an AES key, verifies it, then updates a mutable
+// Test_CM_CMKeyBasicCRUD creates an AES key, verifies it, then updates a mutable
 // field (description) and verifies the update was applied.
-func TestCMKeyBasicCRUD(t *testing.T) {
+func Test_CM_CMKeyBasicCRUD(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -856,10 +847,10 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCMKeyNameImmutable verifies that attempting to rename a key after creation
+// Test_CM_CMKeyNameImmutable verifies that attempting to rename a key after creation
 // produces a clear, actionable plan-time error rather than silent state drift
 // (where Terraform state updates but CM retains the original name).
-func TestCMKeyNameImmutable(t *testing.T) {
+func Test_CM_CMKeyNameImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -877,9 +868,9 @@ func TestCMKeyNameImmutable(t *testing.T) {
 	})
 }
 
-// TestCMKeyAlgorithmImmutable verifies that attempting to change the 'algorithm'
+// Test_CM_CMKeyAlgorithmImmutable verifies that attempting to change the 'algorithm'
 // field after creation produces a clear, actionable plan-time error.
-func TestCMKeyAlgorithmImmutable(t *testing.T) {
+func Test_CM_CMKeyAlgorithmImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -905,9 +896,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCMKeyKeySizeImmutable verifies that changing 'key_size' after creation
+// Test_CM_CMKeyKeySizeImmutable verifies that changing 'key_size' after creation
 // produces a clear plan-time error.
-func TestCMKeyKeySizeImmutable(t *testing.T) {
+func Test_CM_CMKeyKeySizeImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -931,9 +922,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCMKeyObjectTypeImmutable verifies that changing 'object_type' after
+// Test_CM_CMKeyObjectTypeImmutable verifies that changing 'object_type' after
 // creation produces a clear plan-time error.
-func TestCMKeyObjectTypeImmutable(t *testing.T) {
+func Test_CM_CMKeyObjectTypeImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -965,9 +956,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCMKeyCurveidImmutable verifies that changing 'curveid' after creation
+// Test_CM_CMKeyCurveidImmutable verifies that changing 'curveid' after creation
 // produces a clear plan-time error.
-func TestCMKeyCurveidImmutable(t *testing.T) {
+func Test_CM_CMKeyCurveidImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -997,10 +988,10 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCMKeyOutOfBandDeletion verifies that when a key is deleted directly on
+// Test_CM_CMKeyOutOfBandDeletion verifies that when a key is deleted directly on
 // CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
 // from state gracefully instead of returning a hard error.
-func TestCMKeyOutOfBandDeletion(t *testing.T) {
+func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 
 	client, ok := createCMClient()
@@ -1049,9 +1040,9 @@ func TestCMKeyOutOfBandDeletion(t *testing.T) {
 	})
 }
 
-// TestCMKeyMaterialImmutable verifies that changing 'material' (key material)
+// Test_CM_CMKeyMaterialImmutable verifies that changing 'material' (key material)
 // after creation produces a clear plan-time error.
-func TestCMKeyMaterialImmutable(t *testing.T) {
+func Test_CM_CMKeyMaterialImmutable(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

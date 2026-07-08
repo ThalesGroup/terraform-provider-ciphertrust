@@ -38,10 +38,10 @@ func scpResponse(fields map[string]string, port int64) string {
 	)
 }
 
-// TestGetScpParamsFromResponse_PlainDrift verifies that getParamsFromResponse
+// Test_CM_GetScpParamsFromResponse_PlainDrift verifies that getParamsFromResponse
 // correctly refreshes plain attributes from the CM API response so that attribute
 // drift (e.g. description or protocol changed in CM UI) is visible to Terraform.
-func TestGetScpParamsFromResponse_PlainDrift(t *testing.T) {
+func Test_CM_GetScpParamsFromResponse_PlainDrift(t *testing.T) {
 	t.Run("all plain fields are populated from the response", func(t *testing.T) {
 		response := `{
 			"id":"scp-id","name":"my-scp-conn",
@@ -132,10 +132,10 @@ func TestGetScpParamsFromResponse_PlainDrift(t *testing.T) {
 	})
 }
 
-// TestSCPRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
+// Test_CM_SCPRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
 // by doRequest for a 404 response (format "status: 404, body: ...") matches the
 // sentinel checked in resourceCMScpConnection.Read so that OOB deletes are caught.
-func TestSCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
+func Test_CM_SCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 	simulatedErr := fmt.Errorf("status: 404, body: {\"error\":\"not found\"}")
 
 	if !strings.Contains(simulatedErr.Error(), "status: 404") {

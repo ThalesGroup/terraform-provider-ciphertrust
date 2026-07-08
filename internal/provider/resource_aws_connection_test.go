@@ -2,20 +2,126 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// testGetAWSAccessKeyID returns the AWS access key ID for create tests.
-// Reads from TEST_AWS_ACCESS_KEY_ID; falls back to a clearly-fake placeholder
-// that does not match GitHub's AKIA secret-scanning pattern.
+// Test_CM_ApplyNullDeletes verifies that ApplyNullDeletes injects nil for keys
+// present in prior state but removed from plan, so they marshal as JSON null
+// and trigger CM's merge-patch delete semantics.
+func Test_CM_ApplyNullDeletes(t *testing.T) {
+	mkElems := func(kv map[string]string) map[string]attr.Value {
+		out := make(map[string]attr.Value, len(kv))
+		for k, v := range kv {
+			out[k] = types.StringValue(v)
+		}
+		return out
+	}
+
+	tests := []struct {
+		name        string
+		payload     map[string]interface{}
+		stateElems  map[string]attr.Value
+		wantNilKeys []string
+		wantNonNil  []string
+	}{
+		{
+			name:        "removed key gets explicit nil",
+			payload:     map[string]interface{}{"key2": "v2"},
+			stateElems:  mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNilKeys: []string{"key1"},
+			wantNonNil:  []string{"key2"},
+		},
+		{
+			name:        "all keys removed — empty plan flushes entire map via nulls",
+			payload:     map[string]interface{}{},
+			stateElems:  mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNilKeys: []string{"key1", "key2"},
+		},
+		{
+			name:       "no change — no nulls injected",
+			payload:    map[string]interface{}{"key1": "v1", "key2": "v2"},
+			stateElems: mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNonNil: []string{"key1", "key2"},
+		},
+		{
+			name:       "new key added — no null injection",
+			payload:    map[string]interface{}{"key1": "v1", "key2": "v2", "key3": "v3"},
+			stateElems: mkElems(map[string]string{"key1": "v1", "key2": "v2"}),
+			wantNonNil: []string{"key1", "key2", "key3"},
+		},
+		{
+			name:       "empty state — nothing to delete",
+			payload:    map[string]interface{}{"key1": "v1"},
+			stateElems: map[string]attr.Value{},
+			wantNonNil: []string{"key1"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			connections.ApplyNullDeletes(tc.payload, tc.stateElems)
+			for _, k := range tc.wantNilKeys {
+				v, ok := tc.payload[k]
+				if !ok {
+					t.Errorf("key %q: expected present with nil value, but absent", k)
+					continue
+				}
+				if v != nil {
+					t.Errorf("key %q: expected nil, got %v", k, v)
+				}
+			}
+			for _, k := range tc.wantNonNil {
+				v, ok := tc.payload[k]
+				if !ok {
+					t.Errorf("key %q: expected present with non-nil value, but absent", k)
+					continue
+				}
+				if v == nil {
+					t.Errorf("key %q: expected non-nil value, got nil", k)
+				}
+			}
+		})
+	}
+}
+
+// Test_CM_ApplyNullDeletes_JSONMarshaling verifies that nil values injected by
+// ApplyNullDeletes marshal to JSON null — the delete signal for CM's PATCH endpoint.
+func Test_CM_ApplyNullDeletes_JSONMarshaling(t *testing.T) {
+	payload := map[string]interface{}{"key2": "v2"}
+	stateElems := map[string]attr.Value{
+		"key1": types.StringValue("v1"),
+		"key2": types.StringValue("v2"),
+	}
+	connections.ApplyNullDeletes(payload, stateElems)
+
+	body := map[string]interface{}{"meta": payload}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	jsonStr := string(raw)
+	if !strings.Contains(jsonStr, `"key1":null`) {
+		t.Errorf("expected JSON to contain %q for removed key, got: %s", `"key1":null`, jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"key2":"v2"`) {
+		t.Errorf("expected JSON to contain %q for retained key, got: %s", `"key2":"v2"`, jsonStr)
+	}
+}
+
+// testGetAWSAccessKeyID returns a fake AWS access key ID for unit tests.
 func testGetAWSAccessKeyID() string {
 	if v := os.Getenv("TEST_AWS_ACCESS_KEY_ID"); v != "" {
 		return v
@@ -23,8 +129,7 @@ func testGetAWSAccessKeyID() string {
 	return "TESTACCESSKEYIDEXAMPLE"
 }
 
-// testGetAWSSecretAccessKey returns the AWS secret access key for create tests.
-// Reads from TEST_AWS_SECRET_ACCESS_KEY; falls back to a clearly-fake placeholder.
+// testGetAWSSecretAccessKey returns a fake AWS secret access key for unit tests.
 func testGetAWSSecretAccessKey() string {
 	if v := os.Getenv("TEST_AWS_SECRET_ACCESS_KEY"); v != "" {
 		return v
@@ -33,7 +138,6 @@ func testGetAWSSecretAccessKey() string {
 }
 
 const (
-
 	testIAMAnywhereCert = `-----BEGIN CERTIFICATE-----
 MIIFTzCCAzegAwIBAgIQZTREZhuT71nFpVShuW0pVTANBgkqhkiG9w0BAQsFADBa
 MQswCQYDVQQGEwJVUzELMAkGA1UECBMCVFgxDzANBgNVBAcTBkF1c3RpbjEPMA0G
@@ -100,8 +204,7 @@ jmooZyN/CR2iiFtUE5Yv9Y2kd586YaHEVQ9vBLUs0Fee5NtZPWgiBp5jTvpaBYlc
 )
 
 // awsAccessKeyID returns the AWS access key ID for acceptance tests.
-// Reads from the environment variable; falls back to the well-known placeholder
-// value from AWS documentation when the env var is not set.
+// Falls back to a well-known placeholder when the env var is not set.
 func awsAccessKeyID() string {
 	if v := os.Getenv("AWS_ACCESS_KEY_ID"); v != "" {
 		return v
@@ -109,8 +212,16 @@ func awsAccessKeyID() string {
 	return "AKIAIOSFODNN7EXAMPLE"
 }
 
-// awsConnConfig returns a minimal ciphertrust_aws_connection config.
-// secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
+// requireAWSIAMCredentials skips the test when AWS IAM credentials are absent.
+func requireAWSIAMCredentials(t *testing.T) {
+	t.Helper()
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		t.Skip("skipping: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
+	}
+}
+
+// awsConnConfig returns a minimal ciphertrust_aws_connection HCL config.
+// secret_access_key is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
 func awsConnConfig(name, description string) string {
 	cfg := fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
@@ -127,10 +238,10 @@ resource "ciphertrust_aws_connection" "test" {
 func awsConnConfigWithScalars(name, region, cloudName string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
-  name              = %q
-  access_key_id     = %q
-  aws_region        = %q
-  cloud_name        = %q
+  name          = %q
+  access_key_id = %q
+  aws_region    = %q
+  cloud_name    = %q
 }
 `, name, awsAccessKeyID(), region, cloudName)
 }
@@ -138,13 +249,101 @@ resource "ciphertrust_aws_connection" "test" {
 func awsConnConfigWithMapList(name string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_aws_connection" "test" {
-  name              = %q
-  access_key_id     = %q
-  labels            = { env = "test" }
-  meta              = { owner = "qa" }
-  products          = ["cckm"]
+  name          = %q
+  access_key_id = %q
+  labels        = { env = "test" }
+  meta          = { owner = "qa" }
+  products      = ["cckm"]
 }
 `, name, awsAccessKeyID())
+}
+
+// awsConnConfigWithTwoMetaKeys returns HCL with meta keys key1 and key2.
+func awsConnConfigWithTwoMetaKeys(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+  meta          = { key1 = "v1", key2 = "v2" }
+}
+`, name, awsAccessKeyID())
+}
+
+// awsConnConfigWithOneMetaKey returns HCL with only meta key2 (key1 removed).
+func awsConnConfigWithOneMetaKey(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+  meta          = { key2 = "v2" }
+}
+`, name, awsAccessKeyID())
+}
+
+// awsConnConfigNoCredentials omits credentials from HCL; relies on env-var fallback.
+func awsConnConfigNoCredentials(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name = %q
+}
+`, name)
+}
+
+// awsConnConfigInvalidProduct returns HCL with an invalid products value.
+func awsConnConfigInvalidProduct(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name     = %q
+  products = ["azure"]
+}
+`, name)
+}
+
+// awsConnConfigWithProducts returns HCL with the given products literal.
+func awsConnConfigWithProducts(name, productsLiteral string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+  products      = %s
+}
+`, name, awsAccessKeyID(), productsLiteral)
+}
+
+// awsRoleAnywhereConfig returns an is_role_anywhere=true HCL config.
+func awsRoleAnywhereConfig(name, description, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = true
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+  }
+`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
+	if description != "" {
+		cfg += fmt.Sprintf("  description = %q\n", description)
+	}
+	cfg += "}\n"
+	return cfg
+}
+
+// awsRoleAnywhereConfigBool returns an is_role_anywhere HCL config with explicit bool value.
+func awsRoleAnywhereConfigBool(name string, isRoleAnywhere bool, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = %v
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+  }
+}
+`, name, isRoleAnywhere, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
 }
 
 // deleteAWSConnection deletes an AWS connection by ID from CM, ignoring errors.
@@ -162,9 +361,9 @@ func deleteAWSConnection(id string) {
 	)
 }
 
-// TestCM_AWSConnection_drift verifies that Read() surfaces an out-of-band
-// description change as drift.
-func TestCM_AWSConnection_drift(t *testing.T) {
+// Test_CM_AWSConnection_drift verifies that Read() surfaces an out-of-band
+// description change as a non-empty plan.
+func Test_CM_AWSConnection_drift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-drift-" + suffix
 	var capturedID string
@@ -185,20 +384,14 @@ func TestCM_AWSConnection_drift(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band description change; next plan should detect drift.
+				// Out-of-band description change; next plan must detect drift.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						return
 					}
-					patchPayload := []byte(`{"description":"out-of-band-changed"}`)
-					_, _ = client.UpdateData(
-						context.Background(),
-						capturedID,
-						common.URL_AWS_CONNECTION,
-						patchPayload,
-						"id",
-					)
+					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_AWS_CONNECTION,
+						[]byte(`{"description":"out-of-band-changed"}`), "id")
 				},
 				Config:             awsConnConfig(name, "initial"),
 				PlanOnly:           true,
@@ -208,9 +401,9 @@ func TestCM_AWSConnection_drift(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_driftScalars verifies drift detection for Optional scalar
-// fields: aws_region and cloud_name.
-func TestCM_AWSConnection_driftScalars(t *testing.T) {
+// Test_CM_AWSConnection_driftScalars verifies drift detection for aws_region
+// and cloud_name Optional scalar fields.
+func Test_CM_AWSConnection_driftScalars(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-scalar-" + suffix
 	var capturedID string
@@ -234,20 +427,14 @@ func TestCM_AWSConnection_driftScalars(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band change to aws_region; next plan should detect drift.
+				// Out-of-band change to aws_region; next plan must detect drift.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						return
 					}
-					patchPayload := []byte(`{"aws_region":"us-west-2"}`)
-					_, _ = client.UpdateData(
-						context.Background(),
-						capturedID,
-						common.URL_AWS_CONNECTION,
-						patchPayload,
-						"id",
-					)
+					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_AWS_CONNECTION,
+						[]byte(`{"aws_region":"us-west-2"}`), "id")
 				},
 				Config:             cfg,
 				PlanOnly:           true,
@@ -257,9 +444,9 @@ func TestCM_AWSConnection_driftScalars(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_driftMapAndList verifies drift detection for labels, meta,
-// and products.
-func TestCM_AWSConnection_driftMapAndList(t *testing.T) {
+// Test_CM_AWSConnection_driftMapAndList verifies drift detection for labels,
+// meta, and products.
+func Test_CM_AWSConnection_driftMapAndList(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-maplist-" + suffix
 	var capturedID string
@@ -283,20 +470,14 @@ func TestCM_AWSConnection_driftMapAndList(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band change to labels; next plan should detect drift.
+				// Out-of-band label change; next plan must detect drift.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						return
 					}
-					patchPayload := []byte(`{"labels":{"env":"changed"}}`)
-					_, _ = client.UpdateData(
-						context.Background(),
-						capturedID,
-						common.URL_AWS_CONNECTION,
-						patchPayload,
-						"id",
-					)
+					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_AWS_CONNECTION,
+						[]byte(`{"labels":{"env":"changed"}}`), "id")
 				},
 				Config:             cfg,
 				PlanOnly:           true,
@@ -306,25 +487,9 @@ func TestCM_AWSConnection_driftMapAndList(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_driftIAMRoleAnywhere verifies drift detection for
+// Test_CM_AWSConnection_driftIAMRoleAnywhere verifies drift detection for
 // iam_role_anywhere readable sub-fields.
-func TestCM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
-	RequireCM(t)
-
-	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
-	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
-	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
-	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
-	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
-		t.Skip("skipping TestCM_AWSConnection_driftIAMRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
-	}
-
-	// IAM Anywhere connections must NOT carry access_key_id/secret_access_key.
-	// Clear the env-var fallback so Create() does not inject them from the
-	// environment, which would cause CM to reject the request with 400.
-	t.Setenv("AWS_ACCESS_KEY_ID", "")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
-
+func Test_CM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-iam-" + suffix
 	var capturedID string
@@ -359,20 +524,14 @@ resource "ciphertrust_aws_connection" "test" {
 				),
 			},
 			{
-				// Out-of-band change to anywhere_role_arn; next plan should detect drift.
+				// Out-of-band change to anywhere_role_arn; next plan must detect drift.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
 						return
 					}
-					patchPayload := []byte(fmt.Sprintf(`{"iam_role_anywhere":{"anywhere_role_arn":%q}}`, altRoleARN))
-					_, _ = client.UpdateData(
-						context.Background(),
-						capturedID,
-						common.URL_AWS_CONNECTION,
-						patchPayload,
-						"id",
-					)
+					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_AWS_CONNECTION,
+						[]byte(fmt.Sprintf(`{"iam_role_anywhere":{"anywhere_role_arn":%q}}`, altRoleARN)), "id")
 				},
 				Config:             cfg,
 				PlanOnly:           true,
@@ -382,9 +541,9 @@ resource "ciphertrust_aws_connection" "test" {
 	})
 }
 
-// TestCM_AWSConnection_outOfBandDelete verifies that Read() removes the resource
-// from state on 404, and that Delete() 404-guards the test teardown.
-func TestCM_AWSConnection_outOfBandDelete(t *testing.T) {
+// Test_CM_AWSConnection_outOfBandDelete verifies that Read() removes the resource
+// from state on 404.
+func Test_CM_AWSConnection_outOfBandDelete(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-oob-del-" + suffix
 	var capturedID string
@@ -403,7 +562,7 @@ func TestCM_AWSConnection_outOfBandDelete(t *testing.T) {
 				),
 			},
 			{
-				// Delete the connection out-of-band; Read() must detect the 404 and mark for re-creation.
+				// Delete out-of-band; Read() must detect 404 and mark for re-creation.
 				PreConfig:          func() { deleteAWSConnection(capturedID) },
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -412,9 +571,9 @@ func TestCM_AWSConnection_outOfBandDelete(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_immutableName verifies that changing `name` raises a
-// plan-time error from NameImmutableModifier, not a destroy+recreate diff.
-func TestCM_AWSConnection_immutableName(t *testing.T) {
+// Test_CM_AWSConnection_immutableName verifies that changing name raises a
+// plan-time error rather than a destroy+recreate.
+func Test_CM_AWSConnection_immutableName(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	original := "tf-acc-aws-orig-" + suffix
 	changed := "tf-acc-aws-chgd-" + suffix
@@ -437,21 +596,9 @@ func TestCM_AWSConnection_immutableName(t *testing.T) {
 	})
 }
 
-// awsConnConfigNoCredentials returns a ciphertrust_aws_connection config that
-// deliberately omits access_key_id and secret_access_key from HCL, relying on
-// the backwards-compatibility env-var fallback in Create().
-func awsConnConfigNoCredentials(name string) string {
-	return providerConfig + fmt.Sprintf(`
-resource "ciphertrust_aws_connection" "test" {
-  name = %q
-}
-`, name)
-}
-
-// TestCM_AWSConnection_envVarFallbackWritesToState verifies that omitting credentials from HCL
-// and supplying them via AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY writes them to state,
-// keeping subsequent plans idempotent.
-func TestCM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
+// Test_CM_AWSConnection_envVarFallbackWritesToState verifies that omitting
+// credentials from HCL and supplying via env vars keeps plans idempotent.
+func Test_CM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
 		t.Setenv("AWS_ACCESS_KEY_ID", testGetAWSAccessKeyID())
 	}
@@ -482,32 +629,9 @@ func TestCM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
 	})
 }
 
-// awsConnConfigInvalidProduct returns HCL for an AWS connection with an invalid products value.
-func awsConnConfigInvalidProduct(name string) string {
-	return providerConfig + fmt.Sprintf(`
-resource "ciphertrust_aws_connection" "test" {
-  name     = %q
-  products = ["azure"]
-}
-`, name)
-}
-
-// awsConnConfigWithProducts returns HCL for an AWS connection with the given products literal.
-// secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
-func awsConnConfigWithProducts(name, productsLiteral string) string {
-	return providerConfig + fmt.Sprintf(`
-resource "ciphertrust_aws_connection" "test" {
-  name              = %q
-  access_key_id     = %q
-  products          = %s
-}
-`, name, awsAccessKeyID(), productsLiteral)
-}
-
-// TestCM_AWSConnection_InvalidProductRejected verifies that terraform plan produces
-// a diagnostic error when products contains an invalid value, preventing the user
-// from reaching terraform apply.
-func TestCM_AWSConnection_InvalidProductRejected(t *testing.T) {
+// Test_CM_AWSConnection_InvalidProductRejected verifies that plan raises a
+// diagnostic error when products contains an invalid value.
+func Test_CM_AWSConnection_InvalidProductRejected(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -520,10 +644,9 @@ func TestCM_AWSConnection_InvalidProductRejected(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_ValidProducts verifies the full happy path through the new
-// validator: valid product values are accepted at plan time, applied successfully,
-// updated to a multi-value list, and Read() round-trips products without drift.
-func TestCM_AWSConnection_ValidProducts(t *testing.T) {
+// Test_CM_AWSConnection_ValidProducts verifies create, update, and Read()
+// round-trip for the products list attribute.
+func Test_CM_AWSConnection_ValidProducts(t *testing.T) {
 	resourceName := "ciphertrust_aws_connection.test"
 	suffix := uuid.New().String()[:8]
 	connName := "tftest-valid-products-" + suffix
@@ -554,9 +677,45 @@ func TestCM_AWSConnection_ValidProducts(t *testing.T) {
 	})
 }
 
-// TestCM_AWSConnection_createSecretKey verifies the basic create → read → delete
-// lifecycle for an AWS connection that uses an access key ID and secret access key.
-func TestCM_AWSConnection_createSecretKey(t *testing.T) {
+// Test_CM_AWSConnection_metaKeyRemovalIdempotent is a regression test verifying
+// that removing a meta key from config actually deletes it from CM and that
+// subsequent plans are empty (idempotent).
+func Test_CM_AWSConnection_metaKeyRemovalIdempotent(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-acc-aws-meta-del-" + suffix
+	resourceName := "ciphertrust_aws_connection.test"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnConfigWithTwoMetaKeys(name),
+				Check: checkStep(t, "meta key removal: create with two keys",
+					resource.TestCheckResourceAttr(resourceName, "meta.key1", "v1"),
+					resource.TestCheckResourceAttr(resourceName, "meta.key2", "v2"),
+				),
+			},
+			{
+				// Remove key1; after apply it must be absent from state.
+				Config: awsConnConfigWithOneMetaKey(name),
+				Check: checkStep(t, "meta key removal: after removing key1",
+					resource.TestCheckNoResourceAttr(resourceName, "meta.key1"),
+					resource.TestCheckResourceAttr(resourceName, "meta.key2", "v2"),
+				),
+			},
+			{
+				// Subsequent plan must be empty (removal was idempotent).
+				Config:   awsConnConfigWithOneMetaKey(name),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AWSConnection_createSecretKey verifies the create lifecycle for an
+// AWS connection using an access key ID and secret access key.
+func Test_CM_AWSConnection_createSecretKey(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-aws-secretkey-" + suffix
 	resourceName := "ciphertrust_aws_connection.test"
@@ -586,15 +745,9 @@ resource "ciphertrust_aws_connection" "test" {
 	})
 }
 
-// TestCM_AWSConnection_createIAMAnywhere verifies the basic create → read → delete
-// lifecycle for an AWS connection that uses IAM Roles Anywhere (is_role_anywhere = true).
-func TestCM_AWSConnection_createIAMAnywhere(t *testing.T) {
-	// IAM Anywhere connections must NOT carry access_key_id/secret_access_key.
-	// Clear the env-var fallback so Create() does not inject them from the
-	// environment, which would cause CM to reject the request with 400.
-	t.Setenv("AWS_ACCESS_KEY_ID", "")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
-
+// Test_CM_AWSConnection_createIAMAnywhere verifies the create lifecycle for an
+// AWS connection using IAM Roles Anywhere (is_role_anywhere = true).
+func Test_CM_AWSConnection_createIAMAnywhere(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-aws-iamanywhere-" + suffix
 	resourceName := "ciphertrust_aws_connection.test"
@@ -633,36 +786,9 @@ resource "ciphertrust_aws_connection" "test" {
 	})
 }
 
-// awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
-// is_role_anywhere = true and an iam_role_anywhere block. private_key is
-// intentionally omitted from HCL.
-// awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
-// is_role_anywhere = true and an iam_role_anywhere block. private_key is
-// intentionally omitted from HCL — it is supplied via the
-// CIPHERTRUST_AWS_PRIVATE_KEY environment variable fallback in Create().
-func awsRoleAnywhereConfig(name, description, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
-	cfg := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_aws_connection" "test" {
-  name             = %q
-  is_role_anywhere = true
-  iam_role_anywhere = {
-    anywhere_role_arn = %q
-    trust_anchor_arn  = %q
-    profile_arn       = %q
-    certificate       = %q
-  }
-`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
-	if description != "" {
-		cfg += fmt.Sprintf("  description = %q\n", description)
-	}
-	cfg += "}\n"
-	return cfg
-}
-
-// TestCipherTrust_AWSConnectionRoleAnywhere verifies that Update() does not
-// re-send the iam_role_anywhere block when only an unrelated field (description)
-// changes, preventing the "Certificate from same CSR" 400 from CM.
-func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
+// Test_CM_AWSConnectionRoleAnywhere verifies that Update() does not re-send the
+// iam_role_anywhere block when only an unrelated field (description) changes.
+func Test_CM_AWSConnectionRoleAnywhere(t *testing.T) {
 	RequireCM(t)
 
 	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
@@ -670,7 +796,7 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
 	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
 	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
-		t.Skip("skipping TestCipherTrust_AWSConnectionRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
+		t.Skip("skipping: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
 	}
 
 	suffix := uuid.New().String()[:8]
@@ -701,14 +827,19 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
+			{
+				// Attempt to flip is_role_anywhere to false; must raise a plan-time error.
+				Config:      awsRoleAnywhereConfigBool(name, false, certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
 		},
 	})
 }
 
-// TestCM_AWSConnection_updateComputedFields verifies that Computed fields are
-// refreshed from CM in state after an in-Terraform update, and that Update()
-// does not corrupt the resource ID.
-func TestCM_AWSConnection_updateComputedFields(t *testing.T) {
+// Test_CM_AWSConnection_updateComputedFields verifies that Computed fields are
+// refreshed after an update and that Update() does not corrupt the resource ID.
+func Test_CM_AWSConnection_updateComputedFields(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-upd-" + suffix
 	var capturedID string

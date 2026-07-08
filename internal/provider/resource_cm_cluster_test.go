@@ -168,22 +168,10 @@ func cfg3Node(n1Host, n1Public string, n2, n3 clusterNode, username string) stri
 		cfgNodeBlock("node3", n3.host, n3.public, n1Host, n3.addr, username, n3.password)
 }
 
-// TestResourceCMCluster runs the full cluster lifecycle as one sequential test.
-// Each step is a single framework apply; checks run against state set by
-// Create/Update, which already polls until the cluster is stable (status="r").
-// Explicit RefreshState steps are omitted: the framework's pre-plan refresh
-// calls Read on all existing resources before every apply, so existing resource
-// state is already current when checks run against Create-set values.
-//
-//  1. Create 1-node cluster                          → count = 1
-//  2. Add node2                                      → count = 2
-//  3. Add node3                                      → count = 3
-//  4. Remove node3                                   → count = 2
-//  5. Swap node2 → node3 (add + remove in one apply) → count = 2
-//  6. Update public_address of node3 (IP → DNS)      → count = 2
-//  7. Re-add node2 (3-node state)                    → count = 3
-//  8. Destroy full 3-node cluster
-func TestResourceCMCluster(t *testing.T) {
+// Test_CM_ResourceCMCluster runs the full cluster lifecycle as one sequential test:
+// create a 1-node cluster, add/remove/swap nodes up to 3, update a node's
+// public_address, then destroy the full cluster.
+func Test_CM_ResourceCMCluster(t *testing.T) {
 	t.Skip("skipping cluster test")
 	n1Host, n1Public := node1Coords(t)
 	n2 := node2Coords(t)
@@ -321,13 +309,10 @@ resource "ciphertrust_cluster" "primary" {
 `, n1Host)
 }
 
-// TestCipherTrust_CMCluster_DriftDetection verifies that:
-//   - Computed fields (node_id, node_count, status_code, status_description, raft_status) are
-//     populated after apply and do not cause perpetual diffs.
-//   - local_node_host is immutable (ImmutableString() fires at plan time).
-//   - local_node_port is immutable (ImmutableInt64() fires at plan time).
-//   - node_count OOB drift is surfaced by Read() when CM_SECOND_NODE_HOST is set.
-func TestCipherTrust_CMCluster_DriftDetection(t *testing.T) {
+// Test_CM_CipherTrust_CMCluster_DriftDetection verifies computed fields populate without
+// perpetual diffs, local_node_host/local_node_port are immutable at plan time, and
+// node_count OOB drift is surfaced by Read() when CM_SECOND_NODE_HOST is set.
+func Test_CM_CipherTrust_CMCluster_DriftDetection(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("CLUSTER_ENABLED") != "1" {
 		t.Skip("CLUSTER_ENABLED not set to 1; skipping cluster drift detection test — requires a cluster-capable CM instance")

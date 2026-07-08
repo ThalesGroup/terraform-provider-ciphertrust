@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMPrometheus(t *testing.T) {
+func Test_CM_ResourceCMPrometheus(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -44,12 +44,10 @@ resource "ciphertrust_cm_prometheus" "cm_prometheus" {
 	})
 }
 
-// TestCipherTrust_CMPrometheus_TokenSensitive verifies:
-//   - token is stored in state after create (enabled).
-//   - token is Sensitive (UseStateForUnknown prevents perpetual (known after apply)).
-//   - token is preserved in state when Prometheus is disabled (Update() three-branch logic).
-//   - token is refreshed when Prometheus is re-enabled.
-func TestCipherTrust_CMPrometheus_TokenSensitive(t *testing.T) {
+// Test_CM_CipherTrust_CMPrometheus_TokenSensitive verifies token is stored in state after
+// create, is Sensitive (UseStateForUnknown prevents perpetual known-after-apply), is
+// preserved in state when disabled, and is refreshed when re-enabled.
+func Test_CM_CipherTrust_CMPrometheus_TokenSensitive(t *testing.T) {
 	RequireCM(t)
 	var capturedToken string
 

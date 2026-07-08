@@ -79,7 +79,7 @@ func requireDomainCreationLicensed(t *testing.T) {
 	}
 }
 
-func TestResourceCMDomain(t *testing.T) {
+func Test_CM_ResourceCMDomain(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
@@ -158,13 +158,13 @@ resource "ciphertrust_domain" "test" {
 `, name, adminsStr, allowUserMgmt, metaStr)
 }
 
-// TestAccCipherTrustCMDomain_basicDrift verifies that out-of-band mutations to
+// Test_CM_AccCipherTrustCMDomain_basicDrift verifies that out-of-band mutations to
 // admins, allow_user_management, and meta_data surface as drift.
-func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_basicDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-drift-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	var domainID string
+	var domainName string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -183,7 +183,8 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 						if !ok {
 							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
 						}
-						domainID = rs.Primary.ID
+						// CM domain PATCH uses name as the path key, not UUID.
+						domainName = rs.Primary.Attributes["name"]
 						return nil
 					},
 				),
@@ -204,7 +205,8 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 					patchPayload, _ := json.Marshal(map[string]interface{}{
 						"admins": []string{"admin", "admin2"},
 					})
-					_, _ = client.UpdateData(context.Background(), domainID, common.URL_DOMAIN, patchPayload, "id")
+					// CM domain PATCH endpoint uses the domain name as the URL path key.
+					_, _ = client.UpdateData(context.Background(), domainName, common.URL_DOMAIN, patchPayload, "id")
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -221,10 +223,10 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_deleteOutOfBand verifies that when a domain is
+// Test_CM_AccCipherTrustCMDomain_deleteOutOfBand verifies that when a domain is
 // deleted out-of-band, Read() emits a warning and keeps the resource in state,
 // and that terraform destroy on an already-deleted domain completes without error.
-func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-oob-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -267,10 +269,10 @@ func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_updatePathKey verifies that Update() sends state.ID
+// Test_CM_AccCipherTrustCMDomain_updatePathKey verifies that Update() sends state.ID
 // (UUID) as the PATCH path parameter. Uses meta_data change as the trigger because
 // allow_user_management is not updatable via PATCH on CM domains.
-func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-upd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -303,14 +305,14 @@ func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_hsmDrift verifies drift detection for HSM fields.
+// Test_CM_AccCipherTrustCMDomain_hsmDrift verifies drift detection for HSM fields.
 // Skipped unless CIPHERTRUST_TEST_HSM_CONNECTION_ID is set.
-func TestAccCipherTrustCMDomain_hsmDrift(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_hsmDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	hsmConnID := getEnvOrSkip(t, "CIPHERTRUST_TEST_HSM_CONNECTION_ID")
 	rName := "tf-domain-hsm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
-	var domainID string
+	var domainName string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -331,7 +333,8 @@ resource "ciphertrust_domain" "test" {
 						if !ok {
 							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
 						}
-						domainID = rs.Primary.ID
+						// CM domain PATCH uses name as the path key, not UUID.
+						domainName = rs.Primary.Attributes["name"]
 						return nil
 					},
 				),
@@ -346,7 +349,8 @@ resource "ciphertrust_domain" "test" {
 					patchPayload, _ := json.Marshal(map[string]interface{}{
 						"hsm_connection_id": "",
 					})
-					_, _ = client.UpdateData(context.Background(), domainID, common.URL_DOMAIN, patchPayload, "id")
+					// CM domain PATCH endpoint uses the domain name as the URL path key.
+					_, _ = client.UpdateData(context.Background(), domainName, common.URL_DOMAIN, patchPayload, "id")
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -367,6 +371,89 @@ resource "ciphertrust_domain" "test" {
 	})
 }
 
+// TestAccCMDomain_ImmutableFields verifies that name, admins, and
+// allow_user_management are each blocked at plan time by the immutable modifier.
+func TestAccCMDomain_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-imm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, nil),
+				Check: checkStep(t, "ImmutableFields: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "name", rName),
+				),
+			},
+			// Rename attempt must be blocked at plan time.
+			{
+				Config:      domainConfig(rName+"-renamed", []string{"admin"}, false, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// Admins change must be blocked at plan time.
+			{
+				Config:      domainConfig(rName, []string{"admin", "admin2"}, false, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+			// allow_user_management change must be blocked at plan time.
+			{
+				Config:      domainConfig(rName, []string{"admin"}, true, nil),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// TestAccCMDomain_ParentCAIdImmutable verifies that parent_ca_id is blocked at
+// plan time when a change is attempted after creation. Requires
+// CIPHERTRUST_TEST_PARENT_CA_ID to be set to a valid CA ID on the CM instance
+// (analogous to CIPHERTRUST_TEST_HSM_CONNECTION_ID for HSM tests).
+func TestAccCMDomain_ParentCAIdImmutable(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	parentCAID := getEnvOrSkip(t, "CIPHERTRUST_TEST_PARENT_CA_ID")
+	rName := "tf-domain-pca-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID),
+				Check: checkStep(t, "ParentCAIdImmutable: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "parent_ca_id", parentCAID),
+				),
+			},
+			// Changing parent_ca_id must be blocked at plan time.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID+"-changed"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
 // getEnvOrSkip returns the value of an env var, skipping the test if unset.
 func getEnvOrSkip(t *testing.T, key string) string {
 	t.Helper()
@@ -377,10 +464,10 @@ func getEnvOrSkip(t *testing.T, key string) string {
 	return v
 }
 
-// TestCMDomainNameImmutable verifies that attempting to rename a domain after
+// Test_CM_CMDomainNameImmutable verifies that attempting to rename a domain after
 // creation produces a clear, actionable plan-time error rather than silent
 // state drift.
-func TestCMDomainNameImmutable(t *testing.T) {
+func Test_CM_CMDomainNameImmutable(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
@@ -409,6 +496,58 @@ resource "ciphertrust_domain" "testDomain" {
 `, rName+"-renamed"),
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`cannot be changed`),
+			},
+		},
+	})
+}
+
+// TestAccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
+// mutable field (meta_data) after creation. The CM domain PATCH endpoint uses the
+// domain name as the path key.
+func TestAccCMDomain_MutableFieldUpdate(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-upd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "test" }
+}
+`, rName),
+				Check: checkStep(t, "create with meta_data",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "test"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "prod" }
+}
+`, rName),
+				Check: checkStep(t, "update meta_data",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "prod"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "prod" }
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

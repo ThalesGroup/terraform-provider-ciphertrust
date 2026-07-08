@@ -410,11 +410,11 @@ type CMRegTokenJSON struct {
 	CAID                      string                 `json:"ca_id"`
 	CertDuration              int64                  `json:"cert_duration"`
 	ClientManagementProfileID string                 `json:"client_management_profile_id"`
-	Label                     map[string]interface{} `json:"label"`
+	Label                     map[string]interface{} `json:"label,omitempty"`
 	Labels                    map[string]interface{} `json:"labels"`
 	Lifetime                  string                 `json:"lifetime"`
 	MaxClients                int64                  `json:"max_clients"`
-	NamePrefix                string                 `json:"name_prefix"`
+	NamePrefix                string                 `json:"name_prefix,omitempty"`
 }
 
 type CMUserTFSDK struct {
@@ -872,14 +872,14 @@ type CreateJobConfigParamsJSON struct {
 type UpdateJobConfigParamsJSON struct {
 	Name                      string                         `json:"name"`
 	Description               string                         `json:"description"`
-	Operation                 string                         `json:"operation"`
+	Operation                 string                         `json:"operation,omitempty"`
 	RunAt                     string                         `json:"run_at"`
 	RunOn                     string                         `json:"run_on"`
 	Disabled                  bool                           `json:"disabled"`
 	StartDate                 time.Time                      `json:"start_date"`
 	EndDate                   time.Time                      `json:"end_date"`
 	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
-	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params"`
+	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params,omitempty"`
 	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
 }
 type DatabaseBackupParamsJSON struct {
