@@ -49,10 +49,10 @@ func azureResponse(fields map[string]string) string {
 	)
 }
 
-// TestGetAzureParamsFromResponse_PlainDrift verifies that getAzureParamsFromResponse
+// Test_CM_GetAzureParamsFromResponse_PlainDrift verifies that getAzureParamsFromResponse
 // correctly refreshes plain string/bool/int attributes from the CM API response so that
 // attribute drift (e.g. cloud_name changed in CM UI) is visible to Terraform.
-func TestGetAzureParamsFromResponse_PlainDrift(t *testing.T) {
+func Test_CM_GetAzureParamsFromResponse_PlainDrift(t *testing.T) {
 	t.Run("all plain fields are populated from the response", func(t *testing.T) {
 		response := `{
 			"id":"az-id","name":"my-conn",
@@ -171,10 +171,10 @@ func TestGetAzureParamsFromResponse_PlainDrift(t *testing.T) {
 	})
 }
 
-// TestAzureRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
+// Test_CM_AzureRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
 // by doRequest for a 404 response (format "status: 404, body: ...") matches the
 // sentinel checked in resourceAzureConnection.Read so that OOB deletes are caught.
-func TestAzureRead_OOBDelete_ErrorSentinel(t *testing.T) {
+func Test_CM_AzureRead_OOBDelete_ErrorSentinel(t *testing.T) {
 	// Simulate the error format returned by doRequest on a 404.
 	simulatedErr := fmt.Errorf("status: 404, body: {\"error\":\"not found\"}")
 

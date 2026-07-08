@@ -7,9 +7,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
 
-// TestUnit_TrialLicense_UpdateReturnsError verifies that Update() always returns an error
+// Test_CM_Unit_TrialLicense_UpdateReturnsError verifies that Update() always returns an error
 // diagnostic, regardless of input, since ciphertrust_trial_license does not support updates.
-func TestUnit_TrialLicense_UpdateReturnsError(t *testing.T) {
+func Test_CM_Unit_TrialLicense_UpdateReturnsError(t *testing.T) {
 	r := resourceCMTrialLicense{}
 	var resp resource.UpdateResponse
 	r.Update(context.Background(), resource.UpdateRequest{}, &resp)
