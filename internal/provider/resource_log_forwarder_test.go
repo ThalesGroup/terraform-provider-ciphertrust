@@ -31,9 +31,9 @@ func requireLogForwarderConnID(t *testing.T) string {
 	return connID
 }
 
-// TestCMLogForwarderCRUD creates a syslog log forwarder, verifies it, then
+// Test_CM_CMLogForwarderCRUD creates a syslog log forwarder, verifies it, then
 // updates a mutable field (name) and verifies the update.
-func TestCMLogForwarderCRUD(t *testing.T) {
+func Test_CM_CMLogForwarderCRUD(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -71,10 +71,10 @@ resource "ciphertrust_log_forwarder" "test_lf" {
 	})
 }
 
-// TestCMLogForwarderTypeImmutable verifies that attempting to change the
+// Test_CM_CMLogForwarderTypeImmutable verifies that attempting to change the
 // 'type' field after creation produces a clear, actionable plan-time error
 // rather than silent state drift.
-func TestCMLogForwarderTypeImmutable(t *testing.T) {
+func Test_CM_CMLogForwarderTypeImmutable(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -128,9 +128,9 @@ func requireLogForwarderLokiConnID(t *testing.T) string {
 	return connID
 }
 
-// TestAccCMLogForwarder_elasticsearchDrift verifies that Read() surfaces an
+// Test_CM_AccCMLogForwarder_elasticsearchDrift verifies that Read() surfaces an
 // out-of-band elasticsearch_params change as drift.
-func TestAccCMLogForwarder_elasticsearchDrift(t *testing.T) {
+func Test_CM_AccCMLogForwarder_elasticsearchDrift(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderESConnID(t)
 	rName := "tf-lf-es-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -185,9 +185,9 @@ resource "ciphertrust_log_forwarder" "test" {
 	})
 }
 
-// TestAccCMLogForwarder_lokiDrift verifies that Read() surfaces an out-of-band
+// Test_CM_AccCMLogForwarder_lokiDrift verifies that Read() surfaces an out-of-band
 // loki_params change as drift.
-func TestAccCMLogForwarder_lokiDrift(t *testing.T) {
+func Test_CM_AccCMLogForwarder_lokiDrift(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderLokiConnID(t)
 	rName := "tf-lf-loki-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -242,9 +242,9 @@ resource "ciphertrust_log_forwarder" "test" {
 	})
 }
 
-// TestAccCMLogForwarder_syslogDrift verifies that Read() surfaces an out-of-band
+// Test_CM_AccCMLogForwarder_syslogDrift verifies that Read() surfaces an out-of-band
 // syslog_params change as drift and that updated_at is populated.
-func TestAccCMLogForwarder_syslogDrift(t *testing.T) {
+func Test_CM_AccCMLogForwarder_syslogDrift(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-sys-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -299,10 +299,10 @@ resource "ciphertrust_log_forwarder" "test" {
 	})
 }
 
-// TestAccCMLogForwarder_destroy verifies that:
+// Test_CM_AccCMLogForwarder_destroy verifies that:
 //   - An out-of-band delete leaves the resource in Terraform state (404 → warning, no RemoveResource).
 //   - terraform destroy uses the correct URL_CM_LOG_FORWARDS endpoint.
-func TestAccCMLogForwarder_destroy(t *testing.T) {
+func Test_CM_AccCMLogForwarder_destroy(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-del-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)

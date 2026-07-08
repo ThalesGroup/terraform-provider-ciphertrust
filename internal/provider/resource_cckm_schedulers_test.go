@@ -21,7 +21,7 @@ var (
 	xksCredImportIgnore  = []string{"cckm_key_rotation_params", "cckm_synchronization_params"}
 )
 
-func TestCckmSchedulersRotationResource(t *testing.T) {
+func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
 		createSchedulerParams := `
 			resource "ciphertrust_scheduler" "rotation_max_params" {
@@ -279,7 +279,7 @@ func TestCckmSchedulersRotationResource(t *testing.T) {
 	})
 }
 
-func TestCckmSchedulersSyncResource(t *testing.T) {
+func Test_CM_CckmSchedulersSyncResource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
 		connectionResource, ok := initCckmAwsTest()
 		if !ok {
@@ -458,10 +458,10 @@ func TestCckmSchedulersSyncResource(t *testing.T) {
 	})
 }
 
-// TestCckmSchedulersInvalidAttribs verifies that providing run_on on a
+// Test_CM_CckmSchedulersInvalidAttribs verifies that providing run_on on a
 // CDSPaaS instance fails at plan time with an error indicating run_on
 // is not supported on CDSPaaS.
-func TestCckmSchedulersInvalidAttribs(t *testing.T) {
+func Test_CM_CckmSchedulersInvalidAttribs(t *testing.T) {
 	if os.Getenv("CDSPAAS") != "true" {
 		t.Skip("Skipping: only runs on CDSPaaS")
 	}

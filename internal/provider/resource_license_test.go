@@ -7,9 +7,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestAccCMLicense_ComputedFields verifies that all stable Computed-only fields are
+// Test_CM_AccCMLicense_ComputedFields verifies that all stable Computed-only fields are
 // populated after create and produce no drift on subsequent refresh.
-func TestAccCMLicense_ComputedFields(t *testing.T) {
+func Test_CM_AccCMLicense_ComputedFields(t *testing.T) {
 	RequireCM(t)
 
 	licenseStr := os.Getenv("CIPHERTRUST_TEST_LICENSE")

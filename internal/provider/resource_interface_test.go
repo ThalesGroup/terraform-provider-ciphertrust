@@ -38,8 +38,8 @@ func interfaceSweep(port int64) {
 	})
 }
 
-// TestAccCMInterface_Basic verifies basic create/read with zero drift on refresh.
-func TestAccCMInterface_Basic(t *testing.T) {
+// Test_CM_AccCMInterface_Basic verifies basic create/read with zero drift on refresh.
+func Test_CM_AccCMInterface_Basic(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -70,9 +70,9 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// TestAccCMInterface_Update verifies that Update() uses the interface name as the PATCH path key
+// Test_CM_AccCMInterface_Update verifies that Update() uses the interface name as the PATCH path key
 // and that the resource ID is stable across updates.
-func TestAccCMInterface_Update(t *testing.T) {
+func Test_CM_AccCMInterface_Update(t *testing.T) {
 	RequireCM(t)
 	var interfaceID string
 
@@ -128,10 +128,10 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// TestAccCMInterface_ImmutableName verifies that ImmutableString() rejects name changes at plan time.
+// Test_CM_AccCMInterface_ImmutableName verifies that ImmutableString() rejects name changes at plan time.
 // CM auto-assigns a name on creation; the test verifies that attempting to set a different name
 // in a subsequent plan is rejected by the ImmutableString() modifier.
-func TestAccCMInterface_ImmutableName(t *testing.T) {
+func Test_CM_AccCMInterface_ImmutableName(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -167,8 +167,8 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// TestAccCMInterface_ImmutableInterfaceType verifies that ImmutableString() rejects interface_type changes at plan time.
-func TestAccCMInterface_ImmutableInterfaceType(t *testing.T) {
+// Test_CM_AccCMInterface_ImmutableInterfaceType verifies that ImmutableString() rejects interface_type changes at plan time.
+func Test_CM_AccCMInterface_ImmutableInterfaceType(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -201,8 +201,8 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// TestAccCMInterface_Drift verifies that an out-of-band mode change is surfaced as drift.
-func TestAccCMInterface_Drift(t *testing.T) {
+// Test_CM_AccCMInterface_Drift verifies that an out-of-band mode change is surfaced as drift.
+func Test_CM_AccCMInterface_Drift(t *testing.T) {
 	RequireCM(t)
 	// CM's interface API uses NAME (not UUID) as the path key — capture name, not ID.
 	var interfaceName string
@@ -255,8 +255,8 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// TestAccCMInterface_OOBDelete verifies that Read() calls RemoveResource on 404 so Terraform plans to recreate.
-func TestAccCMInterface_OOBDelete(t *testing.T) {
+// Test_CM_AccCMInterface_OOBDelete verifies that Read() calls RemoveResource on 404 so Terraform plans to recreate.
+func Test_CM_AccCMInterface_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	// CM's interface API uses NAME (not UUID) as the path key — capture name, not ID.
 	var interfaceName string

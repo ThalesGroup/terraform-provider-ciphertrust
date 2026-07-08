@@ -12,12 +12,9 @@ import (
 // getParamsFromResponse – cckm_key_rotation_params hydration
 // ---------------------------------------------------------------------------
 
-// Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse verifies the
-// primary bug fix: cckm_key_rotation_params must be populated by Read even when
-// plan.Operation starts as empty (e.g. partial import state). Previously the
-// function read plan.Operation before the API response was consulted, so any
-// empty/stale state value caused the switch to fall through, leaving the params
-// block unset.
+// Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse verifies
+// cckm_key_rotation_params is populated by Read even when plan.Operation
+// starts empty (e.g. partial import state).
 func Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testing.T) {
 	response := `{
 		"id":        "sched-1",

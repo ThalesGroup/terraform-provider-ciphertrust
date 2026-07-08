@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmSchedulersRotationDataSource(t *testing.T) {
+func Test_CM_CckmSchedulersRotationDataSource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
 		createSchedulerParams := `
 			resource "ciphertrust_scheduler" "aws_scheduled_rotation_job" {
@@ -216,7 +216,7 @@ func TestCckmSchedulersRotationDataSource(t *testing.T) {
 	})
 }
 
-func TestCckmSchedulersSyncDataSource(t *testing.T) {
+func Test_CM_CckmSchedulersSyncDataSource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
 		connectionResource, ok := initCckmAwsTest()
 		if !ok {
@@ -351,10 +351,10 @@ func TestCckmSchedulersSyncDataSource(t *testing.T) {
 	})
 }
 
-// TestCckmSchedulersListAllDataSource creates one scheduler of each CCKM
+// Test_CM_CckmSchedulersListAllDataSource creates one scheduler of each CCKM
 // operation type and verifies that a datasource filtered by "operation=cckm*"
 // returns at least three results.
-func TestCckmSchedulersListAllDataSource(t *testing.T) {
+func Test_CM_CckmSchedulersListAllDataSource(t *testing.T) {
 	config := `
 		resource "ciphertrust_scheduler" "rotation" {
 			cckm_key_rotation_params = {

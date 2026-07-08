@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMUser(t *testing.T) {
+func Test_CM_ResourceCMUser(t *testing.T) {
 	username := fmt.Sprintf("testuser%d", time.Now().Unix())
 
 	resource.Test(t, resource.TestCase{
@@ -51,14 +51,10 @@ resource "ciphertrust_user" "testUser" {
 	})
 }
 
-// TestAccCMUser_NameNicknameDrift verifies that OOB changes to name are detected
-// as drift, and that no spurious drift is introduced by the gjson-based Read fix.
-//
-// The CM API auto-sets nickname to username and does not accept custom nickname
-// values via PATCH, so nickname OOB mutations cannot be exercised directly.
-// Correctness of the nickname fix is validated by the no-spurious-drift check
-// (Step 2) — if Read stored "" instead of the username value, a diff would appear.
-func TestAccCMUser_NameNicknameDrift(t *testing.T) {
+// Test_CM_AccCMUser_NameNicknameDrift verifies OOB changes to name are detected as drift and
+// that no spurious drift is introduced by the gjson-based Read fix; nickname OOB mutations
+// can't be exercised directly since CM auto-sets nickname to username via PATCH.
+func Test_CM_AccCMUser_NameNicknameDrift(t *testing.T) {
 	RequireCM(t)
 
 	username := fmt.Sprintf("testdrift%d", time.Now().Unix())
@@ -133,10 +129,10 @@ resource "ciphertrust_user" "driftUser" {
 	})
 }
 
-// TestResourceCMUserUpdateWithoutName verifies that a user can be updated
+// Test_CM_ResourceCMUserUpdateWithoutName verifies that a user can be updated
 // without providing the optional "name" field. This guards against a regression
 // where the provider would send an empty name to the API, causing a 422 error.
-func TestResourceCMUserUpdateWithoutName(t *testing.T) {
+func Test_CM_ResourceCMUserUpdateWithoutName(t *testing.T) {
 	username := fmt.Sprintf("testuser_noname%d", time.Now().Unix())
 
 	resource.Test(t, resource.TestCase{
@@ -173,9 +169,9 @@ resource "ciphertrust_user" "testUserNoName" {
 	})
 }
 
-// TestCipherTrust_CMUser_ImmutableFields verifies that username and is_domain_user
+// Test_CM_CipherTrust_CMUser_ImmutableFields verifies that username and is_domain_user
 // cannot be changed after resource creation.
-func TestCipherTrust_CMUser_ImmutableFields(t *testing.T) {
+func Test_CM_CipherTrust_CMUser_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -218,10 +214,10 @@ resource "ciphertrust_user" "test" {
 }`, username, isDomainUser)
 }
 
-// TestCMUserOutOfBandDeletion verifies that when a user is deleted directly on
+// Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
 // CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
 // from state gracefully instead of returning a hard error.
-func TestCMUserOutOfBandDeletion(t *testing.T) {
+func Test_CM_CMUserOutOfBandDeletion(t *testing.T) {
 	username := fmt.Sprintf("tf-oob-%d", time.Now().Unix())
 
 	deleteOutOfBand := func(resourceName string) resource.TestCheckFunc {

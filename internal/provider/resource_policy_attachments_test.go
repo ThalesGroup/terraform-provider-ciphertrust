@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMPolicyAttachment(t *testing.T) {
+func Test_CM_ResourceCMPolicyAttachment(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -49,11 +49,10 @@ resource "ciphertrust_policy_attachments" "policy_attachment" {
 	})
 }
 
-// TestCMPolicyAttachmentOutOfBandDeletion verifies that when a policy attachment
-// is deleted directly on CipherTrust Manager (out-of-band), the next
-// terraform refresh removes it from state gracefully instead of returning a
-// hard error.
-func TestCMPolicyAttachmentOutOfBandDeletion(t *testing.T) {
+// Test_CM_CMPolicyAttachmentOutOfBandDeletion verifies that when a policy attachment is
+// deleted directly on CipherTrust Manager (out-of-band), the next terraform refresh
+// removes it from state gracefully instead of returning a hard error.
+func Test_CM_CMPolicyAttachmentOutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	policyName := fmt.Sprintf("tf-oob-policy-%d", time.Now().Unix())
 
@@ -118,7 +117,7 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 	})
 }
 
-func TestAccCMPolicyAttachment_drift(t *testing.T) {
+func Test_CM_AccCMPolicyAttachment_drift(t *testing.T) {
 	RequireCM(t)
 	policyName := fmt.Sprintf("tf-acc-attach-drift-pol-%d", time.Now().Unix())
 
@@ -182,7 +181,7 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-func TestAccCMPolicyAttachment_update(t *testing.T) {
+func Test_CM_AccCMPolicyAttachment_update(t *testing.T) {
 	RequireCM(t)
 
 	policyName := fmt.Sprintf("tf-acc-attach-upd-pol-%d", time.Now().Unix())
@@ -244,10 +243,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// TestAccCipherTrust_PolicyAttachment_ImmutableFields verifies that changing the
+// Test_CM_AccCipherTrust_PolicyAttachment_ImmutableFields verifies that changing the
 // immutable policy field on a ciphertrust_policy_attachments resource produces a
 // plan-time error from ImmutableString.
-func TestAccCipherTrust_PolicyAttachment_ImmutableFields(t *testing.T) {
+func Test_CM_AccCipherTrust_PolicyAttachment_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 
 	policyName := fmt.Sprintf("tf-acc-attach-immf-pol-%d", time.Now().Unix())
@@ -307,7 +306,7 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-func TestAccCMPolicyAttachment_immutablePolicy(t *testing.T) {
+func Test_CM_AccCMPolicyAttachment_immutablePolicy(t *testing.T) {
 	RequireCM(t)
 
 	policyName := fmt.Sprintf("tf-acc-attach-immut-pol-%d", time.Now().Unix())
