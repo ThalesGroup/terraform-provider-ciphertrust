@@ -1,3 +1,9 @@
+// Package modifiers provides shared Terraform plan modifiers for the
+// CipherTrust provider. ImmutableString, ImmutableInt64, ImmutableBool,
+// ImmutableList, ImmutableMap, and ImmutableObject each enforce that a
+// given schema attribute cannot change after resource creation, emitting
+// a plan-time diagnostic error so no API call is made and no
+// destroy+recreate occurs.
 package modifiers
 
 import (
