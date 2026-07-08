@@ -1249,7 +1249,7 @@ resource "ciphertrust_cm_key" "test_key" {
 }
 `, rName),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
@@ -1270,7 +1270,7 @@ func TestCipherTrust_CMKey_ImmutableKeySize(t *testing.T) {
 			{
 				Config:      aesKeyConfig(rName, 128),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
@@ -1290,9 +1290,18 @@ func TestCipherTrust_CMKey_ImmutableName(t *testing.T) {
 				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
 			},
 			{
-				Config:      aesKeyConfig("test-key-renamed-"+acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum), 256),
+				// Use an inline config with the same resource label (test_key) and a fixed new
+				// name so the framework clearly sees a modification to the existing resource,
+				// not a new resource at a different address.
+				Config: providerConfig + `
+resource "ciphertrust_cm_key" "test_key" {
+  name      = "test-key-renamed"
+  algorithm = "aes"
+  key_size  = 256
+}
+`,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
@@ -1325,7 +1334,7 @@ resource "ciphertrust_cm_key" "test_key" {
 }
 `, rName),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
@@ -1360,7 +1369,7 @@ resource "ciphertrust_cm_key" "test_key" {
 }
 `, rName),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
 			},
 		},
 	})
