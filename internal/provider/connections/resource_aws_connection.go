@@ -658,6 +658,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	for k, v := range plan.Labels.Elements() {
 		labelsPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(labelsPayload, state.Labels.Elements())
 	payload.Labels = labelsPayload
 
 	// Add meta to payload
@@ -665,6 +666,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	for k, v := range plan.Meta.Elements() {
 		metaPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(metaPayload, state.Meta.Elements())
 	payload.Meta = metaPayload
 
 	var productsArr []string
@@ -763,6 +765,16 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 			"Could not delete AWS Connection, unexpected error: "+err.Error(),
 		)
 		return
+	}
+}
+
+// ApplyNullDeletes injects nil (JSON null) for keys present in prior state but absent from
+// plan, so CM's merge-patch endpoint deletes them rather than leaving them unchanged.
+func ApplyNullDeletes(payload map[string]interface{}, stateElements map[string]attr.Value) {
+	for k := range stateElements {
+		if _, exists := payload[k]; !exists {
+			payload[k] = nil
+		}
 	}
 }
 
