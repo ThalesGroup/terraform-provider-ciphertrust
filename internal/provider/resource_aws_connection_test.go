@@ -309,6 +309,22 @@ func TestCM_AWSConnection_driftMapAndList(t *testing.T) {
 // TestCM_AWSConnection_driftIAMRoleAnywhere verifies drift detection for
 // iam_role_anywhere readable sub-fields.
 func TestCM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
+	RequireCM(t)
+
+	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
+	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
+	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
+	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
+	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
+		t.Skip("skipping TestCM_AWSConnection_driftIAMRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
+	}
+
+	// IAM Anywhere connections must NOT carry access_key_id/secret_access_key.
+	// Clear the env-var fallback so Create() does not inject them from the
+	// environment, which would cause CM to reject the request with 400.
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-iam-" + suffix
 	var capturedID string
@@ -317,16 +333,16 @@ func TestCM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
 resource "ciphertrust_aws_connection" "test" {
   name             = %q
   is_role_anywhere = true
-  iam_role_anywhere {
+  iam_role_anywhere = {
     anywhere_role_arn = %q
     trust_anchor_arn  = %q
     profile_arn       = %q
     certificate       = %q
   }
 }
-`, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert)
+`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
 
-	altRoleARN := testIAMAnywhereRoleARN + "-changed"
+	altRoleARN := anywhereRoleARN + "-changed"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -553,7 +569,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testGetAWSAccessKeyID(), testGetAWSSecretAccessKey())
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -573,6 +589,12 @@ resource "ciphertrust_aws_connection" "test" {
 // TestCM_AWSConnection_createIAMAnywhere verifies the basic create → read → delete
 // lifecycle for an AWS connection that uses IAM Roles Anywhere (is_role_anywhere = true).
 func TestCM_AWSConnection_createIAMAnywhere(t *testing.T) {
+	// IAM Anywhere connections must NOT carry access_key_id/secret_access_key.
+	// Clear the env-var fallback so Create() does not inject them from the
+	// environment, which would cause CM to reject the request with 400.
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+
 	suffix := uuid.New().String()[:8]
 	name := "tf-aws-iamanywhere-" + suffix
 	resourceName := "ciphertrust_aws_connection.test"
@@ -581,7 +603,7 @@ func TestCM_AWSConnection_createIAMAnywhere(t *testing.T) {
 resource "ciphertrust_aws_connection" "test" {
   name             = %q
   is_role_anywhere = true
-  iam_role_anywhere {
+  iam_role_anywhere = {
     anywhere_role_arn = %q
     trust_anchor_arn  = %q
     profile_arn       = %q
@@ -591,7 +613,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert, testIAMAnywherePrivateKey)
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -599,9 +621,9 @@ resource "ciphertrust_aws_connection" "test" {
 				Check: checkStep(t, "create IAM Anywhere connection",
 					resource.TestCheckResourceAttr(resourceName, "name", name),
 					resource.TestCheckResourceAttr(resourceName, "is_role_anywhere", "true"),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.anywhere_role_arn", testIAMAnywhereRoleARN),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.trust_anchor_arn", testIAMAnywhereTrustAnchorARN),
-					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.profile_arn", testIAMAnywhereProfileARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.anywhere_role_arn", testIAMAnywhereRoleARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.trust_anchor_arn", testIAMAnywhereTrustAnchorARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.profile_arn", testIAMAnywhereProfileARN),
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
 					resource.TestCheckResourceAttrSet(resourceName, "updated_at"),
@@ -623,7 +645,7 @@ func awsRoleAnywhereConfig(name, description, certificate, anywhereRoleARN, prof
 resource "ciphertrust_aws_connection" "test" {
   name             = %q
   is_role_anywhere = true
-  iam_role_anywhere {
+  iam_role_anywhere = {
     anywhere_role_arn = %q
     trust_anchor_arn  = %q
     profile_arn       = %q
