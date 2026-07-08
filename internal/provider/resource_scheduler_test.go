@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceScheduler(t *testing.T) {
+func Test_CM_ResourceScheduler(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -73,9 +73,9 @@ resource "ciphertrust_scheduler" "scheduler" {
 	})
 }
 
-// TestAccScheduler_nameImmutable verifies that changing the name of a scheduler
+// Test_CM_AccScheduler_nameImmutable verifies that changing the name of a scheduler
 // after creation produces a plan-time error, not a silent no-op.
-func TestAccScheduler_nameImmutable(t *testing.T) {
+func Test_CM_AccScheduler_nameImmutable(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
 		t.Skip("skipping TestAccScheduler_nameImmutable: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable (requires scheduler license)")
@@ -121,12 +121,10 @@ resource "ciphertrust_scheduler" "sched" {
 	t.Log("======== PASSED: scheduler name immutable ========")
 }
 
-// TestCipherTrust_Scheduler_ImmutableFields verifies that the operation field
-// cannot be changed after scheduler creation (ImmutableString modifier).
-// Requires a CipherTrust license that permits scheduler creation.
-// Set CIPHERTRUST_SCHEDULER_ENABLED=1 to opt in; the test is skipped otherwise
-// to avoid failing in environments where the license is absent.
-func TestCipherTrust_Scheduler_ImmutableFields(t *testing.T) {
+// Test_CM_CipherTrust_Scheduler_ImmutableFields verifies that the operation field cannot be
+// changed after scheduler creation (ImmutableString modifier). Requires a CipherTrust license
+// that permits scheduler creation; set CIPHERTRUST_SCHEDULER_ENABLED=1 to opt in.
+func Test_CM_CipherTrust_Scheduler_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
 		t.Skip("skipping TestCipherTrust_Scheduler_ImmutableFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")

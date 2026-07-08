@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceCMPassordPolicy(t *testing.T) {
+func Test_CM_ResourceCMPassordPolicy(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -89,9 +89,9 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 	})
 }
 
-// TestAccCipherTrustPasswordPolicy_drift verifies that Read() surfaces out-of-band
+// Test_CM_AccCipherTrustPasswordPolicy_drift verifies that Read() surfaces out-of-band
 // changes to all nine configured numeric fields and failed_logins_lockout_thresholds.
-func TestAccCipherTrustPasswordPolicy_drift(t *testing.T) {
+func Test_CM_AccCipherTrustPasswordPolicy_drift(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdDrift-" + uuid.New().String()[:8]
 	var capturedName string
@@ -144,9 +144,9 @@ resource "ciphertrust_password_policy" "drift_test" {
 	})
 }
 
-// TestAccCipherTrustPasswordPolicy_noDefaultDrift confirms that unconfigured Optional
+// Test_CM_AccCipherTrustPasswordPolicy_noDefaultDrift confirms that unconfigured Optional
 // Int64 fields do not drift when CM returns server defaults (typically 0 or []).
-func TestAccCipherTrustPasswordPolicy_noDefaultDrift(t *testing.T) {
+func Test_CM_AccCipherTrustPasswordPolicy_noDefaultDrift(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdNoDrift-" + uuid.New().String()[:8]
 
@@ -172,9 +172,9 @@ resource "ciphertrust_password_policy" "no_drift_test" {
 	})
 }
 
-// TestAccCipherTrustPasswordPolicy_oobDelete verifies that Read() handles a 404 cleanly
+// Test_CM_AccCipherTrustPasswordPolicy_oobDelete verifies that Read() handles a 404 cleanly
 // when a non-global policy has been deleted out-of-band.
-func TestAccCipherTrustPasswordPolicy_oobDelete(t *testing.T) {
+func Test_CM_AccCipherTrustPasswordPolicy_oobDelete(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdOOBDel-" + uuid.New().String()[:8]
 	var capturedName string

@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCiphertrustSCPConnectionDataSource(t *testing.T) {
+func Test_CM_CiphertrustSCPConnectionDataSource(t *testing.T) {
 	RequireCM(t)
 	// Config for the resource and data source
 	scpConnectionConfig := `

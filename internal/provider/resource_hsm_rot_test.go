@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-func TestResourceHSMRootOfTrustSetupLuna(t *testing.T) {
+func Test_CM_ResourceHSMRootOfTrustSetupLuna(t *testing.T) {
 	RequireCM(t)
 	// Remove skip after actual HSM data is used in test
 	t.Skip("Skipped!! dummy data in resource parameters")
@@ -54,7 +54,7 @@ resource "ciphertrust_hsm_root_of_trust_setup" "cm_hsm_rot_setup" {
 
 // terraform destroy will perform automatically at the end of the test
 
-func TestResourceHSMRootOfTrustSetupLunaPCI(t *testing.T) {
+func Test_CM_ResourceHSMRootOfTrustSetupLunaPCI(t *testing.T) {
 	RequireCM(t)
 	// Remove skip after actual HSM data is used in test
 	t.Skip("Skipped!! dummy data in resource parameters")
@@ -88,7 +88,7 @@ resource "ciphertrust_hsm_root_of_trust_setup" "cm_hsm_rot_setup" {
 
 // terraform destroy will perform automatically at the end of the test
 
-func TestResourceHSMRootOfTrustSetupLunatct(t *testing.T) {
+func Test_CM_ResourceHSMRootOfTrustSetupLunatct(t *testing.T) {
 	RequireCM(t)
 	// Remove skip after actual HSM data is used in test
 	t.Skip("Skipped!! dummy data in resource parameters")
@@ -160,8 +160,8 @@ func hsmRotConfigWithReset(reset bool) string {
 	return hsmRotConfig("lunapci", "test-partition", "test-password", reset, 5)
 }
 
-// TestCipherTrust_HSMRot_NoDrift verifies that after apply, a subsequent plan shows no changes.
-func TestCipherTrust_HSMRot_NoDrift(t *testing.T) {
+// Test_CM_CipherTrust_HSMRot_NoDrift verifies that after apply, a subsequent plan shows no changes.
+func Test_CM_CipherTrust_HSMRot_NoDrift(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 
@@ -185,9 +185,9 @@ func TestCipherTrust_HSMRot_NoDrift(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_HSMRot_ImmutableType verifies that changing the type field after creation
+// Test_CM_CipherTrust_HSMRot_ImmutableType verifies that changing the type field after creation
 // emits an immutability error at plan time (not destroy+recreate).
-func TestCipherTrust_HSMRot_ImmutableType(t *testing.T) {
+func Test_CM_CipherTrust_HSMRot_ImmutableType(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 
@@ -209,9 +209,9 @@ func TestCipherTrust_HSMRot_ImmutableType(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_HSMRot_ImmutableConnInfo verifies that changing conn_info after creation
+// Test_CM_CipherTrust_HSMRot_ImmutableConnInfo verifies that changing conn_info after creation
 // emits an immutability error at plan time.
-func TestCipherTrust_HSMRot_ImmutableConnInfo(t *testing.T) {
+func Test_CM_CipherTrust_HSMRot_ImmutableConnInfo(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 
@@ -233,9 +233,9 @@ func TestCipherTrust_HSMRot_ImmutableConnInfo(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_HSMRot_ImmutableReset verifies that changing the reset field after creation
+// Test_CM_CipherTrust_HSMRot_ImmutableReset verifies that changing the reset field after creation
 // emits an immutability error at plan time.
-func TestCipherTrust_HSMRot_ImmutableReset(t *testing.T) {
+func Test_CM_CipherTrust_HSMRot_ImmutableReset(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 
@@ -257,10 +257,10 @@ func TestCipherTrust_HSMRot_ImmutableReset(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_HSMRot_DestroyNotFound verifies that terraform destroy succeeds when the
+// Test_CM_CipherTrust_HSMRot_DestroyNotFound verifies that terraform destroy succeeds when the
 // HSM setup record was already deleted out-of-band (the notFoundError guard in Delete()
 // prevents an error).
-func TestCipherTrust_HSMRot_DestroyNotFound(t *testing.T) {
+func Test_CM_CipherTrust_HSMRot_DestroyNotFound(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 

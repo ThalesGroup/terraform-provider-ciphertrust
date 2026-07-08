@@ -30,9 +30,9 @@ func sensitiveAttrsForResource(t *testing.T, r resource.Resource) map[string]boo
 	return result
 }
 
-// TestAWSConnectionSensitiveFields verifies that access_key_id and secret_access_key
+// Test_CM_AWSConnectionSensitiveFields verifies that access_key_id and secret_access_key
 // are marked Sensitive: true in the ciphertrust_aws_connection schema.
-func TestAWSConnectionSensitiveFields(t *testing.T) {
+func Test_CM_AWSConnectionSensitiveFields(t *testing.T) {
 	attrs := sensitiveAttrsForResource(t, NewResourceCCKMAWSConnection())
 	for _, field := range []string{"access_key_id", "secret_access_key"} {
 		sensitive, exists := attrs[field]
@@ -46,9 +46,9 @@ func TestAWSConnectionSensitiveFields(t *testing.T) {
 	}
 }
 
-// TestAzureConnectionSensitiveFields verifies that client_secret is marked
+// Test_CM_AzureConnectionSensitiveFields verifies that client_secret is marked
 // Sensitive: true in the ciphertrust_azure_connection schema.
-func TestAzureConnectionSensitiveFields(t *testing.T) {
+func Test_CM_AzureConnectionSensitiveFields(t *testing.T) {
 	attrs := sensitiveAttrsForResource(t, NewResourceAzureConnection())
 	for _, field := range []string{"client_secret"} {
 		sensitive, exists := attrs[field]
@@ -62,9 +62,9 @@ func TestAzureConnectionSensitiveFields(t *testing.T) {
 	}
 }
 
-// TestOCIConnectionSensitiveFields verifies that key_file and key_file_pass_phrase
+// Test_CM_OCIConnectionSensitiveFields verifies that key_file and key_file_pass_phrase
 // are marked Sensitive: true in the ciphertrust_oci_connection schema.
-func TestOCIConnectionSensitiveFields(t *testing.T) {
+func Test_CM_OCIConnectionSensitiveFields(t *testing.T) {
 	attrs := sensitiveAttrsForResource(t, NewResourceCCKMOCIConnection())
 	for _, field := range []string{"key_file", "key_file_pass_phrase"} {
 		sensitive, exists := attrs[field]

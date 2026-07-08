@@ -79,7 +79,7 @@ func requireDomainCreationLicensed(t *testing.T) {
 	}
 }
 
-func TestResourceCMDomain(t *testing.T) {
+func Test_CM_ResourceCMDomain(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
@@ -158,9 +158,9 @@ resource "ciphertrust_domain" "test" {
 `, name, adminsStr, allowUserMgmt, metaStr)
 }
 
-// TestAccCipherTrustCMDomain_basicDrift verifies that out-of-band mutations to
+// Test_CM_AccCipherTrustCMDomain_basicDrift verifies that out-of-band mutations to
 // admins, allow_user_management, and meta_data surface as drift.
-func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_basicDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-drift-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -223,10 +223,10 @@ func TestAccCipherTrustCMDomain_basicDrift(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_deleteOutOfBand verifies that when a domain is
+// Test_CM_AccCipherTrustCMDomain_deleteOutOfBand verifies that when a domain is
 // deleted out-of-band, Read() emits a warning and keeps the resource in state,
 // and that terraform destroy on an already-deleted domain completes without error.
-func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-oob-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -269,11 +269,10 @@ func TestAccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_updatePathKey verifies that Update() successfully PATCHes
-// a domain using the domain name as the path parameter (CM domain PATCH requires name,
-// not UUID). Uses meta_data change as the trigger because allow_user_management is
-// not updatable via PATCH on CM domains.
-func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
+// Test_CM_AccCipherTrustCMDomain_updatePathKey verifies that Update() sends state.ID
+// (UUID) as the PATCH path parameter. Uses meta_data change as the trigger because
+// allow_user_management is not updatable via PATCH on CM domains.
+func Test_CM_AccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-upd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -306,9 +305,9 @@ func TestAccCipherTrustCMDomain_updatePathKey(t *testing.T) {
 	})
 }
 
-// TestAccCipherTrustCMDomain_hsmDrift verifies drift detection for HSM fields.
+// Test_CM_AccCipherTrustCMDomain_hsmDrift verifies drift detection for HSM fields.
 // Skipped unless CIPHERTRUST_TEST_HSM_CONNECTION_ID is set.
-func TestAccCipherTrustCMDomain_hsmDrift(t *testing.T) {
+func Test_CM_AccCipherTrustCMDomain_hsmDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	hsmConnID := getEnvOrSkip(t, "CIPHERTRUST_TEST_HSM_CONNECTION_ID")
@@ -465,10 +464,10 @@ func getEnvOrSkip(t *testing.T, key string) string {
 	return v
 }
 
-// TestCMDomainNameImmutable verifies that attempting to rename a domain after
+// Test_CM_CMDomainNameImmutable verifies that attempting to rename a domain after
 // creation produces a clear, actionable plan-time error rather than silent
 // state drift.
-func TestCMDomainNameImmutable(t *testing.T) {
+func Test_CM_CMDomainNameImmutable(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + acctest.RandStringFromCharSet(10, acctest.CharSetAlphaNum)
