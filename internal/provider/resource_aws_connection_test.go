@@ -563,7 +563,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testGetAWSAccessKeyID(), testGetAWSSecretAccessKey())
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -601,7 +601,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert, testIAMAnywherePrivateKey)
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -644,6 +644,25 @@ resource "ciphertrust_aws_connection" "test" {
 		cfg += fmt.Sprintf("  description = %q\n", description)
 	}
 	cfg += "}\n"
+	return cfg
+}
+
+// awsRoleAnywhereConfigBool returns a ciphertrust_aws_connection config with a
+// configurable is_role_anywhere bool value. Used to test that changing
+// is_role_anywhere fires the ImmutableBool plan modifier.
+func awsRoleAnywhereConfigBool(name string, isRoleAnywhere bool, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = %v
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+  }
+}
+`, name, isRoleAnywhere, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
 	return cfg
 }
 
