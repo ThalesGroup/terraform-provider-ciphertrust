@@ -431,8 +431,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// CM domain PATCH endpoint uses the domain name (not the UUID) as the URL path segment.
-	_, err = r.client.UpdateData(ctx, state.Name.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
+	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+state.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
@@ -442,13 +441,12 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Read back the domain using the name (CM domains are looked up by name after PATCH).
-	readResponse, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_DOMAIN)
+	readResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager after update: ",
-			"Could not read CM Domain name: "+state.Name.ValueString()+", unexpected error: "+err.Error(),
+			"Could not read CM Domain id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
