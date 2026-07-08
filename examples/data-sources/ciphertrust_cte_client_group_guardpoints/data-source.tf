@@ -29,7 +29,7 @@ provider "ciphertrust" {
 }
 
 # Data source for retrieving CTE client group guardpoints details
-data "ciphertrust_cte_clientgroup_guardpoint" "example"" {
+data "ciphertrust_cte_clientgroup_guardpoint" "example" {
     # The name filter to specify which CTE client group guardpoints to retrieve (replace with actual client names)
     clientgroup_name = ""
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -51,19 +52,22 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"id": schema.StringAttribute{
 				Computed:    true,
 				Description: "The unique identifier for the NTP server (same as host)",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
-				Description: "Host (hostname/ip) of NTP server to add",
+				Description: "(Immutable) Host (hostname/ip) of NTP server to add",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"key": schema.StringAttribute{
 				Optional:    true,
-				Description: "Symmetric key value to be used for authenticated NTP servers",
+				Description: "(Immutable) Symmetric key value to be used for authenticated NTP servers",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"key_type": schema.StringAttribute{
@@ -76,9 +80,9 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"SHA-384",
 						"SHA-512"}...),
 				},
-				Description: "Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)",
+				Description: "(Immutable) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 		},
@@ -238,9 +242,13 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
-// Note: All attributes have RequiresReplace, so this method will never be called.
-// Terraform will automatically delete and recreate the resource for any changes.
 func (r *resourceCMNTP) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_ntp.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Update Not Supported",
+		"ciphertrust_ntp does not support updates. NTP server configuration is immutable — delete and recreate this resource to change NTP settings.",
+	)
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

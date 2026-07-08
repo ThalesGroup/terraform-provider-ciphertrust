@@ -10,8 +10,6 @@ import (
 )
 
 func TestCTEPolicyLDTKeyRuleResource(t *testing.T) {
-	RequireCM(t)
-
 	suffix := uuid.New().String()[:8]
 	key1Name := "ldt-key-initial-" + suffix
 	key2Name := "ldt-key-new-" + suffix

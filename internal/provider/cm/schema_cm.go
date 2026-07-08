@@ -460,15 +460,19 @@ type CMSSHKeyJSON struct {
 }
 
 type CMPwdChangeTFSDK struct {
-	Username    types.String `tfsdk:"username"`
-	Password    types.String `tfsdk:"password"`
-	NewPassword types.String `tfsdk:"new_password"`
+	Username     types.String `tfsdk:"username"`
+	Password     types.String `tfsdk:"password"`
+	NewPassword  types.String `tfsdk:"new_password"`
+	AuthDomain   types.String `tfsdk:"auth_domain"`
+	PasswordHint types.String `tfsdk:"password_hint"`
 }
 
 type CMPwdChangeJSON struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	NewPassword string `json:"new_password"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	NewPassword  string `json:"new_password"`
+	AuthDomain   string `json:"auth_domain,omitempty"`
+	PasswordHint string `json:"password_hint,omitempty"`
 }
 
 type CMDomainTFSDK struct {

@@ -54,5 +54,5 @@ resource "ciphertrust_cte_client_guardpoint" "dir_auto_gp" {
 
 # Output the unique ID of the created CTE GuardPoint
 output "guardpoint_id" {
-    value = ciphertrust_cte_guardpoint.dir_auto_gp.id
+    value = ciphertrust_cte_client_guardpoint.dir_auto_gp.id
 }

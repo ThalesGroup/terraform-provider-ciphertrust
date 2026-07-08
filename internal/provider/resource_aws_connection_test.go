@@ -13,6 +13,92 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
+// testGetAWSAccessKeyID returns the AWS access key ID for create tests.
+// Reads from TEST_AWS_ACCESS_KEY_ID; falls back to a clearly-fake placeholder
+// that does not match GitHub's AKIA secret-scanning pattern.
+func testGetAWSAccessKeyID() string {
+	if v := os.Getenv("TEST_AWS_ACCESS_KEY_ID"); v != "" {
+		return v
+	}
+	return "TESTACCESSKEYIDEXAMPLE"
+}
+
+// testGetAWSSecretAccessKey returns the AWS secret access key for create tests.
+// Reads from TEST_AWS_SECRET_ACCESS_KEY; falls back to a clearly-fake placeholder.
+func testGetAWSSecretAccessKey() string {
+	if v := os.Getenv("TEST_AWS_SECRET_ACCESS_KEY"); v != "" {
+		return v
+	}
+	return "TestFakeSecretAccessKeyForTestingOnlyXXXX"
+}
+
+const (
+
+	testIAMAnywhereCert = `-----BEGIN CERTIFICATE-----
+MIIFTzCCAzegAwIBAgIQZTREZhuT71nFpVShuW0pVTANBgkqhkiG9w0BAQsFADBa
+MQswCQYDVQQGEwJVUzELMAkGA1UECBMCVFgxDzANBgNVBAcTBkF1c3RpbjEPMA0G
+A1UEChMGVGhhbGVzMRwwGgYDVQQDExNDaXBoZXJUcnVzdCBSb290IENBMB4XDTIz
+MDMyMjA5MDY1NVoXDTMyMTIxNjEzMjEyOFowYTELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgTAk1EMRAwDgYDVQQHEwdCZWxjYW1wMRUwEwYDVQQKEwxUaGFsZXMgR3JvdXAx
+DDAKBgNVBAsTA1JuRDEOMAwGA1UEAxMFYWRtaW4wggEiMA0GCSqGSIb3DQEBAQUA
+A4IBDwAwggEKAoIBAQD2COszQEX1HZbR6qMxmA/N7bvidDo1kpgCVqjN2hTjk5hh
+SdurIudGxzW7JTJNf4adjYCibLNz+9QnmT/zWiOCgRIO1KIzK8Mh8V3BW/ZCin4Y
+LqYswoNMQYEuVIRjU6Q7C+eSbAk82wIH+dkFJbTOerylKJ7QKYaikpjviwTLJM+K
+thCfSaulsDU7qMOJMZqdgr5xDTcmVxFFXafqRMQgJjydT4IPr1ZtTapPIbJorjy/
+alAvOkMjUBf7yDkGxZI48mKN4QX2V6wOcrPZBEVXWn3lHDt0zek8/k3oQt6wq20w
++zLyuopA6hbpkNInovu60nQvYwqVDcbwFkQ+k60tAgMBAAGjggEIMIIBBDAOBgNV
+HQ8BAf8EBAMCA4gwEwYDVR0lBAwwCgYIKwYBBQUHAwIwDAYDVR0TAQH/BAIwADAf
+BgNVHSMEGDAWgBRJtGj7rVwPDfLFgbU2wy3N4eIAGjBOBgNVHREERzBFghEqLnRo
+YWxlc2dyb3VwLmNvbYIRKi50aGFsZXNncm91cC5uZXSBF2NvbnRhY3RAdGhhbGVz
+Z3JvdXAuY29thwQBAQEBMF4GA1UdHwRXMFUwU6BRoE+GTWh0dHA6Ly9jaXBoZXJ0
+cnVzdG1hbmFnZXIubG9jYWwvY3Jscy8zNjczNzgxNC1mYWMyLTQ4MGMtOGFlZi04
+ZmY2MTA1YjljYWEuY3JsMA0GCSqGSIb3DQEBCwUAA4ICAQB8iJui2RGvhI7p4LVW
+Qhz3k/FrzBXZBxJXnP6F+uczjgt4ML/FiAz4VuPRYnzHsfLh8ZkMvIdgGG4pDUt9
+f8rgsvVETYwhzyFA6mjqVUzaDnfAR9Q9iGmZKh948DCebSi193G7qbqjiOFMPal9
+OIlyoRGpSJ7vTFkbvnzNI0pZK9Wo+eR7XXuB2I8owYV4+3y8i0Otn+HqeCFpNPeh
+Bw4d26KusdFRIJysdBs/6SuwaLamZ+Al5RYgbgEvcawCwKa8VqGCIiQDQA/1CBg8
+SpuZLH5WtYrpos2cjbPqauZ9G0R0mLdEnmlpm8FCyPvWUAl9KgvgsQrnwVlDciiW
+aX+0ZJtBWxlVGVUofNZX13+Z1DeYbJyHcjzfFyuu9kNUDbCjxnqirrSc+Jx10S4i
+b+8wyz8/sX6TaZfknno2V9v5ETBUJxIFAKKEY9sBBqpkJL1hwcnBUhT5xjBqRQTX
+nRvU+9WKnOto04MI1Zzb3kaRwBJi6KhY4Y1JMuApwRjKGGfsM3UkrN/WcconSa3i
+oQZVRGw0Liu8W5OtyyQFhX8+qOilXOOEIIe7I4OF+Icfm4ftmryhqwFIOuhaqs0L
+U5of3V2S+h2+Pknoo5by390lpzkvq9c7DEu0wzEyEZ5Pg1e4moOg49lfSVMoKi00
+hsdrliuQ+mRB2RlHwskdaTW9oQ==
+-----END CERTIFICATE-----`
+
+	testIAMAnywherePrivateKey = `-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA5Q0/50DPEc+ToVPT/aA+tQnWcThXma1X0cKXciwwCxAmNS6X
+TzehzDjmnsdYoJV5S0aK2VNn0LBlGrsbPbQiYK9yQZ1pIh5i3vsXKr3JCotgLIw4
+iyu4VFnwqqczMeyYr2Dv6G2UN44GUChqgP21cLrOE/YOF0THTxddeMvDAYpfVnJF
+23sny83sCuYifg5Ektmi4JHrol1vj6sIbsEpB298EnWhemcTe1uZ5eor31iibKBI
+OZJFd+Y6ZxZziofMC2NkCqGQdZqB/XJ+BxFpIwY72e3QgFRuR8dyDlHko3O8kIXf
+hvwAm+jiDzGXvDtiUrkwj67STJAhld6vH/N08wIDAQABAoIBAQCKfw9zuek7AMNo
+WfKlud4Qw2kJvqKhRoICUGIYZAWMuvAPWiOdf6ryfDleKnU5bAgSbw4HyHnOYspP
+dnFLRv8+bPduG0r1mV/5KePhMS49lPbLGOIbrIzhXBy8Yyr+dewAp2GIrbFgQh0p
+HLcBVeb+ycVPpojwouLMvPkE0FgSNj8FPeH3QDvk4hgr2UWmlqJ3OYRJYduF8TeP
+IC/pY4v+zBHt+uaQYd90+yGVNeRuIsVmeIdsMLrE8M8uoK6cy0jAxjoCgkIOhGn6
+d6Y+JizUZSQJoaLd+JB+ZETxCoCzfaOBHjcTgO+GUc2yWYJGwpSstjX2zRRZMv+w
+acqsQCUBAoGBAPCiiWTjmPwL4ISjazAxwOy98Zrt4mtHpebiLVxH+sPtAudcuYat
+M1N5mnayBMKlhI9U+G0IkNyTTY4MqfYIsw77enA84jfjp8nFTQEvoCOLx/9/0Rrc
+qIhw7oj7QtWOzj6Yk6IXfLfdBQ0oiVJyBZbPthVrjytQ4SmqFbnHQ6OBAoGBAPOt
+X18GsGZ3Uh5lu65r04WfbbjyQ8O5Gk0hpc9I9al7j1a5Oxpi47wI5Uq2Gw8oMnYy
+iYashJQoyXXQIwDi0bzIsuhJa6tVbpdvMlHPqwhyh51mM4y6qspEaHfA2xgp7kXv
+GPfGzQN71+zhZBDbWMszJRhvJxFSyN/udn/SSgJzAoGAPcjN1Cyn7Bc0l3nKHL65
+lU+TyD7KAteLnkN2eBo3JbUmKLdjH1Q7OHShl1ZP6JZM+exMONqZLzlXEWDpBrXn
+G7KwFj9bqhP20dSp1+Mdj+LlABIWY3pCf33XkS5KU8Dt7Z6JUXYMXL0P/ffpglSq
+YLWGP+u0/98tYOA94cxq7oECgYAkRFd/cyVp+rRUJdwLF61Bo/rWnegMB06s0Cc3
+dKprcSJiS+tKABHY+JH3zqa0WM053ketrZuF2ZQyXqn3Bcslh9Fo1RSbSXnOPBSH
+LJtOBI2+lWlyto2Y0RmjSSbSr9rwuadDqWj17cazUNBt2debVp9cxZ5Q67tN6NXm
+LEwrlQKBgQCMoQ+zk0iSRt2Xnbv4Fvx4d1/dTDhyeMIDG1Vp7OtDEgMVaBsAMjrW
+jmooZyN/CR2iiFtUE5Yv9Y2kd586YaHEVQ9vBLUs0Fee5NtZPWgiBp5jTvpaBYlc
+6nHwS7c+qB3UULBARunwbzkMVG3EbCcutXU1NZqVs3CchajlOAX1tg==
+-----END RSA PRIVATE KEY-----`
+
+	testIAMAnywhereProfileARN     = "arn:aws:rolesanywhere:us-east-1:556782317223:profile/3c30dfae-294e-42bd-b18a-75e9fd2759c0"
+	testIAMAnywhereTrustAnchorARN = "arn:aws:rolesanywhere:us-east-1:556782317223:trust-anchor/c4564179-fa53-47a1-5e77-24d6829d2810"
+	testIAMAnywhereRoleARN        = "arn:aws:rolesanywhere:us-east-1:556782317223:role-arn/3c30dfae-294e-42bd-b18a-54e9fd2759c0"
+)
+
 // awsAccessKeyID returns the AWS access key ID for acceptance tests.
 // Reads from the environment variable; falls back to the well-known placeholder
 // value from AWS documentation when the env var is not set.
@@ -86,11 +172,9 @@ func deleteAWSConnection(id string) {
 	)
 }
 
-// TestAccAWSConnection_drift verifies that Read() surfaces an out-of-band
+// TestCM_AWSConnection_drift verifies that Read() surfaces an out-of-band
 // description change as drift.
-func TestAccAWSConnection_drift(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_drift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-drift-" + suffix
 	var capturedID string
@@ -134,11 +218,9 @@ func TestAccAWSConnection_drift(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_driftScalars verifies drift detection for Optional scalar
+// TestCM_AWSConnection_driftScalars verifies drift detection for Optional scalar
 // fields: aws_region and cloud_name.
-func TestAccAWSConnection_driftScalars(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_driftScalars(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-scalar-" + suffix
 	var capturedID string
@@ -185,11 +267,9 @@ func TestAccAWSConnection_driftScalars(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_driftMapAndList verifies drift detection for labels, meta,
+// TestCM_AWSConnection_driftMapAndList verifies drift detection for labels, meta,
 // and products.
-func TestAccAWSConnection_driftMapAndList(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_driftMapAndList(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-maplist-" + suffix
 	var capturedID string
@@ -236,20 +316,9 @@ func TestAccAWSConnection_driftMapAndList(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_driftIAMRoleAnywhere verifies drift detection for
-// iam_role_anywhere readable sub-fields. Skipped if IAM Anywhere env vars
-// are not set.
-func TestAccAWSConnection_driftIAMRoleAnywhere(t *testing.T) {
-	RequireCM(t)
-
-	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
-	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
-	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
-	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
-	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
-		t.Skip("skipping TestAccAWSConnection_driftIAMRoleAnywhere: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
-	}
-
+// TestCM_AWSConnection_driftIAMRoleAnywhere verifies drift detection for
+// iam_role_anywhere readable sub-fields.
+func TestCM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-iam-" + suffix
 	var capturedID string
@@ -265,9 +334,9 @@ resource "ciphertrust_aws_connection" "test" {
     certificate       = %q
   }
 }
-`, name, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
+`, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert)
 
-	altRoleARN := anywhereRoleARN + "-changed"
+	altRoleARN := testIAMAnywhereRoleARN + "-changed"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -307,11 +376,9 @@ resource "ciphertrust_aws_connection" "test" {
 	})
 }
 
-// TestAccAWSConnection_outOfBandDelete verifies that Read() removes the resource
+// TestCM_AWSConnection_outOfBandDelete verifies that Read() removes the resource
 // from state on 404, and that Delete() 404-guards the test teardown.
-func TestAccAWSConnection_outOfBandDelete(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_outOfBandDelete(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-oob-del-" + suffix
 	var capturedID string
@@ -339,11 +406,9 @@ func TestAccAWSConnection_outOfBandDelete(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_immutableName verifies that changing `name` raises a
+// TestCM_AWSConnection_immutableName verifies that changing `name` raises a
 // plan-time error from NameImmutableModifier, not a destroy+recreate diff.
-func TestAccAWSConnection_immutableName(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_immutableName(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	original := "tf-acc-aws-orig-" + suffix
 	changed := "tf-acc-aws-chgd-" + suffix
@@ -377,15 +442,15 @@ resource "ciphertrust_aws_connection" "test" {
 `, name)
 }
 
-// TestAccAWSConnection_envVarFallbackWritesToState verifies that when
-// access_key_id and secret_access_key are omitted from HCL config and supplied
-// via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY environment variables, the
-// Create() function writes the resolved values into Terraform state so that
-// subsequent plans are idempotent (no perpetual diff).
-func TestAccAWSConnection_envVarFallbackWritesToState(t *testing.T) {
-	RequireCM(t)
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-		t.Skip("skipping TestAccAWSConnection_envVarFallbackWritesToState: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
+// TestCM_AWSConnection_envVarFallbackWritesToState verifies that omitting credentials from HCL
+// and supplying them via AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY writes them to state,
+// keeping subsequent plans idempotent.
+func TestCM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+		t.Setenv("AWS_ACCESS_KEY_ID", testGetAWSAccessKeyID())
+	}
+	if os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		t.Setenv("AWS_SECRET_ACCESS_KEY", testGetAWSSecretAccessKey())
 	}
 
 	suffix := uuid.New().String()[:8]
@@ -396,17 +461,14 @@ func TestAccAWSConnection_envVarFallbackWritesToState(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Create with no credentials in HCL; env-var fallback should supply them.
 				Config: cfg,
 				Check: checkStep(t, "env-var fallback: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
-					// Both credential fields must be non-null in state after Create().
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "access_key_id"),
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "secret_access_key"),
 				),
 			},
 			{
-				// Second plan with identical config must produce no diff (idempotency).
 				Config:   cfg,
 				PlanOnly: true,
 			},
@@ -436,16 +498,14 @@ resource "ciphertrust_aws_connection" "test" {
 `, name, awsAccessKeyID(), productsLiteral)
 }
 
-// TestAccAWSConnection_InvalidProductRejected verifies that terraform plan produces
+// TestCM_AWSConnection_InvalidProductRejected verifies that terraform plan produces
 // a diagnostic error when products contains an invalid value, preventing the user
 // from reaching terraform apply.
-func TestAccAWSConnection_InvalidProductRejected(t *testing.T) {
-	RequireCM(t)
+func TestCM_AWSConnection_InvalidProductRejected(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// PlanOnly: true — never calls Apply; verifies plan-phase validation only.
 				PlanOnly:    true,
 				Config:      awsConnConfigInvalidProduct("tftest-invalid-product"),
 				ExpectError: regexp.MustCompile(`(?i)value must be one of`),
@@ -454,12 +514,10 @@ func TestAccAWSConnection_InvalidProductRejected(t *testing.T) {
 	})
 }
 
-// TestAccAWSConnection_ValidProducts verifies the full happy path through the new
+// TestCM_AWSConnection_ValidProducts verifies the full happy path through the new
 // validator: valid product values are accepted at plan time, applied successfully,
 // updated to a multi-value list, and Read() round-trips products without drift.
-func TestAccAWSConnection_ValidProducts(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_ValidProducts(t *testing.T) {
 	resourceName := "ciphertrust_aws_connection.test"
 	suffix := uuid.New().String()[:8]
 	connName := "tftest-valid-products-" + suffix
@@ -468,7 +526,6 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Step 1: Create with single valid product.
 				Config: awsConnConfigWithProducts(connName, `["cckm"]`),
 				Check: checkStep(t, "create with cckm",
 					resource.TestCheckResourceAttr(resourceName, "products.0", "cckm"),
@@ -476,8 +533,6 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 				),
 			},
 			{
-				// Step 2: Update to two valid products — verifies in-place update path
-				// (products is in update_connection_request_common; no RequiresReplace).
 				Config: awsConnConfigWithProducts(connName, `["cckm", "backup/restore"]`),
 				Check: checkStep(t, "update to two products",
 					resource.TestCheckResourceAttr(resourceName, "products.#", "2"),
@@ -486,8 +541,6 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 				),
 			},
 			{
-				// Step 3: Drift detection — RefreshState re-reads from CM and confirms no diff,
-				// verifying that Read() hydrates products correctly from the API response.
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -495,6 +548,82 @@ func TestAccAWSConnection_ValidProducts(t *testing.T) {
 	})
 }
 
+// TestCM_AWSConnection_createSecretKey verifies the basic create → read → delete
+// lifecycle for an AWS connection that uses an access key ID and secret access key.
+func TestCM_AWSConnection_createSecretKey(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	name := "tf-aws-secretkey-" + suffix
+	resourceName := "ciphertrust_aws_connection.test"
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name              = %q
+  access_key_id     = %q
+  secret_access_key = %q
+}
+`, name, testGetAWSAccessKeyID(), testGetAWSSecretAccessKey())
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create secret key connection",
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "access_key_id", testGetAWSAccessKeyID()),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
+					resource.TestCheckResourceAttrSet(resourceName, "updated_at"),
+				),
+			},
+		},
+	})
+}
+
+// TestCM_AWSConnection_createIAMAnywhere verifies the basic create → read → delete
+// lifecycle for an AWS connection that uses IAM Roles Anywhere (is_role_anywhere = true).
+func TestCM_AWSConnection_createIAMAnywhere(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	name := "tf-aws-iamanywhere-" + suffix
+	resourceName := "ciphertrust_aws_connection.test"
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name             = %q
+  is_role_anywhere = true
+  iam_role_anywhere {
+    anywhere_role_arn = %q
+    trust_anchor_arn  = %q
+    profile_arn       = %q
+    certificate       = %q
+    private_key       = %q
+  }
+}
+`, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert, testIAMAnywherePrivateKey)
+
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create IAM Anywhere connection",
+					resource.TestCheckResourceAttr(resourceName, "name", name),
+					resource.TestCheckResourceAttr(resourceName, "is_role_anywhere", "true"),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.anywhere_role_arn", testIAMAnywhereRoleARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.trust_anchor_arn", testIAMAnywhereTrustAnchorARN),
+					resource.TestCheckResourceAttr(resourceName, "iam_role_anywhere.0.profile_arn", testIAMAnywhereProfileARN),
+					resource.TestCheckResourceAttrSet(resourceName, "id"),
+					resource.TestCheckResourceAttrSet(resourceName, "created_at"),
+					resource.TestCheckResourceAttrSet(resourceName, "updated_at"),
+				),
+			},
+		},
+	})
+}
+
+// awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
+// is_role_anywhere = true and an iam_role_anywhere block. private_key is
+// intentionally omitted from HCL.
 // awsRoleAnywhereConfig returns a ciphertrust_aws_connection config with
 // is_role_anywhere = true and an iam_role_anywhere block. private_key is
 // intentionally omitted from HCL — it is supplied via the
@@ -538,33 +667,25 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1 — create with iam_role_anywhere configured and initial description.
 			{
-				Config: awsRoleAnywhereConfig(name, "initial description", certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				Config: awsRoleAnywhereConfig(name, "initial description", testIAMAnywhereCert, testIAMAnywhereRoleARN, testIAMAnywhereProfileARN, testIAMAnywhereTrustAnchorARN),
 				Check: checkStep(t, "create role-anywhere connection",
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "initial description"),
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "is_role_anywhere", "true"),
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
 				),
 			},
-			// Step 2 — update only description; iam_role_anywhere block is identical.
-			// Primary regression gate: if the bug were present, Update() would re-send
-			// the certificate and CM would return 400 "Certificate from same CSR".
 			{
-				Config: awsRoleAnywhereConfig(name, "updated description", certificate, anywhereRoleARN, profileARN, trustAnchorARN),
-				Check: checkStep(t, "update description only — iam_role_anywhere omitted from PATCH",
+				Config: awsRoleAnywhereConfig(name, "updated description", testIAMAnywhereCert, testIAMAnywhereRoleARN, testIAMAnywhereProfileARN, testIAMAnywhereTrustAnchorARN),
+				Check: checkStep(t, "update description only",
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "updated description"),
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "is_role_anywhere", "true"),
 				),
 			},
-			// Step 3 — plan-only: verify Terraform detects a changed profile_arn within
-			// iam_role_anywhere. ExpectNonEmptyPlan confirms the plan phase picks up the
-			// config-level diff. A full apply with a new certificate is deferred because
-			// it requires a freshly issued cert not available in the static test corpus.
 			{
-				Config: awsRoleAnywhereConfig(name, "updated description", certificate, anywhereRoleARN,
+				Config: awsRoleAnywhereConfig(name, "updated description", testIAMAnywhereCert, testIAMAnywhereRoleARN,
 					"arn:aws:rolesanywhere:us-east-1:123456789012:profile/new",
-					trustAnchorARN),
+					testIAMAnywhereTrustAnchorARN),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
@@ -579,31 +700,10 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 	})
 }
 
-// awsRoleAnywhereConfigBool returns an AWS connection config with is_role_anywhere
-// set to the given bool value. Uses the same resource label as awsRoleAnywhereConfig
-// so immutability steps run against the same state resource.
-func awsRoleAnywhereConfigBool(name string, isRoleAnywhere bool, certificate, anywhereRoleARN, profileARN, trustAnchorARN string) string {
-	cfg := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_aws_connection" "test" {
-  name             = %q
-  is_role_anywhere = %t
-  iam_role_anywhere {
-    anywhere_role_arn = %q
-    trust_anchor_arn  = %q
-    profile_arn       = %q
-    certificate       = %q
-  }
-}
-`, name, isRoleAnywhere, anywhereRoleARN, trustAnchorARN, profileARN, certificate)
-	return cfg
-}
-
-// TestAccAWSConnection_updateComputedFields verifies that Computed fields are
+// TestCM_AWSConnection_updateComputedFields verifies that Computed fields are
 // refreshed from CM in state after an in-Terraform update, and that Update()
 // does not corrupt the resource ID.
-func TestAccAWSConnection_updateComputedFields(t *testing.T) {
-	RequireCM(t)
-	requireAWSIAMCredentials(t)
+func TestCM_AWSConnection_updateComputedFields(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-upd-" + suffix
 	var capturedID string

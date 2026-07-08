@@ -9,8 +9,6 @@ import (
 )
 
 func TestCTEPolicyIDTKeyRulesDataSource(t *testing.T) {
-	RequireCM(t)
-
 	policyName := "tf-policy-idt-" + uuid.New().String()[:8]
 	keyName := "tf-key-idt-" + uuid.New().String()[:8]
 
