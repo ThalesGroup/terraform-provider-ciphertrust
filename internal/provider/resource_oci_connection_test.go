@@ -10,9 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-// TestCckmOCIConnection exercises the full lifecycle of the ciphertrust_oci_connection resource:
+// Test_CM_CckmOCIConnection exercises the full lifecycle of the ciphertrust_oci_connection resource:
 // Create, RefreshState, ImportState, Update (description change), and Update (region change).
-func TestCckmOCIConnection(t *testing.T) {
+func Test_CM_CckmOCIConnection(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")
@@ -130,10 +130,10 @@ func TestCckmOCIConnection(t *testing.T) {
 	})
 }
 
-// TestCckmOCIConnectionNameImmutable is a focused regression test that verifies the provider
+// Test_CM_CckmOCIConnectionNameImmutable is a focused regression test that verifies the provider
 // returns a clear, actionable error (not a framework-level "inconsistent result") when the
 // user attempts to change the immutable 'name' field of an OCI connection.
-func TestCckmOCIConnectionNameImmutable(t *testing.T) {
+func Test_CM_CckmOCIConnectionNameImmutable(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")

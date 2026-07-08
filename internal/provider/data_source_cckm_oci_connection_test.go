@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmOCIDataSourceConnection(t *testing.T) {
+func Test_CM_CckmOCIDataSourceConnection(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")

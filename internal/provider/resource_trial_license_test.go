@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestResourceTrialLicense(t *testing.T) {
+func Test_CM_ResourceTrialLicense(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -25,9 +25,9 @@ resource "ciphertrust_trial_license" "trial_license" {
 	})
 }
 
-// TestAccCipherTrust_TrialLicense_StableComputedFields verifies that name and description
+// Test_CM_AccCipherTrust_TrialLicense_StableComputedFields verifies that name and description
 // do not show as (known after apply) on subsequent plans after the first apply.
-func TestAccCipherTrust_TrialLicense_StableComputedFields(t *testing.T) {
+func Test_CM_AccCipherTrust_TrialLicense_StableComputedFields(t *testing.T) {
 	RequireCM(t)
 
 	cfg := providerConfig + `

@@ -81,12 +81,10 @@ provider "ciphertrust" {
 `, addr)
 }
 
-// TestPlanTimeGating_CMOnlyResourceFailsOnCDSPaaS verifies that a CM-only
-// resource (ciphertrust_ntp here) fails at terraform plan time when the
-// provider is configured against a CDSPaaS deployment (i.e. tenant is set).
-// It does not require TF_ACC because IsUnitTest is true and the auth
-// endpoint is faked.
-func TestPlanTimeGating_CMOnlyResourceFailsOnCDSPaaS(t *testing.T) {
+// Test_CM_PlanTimeGating_CMOnlyResourceFailsOnCDSPaaS verifies that a CM-only resource
+// (ciphertrust_ntp here) fails at terraform plan time when the provider is configured
+// against a CDSPaaS deployment (i.e. tenant is set). Uses a faked auth endpoint.
+func Test_CM_PlanTimeGating_CMOnlyResourceFailsOnCDSPaaS(t *testing.T) {
 	setProviderCredEnv(t)
 	server := fakeCDSPaaSAuthServer(t)
 	defer server.Close()
@@ -107,11 +105,10 @@ resource "ciphertrust_ntp" "x" {
 	})
 }
 
-// TestPlanTimeGating_CMOnlyResourcePassesOnCM is the negative control: the
-// same gated resource MUST plan cleanly when tenant is unset (CM mode),
-// confirming the gate fires only on CDSPaaS. We don't run apply (no real CM
-// server here) — PlanOnly is enough to exercise ValidateConfig.
-func TestPlanTimeGating_CMOnlyResourcePassesOnCM(t *testing.T) {
+// Test_CM_PlanTimeGating_CMOnlyResourcePassesOnCM is the negative control: the same gated
+// resource MUST plan cleanly when tenant is unset (CM mode), confirming the gate fires
+// only on CDSPaaS. PlanOnly is enough to exercise ValidateConfig (no real CM server).
+func Test_CM_PlanTimeGating_CMOnlyResourcePassesOnCM(t *testing.T) {
 	// Prevent a pipeline-set CIPHERTRUST_TENANT from enabling CDSPaaS mode;
 	// this test must exercise the CM (no-tenant) path regardless of env.
 	t.Setenv("CIPHERTRUST_TENANT", "")
@@ -136,20 +133,10 @@ resource "ciphertrust_ntp" "x" {
 	})
 }
 
-// TestPlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS is the comprehensive
-// table for plan-time gating: every CM-only resource we ship must produce
-// the "Resource not supported on CDSPaaS" diagnostic at plan time when the
-// provider is configured with `tenant`. Each row is a function that returns
-// a minimal HCL body shaped enough to pass schema-level validation;
-// ValidateConfig then fires before any HTTP call to the resource endpoint
-// is attempted.
-//
-// hclBody is a func (rather than a literal string) so rows that need
-// throwaway non-empty strings for keyword-named fields can compose them via
-// fmt.Sprintf and avoid placing keyword-literal pairs in this source file.
-//
-// When you add a new gated resource, add a row here.
-func TestPlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS(t *testing.T) {
+// Test_CM_PlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS is the comprehensive table for
+// plan-time gating: every CM-only resource we ship must produce the "Resource not supported
+// on CDSPaaS" diagnostic at plan time when `tenant` is set. Add a row here for new gated resources.
+func Test_CM_PlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS(t *testing.T) {
 	cases := []struct {
 		name    string        // subtest name (also t.Run label)
 		typeID  string        // ciphertrust_<type>

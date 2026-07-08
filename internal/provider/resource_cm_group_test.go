@@ -31,9 +31,9 @@ resource "ciphertrust_groups" "testGroup" {
 	return providerConfig + cfg
 }
 
-// TestAccCMGroup_nameImmutable verifies that changing the group name is blocked at plan
+// Test_CM_AccCMGroup_nameImmutable verifies that changing the group name is blocked at plan
 // time with a clear error, leaving the original group untouched on CM.
-func TestAccCMGroup_nameImmutable(t *testing.T) {
+func Test_CM_AccCMGroup_nameImmutable(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -53,7 +53,7 @@ func TestAccCMGroup_nameImmutable(t *testing.T) {
 	})
 }
 
-func TestAccCMGroup_basicCreate(t *testing.T) {
+func Test_CM_AccCMGroup_basicCreate(t *testing.T) {
 	name := "TFTestGroup-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
@@ -78,7 +78,7 @@ func TestAccCMGroup_basicCreate(t *testing.T) {
 	})
 }
 
-func TestAccCMGroup_driftDetection(t *testing.T) {
+func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 	name := "TFTestGroupDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
@@ -273,10 +273,10 @@ func extractUserID(obj string) string {
 	return rest[:end]
 }
 
-// TestAccCMGroup_userIDsCreate verifies that user_ids on Create adds the
+// Test_CM_AccCMGroup_userIDsCreate verifies that user_ids on Create adds the
 // referenced users to the group, that the field round-trips through state,
 // and that a subsequent plan reports no drift.
-func TestAccCMGroup_userIDsCreate(t *testing.T) {
+func Test_CM_AccCMGroup_userIDsCreate(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	groupName := "TFTestGroupUsers-" + suffix
 	username := "tf-test-user-" + suffix
@@ -304,10 +304,10 @@ func TestAccCMGroup_userIDsCreate(t *testing.T) {
 	})
 }
 
-// TestAccCMGroup_userIDsAddRemove walks the membership through three states:
+// Test_CM_AccCMGroup_userIDsAddRemove walks the membership through three states:
 // one user → two users → one user. Each transition must reconcile via the
 // add-user / remove-user endpoints and end with the live group matching state.
-func TestAccCMGroup_userIDsAddRemove(t *testing.T) {
+func Test_CM_AccCMGroup_userIDsAddRemove(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	groupName := "TFTestGroupAddRem-" + suffix
 	userA := "tf-test-usera-" + suffix
@@ -354,10 +354,10 @@ func TestAccCMGroup_userIDsAddRemove(t *testing.T) {
 	})
 }
 
-// TestAccCMGroup_userIDsDrift verifies that out-of-band removal of a user
+// Test_CM_AccCMGroup_userIDsDrift verifies that out-of-band removal of a user
 // from the group is detected on the next plan (Read populates user_ids from
 // the live API, not from cached state).
-func TestAccCMGroup_userIDsDrift(t *testing.T) {
+func Test_CM_AccCMGroup_userIDsDrift(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	groupName := "TFTestGroupUserDrift-" + suffix
 	username := "tf-test-driftuser-" + suffix
@@ -402,10 +402,10 @@ func TestAccCMGroup_userIDsDrift(t *testing.T) {
 	})
 }
 
-// TestAccCMGroup_userIDsOmittedUnmanaged verifies that omitting user_ids from
+// Test_CM_AccCMGroup_userIDsOmittedUnmanaged verifies that omitting user_ids from
 // config leaves membership unmanaged: pre-existing members added out-of-band
 // remain in the group, and the plan stays empty.
-func TestAccCMGroup_userIDsOmittedUnmanaged(t *testing.T) {
+func Test_CM_AccCMGroup_userIDsOmittedUnmanaged(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	groupName := "TFTestGroupUnmanaged-" + suffix
 	username := "tf-test-unmanaged-" + suffix
@@ -453,7 +453,7 @@ func TestAccCMGroup_userIDsOmittedUnmanaged(t *testing.T) {
 	})
 }
 
-func TestAccCMGroup_attributeDrift(t *testing.T) {
+func Test_CM_AccCMGroup_attributeDrift(t *testing.T) {
 	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
