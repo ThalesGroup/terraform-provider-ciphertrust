@@ -152,6 +152,20 @@ func TestCckmSchedulersRotationResource(t *testing.T) {
 					ImportStateVerify:       true,
 					ImportStateVerifyIgnore: rotationImportIgnore,
 				},
+				{
+					// cckm_key_rotation_params is now immutable (TFIN-269): verify plan-time rejection.
+					Config:      updateConfig,
+					PlanOnly:    true,
+					ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+				},
+				{
+					// No-drift check: original create config produces no changes after import.
+					// Use createConfig explicitly — RefreshState would inherit the updateConfig
+					// context from the previous PlanOnly step and trigger ImmutableObject errors.
+					Config:             createConfig,
+					PlanOnly:           true,
+					ExpectNonEmptyPlan: false,
+				},
 			},
 		})
 	})
