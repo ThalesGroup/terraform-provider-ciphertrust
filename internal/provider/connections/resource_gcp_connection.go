@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -54,8 +55,8 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique connection name. Immutable after creation.",
-				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
+				Description: "(Immutable) Unique connection name.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,

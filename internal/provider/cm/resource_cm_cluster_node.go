@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
@@ -79,11 +80,17 @@ func (r *resourceCMClusterNode) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
-				Description: "Hostname or IP address of the node to add to the cluster.",
+				Description: "(Immutable) Hostname or IP address of the node to add to the cluster.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
-				Description: "Port of the node to add, typically 5432.",
+				Description: "(Immutable) Port of the node to add, typically 5432.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"public_address": schema.StringAttribute{
 				Required:    true,
@@ -122,13 +129,19 @@ func (r *resourceCMClusterNode) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"member_host": schema.StringAttribute{
 				Optional:    true,
-				Description: "Hostname or FQDN of any existing cluster member to join through. Can be any node already in the cluster, not necessarily the first/original node. If omitted, the provider's configured address is used. Use an FQDN (e.g. ec2-1-2-3-4.compute-1.amazonaws.com) to match the member node's TLS certificate.",
+				Description: "(Immutable) Hostname or FQDN of any existing cluster member to join through. Can be any node already in the cluster, not necessarily the first/original node. If omitted, the provider's configured address is used. Use an FQDN (e.g. ec2-1-2-3-4.compute-1.amazonaws.com) to match the member node's TLS certificate.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"member_port": schema.Int64Attribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     int64default.StaticInt64(5432),
-				Description: "Port of the existing cluster member (the provider's configured node). Defaults to 5432.",
+				Description: "(Immutable) Port of the existing cluster member (the provider's configured node). Defaults to 5432.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"node_id": schema.StringAttribute{
 				Computed:    true,

@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -97,8 +98,8 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"name": schema.StringAttribute{
 				Required:      true,
-				Description:   "Unique connection name. Immutable after creation — changing this field will produce a plan-time error.",
-				PlanModifiers: []planmodifier.String{NameImmutableModifier{}},
+				Description:   "(Immutable) Unique connection name.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"pub_key_fingerprint": schema.StringAttribute{
 				Required:    true,
