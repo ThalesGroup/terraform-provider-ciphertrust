@@ -496,3 +496,54 @@ resource "ciphertrust_domain" "testDomain" {
 		},
 	})
 }
+
+// TestAccCMDomain_MutableFieldUpdate verifies that Update() uses state.ID as the
+// PATCH path key by successfully updating meta_data (a mutable field) after creation.
+func TestAccCMDomain_MutableFieldUpdate(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-upd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "test" }
+}
+`, rName),
+				Check: checkStep(t, "create with meta_data",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "test"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "prod" }
+}
+`, rName),
+				Check: checkStep(t, "update meta_data",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "prod"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name      = %q
+  admins    = ["admin"]
+  meta_data = { "env" = "prod" }
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
