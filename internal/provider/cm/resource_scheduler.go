@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -91,12 +92,12 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"operation": schema.StringAttribute{
 				Required:    true,
-				Description: "The operation field specifies the type of operation to be performed. Currently, only " + strings.Join(supportedOperations, ", ") + " are supported. Immutable after creation — changing this field forces replacement.",
+				Description: "(Immutable) The operation field specifies the type of operation to be performed. Currently, only " + strings.Join(supportedOperations, ", ") + " are supported.",
 				Validators: []validator.String{
 					stringvalidator.OneOf(supportedOperations...),
 				},
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"run_at": schema.StringAttribute{
@@ -212,8 +213,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed: true,
 				PlanModifiers: []planmodifier.Object{
 					common.NewObjectUseStateForUnknown(),
+					modifiers.ImmutableObject(),
 				},
-				Description: "CCKM XKS credential rotation operation specific arguments.",
+				Description: "(Immutable) CCKM XKS credential rotation operation specific arguments.",
 				Attributes: map[string]schema.Attribute{
 					"cloud_name": schema.StringAttribute{
 						Required:    true,
@@ -235,8 +237,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed: true,
 				PlanModifiers: []planmodifier.Object{
 					common.NewObjectUseStateForUnknown(),
+					modifiers.ImmutableObject(),
 				},
-				Description: "Specifies cloud key rotation parameters.",
+				Description: "(Immutable) Specifies cloud key rotation parameters.",
 				Attributes: map[string]schema.Attribute{
 					"aws_retain_alias": schema.BoolAttribute{
 						Optional: true,
@@ -529,14 +532,6 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		dbBackupParams := getDatabaseOperationBackupParams(plan)
 		if dbBackupParams != nil {
 			payload.DatabaseBackupParams = dbBackupParams
-		}
-	case "cckm_key_rotation":
-		payload.CCKMRotationParams = getCckmKeyRotationOperationParams(ctx, plan, &state, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if payload.CCKMRotationParams != nil {
-			payload.CCKMRotationParams.CloudName = ""
 		}
 	case "cckm_synchronization":
 		payload.CCKMSynchronizationParams = getCckmSyncParams(ctx, plan, &resp.Diagnostics)

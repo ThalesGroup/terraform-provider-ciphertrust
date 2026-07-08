@@ -109,6 +109,16 @@ func awsAccessKeyID() string {
 	return "AKIAIOSFODNN7EXAMPLE"
 }
 
+// requireAWSIAMCredentials skips the test when AWS IAM credentials are absent.
+// Tests that create non-role-anywhere connections require both AWS_ACCESS_KEY_ID
+// and AWS_SECRET_ACCESS_KEY; without the secret key the CM API returns 422.
+func requireAWSIAMCredentials(t *testing.T) {
+	t.Helper()
+	if os.Getenv("AWS_ACCESS_KEY_ID") == "" || os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
+		t.Skip("skipping: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set for AWS Connection acceptance tests")
+	}
+}
+
 // awsConnConfig returns a minimal ciphertrust_aws_connection config.
 // secret_access_key is intentionally omitted; it is supplied via AWS_SECRET_ACCESS_KEY env-var fallback.
 func awsConnConfig(name, description string) string {
@@ -678,6 +688,13 @@ func TestCipherTrust_AWSConnectionRoleAnywhere(t *testing.T) {
 					testIAMAnywhereTrustAnchorARN),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+			// Step 4 — plan-only: attempt to flip is_role_anywhere from true to false.
+			// ImmutableBool must fire a plan-time error and prevent the change.
+			{
+				Config:      awsRoleAnywhereConfigBool(name, false, certificate, anywhereRoleARN, profileARN, trustAnchorARN),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
 			},
 		},
 	})

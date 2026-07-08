@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -309,13 +310,73 @@ resource "ciphertrust_cm_reg_token" "test" {
 				),
 			},
 			{
+				// name_prefix is immutable: after an OOB change the plan modifier fires an
+				// error when Terraform tries to reconcile config "orig-" against the refreshed
+				// state "changed-".
 				PreConfig: func() {
 					patchPayload, _ := json.Marshal(map[string]interface{}{"name_prefix": "changed-"})
 					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_REG_TOKEN, patchPayload, "id")
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)immutable|cannot be changed`),
 			},
 		},
 	})
+}
+
+// TestCipherTrust_CMRegToken_ImmutableFields verifies that name_prefix and label
+// cannot be changed after registration token creation.
+func TestCipherTrust_CMRegToken_ImmutableFields(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create baseline with name_prefix and label both set
+			{
+				Config: cmRegTokenBaseConfig(),
+			},
+			// Scenario A: name_prefix immutability
+			{
+				Config:      cmRegTokenConfigPrefix("prefix-b"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+			// Scenario B: label immutability (name_prefix unchanged; only label differs)
+			{
+				Config:      cmRegTokenConfigLabel("profile2"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+		},
+	})
+}
+
+func cmRegTokenBaseConfig() string {
+	return providerConfig + `
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = "prefix-a"
+  label = {
+    KmipClientProfile = "profile1"
+  }
+}`
+}
+
+func cmRegTokenConfigPrefix(prefix string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  label = {
+    KmipClientProfile = "profile1"
+  }
+}`, prefix)
+}
+
+func cmRegTokenConfigLabel(profile string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = "prefix-a"
+  label = {
+    KmipClientProfile = %q
+  }
+}`, profile)
 }
