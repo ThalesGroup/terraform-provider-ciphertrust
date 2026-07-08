@@ -728,7 +728,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testGetAWSAccessKeyID(), testGetAWSSecretAccessKey())
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -766,7 +766,7 @@ resource "ciphertrust_aws_connection" "test" {
 }
 `, name, testIAMAnywhereRoleARN, testIAMAnywhereTrustAnchorARN, testIAMAnywhereProfileARN, testIAMAnywhereCert, testIAMAnywherePrivateKey)
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{

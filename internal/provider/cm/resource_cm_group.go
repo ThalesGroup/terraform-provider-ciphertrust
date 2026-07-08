@@ -11,6 +11,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -45,9 +46,9 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique group name. Immutable after creation.",
+				Description: "(Immutable) Unique group name.",
 				PlanModifiers: []planmodifier.String{
-					NameImmutableModifier{},
+					modifiers.ImmutableString(),
 				},
 			},
 			"app_metadata": schema.StringAttribute{
