@@ -174,7 +174,7 @@ resource "ciphertrust_ntp" "test" {
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
-			// Changing key must produce an immutable error at plan time.
+			// Changing key must produce a replacement plan (RequiresReplaceIfConfigured).
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
@@ -183,10 +183,10 @@ resource "ciphertrust_ntp" "test" {
   key_type = "SHA-256"
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
-			// Changing key_type must produce an immutable error at plan time.
+			// Changing key_type must produce a replacement plan (RequiresReplaceIfConfigured).
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
@@ -195,8 +195,8 @@ resource "ciphertrust_ntp" "test" {
   key_type = "MD5"
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -248,6 +248,76 @@ resource "ciphertrust_ntp" "test" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_NTP_OptionalFieldAdded_ForcesReplacement verifies that adding an optional
+// field (key or key_type) to an existing NTP resource forces a destroy+recreate plan.
+func TestCipherTrust_NTP_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time6.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time6.google.com"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time6.google.com"),
+					resource.TestCheckNoResourceAttr("ciphertrust_ntp.test", "key"),
+					resource.TestCheckNoResourceAttr("ciphertrust_ntp.test", "key_type"),
+				),
+			},
+			{
+				// Adding key and key_type (null→value) must force a replacement plan.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time6.google.com"
+  key      = "testkey-sha256"
+  key_type = "SHA-256"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_NTP_RequiredFieldChanged_PlanError verifies that changing the Required
+// host attribute on an existing NTP resource produces a plan-time immutable error.
+func TestCipherTrust_NTP_RequiredFieldChanged_PlanError(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time7.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time7.google.com"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time7.google.com"),
+				),
+			},
+			{
+				// Changing host (Required, ImmutableString) must produce a plan-time error.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time8.google.com"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
