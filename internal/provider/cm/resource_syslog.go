@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -67,14 +68,22 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode",
 			},
 			"message_format": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("rfc5424", "plain_message", "cef", "leef"),
 				},
 			},
 			"port": schema.Int64Attribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
 			},
 			"account": schema.StringAttribute{
@@ -151,12 +160,10 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	if !plan.MessageFormat.IsNull() {
-		plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
-	}
-	if !plan.Port.IsNull() {
-		plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
-	}
+	// message_format and port are Optional+Computed: hydrate unconditionally so the
+	// framework's post-Create consistency check (every Computed attribute must resolve
+	// to a known value) is satisfied even when the user never set them.
+	hydrateSyslogOptionalFields(&plan, response)
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
 
@@ -299,12 +306,10 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 			plan.CACert = types.StringValue(caCert.String())
 		}
 	}
-	if !plan.MessageFormat.IsNull() {
-		plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
-	}
-	if !plan.Port.IsNull() {
-		plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
-	}
+	// message_format and port are Optional+Computed: hydrate unconditionally, matching
+	// Create() and Read(), so the framework's post-Update consistency check is satisfied
+	// even when the user never set them.
+	hydrateSyslogOptionalFields(&plan, response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

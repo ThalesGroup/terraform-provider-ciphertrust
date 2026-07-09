@@ -314,16 +314,21 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	// Backwards compatibility: fall back to environment variables when credentials are
 	// omitted from HCL config. Write resolved values back into plan so state reflects
 	// the actual credentials sent to CM; this prevents perpetual plan diffs.
-	if payload.SecretAccessKey == "" {
-		if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
-			payload.SecretAccessKey = v
-			plan.SecretAccessKey = types.StringValue(v)
+	// IAM Roles Anywhere connections authenticate via certificate/trust anchor, so CM
+	// rejects the request outright if access_key_id/secret_access_key are non-null —
+	// never apply this fallback for them.
+	if !payload.IsRoleAnywhere {
+		if payload.SecretAccessKey == "" {
+			if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
+				payload.SecretAccessKey = v
+				plan.SecretAccessKey = types.StringValue(v)
+			}
 		}
-	}
-	if payload.AccessKeyID == "" {
-		if v := os.Getenv("AWS_ACCESS_KEY_ID"); v != "" {
-			payload.AccessKeyID = v
-			plan.AccessKeyID = types.StringValue(v)
+		if payload.AccessKeyID == "" {
+			if v := os.Getenv("AWS_ACCESS_KEY_ID"); v != "" {
+				payload.AccessKeyID = v
+				plan.AccessKeyID = types.StringValue(v)
+			}
 		}
 	}
 
