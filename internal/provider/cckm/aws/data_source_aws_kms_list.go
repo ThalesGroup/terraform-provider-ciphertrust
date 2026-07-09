@@ -46,8 +46,8 @@ type dataSourceAWSKms struct {
 }
 
 type AWSKmsDataSourceModel struct {
-	Filters types.Map       `tfsdk:"filters"`
-	Matched types.Int64     `tfsdk:"matched"`
+	Filters types.Map             `tfsdk:"filters"`
+	Matched types.Int64           `tfsdk:"matched"`
 	Kmses   []KMSModelCommonTFSDK `tfsdk:"kms"`
 }
 

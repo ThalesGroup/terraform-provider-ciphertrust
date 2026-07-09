@@ -50,7 +50,6 @@ type LocalHostedParamsJSON struct {
 	Blocked          bool   `json:"blocked"`
 	HealthCheckKeyID string `json:"health_check_key_id"`
 	MaxCredentials   int32  `json:"max_credentials"`
-	PartitionID      string `json:"partition_id"`
 	SourceKeyTier    string `json:"source_key_tier"`
 }
 
@@ -61,8 +60,6 @@ type LocalHostedParamsJSONResponse struct {
 	HealthCheckURIPath    string `json:"health_check_uri_path"`
 	LinkedState           bool   `json:"linked_state"`
 	MaxCredentials        int32  `json:"max_credentials"`
-	PartitionID           string `json:"partition_id"`
-	PartitionLabel        string `json:"partition_label"`
 	SourceContainerID     string `json:"source_container_id"`
 	SourceContainerType   string `json:"source_container_type"`
 	SourceKeyTier         string `json:"source_key_tier"`
