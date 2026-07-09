@@ -62,21 +62,21 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"key_size": schema.Int64Attribute{
 				Optional: true,
-				Computed: true,
 			},
 			"curve": schema.StringAttribute{
 				Optional: true,
-				Computed: true,
 			},
 			"username": schema.StringAttribute{
 				Optional: true,
 			},
 			"public_key_encoding": schema.StringAttribute{
 				Optional: true,
-				Computed: true,
 			},
 			"fingerprint": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"created_at": schema.StringAttribute{
 				Computed: true,
@@ -86,6 +86,9 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"updated_at": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -120,7 +123,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	response, err := r.client.PostDataBootstrap(ctx, id, common.URL_SSH_KEY, payloadJSON, "id")
+	resourceID, err := r.client.PostDataBootstrap(ctx, id, common.URL_SSH_KEY, payloadJSON, "id")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -130,10 +133,28 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create Output]["+response+"]")
+	// Fetch the created resource to hydrate all Computed fields so that the
+	// framework does not see Unknown values in state after apply.
+	fullResponse, err := r.client.GetByIdBootstrap(ctx, id, resourceID, common.URL_SSH_KEY)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust SSH Key after creation",
+			"Could not read SSH key "+resourceID+": "+err.Error(),
+		)
+		return
+	}
+
+	tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create Output]["+fullResponse+"]")
+
+	plan.ID = types.StringValue(gjson.Get(fullResponse, "id").String())
+	plan.Name = types.StringValue(gjson.Get(fullResponse, "name").String())
+	plan.Algorithm = types.StringValue(gjson.Get(fullResponse, "algorithm").String())
+	plan.Fingerprint = types.StringValue(gjson.Get(fullResponse, "fingerprint").String())
+	plan.CreatedAt = types.StringValue(gjson.Get(fullResponse, "createdAt").String())
+	plan.UpdatedAt = types.StringValue(gjson.Get(fullResponse, "updatedAt").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Create]["+id+"]")
-	plan.ID = types.StringValue(response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
