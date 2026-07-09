@@ -273,9 +273,9 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestCipherTrust_NTP_OptionalFieldAdded_ForcesReplacement verifies that adding an optional
+// Test_CM_CipherTrust_NTP_OptionalFieldAdded_ForcesReplacement verifies that adding an optional
 // field (key or key_type) to an existing NTP resource forces a destroy+recreate plan.
-func TestCipherTrust_NTP_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
+func Test_CM_CipherTrust_NTP_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
@@ -310,9 +310,9 @@ resource "ciphertrust_ntp" "test" {
 	})
 }
 
-// TestCipherTrust_NTP_RequiredFieldChanged_PlanError verifies that changing the Required
+// Test_CM_CipherTrust_NTP_RequiredFieldChanged_PlanError verifies that changing the Required
 // host attribute on an existing NTP resource produces a plan-time immutable error.
-func TestCipherTrust_NTP_RequiredFieldChanged_PlanError(t *testing.T) {
+func Test_CM_CipherTrust_NTP_RequiredFieldChanged_PlanError(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{

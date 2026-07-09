@@ -106,9 +106,9 @@ resource "ciphertrust_log_forwarder" "test_lf" {
 	})
 }
 
-// TestAccCMLogForwarder_TypeImmutable verifies that attempting to change the
+// Test_CM_AccCMLogForwarder_TypeImmutable verifies that attempting to change the
 // 'type' field after creation produces a clear immutable-field plan-time error.
-func TestAccCMLogForwarder_TypeImmutable(t *testing.T) {
+func Test_CM_AccCMLogForwarder_TypeImmutable(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := "tf-lf-imm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
