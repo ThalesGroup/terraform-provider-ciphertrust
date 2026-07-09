@@ -271,10 +271,10 @@ resource "ciphertrust_hsm_root_of_trust_setup" "test" {
 `
 }
 
-// TestCipherTrust_HSMRoT_ImmutableReset_NullToNonNull verifies that adding reset=true to a
+// Test_CM_CipherTrust_HSMRoT_ImmutableReset_NullToNonNull verifies that adding reset=true to a
 // resource where it was null in prior state fires the ImmutableBool modifier at plan time
 // after the IsNull→IsUnknown fix.
-func TestCipherTrust_HSMRoT_ImmutableReset_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_HSMRoT_ImmutableReset_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 
@@ -296,10 +296,10 @@ func TestCipherTrust_HSMRoT_ImmutableReset_NullToNonNull(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_HSMRoT_ImmutableDelay_NullToNonNull verifies that adding delay=5 to a
+// Test_CM_CipherTrust_HSMRoT_ImmutableDelay_NullToNonNull verifies that adding delay=5 to a
 // resource where it was null in prior state fires the ImmutableInt64 modifier at plan time
 // after the IsNull→IsUnknown fix.
-func TestCipherTrust_HSMRoT_ImmutableDelay_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_HSMRoT_ImmutableDelay_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
 

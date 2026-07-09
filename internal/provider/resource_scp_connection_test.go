@@ -88,7 +88,7 @@ resource "ciphertrust_scp_connection" "scp_connection" {
 	})
 }
 
-func TestCipherTrust_SCPConnection_NameImmutable(t *testing.T) {
+func Test_CM_CipherTrust_SCPConnection_NameImmutable(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("SCP_HOST") == "" || os.Getenv("SCP_USERNAME") == "" {
 		t.Skip("SCP_HOST / SCP_USERNAME not set — skipping SCP connection immutability test")

@@ -374,9 +374,9 @@ resource "ciphertrust_domain" "test" {
 	})
 }
 
-// TestAccCMDomain_ImmutableFields verifies that name, admins, and
+// Test_CM_AccCMDomain_ImmutableFields verifies that name, admins, and
 // allow_user_management are each blocked at plan time by the immutable modifier.
-func TestAccCMDomain_ImmutableFields(t *testing.T) {
+func Test_CM_AccCMDomain_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-imm-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -414,11 +414,11 @@ func TestAccCMDomain_ImmutableFields(t *testing.T) {
 	})
 }
 
-// TestAccCMDomain_ParentCAIdImmutable verifies that parent_ca_id is blocked at
+// Test_CM_AccCMDomain_ParentCAIdImmutable verifies that parent_ca_id is blocked at
 // plan time when a change is attempted after creation. Requires
 // CIPHERTRUST_TEST_PARENT_CA_ID to be set to a valid CA ID on the CM instance
 // (analogous to CIPHERTRUST_TEST_HSM_CONNECTION_ID for HSM tests).
-func TestAccCMDomain_ParentCAIdImmutable(t *testing.T) {
+func Test_CM_AccCMDomain_ParentCAIdImmutable(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	parentCAID := getEnvOrSkip(t, "CIPHERTRUST_TEST_PARENT_CA_ID")
@@ -504,10 +504,10 @@ resource "ciphertrust_domain" "testDomain" {
 	})
 }
 
-// TestAccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
+// Test_CM_AccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
 // mutable field (meta_data) after creation. The CM domain PATCH endpoint uses the
 // domain name as the path key.
-func TestAccCMDomain_MutableFieldUpdate(t *testing.T) {
+func Test_CM_AccCMDomain_MutableFieldUpdate(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-upd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)

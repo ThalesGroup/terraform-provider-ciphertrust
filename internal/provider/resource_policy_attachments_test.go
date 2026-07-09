@@ -366,10 +366,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull verifies that adding
+// Test_CM_CipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull verifies that adding
 // jurisdiction to an attachment where it was null in prior state fires the ImmutableString
 // modifier at plan time after the IsNull→IsUnknown fix.
-func TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 
 	policyID := os.Getenv("CM_POLICY_ID")
@@ -411,10 +411,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
+// Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
 // to an attachment where it was null in prior state fires the ImmutableList modifier at plan
 // time after the IsNull→IsUnknown fix.
-func TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 
 	policyID := os.Getenv("CM_POLICY_ID")
