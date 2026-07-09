@@ -52,6 +52,9 @@ func domainSweep() {
 // so that a license-restricted environment produces SKIP rather than FAIL.
 func requireDomainCreationLicensed(t *testing.T) {
 	t.Helper()
+	if os.Getenv("TF_ACC") == "" {
+		return
+	}
 	client, ok := createCMClient()
 	if !ok {
 		t.Skip("CM client unavailable — skipping domain creation license check")

@@ -65,9 +65,9 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"key": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) Symmetric key value to be used for authenticated NTP servers",
+				Description: "Symmetric key value to be used for authenticated NTP servers. Changing this value forces replacement of the NTP resource.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 			"key_type": schema.StringAttribute{
@@ -80,9 +80,9 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"SHA-384",
 						"SHA-512"}...),
 				},
-				Description: "(Immutable) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)",
+				Description: "Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing this value forces replacement of the NTP resource.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 		},

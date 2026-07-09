@@ -490,6 +490,14 @@ func Test_CM_AWSConnection_driftMapAndList(t *testing.T) {
 // Test_CM_AWSConnection_driftIAMRoleAnywhere verifies drift detection for
 // iam_role_anywhere readable sub-fields.
 func Test_CM_AWSConnection_driftIAMRoleAnywhere(t *testing.T) {
+	RequireCM(t)
+	anywhereRoleARN := os.Getenv("CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN")
+	trustAnchorARN := os.Getenv("CIPHERTRUST_AWS_TRUST_ANCHOR_ARN")
+	profileARN := os.Getenv("CIPHERTRUST_AWS_PROFILE_ARN")
+	certificate := os.Getenv("CIPHERTRUST_AWS_CERTIFICATE")
+	if anywhereRoleARN == "" || trustAnchorARN == "" || profileARN == "" || certificate == "" {
+		t.Skip("skipping: CIPHERTRUST_AWS_ANYWHERE_ROLE_ARN, CIPHERTRUST_AWS_TRUST_ANCHOR_ARN, CIPHERTRUST_AWS_PROFILE_ARN, and CIPHERTRUST_AWS_CERTIFICATE must be set")
+	}
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-iam-" + suffix
 	var capturedID string

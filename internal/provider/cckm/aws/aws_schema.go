@@ -38,8 +38,6 @@ type LocalHostedParamsTFSDK struct {
 	HealthCheckURIPath    types.String `tfsdk:"health_check_uri_path"`
 	LinkedState           types.Bool   `tfsdk:"linked_state"`
 	MaxCredentials        types.Int32  `tfsdk:"max_credentials"`
-	PartitionID           types.String `tfsdk:"partition_id"`
-	PartitionLabel        types.String `tfsdk:"partition_label"`
 	SourceContainerID     types.String `tfsdk:"source_container_id"`
 	SourceContainerType   types.String `tfsdk:"source_container_type"`
 	SourceKeyTier         types.String `tfsdk:"source_key_tier"`

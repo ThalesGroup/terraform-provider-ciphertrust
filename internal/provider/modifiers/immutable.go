@@ -31,7 +31,13 @@ func (m immutableStringModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableStringModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
-	if req.StateValue.IsNull() {
+	// If the full prior resource state is null, this is a brand-new resource being
+	// created for the first time — allow any value. We use req.State.Raw.IsNull()
+	// rather than req.StateValue.IsNull() so that we correctly reject the case where
+	// an Optional field was omitted on create (StateValue is null but State is not —
+	// i.e. the resource already exists) and the user tries to add it on a subsequent
+	// plan, which must be blocked as an immutable change.
+	if req.State.Raw.IsNull() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
@@ -66,8 +72,8 @@ func (m immutableInt64Modifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
-	// Allow creation (no prior state).
-	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
+	// Brand-new resource: no prior resource state — allow any value.
+	if req.State.Raw.IsNull() {
 		return
 	}
 	// Allow plan values that are null or unknown (e.g., Optional field removed from config
@@ -109,7 +115,8 @@ func (m immutableBoolModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableBoolModifier) PlanModifyBool(_ context.Context, req planmodifier.BoolRequest, resp *planmodifier.BoolResponse) {
-	if req.StateValue.IsNull() {
+	// Brand-new resource: no prior resource state — allow any value.
+	if req.State.Raw.IsNull() {
 		return
 	}
 	// When an Optional+Computed bool is omitted from config, the framework sets
@@ -151,7 +158,8 @@ func (m immutableListModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableListModifier) PlanModifyList(_ context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
-	if req.StateValue.IsNull() {
+	// Brand-new resource: no prior resource state — allow any value.
+	if req.State.Raw.IsNull() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
@@ -184,7 +192,8 @@ func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
 }
 
 func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
-	if req.StateValue.IsNull() {
+	// Brand-new resource: no prior resource state — allow any value.
+	if req.State.Raw.IsNull() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {
