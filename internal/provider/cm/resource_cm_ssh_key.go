@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
@@ -51,6 +53,39 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
+			},
+			"name": schema.StringAttribute{
+				Computed: true,
+			},
+			"algorithm": schema.StringAttribute{
+				Computed: true,
+			},
+			"key_size": schema.Int64Attribute{
+				Optional: true,
+				Computed: true,
+			},
+			"curve": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+			},
+			"username": schema.StringAttribute{
+				Optional: true,
+			},
+			"public_key_encoding": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+			},
+			"fingerprint": schema.StringAttribute{
+				Computed: true,
+			},
+			"created_at": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"updated_at": schema.StringAttribute{
+				Computed: true,
 			},
 		},
 	}
@@ -108,26 +143,71 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// Bootstrap-only resource: CMClientBootstrap does not expose GetById and
-	// the CM SSH key endpoint has no per-resource GET. State is preserved unchanged.
-	// Drift detection is intentionally not supported for this resource.
-	var state CMSSHKeyTFSDK
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]["+id+"]")
 	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Read]["+id+"]")
 
+	var state CMSSHKeyTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	resp.Diagnostics.AddWarning(
-		"Drift Detection Not Supported",
-		"ciphertrust_cm_ssh_key is a bootstrap-only resource backed by CMClientBootstrap, "+
-			"which does not expose a GET method. Terraform state is preserved unchanged on "+
-			"every plan/refresh. Out-of-band changes to this SSH key will not be detected.",
-	)
+	response, err := r.client.GetByIdBootstrap(ctx, id, state.ID.ValueString(), common.URL_SSH_KEY)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust SSH Key",
+			"Could not read SSH key "+state.ID.ValueString()+": "+err.Error(),
+		)
+		return
+	}
+
+	// Computed-only — unconditional hydration (no r.Exists() guard per Check 8a)
+	state.ID = types.StringValue(gjson.Get(response, "id").String())
+	state.Name = types.StringValue(gjson.Get(response, "name").String())
+	state.Algorithm = types.StringValue(gjson.Get(response, "algorithm").String())
+	state.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
+	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+
+	// Optional+Computed and Optional fields — guard on !state.X.IsNull()
+	if !state.KeySize.IsNull() {
+		if r := gjson.Get(response, "size"); r.Exists() {
+			state.KeySize = types.Int64Value(r.Int())
+		} else {
+			state.KeySize = types.Int64Null()
+		}
+	}
+	if !state.Curve.IsNull() {
+		if r := gjson.Get(response, "curve"); r.Exists() {
+			state.Curve = types.StringValue(r.String())
+		} else {
+			state.Curve = types.StringNull()
+		}
+	}
+	if !state.Username.IsNull() {
+		if r := gjson.Get(response, "username"); r.Exists() {
+			state.Username = types.StringValue(r.String())
+		} else {
+			state.Username = types.StringNull()
+		}
+	}
+	if !state.PublicKeyEncoding.IsNull() {
+		if r := gjson.Get(response, "public_key_encoding"); r.Exists() {
+			state.PublicKeyEncoding = types.StringValue(r.String())
+		} else {
+			state.PublicKeyEncoding = types.StringNull()
+		}
+	}
+
+	// state.Key is write-only — CM never returns SSH key material in GET responses.
+	// Preserved from prior state (no assignment).
 
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)

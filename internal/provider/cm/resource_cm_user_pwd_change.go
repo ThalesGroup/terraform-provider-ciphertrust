@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -37,6 +40,12 @@ func (r *resourceCMPwdChange) Metadata(_ context.Context, req resource.MetadataR
 func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"username": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) Username of the CipherTrust Manager user whose password is being changed.",
@@ -123,6 +132,9 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 	tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create Output]["+response+"]")
 
+	// Store the server-assigned user_id so Read() can perform 404 detection.
+	plan.ID = types.StringValue(gjson.Get(response, "user_id").String())
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -133,14 +145,45 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// Intentionally empty. ciphertrust_cm_user_password_change is a one-shot action
-	// resource: it triggers a CM password change and has no retrievable state.
-	// The CM API provides no GET endpoint for password-change records.
-	//
-	// User-visible consequence: after the initial `terraform apply`, subsequent
-	// `terraform plan` runs will always show no changes — even if the password
-	// was changed or reset in CM outside of Terraform. This is a known,
-	// intentional limitation documented in TFIN-DD-015.
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Read]["+id+"]")
+
+	var state CMPwdChangeTFSDK
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Verify the underlying user still exists via the user management endpoint.
+	// state.ID holds the CM user_id stored during Create(). If it is non-empty,
+	// perform a GET to detect 404 (user deleted out-of-band).
+	if !state.ID.IsNull() && !state.ID.IsUnknown() && state.ID.ValueString() != "" {
+		response, err := r.client.GetByIdBootstrap(ctx, id, state.ID.ValueString(), common.URL_USER_MANAGEMENT)
+		if err != nil {
+			if strings.Contains(err.Error(), notFoundError) {
+				resp.State.RemoveResource(ctx)
+				return
+			}
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_pwd_change.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error Reading CipherTrust User Password Change",
+				"Could not read user "+state.ID.ValueString()+": "+err.Error(),
+			)
+			return
+		}
+
+		// Hydrate the server-assigned user_id from GET response (Computed-only).
+		state.ID = types.StringValue(gjson.Get(response, "user_id").String())
+	}
+
+	// All credential and input-only fields (password, new_password, username,
+	// auth_domain, password_hint) are write-only — CM does not return them in
+	// GET responses. They are preserved from prior state automatically.
+
+	diags = resp.State.Set(ctx, state)
+	resp.Diagnostics.Append(diags...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.

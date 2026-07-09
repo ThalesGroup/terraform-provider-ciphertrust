@@ -451,8 +451,17 @@ type CMUserJSON struct {
 }
 
 type CMSSHKeyTFSDK struct {
-	ID  types.String `tfsdk:"id"`
-	Key types.String `tfsdk:"key"`
+	ID                types.String `tfsdk:"id"`
+	Key               types.String `tfsdk:"key"`
+	Name              types.String `tfsdk:"name"`
+	Algorithm         types.String `tfsdk:"algorithm"`
+	KeySize           types.Int64  `tfsdk:"key_size"`
+	Curve             types.String `tfsdk:"curve"`
+	Username          types.String `tfsdk:"username"`
+	PublicKeyEncoding types.String `tfsdk:"public_key_encoding"`
+	Fingerprint       types.String `tfsdk:"fingerprint"`
+	CreatedAt         types.String `tfsdk:"created_at"`
+	UpdatedAt         types.String `tfsdk:"updated_at"`
 }
 
 type CMSSHKeyJSON struct {
@@ -460,6 +469,7 @@ type CMSSHKeyJSON struct {
 }
 
 type CMPwdChangeTFSDK struct {
+	ID           types.String `tfsdk:"id"`
 	Username     types.String `tfsdk:"username"`
 	Password     types.String `tfsdk:"password"`
 	NewPassword  types.String `tfsdk:"new_password"`

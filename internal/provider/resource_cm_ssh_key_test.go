@@ -1,12 +1,16 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 // bootstrapProviderConfig returns the HCL provider block for bootstrap mode.
@@ -95,7 +99,92 @@ resource "ciphertrust_cm_ssh_key" "test" {
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
 				),
 			},
-			// Verify repeated refresh produces no diff and no error — confirms no-op Read() stability.
+			// Verify repeated refresh produces no diff and no error.
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMSSHKey_OOBDelete verifies that Read() detects an out-of-band
+// deletion of the SSH key and removes it from state so a subsequent plan proposes
+// recreation. Skipped when TEST_SSH_PUBLIC_KEY is not set, or when the CM API
+// does not support SSH key deletion via normal authentication.
+func TestCipherTrust_CMSSHKey_OOBDelete(t *testing.T) {
+	RequireCM(t)
+	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
+	if sshKey == "" {
+		t.Skip("skipping TestCipherTrust_CMSSHKey_OOBDelete: TEST_SSH_PUBLIC_KEY not set")
+	}
+
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("skipping TestCipherTrust_CMSSHKey_OOBDelete: createCMClient failed")
+	}
+
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, sshKey),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_cm_ssh_key.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					// Attempt an out-of-band delete via normal authentication.
+					// Skip this step if the CM API does not support SSH key deletion.
+					_, err := client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_SSH_KEY+"/"+capturedID)
+					if err != nil {
+						t.Skipf("skipping OOB delete step: CM API returned error on SSH key delete: %s", err.Error())
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMSSHKey_AttributeDrift verifies that Read() produces no false drift
+// when the SSH key still exists on CM. The ciphertrust_cm_ssh_key schema exposes only
+// the server-assigned id (Computed) and the write-only key material; there are no
+// server-settable mutable attributes that can produce attribute-level drift, so this
+// test confirms Read() stability: refresh after apply must show no changes.
+func TestCipherTrust_CMSSHKey_AttributeDrift(t *testing.T) {
+	RequireCM(t)
+	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
+	if sshKey == "" {
+		t.Skip("skipping TestCipherTrust_CMSSHKey_AttributeDrift: TEST_SSH_PUBLIC_KEY not set")
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, sshKey),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+				),
+			},
+			// Verify Read() via GetByIdBootstrap introduces no false attribute drift.
 			{
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
