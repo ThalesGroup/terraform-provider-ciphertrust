@@ -240,22 +240,30 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 				Description: "Specifies cloud key rotation parameters.",
 				Attributes: map[string]schema.Attribute{
-					"aws_retain_alias": schema.BoolAttribute{
-						Optional: true,
-						Description: "Retain the alias and timestamp on the archived key after rotation. " +
-							"Applicable only to AWS key rotation.",
-						Computed: true,
-					},
-					"rotate_material": schema.BoolAttribute{
+					"aws_param": schema.SingleNestedAttribute{
 						Optional:    true,
-						Description: "If true, rotate the key material during the key rotation job. The attribute is only valid for CipherTrustManager version 2.21 or later.",
-						Computed:    true,
+						Description: "AWS-specific key rotation parameters. Applicable only when cloud_name is 'aws'.",
+						Attributes: map[string]schema.Attribute{
+							"retain_alias": schema.BoolAttribute{
+								Optional:    true,
+								Computed:    true,
+								Description: "Retain the alias and timestamp on the archived key after rotation.",
+							},
+							"rotate_material": schema.BoolAttribute{
+								Optional:    true,
+								Computed:    true,
+								Description: "If true, rotate the key material during the key rotation job. The attribute is only valid for CipherTrustManager version 2.21 or later.",
+							},
+						},
 					},
 					"cloud_name": schema.StringAttribute{
 						Required:    true,
-						Description: "Name of the cloud for which to schedule the key rotation. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
+						Description: "(Immutable) Name of the cloud for which to schedule the key rotation. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
 						Validators: []validator.String{
 							stringvalidator.OneOf(cckmRotationClouds...),
+						},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
 						},
 					},
 					"expiration": schema.StringAttribute{
@@ -761,13 +769,14 @@ func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK) *Database
 func getCckmKeyRotationOperationParams(ctx context.Context, plan CreateJobConfigParamsTFSDK, state *CreateJobConfigParamsTFSDK, diags *diag.Diagnostics) *CCKMKeyRotationParamsJSON {
 	if plan.CCKMKeyRotationParams != nil {
 		rotationParams := plan.CCKMKeyRotationParams
-		awsParams := CCKMRotationAwsParamsJSON{
-			RetainAlias:    rotationParams.RetainAlias.ValueBool(),
-			RotateMaterial: rotationParams.RotateMaterial.ValueBool(),
-		}
 		rotationParamsJSON := CCKMKeyRotationParamsJSON{
-			CloudName:                 rotationParams.CloudName.ValueString(),
-			CCKMRotationAwsParamsJSON: awsParams,
+			CloudName: rotationParams.CloudName.ValueString(),
+		}
+		if rotationParams.AWSParam != nil {
+			rotationParamsJSON.CCKMRotationAwsParamsJSON = CCKMRotationAwsParamsJSON{
+				RetainAlias:    rotationParams.AWSParam.RetainAlias.ValueBool(),
+				RotateMaterial: rotationParams.AWSParam.RotateMaterial.ValueBool(),
+			}
 		}
 		var stateRotationParams *CCKMKeyRotationParamsTFSDK
 		if state != nil {
@@ -886,14 +895,19 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		}
 		plan.DatabaseBackupParams = dbParams
 	case "cckm_key_rotation":
-		plan.CCKMKeyRotationParams = &CCKMKeyRotationParamsTFSDK{
-			CloudName:      types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
-			RetainAlias:    types.BoolValue(gjson.Get(response, "job_config_params.aws_param.retain_alias").Bool()),
-			RotateMaterial: types.BoolValue(gjson.Get(response, "job_config_params.aws_param.rotate_material").Bool()),
-			Expiration:     types.StringValue(gjson.Get(response, "job_config_params.expiration").String()),
-			ExpireIn:       types.StringValue(gjson.Get(response, "job_config_params.expire_in").String()),
-			RotationAfter:  types.StringValue(gjson.Get(response, "job_config_params.rotation_after").String()),
+		cckmRotationParams := &CCKMKeyRotationParamsTFSDK{
+			CloudName:     types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
+			Expiration:    types.StringValue(gjson.Get(response, "job_config_params.expiration").String()),
+			ExpireIn:      types.StringValue(gjson.Get(response, "job_config_params.expire_in").String()),
+			RotationAfter: types.StringValue(gjson.Get(response, "job_config_params.rotation_after").String()),
 		}
+		if awsParam := gjson.Get(response, "job_config_params.aws_param"); awsParam.Exists() && awsParam.Type != gjson.Null {
+			cckmRotationParams.AWSParam = &CCKMKeyRotationAwsParamTFSDK{
+				RetainAlias:    types.BoolValue(awsParam.Get("retain_alias").Bool()),
+				RotateMaterial: types.BoolValue(awsParam.Get("rotate_material").Bool()),
+			}
+		}
+		plan.CCKMKeyRotationParams = cckmRotationParams
 	case "cckm_synchronization":
 		cckmParams := &CCKMSynchronizationParamsTFSDK{
 			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),

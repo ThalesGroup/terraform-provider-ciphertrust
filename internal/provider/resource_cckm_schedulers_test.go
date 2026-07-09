@@ -31,8 +31,10 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
-					aws_retain_alias = true
-					rotate_material = true
+					aws_param = {
+						retain_alias    = true
+						rotate_material = true
+					}
 				}
 				name       = "%s"
 				operation  = "cckm_key_rotation"
@@ -53,8 +55,10 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
-					aws_retain_alias = true
-					rotate_material = false
+					aws_param = {
+						retain_alias    = true
+						rotate_material = false
+					}
 				}
 				name       = "%s"
 				operation  = "cckm_key_rotation"
@@ -66,8 +70,10 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
-					aws_retain_alias = true
-					rotate_material = true
+					aws_param = {
+						retain_alias    = true
+						rotate_material = true
+					}
 				}
 				name       = "%s"
 				operation  = "cckm_key_rotation"
@@ -80,8 +86,10 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 				expiration = ""
 				expire_in = ""
 				rotation_after = ""
-				aws_retain_alias = false
-				rotate_material = false
+				aws_param = {
+					retain_alias    = false
+					rotate_material = false
+				}
 			}
 			name       = "%s"
 			operation  = "cckm_key_rotation"
@@ -93,8 +101,10 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 				expiration = ""
 				expire_in = ""
 				rotation_after = ""
-				aws_retain_alias = false
-				rotate_material = false
+				aws_param = {
+					retain_alias    = false
+					rotate_material = false
+				}
 			}
 			name       = "%s"
 			operation  = "cckm_key_rotation"
@@ -119,9 +129,9 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 		rotateMaterialExpectedTrueValue := "true"
 		if getCipherTrustVersion() < 221 {
 			rotateMaterialExpectedTrueValue = "false"
-			createConfig = strings.ReplaceAll(createConfig, "rotate_material = true", "")
-			updateConfig = strings.ReplaceAll(updateConfig, "rotate_material = true", "")
-			updateConfig2 = strings.ReplaceAll(updateConfig2, "rotate_material = true", "")
+			createConfig = strings.ReplaceAll(createConfig, "rotate_material = true", "rotate_material = false")
+			updateConfig = strings.ReplaceAll(updateConfig, "rotate_material = true", "rotate_material = false")
+			updateConfig2 = strings.ReplaceAll(updateConfig2, "rotate_material = true", "rotate_material = false")
 		}
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmAwsKMS() },
@@ -135,7 +145,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", expiration),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", expireIn),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfter),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedTrueValue),
+						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.aws_param.rotate_material", rotateMaterialExpectedTrueValue),
 
 						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
@@ -166,14 +176,14 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", expirationUpdate),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfterUpdate),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.aws_param.rotate_material", "false"),
 
 						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expiration", expirationUpdate),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfterUpdate),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedTrueValue),
+						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.aws_param.rotate_material", rotateMaterialExpectedTrueValue),
 					),
 				},
 				{
@@ -187,14 +197,14 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", ""),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", ""),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.aws_param.rotate_material", "false"),
 
 						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expiration", ""),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expire_in", ""),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.aws_param.rotate_material", "false"),
 					),
 				},
 				{

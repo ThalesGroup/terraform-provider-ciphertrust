@@ -59,10 +59,13 @@ func Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testi
 	if p.CloudName.ValueString() != "aws" {
 		t.Errorf("CloudName: want aws, got %q", p.CloudName.ValueString())
 	}
-	if !p.RetainAlias.ValueBool() {
+	if p.AWSParam == nil {
+		t.Fatal("AWSParam is nil; want non-nil")
+	}
+	if !p.AWSParam.RetainAlias.ValueBool() {
 		t.Error("RetainAlias: want true, got false")
 	}
-	if p.RotateMaterial.ValueBool() {
+	if p.AWSParam.RotateMaterial.ValueBool() {
 		t.Error("RotateMaterial: want false, got true")
 	}
 	if p.Expiration.ValueString() != "7d" {
@@ -107,7 +110,10 @@ func Test_CM_GetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState(t *te
 	if plan.CCKMKeyRotationParams.CloudName.ValueString() != "oci" {
 		t.Errorf("CloudName: want oci, got %q", plan.CCKMKeyRotationParams.CloudName.ValueString())
 	}
-	if !plan.CCKMKeyRotationParams.RotateMaterial.ValueBool() {
+	if plan.CCKMKeyRotationParams.AWSParam == nil {
+		t.Fatal("AWSParam is nil; want non-nil")
+	}
+	if !plan.CCKMKeyRotationParams.AWSParam.RotateMaterial.ValueBool() {
 		t.Error("RotateMaterial: want true, got false")
 	}
 }

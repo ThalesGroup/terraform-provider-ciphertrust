@@ -1194,13 +1194,17 @@ type CMLogForwardersJSON struct {
 	UpdatedAt           string                     `json:"updatedAt"`
 }
 
+type CCKMKeyRotationAwsParamTFSDK struct {
+	RetainAlias    types.Bool `tfsdk:"retain_alias"`
+	RotateMaterial types.Bool `tfsdk:"rotate_material"`
+}
+
 type CCKMKeyRotationParamsTFSDK struct {
-	RetainAlias    types.Bool   `tfsdk:"aws_retain_alias"`
-	CloudName      types.String `tfsdk:"cloud_name"`
-	Expiration     types.String `tfsdk:"expiration"`
-	ExpireIn       types.String `tfsdk:"expire_in"`
-	RotateMaterial types.Bool   `tfsdk:"rotate_material"`
-	RotationAfter  types.String `tfsdk:"rotation_after"`
+	AWSParam      *CCKMKeyRotationAwsParamTFSDK `tfsdk:"aws_param"`
+	CloudName     types.String                  `tfsdk:"cloud_name"`
+	Expiration    types.String                  `tfsdk:"expiration"`
+	ExpireIn      types.String                  `tfsdk:"expire_in"`
+	RotationAfter types.String                  `tfsdk:"rotation_after"`
 }
 
 type CCKMAwsKeyRotationParamsDatasourceTFSDK struct {
