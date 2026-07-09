@@ -75,11 +75,11 @@ output "reg_token_value" {
 - `ca_id` (String) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.
 - `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. The value cannot be negative. If 0 is provided then the value will be ignored. It is not recommended to use this parameter. Please use the one supported in client profile.
 - `client_management_profile_id` (String) ID of the client management profile
-- `label` (Map of String) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.
+- `label` (Map of String) (Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels
 - `lifetime` (String) Duration in minutes/hours/days for which this token can be used for registering CipherTrust Manager clients. No limit by default. For 'x' amount of time, it should formatted as xm for x minutes, xh for hours and xd for days.
 - `max_clients` (Number) Maximum number of clients that can be registered using this registration token. No limit by default.
-- `name_prefix` (String) Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name will be constructed as 'name_prefix{nth client registered using this registation token}', If name_prefix is not specified, CipherTrust Manager server will generate a random name for the client.
+- `name_prefix` (String) (Immutable) Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name will be constructed as 'name_prefix{nth client registered using this registation token}', If name_prefix is not specified, CipherTrust Manager server will generate a random name for the client.
 
 ### Read-Only
 

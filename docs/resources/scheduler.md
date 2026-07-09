@@ -104,7 +104,7 @@ resource "ciphertrust_scheduler" "oci" {
 ### Required
 
 - `name` (String) The name of the job configuration. Immutable after creation.
-- `operation` (String) The operation field specifies the type of operation to be performed. Currently, only database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation are supported. Immutable after creation — changing this field forces replacement.
+- `operation` (String) (Immutable) The operation field specifies the type of operation to be performed. Currently, only database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation are supported.
 - `run_at` (String) Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
 
 For example:
@@ -115,9 +115,9 @@ For example:
 
 ### Optional
 
-- `cckm_key_rotation_params` (Attributes) Specifies cloud key rotation parameters. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
+- `cckm_key_rotation_params` (Attributes) (Immutable) Specifies cloud key rotation parameters. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
 - `cckm_synchronization_params` (Attributes) Cloud key synchronization parameters. (see [below for nested schema](#nestedatt--cckm_synchronization_params))
-- `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
+- `cckm_xks_credential_rotation_params` (Attributes) (Immutable) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
 - `description` (String) Description for the job configuration.
 - `disabled` (Boolean) By default, the job configuration starts in an active state. True disables the job configuration.
