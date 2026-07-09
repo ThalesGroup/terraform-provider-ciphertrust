@@ -4,11 +4,24 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+)
+
+// ntpSweepDaemonBusyError, ntpSweepMaxRetries, and ntpSweepRetryDelay mirror the
+// unexported ntpDaemonError/ntpMaxRetries/ntpRetryDelay constants in
+// cm/resource_ntp.go. They can't be imported directly (different package,
+// unexported), so the values are duplicated here to keep the sweep's retry
+// behavior consistent with production Create()/Delete().
+const (
+	ntpSweepDaemonBusyError = "Local NTP Unix socket returned a non-successful HTTP code"
+	ntpSweepMaxRetries      = 3
+	ntpSweepRetryDelay      = 5 * time.Second
 )
 
 func Test_CM_ResourceCMNTP(t *testing.T) {
@@ -42,20 +55,27 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 	})
 }
 
-// ntpSweep deletes an NTP host from CipherTrust Manager, ignoring all errors.
-// Used as a pre-test sweep to ensure no stale entries block Create().
+// ntpSweep deletes an NTP host from CipherTrust Manager. Used as a pre-test sweep
+// to ensure no stale entries (from a prior failed/aborted run) block Create().
+// Retries while the NTP daemon reports itself busy, mirroring production
+// Create()/Delete()'s retry loop — a single unretried attempt can silently no-op
+// during the daemon's post-mutation recovery window, leaving the stale entry in
+// place and causing the next Create() to fail with a 409 "already exists".
 func ntpSweep(host string) {
 	client, ok := createCMClient()
 	if !ok {
 		return
 	}
-	_, _ = client.DeleteByID(
-		context.Background(),
-		"DELETE",
-		host,
-		fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, host),
-		nil,
-	)
+	url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, host)
+	for attempt := 0; attempt <= ntpSweepMaxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(ntpSweepRetryDelay)
+		}
+		_, err := client.DeleteByID(context.Background(), "DELETE", host, url, nil)
+		if err == nil || !strings.Contains(err.Error(), ntpSweepDaemonBusyError) {
+			return
+		}
+	}
 }
 
 // Test_CM_AccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
