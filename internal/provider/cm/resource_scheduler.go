@@ -237,9 +237,8 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed: true,
 				PlanModifiers: []planmodifier.Object{
 					common.NewObjectUseStateForUnknown(),
-					modifiers.ImmutableObject(),
 				},
-				Description: "(Immutable) Specifies cloud key rotation parameters.",
+				Description: "Specifies cloud key rotation parameters.",
 				Attributes: map[string]schema.Attribute{
 					"aws_retain_alias": schema.BoolAttribute{
 						Optional: true,
@@ -532,6 +531,14 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		dbBackupParams := getDatabaseOperationBackupParams(plan)
 		if dbBackupParams != nil {
 			payload.DatabaseBackupParams = dbBackupParams
+		}
+	case "cckm_key_rotation":
+		payload.CCKMRotationParams = getCckmKeyRotationOperationParams(ctx, plan, &state, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if payload.CCKMRotationParams != nil {
+			payload.CCKMRotationParams.CloudName = ""
 		}
 	case "cckm_synchronization":
 		payload.CCKMSynchronizationParams = getCckmSyncParams(ctx, plan, &resp.Diagnostics)

@@ -756,6 +756,7 @@ resource "ciphertrust_aws_connection" "test" {
 // Test_CM_AWSConnection_createIAMAnywhere verifies the create lifecycle for an
 // AWS connection using IAM Roles Anywhere (is_role_anywhere = true).
 func Test_CM_AWSConnection_createIAMAnywhere(t *testing.T) {
+	RequireCM(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-aws-iamanywhere-" + suffix
 	resourceName := "ciphertrust_aws_connection.test"

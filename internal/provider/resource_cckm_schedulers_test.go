@@ -22,6 +22,7 @@ var (
 )
 
 func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
+	RequireCM(t)
 	t.Run("aws", func(t *testing.T) {
 		createSchedulerParams := `
 			resource "ciphertrust_scheduler" "rotation_max_params" {
@@ -30,6 +31,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
+					aws_retain_alias = true
 					rotate_material = true
 				}
 				name       = "%s"
@@ -51,6 +53,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
+					aws_retain_alias = true
 					rotate_material = false
 				}
 				name       = "%s"
@@ -63,6 +66,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					expiration = "%s"
 					expire_in = "%s"
 					rotation_after = "%s"
+					aws_retain_alias = true
 					rotate_material = true
 				}
 				name       = "%s"
@@ -76,6 +80,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 				expiration = ""
 				expire_in = ""
 				rotation_after = ""
+				aws_retain_alias = false
 				rotate_material = false
 			}
 			name       = "%s"
@@ -88,6 +93,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 				expiration = ""
 				expire_in = ""
 				rotation_after = ""
+				aws_retain_alias = false
 				rotate_material = false
 			}
 			name       = "%s"

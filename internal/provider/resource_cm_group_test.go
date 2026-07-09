@@ -358,6 +358,7 @@ func Test_CM_AccCMGroup_userIDsAddRemove(t *testing.T) {
 // from the group is detected on the next plan (Read populates user_ids from
 // the live API, not from cached state).
 func Test_CM_AccCMGroup_userIDsDrift(t *testing.T) {
+	RequireCM(t)
 	suffix := uuid.New().String()[:8]
 	groupName := "TFTestGroupUserDrift-" + suffix
 	username := "tf-test-driftuser-" + suffix

@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -56,7 +57,10 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
-				Description: "The hostname or IP address of the syslog connection.",
+				Description: "(Immutable) The hostname or IP address of the syslog connection.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"transport": schema.StringAttribute{
 				Required:    true,
@@ -75,7 +79,10 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"port": schema.Int64Attribute{
 				Optional:    true,
-				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"account": schema.StringAttribute{
 				Computed: true,
@@ -151,12 +158,7 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	if !plan.MessageFormat.IsNull() {
-		plan.MessageFormat = types.StringValue(gjson.Get(response, "messageFormat").String())
-	}
-	if !plan.Port.IsNull() {
-		plan.Port = types.Int64Value(gjson.Get(response, "port").Int())
-	}
+	hydrateSyslogOptionalFields(&plan, response)
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
 
