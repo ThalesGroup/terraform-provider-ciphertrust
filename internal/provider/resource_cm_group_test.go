@@ -477,7 +477,6 @@ func TestAccCMGroup_NameImmutable(t *testing.T) {
 }
 
 func TestAccCMGroup_attributeDrift(t *testing.T) {
-func Test_CM_AccCMGroup_attributeDrift(t *testing.T) {
 	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string
 
