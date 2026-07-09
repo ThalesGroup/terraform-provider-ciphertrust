@@ -78,14 +78,14 @@ output "interface_id" {
 - `custom_uid_size` (Number) This flag is used to define the custom uid size of managed object over the KMIP interface.
 - `custom_uid_v2` (Boolean) This flag specifies which version of custom uid feature is to be used for KMIP interface. If it is set to true, new implementation i.e. Custom uid version 2 will be used.
 - `default_connection` (String) The default connection may be "local_account" for local authentication or the LDAP domain for LDAP authentication. This value is applied when the username does not embed the connection name (e.g. "jdoe" effectively becomes "local_account|jdoe"). This value only applies to NAE only and is ignored if set for web and KMIP interfaces.
-- `interface_type` (String) This parameter is used to identify the type of interface, what service to run on the interface.
+- `interface_type` (String) (Immutable) This parameter is used to identify the type of interface, what service to run on the interface.
 - `kmip_enable_hard_delete` (Number) Enables hard delete of keys on KMIP Destroy operation, that is both meta-data and material will be removed from CipherTrust Manager for the key being deleted. By default, only key material is removed and meta-data is preserved with the updated key state. This setting applies only to KMIP interface. Should be set to 1 for enabling the feature or 0 for returning to default behavior.
 - `local_auto_gen_attributes` (Attributes) Local CSR parameters for interface's certificate. These are for the local node itself, and they do not affect other nodes in the cluster. This gives user a convenient way to supply custom fields for automatic interface certification generation. Without them, the system defaults are used. (see [below for nested schema](#nestedatt--local_auto_gen_attributes))
 - `maximum_tls_version` (String) Maximum TLS version to be configured for NAE or KMIP interface, default is latest maximum supported protocol.
 - `meta` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--meta))
 - `minimum_tls_version` (String) Minimum TLS version to be configured for NAE or KMIP interface, default is v1.2 (tls_1_2).
 - `mode` (String) The interface mode can be one of the following: no-tls-pw-opt, no-tls-pw-req, unauth-tls-pw-opt, tls-cert-opt-pw-opt, tls-pw-opt, tls-pw-req, tls-cert-pw-opt, or tls-cert-and-pw. Default mode is no-tls-pw-opt. Refer to the top level discussion of the Interface section for further details.
-- `name` (String) The name of the interface. Not valid for interface_type nae.
+- `name` (String) (Immutable) The name of the interface. Not valid for interface_type nae.
 - `network_interface` (String) Defines what ethernet adapter the interface should listen to, use "all" for all. Defaults to all if not specified.
 - `registration_token` (String) Registration token in case auto registration is true.
 - `tls_ciphers` (Attributes List) Certificate to be associated with the interface (see [below for nested schema](#nestedatt--tls_ciphers))

@@ -72,7 +72,7 @@ output "group_name" {
 
 ### Required
 
-- `name` (String) Unique group name. Immutable after creation.
+- `name` (String) (Immutable) Unique group name.
 
 ### Optional
 

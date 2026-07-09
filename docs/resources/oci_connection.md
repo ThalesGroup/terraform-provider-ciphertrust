@@ -62,7 +62,7 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 ### Required
 
 - `key_file` (String, Sensitive) Path to or data of the OCI private key file (PEM format).
-- `name` (String) Unique connection name. Immutable after creation — changing this field will produce a plan-time error.
+- `name` (String) (Immutable) Unique connection name.
 - `pub_key_fingerprint` (String) Fingerprint of the public key added to the OCI user.
 - `region` (String) OCI connection region.
 - `tenancy_ocid` (String) Tenant OCID.

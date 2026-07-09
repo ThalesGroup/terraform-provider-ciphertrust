@@ -78,7 +78,7 @@ output "log_forwarder_id" {
 
 - `connection_id` (String) connection id of log-forwarder connection (elasticsearch, loki, syslog).
 - `name` (String) Unique name of the Log Forwarder.
-- `type` (String) Type of the Log Forwarder
+- `type` (String) (Immutable) Type of the log forwarder. Allowed values: elasticsearch, loki, syslog.
 
 ### Optional
 

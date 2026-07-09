@@ -81,7 +81,7 @@ output "cm_policy_id" {
 - `conditions` (Attributes List) Conditions are rules for matching the other attributes of the operation (see [below for nested schema](#nestedatt--conditions))
 - `effect` (String) Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.
 - `include_descendant_accounts` (Boolean) When false, only the resources in the principal's account can be accessed if the policy allows it.
-- `name` (String) This is the name of the policy.
+- `name` (String) (Immutable) This is the name of the policy.
 - `resources` (List of String) Resources is a list of URI strings, which must be in URI format.
 
 ### Read-Only

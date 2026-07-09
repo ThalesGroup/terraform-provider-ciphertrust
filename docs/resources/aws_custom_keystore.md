@@ -156,7 +156,6 @@ resource "ciphertrust_aws_custom_keystore" "imported_external_custom_keystore" {
 
 ### Read-Only
 
-- `access_key_id` (String)
 - `cloud_name` (String)
 - `created_at` (String)
 - `credential_count` (Number) Number of credentials currently associated with the key store.
@@ -165,7 +164,6 @@ resource "ciphertrust_aws_custom_keystore" "imported_external_custom_keystore" {
 - `kms_name` (String) Name of the AWS KMS account container associated with this key store.
 - `labels` (Map of String) A list of key:value pairs associated with the key.
 - `oldest_credentials_id` (String) ID of the oldest credentials associated with the key store.
-- `secret_access_key` (String)
 - `type` (String)
 - `updated_at` (String)
 - `version_count` (Number) Number of credential versions available.
