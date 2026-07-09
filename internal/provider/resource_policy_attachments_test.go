@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -360,6 +361,96 @@ resource "ciphertrust_policy_attachments" "test" {
 				Config:      changedPolicyConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull verifies that adding
+// jurisdiction to an attachment where it was null in prior state fires the ImmutableString
+// modifier at plan time after the IsNull→IsUnknown fix.
+func TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull(t *testing.T) {
+	RequireCM(t)
+
+	policyID := os.Getenv("CM_POLICY_ID")
+	principalUser := os.Getenv("CM_PRINCIPAL_USER")
+	if policyID == "" || principalUser == "" {
+		t.Skip("Skipping: CM_POLICY_ID and CM_PRINCIPAL_USER must be set")
+	}
+
+	step1Config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test" {
+  policy             = %q
+  principal_selector = { user = %q }
+}
+`, policyID, principalUser)
+
+	step2Config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test" {
+  policy             = %q
+  principal_selector = { user = %q }
+  jurisdiction       = "root"
+}
+`, policyID, principalUser)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: step1Config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test", "id"),
+				),
+			},
+			{
+				Config:      step2Config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
+// to an attachment where it was null in prior state fires the ImmutableList modifier at plan
+// time after the IsNull→IsUnknown fix.
+func TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
+	RequireCM(t)
+
+	policyID := os.Getenv("CM_POLICY_ID")
+	principalUser := os.Getenv("CM_PRINCIPAL_USER")
+	if policyID == "" || principalUser == "" {
+		t.Skip("Skipping: CM_POLICY_ID and CM_PRINCIPAL_USER must be set")
+	}
+
+	step1Config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test_actions" {
+  policy             = %q
+  principal_selector = { user = %q }
+}
+`, policyID, principalUser)
+
+	step2Config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test_actions" {
+  policy             = %q
+  principal_selector = { user = %q }
+  actions            = ["CreateKey"]
+}
+`, policyID, principalUser)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: step1Config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test_actions", "id"),
+				),
+			},
+			{
+				Config:      step2Config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
