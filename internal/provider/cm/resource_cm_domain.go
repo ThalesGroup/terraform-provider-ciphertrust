@@ -259,8 +259,10 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
 				"Domain Not Found",
-				"The Domain resource was not found on CipherTrust Manager (HTTP 404). The resource has been left in Terraform state. If the domain was intentionally deleted outside Terraform, run 'terraform state rm' to remove it manually.",
+				"The Domain resource was not found on CipherTrust Manager (HTTP 404). "+
+					"It may have been deleted outside of Terraform. Removing it from state.",
 			)
+			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
