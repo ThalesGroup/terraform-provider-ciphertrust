@@ -353,3 +353,20 @@ func (c *CMClientBootstrap) PatchDataBootstrap(ctx context.Context, uuid string,
 	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
+
+func (c *CMClientBootstrap) GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequestBootstrap(ctx, uuid, req)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
+	return string(body), nil
+}
