@@ -11,7 +11,7 @@ import (
 // It uses initCckmOCITest to create an OCI connection and register a vault,
 // then lists all compartments to obtain a compartment OCID, and finally
 // fetches buckets for that compartment. At least one bucket must be returned.
-func TestCckmOCIGetBuckets(t *testing.T) {
+func TestCckmOCIDataSourceGetBuckets(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
 
