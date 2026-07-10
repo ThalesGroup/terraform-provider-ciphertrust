@@ -161,6 +161,18 @@ resource "ciphertrust_domain" "test" {
 `, name, adminsStr, allowUserMgmt, metaStr)
 }
 
+// cmDomainOOBConfig returns an HCL config for a domain resource used in
+// out-of-band delete testing. Uses the resource label "oob" to avoid
+// conflicts with other tests using "test" label.
+func cmDomainOOBConfig(name string) string {
+	return fmt.Sprintf(providerConfig+`
+resource "ciphertrust_domain" "oob" {
+  name   = %q
+  admins = ["admin"]
+}
+`, name)
+}
+
 // Test_CM_AccCipherTrustCMDomain_basicDrift verifies that out-of-band mutations to
 // admins, allow_user_management, and meta_data surface as drift.
 func Test_CM_AccCipherTrustCMDomain_basicDrift(t *testing.T) {
@@ -227,8 +239,8 @@ func Test_CM_AccCipherTrustCMDomain_basicDrift(t *testing.T) {
 }
 
 // Test_CM_AccCipherTrustCMDomain_deleteOutOfBand verifies that when a domain is
-// deleted out-of-band, Read() emits a warning and keeps the resource in state,
-// and that terraform destroy on an already-deleted domain completes without error.
+// deleted out-of-band, Read() calls RemoveResource to remove the resource from state,
+// and the plan correctly proposes recreation. After re-apply, the domain is recreated.
 func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
@@ -240,23 +252,19 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				PreConfig: func() { domainSweep() },
-				Config:    domainConfig(rName, []string{"admin"}, false, nil),
+				Config:    cmDomainOOBConfig(rName),
 				Check: checkStep(t, "deleteOutOfBand: create",
-					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["ciphertrust_domain.test"]
-						if !ok {
-							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
-						}
-						domainID = rs.Primary.ID
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.oob", "id"),
+					resource.TestCheckResourceAttrWith("ciphertrust_domain.oob", "id", func(val string) error {
+						domainID = val
 						return nil
-					},
+					}),
 				),
 			},
 			{
 				// Step 2: OOB delete + refresh.
-				// Read() gets 404, emits warning, keeps resource in state.
-				// State is unchanged → config matches state → plan is empty.
+				// Read() gets 404, calls RemoveResource — resource removed from state.
+				// Config still wants the resource → plan proposes recreation → non-empty plan.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -266,7 +274,14 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: false, // correct: keep-in-state leaves no diff
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Step 3: re-apply config — Terraform recreates the domain.
+				Config: cmDomainOOBConfig(rName),
+				Check: checkStep(t, "deleteOutOfBand: recreated",
+					resource.TestCheckResourceAttr("ciphertrust_domain.oob", "name", rName),
+				),
 			},
 		},
 	})
