@@ -407,3 +407,43 @@ resource "ciphertrust_log_forwarder" "test" {
 		},
 	})
 }
+
+// Test_CM_LogForwarder_BasicCreateUpdate verifies that a ciphertrust_log_forwarder resource
+// can be created, that id is populated after apply, and that updating the name field
+// (a mutable attribute) takes effect on the next apply.
+// Required env var: CIPHERTRUST_LOG_FORWARDER_CONNECTION_ID.
+func Test_CM_LogForwarder_BasicCreateUpdate(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-basic-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	rNameUpdated := rName + "-upd"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLogForwarderBasicConfig(connID, rName),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.basic", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.basic", "name", rName),
+				),
+			},
+			{
+				Config: testAccLogForwarderBasicConfig(connID, rNameUpdated),
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.basic", "name", rNameUpdated),
+				),
+			},
+		},
+	})
+}
+
+func testAccLogForwarderBasicConfig(connID, name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "basic" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, name)
+}
