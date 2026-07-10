@@ -16,7 +16,10 @@ generate:
 
 docs:
 	@echo "Generating docs..."
+	@cp docs/index.md /tmp/ciphertrust-docs-index.md.bak
 	@tfplugindocs generate --provider-dir . -provider-name terraform-provider-ciphertrust 2>&1 | grep -v "^rendering\|^exporting\|^compiling\|^using\|^running\|^getting\|^generating\|^cleaning\|^removing" || true
+	@cp /tmp/ciphertrust-docs-index.md.bak docs/index.md
+	@rm -f /tmp/ciphertrust-docs-index.md.bak
 	@CHANGED=$$(git diff --name-only docs/ 2>/dev/null); \
 	NEW=$$(git ls-files --others --exclude-standard docs/ 2>/dev/null); \
 	ALL=$$(printf '%s\n' $$CHANGED $$NEW | grep .); \
