@@ -9,7 +9,7 @@ import (
 
 type VaultTFSDK struct {
 	VaultCommonTFSDK
-	ConnectionID    types.String `tfsdk:"connection_id"`
+	ConnectionID types.String `tfsdk:"connection_id"`
 	BucketParamsTFSDK
 	FreeformTags types.Map `tfsdk:"freeform_tags"`
 	DefinedTags  types.Set `tfsdk:"defined_tags"`
@@ -200,4 +200,46 @@ type DataSourceVaultJSON struct {
 
 type DataSourceVaultsJSON struct {
 	Resources []DataSourceVaultJSON `json:"resources"`
+}
+
+// ListOCIBucketsPayloadJSON is the request body for the list-buckets API.
+type ListOCIBucketsPayloadJSON struct {
+	Connection    string  `json:"connection"`
+	CompartmentID string  `json:"compartment_id"`
+	Limit         *int64  `json:"limit,omitempty"`
+	OciNextPage   *string `json:"ociNextPage,omitempty"`
+}
+
+// ListOCIBucketsResponseJSON is the API response from list-buckets.
+type ListOCIBucketsResponseJSON struct {
+	Data        []OCIBucketJSON `json:"data"`
+	OciNextPage string          `json:"ociNextPage"`
+}
+
+// OCIBucketJSON is a single bucket returned by the list-buckets API.
+type OCIBucketJSON struct {
+	Namespace     string                       `json:"namespace"`
+	Name          string                       `json:"name"`
+	CompartmentID string                       `json:"compartment_id"`
+	TimeCreated   string                       `json:"time_created"`
+	FreeformTags  map[string]string            `json:"freeform_tags"`
+	DefinedTags   map[string]map[string]string `json:"defined_tags"`
+}
+
+// OCIBucketTFSDK is the Terraform state model for a single OCI bucket.
+type OCIBucketTFSDK struct {
+	Namespace     types.String `tfsdk:"namespace"`
+	Name          types.String `tfsdk:"name"`
+	CompartmentID types.String `tfsdk:"compartment_id"`
+	TimeCreated   types.String `tfsdk:"time_created"`
+	FreeformTags  types.Map    `tfsdk:"freeform_tags"`
+	DefinedTags   types.Set    `tfsdk:"defined_tags"`
+}
+
+// ListOCIBucketsTFSDK is the top-level Terraform state for the get_oci_buckets data source.
+type ListOCIBucketsTFSDK struct {
+	Connection    types.String     `tfsdk:"connection_id"`
+	CompartmentID types.String     `tfsdk:"compartment_id"`
+	Limit         types.Int64      `tfsdk:"limit"`
+	Buckets       []OCIBucketTFSDK `tfsdk:"buckets"`
 }
