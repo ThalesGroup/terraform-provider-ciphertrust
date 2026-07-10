@@ -64,6 +64,18 @@ output "key_id" {
 
 - `key` (String) (Immutable) SSH public key to add to the CipherTrust Manager appliance during initial bootstrap.
 
+### Optional
+
+- `curve` (String)
+- `key_size` (Number)
+- `public_key_encoding` (String)
+- `username` (String)
+
 ### Read-Only
 
+- `algorithm` (String)
+- `created_at` (String)
+- `fingerprint` (String)
 - `id` (String) The ID of this resource.
+- `name` (String)
+- `updated_at` (String)

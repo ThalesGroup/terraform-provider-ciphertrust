@@ -115,7 +115,7 @@ For example:
 
 ### Optional
 
-- `cckm_key_rotation_params` (Attributes) (Immutable) Specifies cloud key rotation parameters. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
+- `cckm_key_rotation_params` (Attributes) Specifies cloud key rotation parameters. cloud_name is immutable after creation; the remaining fields can be updated. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
 - `cckm_synchronization_params` (Attributes) Cloud key synchronization parameters. (see [below for nested schema](#nestedatt--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) (Immutable) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
@@ -140,7 +140,7 @@ For example:
 
 Required:
 
-- `cloud_name` (String) Name of the cloud for which to schedule the key rotation. Options are: aws,oci.
+- `cloud_name` (String) (Immutable) Name of the cloud for which to schedule the key rotation. Options are: aws,oci.
 
 Optional:
 
