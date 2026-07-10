@@ -447,6 +447,7 @@ func Test_CM_AWSConnection_driftScalars(t *testing.T) {
 // Test_CM_AWSConnection_driftMapAndList verifies drift detection for labels,
 // meta, and products.
 func Test_CM_AWSConnection_driftMapAndList(t *testing.T) {
+	RequireCM(t)
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-maplist-" + suffix
 	var capturedID string
@@ -655,6 +656,7 @@ func Test_CM_AWSConnection_InvalidProductRejected(t *testing.T) {
 // Test_CM_AWSConnection_ValidProducts verifies create, update, and Read()
 // round-trip for the products list attribute.
 func Test_CM_AWSConnection_ValidProducts(t *testing.T) {
+	RequireCM(t)
 	resourceName := "ciphertrust_aws_connection.test"
 	suffix := uuid.New().String()[:8]
 	connName := "tftest-valid-products-" + suffix
