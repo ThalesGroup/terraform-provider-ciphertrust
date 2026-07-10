@@ -206,38 +206,42 @@ resource "ciphertrust_cm_reg_token" "test" {
 
 func Test_CM_CipherTrust_CMRegToken_labelDrift(t *testing.T) {
 	RequireCM(t)
-	client, ok := createCMClient()
-	if !ok {
-		t.Skip("createCMClient failed")
-	}
-
-	var capturedID string
+	var tokenID string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
-resource "ciphertrust_cm_reg_token" "test" {
-  label = { KmipClientProfile = "default" }
-}
-`,
-				Check: checkStep(t, "labelDrift: create",
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "label.KmipClientProfile", "default"),
-					func(s *terraform.State) error {
-						capturedID = s.RootModule().Resources["ciphertrust_cm_reg_token.test"].Primary.ID
+				Config: regTokenLabelsConfig("prod"),
+				Check: checkStep(t, "labelDrift: create reg token with labels",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "labels.env", "prod"),
+					resource.TestCheckResourceAttrWith("ciphertrust_cm_reg_token.test", "id", func(val string) error {
+						tokenID = val
 						return nil
-					},
+					}),
 				),
 			},
 			{
 				PreConfig: func() {
-					patchPayload, _ := json.Marshal(map[string]interface{}{"label": map[string]interface{}{"KmipClientProfile": "updated"}})
-					_, _ = client.UpdateData(context.Background(), capturedID, common.URL_REG_TOKEN, patchPayload, "id")
+					ctx := context.Background()
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM client not available")
+					}
+					payload := []byte(`{"labels":{"env":"drifted"}}`)
+					_, err := client.UpdateData(ctx, tokenID, common.URL_REG_TOKEN, payload, "id")
+					if err != nil {
+						t.Logf("OOB update warning: %v", err)
+					}
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+			{
+				Config: regTokenLabelsConfig("prod"),
+				Check: checkStep(t, "labelDrift: labels restored after drift convergence",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "labels.env", "prod"),
+				),
 			},
 		},
 	})
@@ -349,6 +353,16 @@ func Test_CM_CipherTrust_CMRegToken_ImmutableFields(t *testing.T) {
 			},
 		},
 	})
+}
+
+func regTokenLabelsConfig(envValue string) string {
+	return fmt.Sprintf(providerConfig+`
+resource "ciphertrust_cm_reg_token" "test" {
+  labels = {
+    "env" = %q
+  }
+}
+`, envValue)
 }
 
 func cmRegTokenBaseConfig() string {
