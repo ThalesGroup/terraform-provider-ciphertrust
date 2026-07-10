@@ -696,9 +696,6 @@ func TestCckmOCIKeyVersionScheduledForDeletionRefresh(t *testing.T) {
 	})
 }
 
-// TestCckmOCIKeyVersionScheduledForDeletionUpdate verifies that when an OCI native key
-// version is scheduled for deletion out-of-band, a subsequent terraform apply that changes
-// schedule_for_deletion_days issues a warning, retains the resource in state, and does not error.
 func TestCckmOCIKeyVersionScheduledForDeletionUpdate(t *testing.T) {
 	connectionResource := initCckmOCITest(t)
 	keyName := "tf-" + uuid.New().String()[:8]
@@ -787,6 +784,276 @@ func TestCckmOCIKeyVersionScheduledForDeletionUpdate(t *testing.T) {
 						return nil
 					},
 					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmOCIKeyRestoreFromBackup verifies that setting restore_from_backup_trigger on a
+// native OCI key triggers a restore from the most recent OCI backup.
+// Applicable only to HSM-protected keys in OCI Virtual Private Vaults.
+// Skipped if CCKM_OCI_VP_VAULT_OCID is not set.
+func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
+	vpVaultOCID := os.Getenv("CCKM_OCI_VP_VAULT_OCID")
+	if vpVaultOCID == "" {
+		t.Skip("CCKM_OCI_VP_VAULT_OCID not set")
+	}
+
+	connectionResource := initCckmOCITest(t)
+
+	// List buckets accessible from the standard vault's compartment so the VP vault
+	// can be configured with bucket storage, which is required for HSM key backup/restore.
+	// Register the virtual private vault alongside the standard vault.
+	vpVaultResource := fmt.Sprintf(`
+		data "ciphertrust_get_oci_buckets" "buckets" {
+			connection_id  = ciphertrust_oci_connection.oci_connection.id
+			compartment_id = ciphertrust_oci_vault.vault.compartment_id
+			limit          = 1
+		}
+
+		resource "ciphertrust_oci_vault" "vp_vault" {
+			connection_id    = ciphertrust_oci_connection.oci_connection.id
+			vault_id         = "%s"
+			region           = local.region
+			bucket_name      = data.ciphertrust_get_oci_buckets.buckets.buckets[0].name
+			bucket_namespace = data.ciphertrust_get_oci_buckets.buckets.buckets[0].namespace
+		}`, vpVaultOCID)
+
+	baseConfig := connectionResource + vpVaultResource
+
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_key.key"
+	versionResource := "ciphertrust_oci_key_version.version"
+
+	createConfig := fmt.Sprintf(`
+			resource "ciphertrust_oci_key" "key" {
+				name = "%s"
+				oci_key_params = {
+					algorithm       = "AES"
+					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
+					length          = 32
+					protection_mode = "HSM"
+				}
+				vault = ciphertrust_oci_vault.vp_vault.id
+			}
+			resource "ciphertrust_oci_key_version" "version" {
+				cckm_key_id = ciphertrust_oci_key.key.id
+			}`, keyName)
+
+	restoreConfig := fmt.Sprintf(`
+			resource "ciphertrust_oci_key" "key" {
+				name = "%s"
+				oci_key_params = {
+					algorithm       = "AES"
+					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
+					length          = 32
+					protection_mode = "HSM"
+				}
+				restore_from_backup_trigger = "1"
+				vault = ciphertrust_oci_vault.vp_vault.id
+			}
+			resource "ciphertrust_oci_key_version" "version" {
+				cckm_key_id = ciphertrust_oci_key.key.id
+			}`, keyName)
+
+	var capturedVersionUpdatedAt string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create an HSM-protected native key and a version on the VP vault.
+				Config: baseConfig + createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[versionResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", versionResource)
+						}
+						capturedVersionUpdatedAt = rs.Primary.Attributes["updated_at"]
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
+				// Verify the trigger attribute is reflected in state.
+				Config: baseConfig + restoreConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+				),
+			},
+			{
+				// Step 3: refresh state to re-read version attributes from the API,
+				// then verify updated_at changed after the restore.
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[versionResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", versionResource)
+						}
+						newUpdatedAt := rs.Primary.Attributes["updated_at"]
+						if capturedVersionUpdatedAt != "" && newUpdatedAt == capturedVersionUpdatedAt {
+							return fmt.Errorf("expected version updated_at to change after restore, got same value: %s", newUpdatedAt)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// TestCckmOCIByokKeyRestoreFromBackup verifies that setting restore_from_backup_trigger on a
+// native OCI key and on a BYOK OCI key triggers a restore from the most recent OCI backup.
+// Applicable only to HSM-protected keys in OCI Virtual Private Vaults.
+// Skipped if CCKM_OCI_VP_VAULT_OCID is not set.
+func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
+	vpVaultOCID := os.Getenv("CCKM_OCI_VP_VAULT_OCID")
+	if vpVaultOCID == "" {
+		t.Skip("CCKM_OCI_VP_VAULT_OCID not set")
+	}
+
+	connectionResource := initCckmOCITest(t)
+
+	// List buckets accessible from the standard vault's compartment so the VP vault
+	// can be configured with bucket storage, which is required for HSM key backup/restore.
+	// Register the virtual private vault alongside the standard vault.
+	vpVaultResource := fmt.Sprintf(`
+		data "ciphertrust_get_oci_buckets" "buckets" {
+			connection_id  = ciphertrust_oci_connection.oci_connection.id
+			compartment_id = ciphertrust_oci_vault.vault.compartment_id
+			limit          = 1
+		}
+
+		resource "ciphertrust_oci_vault" "vp_vault" {
+			connection_id    = ciphertrust_oci_connection.oci_connection.id
+			vault_id         = "%s"
+			region           = local.region
+			bucket_name      = data.ciphertrust_get_oci_buckets.buckets.buckets[0].name
+			bucket_namespace = data.ciphertrust_get_oci_buckets.buckets.buckets[0].namespace
+		}`, vpVaultOCID)
+
+	baseConfig := connectionResource + vpVaultResource
+
+	cmKeyName := "tf-" + uuid.New().String()[:8]
+	cmVersionKeyName := "tf-" + uuid.New().String()[:8]
+	ociKeyName := "tf-" + uuid.New().String()[:8]
+	keyResource := "ciphertrust_oci_byok_key.key"
+	versionResource := "ciphertrust_oci_byok_key_version.version"
+
+	createConfig := fmt.Sprintf(`
+			resource "ciphertrust_cm_key" "cm_key" {
+				name       = "%s"
+				algorithm  = "AES"
+				usage_mask = local.cm_key_usage_mask
+			}
+			resource "ciphertrust_cm_key" "cm_version_key" {
+				name       = "%s"
+				algorithm  = "AES"
+				usage_mask = local.cm_key_usage_mask
+			}
+			resource "ciphertrust_oci_byok_key" "key" {
+				name = "%s"
+				oci_key_params = {
+					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
+					protection_mode = "HSM"
+				}
+				source_key_id   = ciphertrust_cm_key.cm_key.id
+				source_key_tier = "local"
+				vault           = ciphertrust_oci_vault.vp_vault.id
+			}
+			resource "ciphertrust_oci_byok_key_version" "version" {
+				cckm_key_id   = ciphertrust_oci_byok_key.key.id
+				source_key_id = ciphertrust_cm_key.cm_version_key.id
+			}`, cmKeyName, cmVersionKeyName, ociKeyName)
+
+	restoreConfig := fmt.Sprintf(`
+			resource "ciphertrust_cm_key" "cm_key" {
+				name       = "%s"
+				algorithm  = "AES"
+				usage_mask = local.cm_key_usage_mask
+			}
+			resource "ciphertrust_cm_key" "cm_version_key" {
+				name       = "%s"
+				algorithm  = "AES"
+				usage_mask = local.cm_key_usage_mask
+			}
+			resource "ciphertrust_oci_byok_key" "key" {
+				name = "%s"
+				oci_key_params = {
+					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
+					protection_mode = "HSM"
+				}
+				restore_from_backup_trigger = "1"
+				source_key_id   = ciphertrust_cm_key.cm_key.id
+				source_key_tier = "local"
+				vault           = ciphertrust_oci_vault.vp_vault.id
+			}
+			resource "ciphertrust_oci_byok_key_version" "version" {
+				cckm_key_id   = ciphertrust_oci_byok_key.key.id
+				source_key_id = ciphertrust_cm_key.cm_version_key.id
+			}`, cmKeyName, cmVersionKeyName, ociKeyName)
+
+	var capturedVersionUpdatedAt string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create an HSM-protected BYOK key and a BYOK version on the VP vault.
+				Config: baseConfig + createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[versionResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", versionResource)
+						}
+						capturedVersionUpdatedAt = rs.Primary.Attributes["updated_at"]
+						return nil
+					},
+				),
+			},
+			{
+				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
+				// Verify the trigger attribute is reflected in state.
+				Config: baseConfig + restoreConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+				),
+			},
+			{
+				// Step 3: refresh state to re-read version attributes from the API,
+				// then verify updated_at changed after the restore.
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources[versionResource]
+						if !ok {
+							return fmt.Errorf("resource not found in state: %s", versionResource)
+						}
+						newUpdatedAt := rs.Primary.Attributes["updated_at"]
+						if capturedVersionUpdatedAt != "" && newUpdatedAt == capturedVersionUpdatedAt {
+							return fmt.Errorf("expected version updated_at to change after restore, got same value: %s", newUpdatedAt)
+						}
+						return nil
+					},
 				),
 			},
 		},

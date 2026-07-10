@@ -42,7 +42,7 @@ func cleanupCckmOCIVaults() {
 	}
 	for _, r := range resources {
 		vaultID := gjson.Get(r.Raw, "id").String()
-		vaultName := gjson.Get(r.Raw, "name").String()
+		vaultName := gjson.Get(r.Raw, "display_name").String()
 		_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_OCI+"/vaults/"+vaultID)
 		if err != nil {
 			fmt.Printf("** cleanupCckmOCIVaults: failed to delete vault '%s' (%s): %s\n", vaultName, vaultID, err.Error())

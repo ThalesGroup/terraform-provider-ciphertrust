@@ -54,12 +54,12 @@ type AWSIAMUsersDataSourceModel struct {
 
 // AWSIAMUserTFSDK represents a single IAM user in Terraform state.
 type AWSIAMUserTFSDK struct {
-	Arn               types.String `tfsdk:"arn"`
-	CreateDate        types.String `tfsdk:"create_date"`
-	Path              types.String `tfsdk:"path"`
-	UserID            types.String `tfsdk:"user_id"`
-	UserName          types.String `tfsdk:"user_name"`
-	PasswordLastUsed  types.String `tfsdk:"password_last_used"`
+	Arn              types.String `tfsdk:"arn"`
+	CreateDate       types.String `tfsdk:"create_date"`
+	Path             types.String `tfsdk:"path"`
+	UserID           types.String `tfsdk:"user_id"`
+	UserName         types.String `tfsdk:"user_name"`
+	PasswordLastUsed types.String `tfsdk:"password_last_used"`
 }
 
 // awsIAMUsersRequest is the JSON body sent to the navic API.
