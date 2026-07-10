@@ -115,7 +115,7 @@ output "scp_connection_name" {
 
 - `auth_method` (String) Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'
 - `host` (String) Hostname or FQDN of SCP/SFTP remote machine.
-- `name` (String) Unique connection name. Immutable after creation.
+- `name` (String) (Immutable) Unique connection name.
 - `path_to` (String) A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'
 - `public_key` (String) Public key of destination host machine. It will be used to verify the host's identity by verifying key fingerprint. You can find it in /etc/ssh/ at host machine.
 - `username` (String) Username for accessing SCP/SFTP server.

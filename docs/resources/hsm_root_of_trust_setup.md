@@ -88,7 +88,7 @@ resource "ciphertrust_hsm_root_of_trust_setup" "cm_hsm_rot_setup" {
 
 ### Required
 
-- `conn_info` (Map of String) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.
+- `conn_info` (Map of String) (Immutable) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.
 
 For Luna Network HSM (including TCT) and Luna PCIe, the required attributes are:
 
@@ -105,12 +105,12 @@ Luna Network/PCIe HSM (including TCT) example:
  "partition_name": "kylo-partition",
  "partition_password": "sOmeP@ssword"
 }
-- `type` (String) Type of HSM server to setup, supported types are "luna", "lunapci", and "lunatct". "luna" refers to the Luna Network HSM version 5, 6, or 7, "lunapci" refers to the embedded Luna PCIe HSM, and "lunatct" refers to the Luna T-Series HSMs.
+- `type` (String) (Immutable) Type of HSM server to setup. Supported values: "luna", "lunapci", "lunatct", "protectserver", "aws", "dpod", "nshield", "ibmhpcs". Must be lowercase.
 
 ### Optional
 
-- `delay` (Number) Delay in seconds before reset, defaults to 5 seconds
-- `initial_config` (Map of String) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.
+- `delay` (Number) (Immutable) Delay in seconds before reset, defaults to 5 seconds.
+- `initial_config` (Map of String) (Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.
 
 For Luna Network HSM (including TCT) the required attributes are:
 - "host"
@@ -149,12 +149,7 @@ Luna Network HSM (including TCT) example:
     }
 
 Note: JSON does not allow line-breaks, it needs to be replaced with \n. Use "sed -z 's/\n/\\n/g' cert-file.pem" command to format the certificate.
-- `reset` (Boolean) If true CipherTrust Manager will perform a reset operation after the initial HSM setup.
-
-Currently a reset is required for this operation to succeed.
-
-WARNING - Reset is a destructive operation and will wipe all
-data in the CipherTrust Manager.
+- `reset` (Boolean) (Immutable) If true CipherTrust Manager will perform a reset operation after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data.
 
 ### Read-Only
 

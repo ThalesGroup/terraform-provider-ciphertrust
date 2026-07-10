@@ -63,7 +63,7 @@ resource "ciphertrust_cm_user_password_change" "test" {
 // an optional field (password_hint) to an existing password-change resource forces a destroy+recreate plan.
 // This resource uses CMClientBootstrap and requires bootstrap mode (provider bootstrap = "yes").
 // Skipped when TEST_CM_BOOTSTRAP_PASSWORD or TEST_CM_BOOTSTRAP_NEW_PASSWORD are not set.
-func TestCipherTrust_CMUserPasswordChange_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
+func Test_CM_CipherTrust_CMUserPasswordChange_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
 	RequireCM(t)
 
 	currentPwd := os.Getenv("TEST_CM_BOOTSTRAP_PASSWORD")

@@ -190,7 +190,7 @@ func Test_CM_CckmOCIConnectionNameImmutable(t *testing.T) {
 	})
 }
 
-func TestCipherTrust_OCIConnection_NameImmutable(t *testing.T) {
+func Test_CM_CipherTrust_OCIConnection_NameImmutable(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("OCI_USER_OCID") == "" || os.Getenv("OCI_TENANCY_OCID") == "" {
 		t.Skip("OCI_USER_OCID / OCI_TENANCY_OCID not set — skipping OCI connection immutability test")

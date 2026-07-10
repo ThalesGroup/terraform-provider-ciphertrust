@@ -130,12 +130,13 @@ func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadReques
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_PROMETHEUS_STATUS)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"prometheus not found (404); keeping in state [resource_cm_prometheus.go -> Read]["+id+"]")
+			tflog.Debug(ctx, common.ERR_METHOD_END+"prometheus not found (404) [resource_cm_prometheus.go -> Read]["+id+"]")
 			resp.Diagnostics.AddWarning(
-				"CipherTrust Prometheus Not Found",
-				"Prometheus status was not found in CM and has been kept in Terraform state. "+
-					"If it was intentionally deleted, run terraform state rm before the next apply.",
+				"Prometheus Not Found",
+				"The Prometheus resource was not found on CipherTrust Manager (HTTP 404). "+
+					"It may have been deleted outside of Terraform. Removing it from state.",
 			)
+			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Read]["+id+"]")

@@ -84,7 +84,7 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 	})
 }
 
-func TestCipherTrust_AzureConnection_NameImmutable(t *testing.T) {
+func Test_CM_CipherTrust_AzureConnection_NameImmutable(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("AZURE_CLIENT_ID") == "" || os.Getenv("AZURE_TENANT_ID") == "" || os.Getenv("AZURE_CLIENT_SECRET") == "" {
 		t.Skip("AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET not set — skipping Azure connection immutability test")

@@ -554,9 +554,11 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		oci.NewDataSourceGetOCIRegions,
 		oci.NewDataSourceGetOCICompartments,
 		oci.NewDataSourceGetOCIVaults,
+		oci.NewDataSourceGetOCIBuckets,
 		oci.NewDataSourceOCIVault,
 		oci.NewDataSourceOCIKeys,
 		oci.NewDataSourceOCIVersions,
+		oci.NewDataSourceOCICompartmentsList,
 		aws.NewDataSourceAWSKeyRotationList,
 	}
 }

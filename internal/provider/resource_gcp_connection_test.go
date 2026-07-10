@@ -91,7 +91,7 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
 	})
 }
 
-func TestCipherTrust_GCPConnection_NameImmutable(t *testing.T) {
+func Test_CM_CipherTrust_GCPConnection_NameImmutable(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("GCP_KEY_FILE") == "" {
 		t.Skip("GCP_KEY_FILE not set — skipping GCP connection immutability test")

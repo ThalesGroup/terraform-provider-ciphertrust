@@ -101,7 +101,7 @@ output "azure_connection_name" {
 
 ### Required
 
-- `name` (String) Unique connection name. Immutable after creation.
+- `name` (String) (Immutable) Unique connection name.
 
 ### Optional
 

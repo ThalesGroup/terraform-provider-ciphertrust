@@ -72,12 +72,12 @@ output "username" {
 ### Required
 
 - `password` (String, Sensitive)
-- `username` (String)
+- `username` (String) (Immutable) Username of the user.
 
 ### Optional
 
 - `email` (String)
-- `is_domain_user` (Boolean)
+- `is_domain_user` (Boolean) (Immutable) Set to true if user is a domain user. Removing this attribute from config after setting it to true also triggers the immutability error — destroy and recreate to change.
 - `name` (String) Users full name
 - `nickname` (String)
 - `password_change_required` (Boolean)

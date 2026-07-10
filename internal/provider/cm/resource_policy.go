@@ -352,10 +352,10 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				"Policy Not Found",
-				"Policy "+state.ID.ValueString()+" was not found in CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Resolve this by importing the resource "+
-					"(if it was recreated) or running 'terraform state rm' before the next apply.",
+				"Policy "+state.ID.ValueString()+" was not found on CipherTrust Manager (HTTP 404). "+
+					"It may have been deleted outside of Terraform. Removing it from state.",
 			)
+			resp.State.RemoveResource(ctx)
 			return
 		}
 		resp.Diagnostics.AddError(

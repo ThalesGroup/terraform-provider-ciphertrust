@@ -52,10 +52,11 @@ resource "ciphertrust_policy_attachments" "policy_attachment" {
 
 // Test_CM_CMPolicyAttachmentOutOfBandDeletion verifies that when a policy attachment is
 // deleted directly on CipherTrust Manager (out-of-band), the next terraform refresh
-// removes it from state gracefully instead of returning a hard error.
+// removes it from state gracefully and triggers a plan to recreate it.
 func Test_CM_CMPolicyAttachmentOutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	policyName := fmt.Sprintf("tf-oob-policy-%d", time.Now().Unix())
+	var capturedID string
 
 	policyConfig := fmt.Sprintf(`
 resource "ciphertrust_policies" "oob_policy" {
@@ -75,44 +76,33 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 }
 `, policyName, policyName)
 
-	deleteOutOfBand := func(resourceName string) resource.TestCheckFunc {
-		return func(s *terraform.State) error {
-			rs, ok := s.RootModule().Resources[resourceName]
-			if !ok {
-				return fmt.Errorf("resource %s not found in state", resourceName)
-			}
-			id := rs.Primary.ID
-			client, ok := createCMClient()
-			if !ok {
-				t.Skip("Skipping out-of-band deletion test: CM client could not be created (check CIPHERTRUST_* env vars)")
-			}
-			endpoint := common.URL_CM_POLICY_ATTACHMENTS + "/" + id
-			if _, err := client.DeleteByURL(context.Background(), id, endpoint); err != nil {
-				return fmt.Errorf("out-of-band delete failed: %s", err)
-			}
-			return nil
-		}
-	}
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: Create the attachment, then delete it from CM directly.
-			// With the new 404 behavior: Read() adds a warning but keeps the
-			// resource in state (no RemoveResource). No diff is produced.
+			// Step 1: Create the attachment, capture its ID.
 			{
 				Config: providerConfig + policyConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.oob_attachment", "id"),
-					deleteOutOfBand("ciphertrust_policy_attachments.oob_attachment"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_policy_attachments.oob_attachment"].Primary.ID
+						return nil
+					},
 				),
-				ExpectNonEmptyPlan: false,
 			},
-			// Step 2: RefreshState — Read() gets 404, adds warning, preserves state.
-			// No diff because resource is still in state with same values.
+			// Step 2: Delete out-of-band then refresh. Read() gets 404 → RemoveResource.
+			// Resource is removed from state; plan shows recreation → non-empty plan.
 			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("CM not configured")
+					}
+					endpoint := common.URL_CM_POLICY_ATTACHMENTS + "/" + capturedID
+					_, _ = client.DeleteByURL(context.Background(), capturedID, endpoint)
+				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -366,10 +356,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull verifies that adding
+// Test_CM_CipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull verifies that adding
 // jurisdiction to an attachment where it was null in prior state fires the ImmutableString
 // modifier at plan time after the IsNull→IsUnknown fix.
-func TestCipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_PolicyAttachment_ImmutableJurisdiction_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 
 	policyID := os.Getenv("CM_POLICY_ID")
@@ -411,10 +401,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
+// Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
 // to an attachment where it was null in prior state fires the ImmutableList modifier at plan
 // time after the IsNull→IsUnknown fix.
-func TestCipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 
 	policyID := os.Getenv("CM_POLICY_ID")

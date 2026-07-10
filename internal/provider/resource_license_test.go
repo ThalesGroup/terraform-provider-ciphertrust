@@ -54,10 +54,10 @@ resource "ciphertrust_license" "test" {
 	})
 }
 
-// TestCipherTrust_License_ImmutableBindType_NullToNonNull verifies that adding bind_type
+// Test_CM_CipherTrust_License_ImmutableBindType_NullToNonNull verifies that adding bind_type
 // to a license resource where it was null in prior state produces a plan-time immutability
 // error from the fixed ImmutableString modifier (IsUnknown guard, not IsNull).
-func TestCipherTrust_License_ImmutableBindType_NullToNonNull(t *testing.T) {
+func Test_CM_CipherTrust_License_ImmutableBindType_NullToNonNull(t *testing.T) {
 	RequireCM(t)
 
 	licenseStr := os.Getenv("CM_LICENSE_STRING")
@@ -106,10 +106,10 @@ resource "ciphertrust_license" "test" {
 	})
 }
 
-// TestCipherTrust_License_ImmutableBindType_InitialCreate verifies that supplying bind_type
+// Test_CM_CipherTrust_License_ImmutableBindType_InitialCreate verifies that supplying bind_type
 // on first create succeeds without immutability error, confirming the IsUnknown() guard
 // preserves first-create behavior.
-func TestCipherTrust_License_ImmutableBindType_InitialCreate(t *testing.T) {
+func Test_CM_CipherTrust_License_ImmutableBindType_InitialCreate(t *testing.T) {
 	RequireCM(t)
 
 	licenseStr := os.Getenv("CM_LICENSE_STRING")

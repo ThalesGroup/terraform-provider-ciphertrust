@@ -189,11 +189,11 @@ output "additional_node_ids" {
 
 ### Required
 
-- `local_node_host` (String) The hostname or IP of this node. Must be reachable by all nodes in the cluster, including this one.
+- `local_node_host` (String) (Immutable) The hostname or IP of this node. Must be reachable by all nodes in the cluster, including this one.
 
 ### Optional
 
-- `local_node_port` (Number) The port of this node. Defaults to 5432.
+- `local_node_port` (Number) (Immutable) The port of this node. Defaults to 5432.
 - `public_address` (String) The fully qualified domain name (FQDN) or public IP of this node. This attribute is used by CipherTrust Manager connectors to learn how to access this particular node of the cluster remotely. Can be updated.
 
 ### Read-Only
@@ -201,5 +201,6 @@ output "additional_node_ids" {
 - `id` (String) The cluster node ID.
 - `node_count` (Number) Total number of nodes in the cluster.
 - `node_id` (String) CipherTrust Manager node ID assigned to this cluster node.
+- `raft_status` (String) Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response. UseStateForUnknown() is intentionally absent — value changes on leader elections and suppressing it causes 'inconsistent result after apply' errors.
 - `status_code` (String) Short cluster status code (e.g., 'r' = ready).
 - `status_description` (String) Human-readable cluster status description.
