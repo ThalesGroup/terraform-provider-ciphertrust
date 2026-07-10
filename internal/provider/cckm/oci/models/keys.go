@@ -21,6 +21,7 @@ type KeyCommonTFSDK struct {
 	Name                    types.String             `tfsdk:"name"`
 	RefreshedAt             types.String             `tfsdk:"refreshed_at"`
 	Region                  types.String             `tfsdk:"region"`
+	RestoreFromBackup       types.String             `tfsdk:"restore_from_backup_trigger"`
 	ScheduleForDeletionDays types.Int64              `tfsdk:"schedule_for_deletion_days"`
 	Tenancy                 types.String             `tfsdk:"tenancy"`
 	UpdatedAt               types.String             `tfsdk:"updated_at"`

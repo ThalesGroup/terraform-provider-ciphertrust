@@ -25,6 +25,14 @@ const (
 
 // updateKey applies all mutable changes to an OCI key.
 func updateKey(ctx context.Context, id string, client *common.Client, keyID string, plan *models.KeyCommonTFSDK, state *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
+
+	if !plan.RestoreFromBackup.IsNull() && plan.RestoreFromBackup != state.RestoreFromBackup {
+		restoreKeyFromBackup(ctx, id, client, keyID, diags)
+		if diags.HasError() {
+			return
+		}
+	}
+
 	response, err := ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
 	if err != nil {
 		msg := "Error refreshing OCI key."
@@ -629,4 +637,78 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 		diags.AddWarning(details, "")
 	}
 	tflog.Debug(ctx, "[oci_key_common.go -> waitForKeyStateChange][response:"+redactOCIResponse(response)+"]")
+}
+
+// restoreKeyFromBackup restores an OCI key from its most recent backup.
+// After the restore POST succeeds it waits until every key version's updatedAt
+// field changes in CM, signalling that checkKeyAndAllKeyVersionStatus has run.
+// The wait ends when all versions have been updated, or when 30 seconds have
+// passed since the last observed change (whichever comes first).
+func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	// Snapshot pre-restore updatedAt for each version.
+	versionsURL := common.URL_OCI + "/keys/" + keyID + "/versions"
+	preJSON, err := client.ListWithFilters(ctx, id, versionsURL, url.Values{})
+	if err != nil {
+		msg := "Error listing OCI key versions before restore."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
+	}
+	preSnapshot := make(map[string]string) // cckm version id -> updatedAt string
+	for _, v := range gjson.Get(preJSON, "resources").Array() {
+		vid := gjson.Get(v.String(), "id").String()
+		uat := gjson.Get(v.String(), "updatedAt").String()
+		preSnapshot[vid] = uat
+	}
+
+	// Perform the restore.
+	_, err = ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/restore")
+	if err != nil {
+		msg := "Error restoring OCI key from backup."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		tflog.Error(ctx, details)
+		diags.AddError(details, "")
+		return
+	}
+
+	// If there were no versions to watch, nothing to wait for.
+	if len(preSnapshot) == 0 {
+		return
+	}
+
+	// Wait for all version updatedAt fields to change, with a 30-second idle
+	// timeout (30s since the last observed change, or since the restore if no
+	// change has been seen yet).
+	const idleTimeout = 30 * time.Second
+	const pollInterval = 2 * time.Second
+	changed := make(map[string]bool, len(preSnapshot))
+	lastChangeTime := time.Now()
+
+	for {
+		time.Sleep(pollInterval)
+
+		postJSON, listErr := client.ListWithFilters(ctx, id, versionsURL, url.Values{})
+		if listErr != nil {
+			tflog.Warn(ctx, "Error listing OCI key versions while waiting for restore: "+listErr.Error())
+		} else {
+			for _, v := range gjson.Get(postJSON, "resources").Array() {
+				vid := gjson.Get(v.String(), "id").String()
+				uat := gjson.Get(v.String(), "updatedAt").String()
+				if !changed[vid] && uat != preSnapshot[vid] {
+					changed[vid] = true
+					lastChangeTime = time.Now()
+				}
+			}
+		}
+
+		if len(changed) == len(preSnapshot) {
+			// All versions have been updated.
+			break
+		}
+		if time.Since(lastChangeTime) > idleTimeout {
+			tflog.Warn(ctx, "Timed out waiting for all key versions to be updated after restore.")
+			break
+		}
+	}
 }

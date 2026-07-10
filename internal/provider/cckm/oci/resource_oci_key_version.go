@@ -184,10 +184,6 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key_version.go -> Create]["+id+"]")
 	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key_version.go -> Create]["+id+"]")
 
-	mutexKey := fmt.Sprintf("ocikeyversion-%s", id)
-	mutex.CckmMutex.Lock(mutexKey)
-	defer mutex.CckmMutex.Unlock(mutexKey)
-
 	var plan models.KeyVersionTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -195,6 +191,11 @@ func (r *resourceCCKMOCIVersion) Create(ctx context.Context, req resource.Create
 	}
 
 	keyID := plan.CCKMKeyID.ValueString()
+
+	mutexKey := fmt.Sprintf("oci-key-version-%s", keyID)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+
 	payload := models.AddKeyVersionPayloadJSON{
 		IsNative: true,
 	}
@@ -296,8 +297,13 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	keyID := state.CCKMKeyID.ValueString()
 	versionID := state.ID.ValueString()
+
+	mutexKey := fmt.Sprintf("oci-key-version-%s", keyID)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
 
 	response := getOciKeyVersion(ctx, id, r.client, keyID, versionID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {

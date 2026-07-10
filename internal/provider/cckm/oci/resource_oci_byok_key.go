@@ -235,6 +235,11 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Computed:    true,
 				Description: "Date/time the key was refreshed.",
 			},
+			"restore_from_backup_trigger": schema.StringAttribute{
+				Optional: true,
+				Description: "Triggers a restore of the key from its most recent OCI backup each time the trigger value changes. " +
+					"Applicable only to HSM-protected keys in OCI Virtual Private Vaults with backup (Object Storage bucket) configured.",
+			},
 			"region": schema.StringAttribute{
 				Computed:    true,
 				Description: "The key's region.",
