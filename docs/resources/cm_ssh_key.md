@@ -62,7 +62,7 @@ output "key_id" {
 
 ### Required
 
-- `key` (String)
+- `key` (String) (Immutable) SSH public key to add to the CipherTrust Manager appliance during initial bootstrap.
 
 ### Read-Only
 

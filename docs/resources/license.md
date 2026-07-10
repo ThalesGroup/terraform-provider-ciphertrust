@@ -59,11 +59,11 @@ output "license_id" {
 
 ### Required
 
-- `license` (String) License String
+- `license` (String) (Immutable) License String
 
 ### Optional
 
-- `bind_type` (String) Binding type for this license. Can be either 'instance' or 'cluster'. If omitted, then CM attempts to bind the license to the cluster. If this step fails with a lock code error, it will attempt to bind to the instance.
+- `bind_type` (String) (Immutable) Binding type for this license. Can be either 'instance' or 'cluster'. If omitted, then CM attempts to bind the license to the cluster. If this step fails with a lock code error, it will attempt to bind to the instance.
 
 ### Read-Only
 

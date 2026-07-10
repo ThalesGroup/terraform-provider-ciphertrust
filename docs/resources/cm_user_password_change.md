@@ -63,6 +63,11 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 
 ### Required
 
-- `new_password` (String)
-- `password` (String)
-- `username` (String)
+- `new_password` (String) (Immutable) New password to set for the user.
+- `password` (String) (Immutable) Current password for the user.
+- `username` (String) (Immutable) Username of the CipherTrust Manager user whose password is being changed.
+
+### Optional
+
+- `auth_domain` (String) (Immutable) Authentication domain of the user whose password is being changed.
+- `password_hint` (String) (Immutable) Optional hint for the new password.

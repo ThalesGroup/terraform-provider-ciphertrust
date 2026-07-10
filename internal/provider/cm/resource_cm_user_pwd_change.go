@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
@@ -59,16 +60,16 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"auth_domain": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) Authentication domain of the user whose password is being changed.",
+				Description: "Authentication domain of the user whose password is being changed. Changing this value forces replacement of the resource.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 			"password_hint": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) Optional hint for the new password.",
+				Description: "Optional hint for the new password. Changing this value forces replacement of the resource.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplaceIfConfigured(),
 				},
 			},
 		},

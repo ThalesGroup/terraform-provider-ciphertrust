@@ -4,11 +4,24 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+)
+
+// ntpSweepDaemonBusyError, ntpSweepMaxRetries, and ntpSweepRetryDelay mirror the
+// unexported ntpDaemonError/ntpMaxRetries/ntpRetryDelay constants in
+// cm/resource_ntp.go. They can't be imported directly (different package,
+// unexported), so the values are duplicated here to keep the sweep's retry
+// behavior consistent with production Create()/Delete().
+const (
+	ntpSweepDaemonBusyError = "Local NTP Unix socket returned a non-successful HTTP code"
+	ntpSweepMaxRetries      = 3
+	ntpSweepRetryDelay      = 5 * time.Second
 )
 
 func Test_CM_ResourceCMNTP(t *testing.T) {
@@ -42,20 +55,27 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 	})
 }
 
-// ntpSweep deletes an NTP host from CipherTrust Manager, ignoring all errors.
-// Used as a pre-test sweep to ensure no stale entries block Create().
+// ntpSweep deletes an NTP host from CipherTrust Manager. Used as a pre-test sweep
+// to ensure no stale entries (from a prior failed/aborted run) block Create().
+// Retries while the NTP daemon reports itself busy, mirroring production
+// Create()/Delete()'s retry loop — a single unretried attempt can silently no-op
+// during the daemon's post-mutation recovery window, leaving the stale entry in
+// place and causing the next Create() to fail with a 409 "already exists".
 func ntpSweep(host string) {
 	client, ok := createCMClient()
 	if !ok {
 		return
 	}
-	_, _ = client.DeleteByID(
-		context.Background(),
-		"DELETE",
-		host,
-		fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, host),
-		nil,
-	)
+	url := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_NTP, host)
+	for attempt := 0; attempt <= ntpSweepMaxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(ntpSweepRetryDelay)
+		}
+		_, err := client.DeleteByID(context.Background(), "DELETE", host, url, nil)
+		if err == nil || !strings.Contains(err.Error(), ntpSweepDaemonBusyError) {
+			return
+		}
+	}
 }
 
 // Test_CM_AccCMNTP_NoDrift verifies no spurious drift is produced when no out-of-band changes occur.
@@ -174,7 +194,7 @@ resource "ciphertrust_ntp" "test" {
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
-			// Changing key must produce an immutable error at plan time.
+			// Changing key must produce a replacement plan (RequiresReplaceIfConfigured).
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
@@ -183,10 +203,10 @@ resource "ciphertrust_ntp" "test" {
   key_type = "SHA-256"
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
-			// Changing key_type must produce an immutable error at plan time.
+			// Changing key_type must produce a replacement plan (RequiresReplaceIfConfigured).
 			{
 				Config: providerConfig + `
 resource "ciphertrust_ntp" "test" {
@@ -195,8 +215,8 @@ resource "ciphertrust_ntp" "test" {
   key_type = "MD5"
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -248,6 +268,76 @@ resource "ciphertrust_ntp" "test" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_NTP_OptionalFieldAdded_ForcesReplacement verifies that adding an optional
+// field (key or key_type) to an existing NTP resource forces a destroy+recreate plan.
+func Test_CM_CipherTrust_NTP_OptionalFieldAdded_ForcesReplacement(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time6.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time6.google.com"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time6.google.com"),
+					resource.TestCheckNoResourceAttr("ciphertrust_ntp.test", "key"),
+					resource.TestCheckNoResourceAttr("ciphertrust_ntp.test", "key_type"),
+				),
+			},
+			{
+				// Adding key and key_type (null→value) must force a replacement plan.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time6.google.com"
+  key      = "testkey-sha256"
+  key_type = "SHA-256"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_NTP_RequiredFieldChanged_PlanError verifies that changing the Required
+// host attribute on an existing NTP resource produces a plan-time immutable error.
+func Test_CM_CipherTrust_NTP_RequiredFieldChanged_PlanError(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time7.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time7.google.com"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time7.google.com"),
+				),
+			},
+			{
+				// Changing host (Required, ImmutableString) must produce a plan-time error.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time8.google.com"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})

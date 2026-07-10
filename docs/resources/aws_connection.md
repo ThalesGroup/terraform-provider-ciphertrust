@@ -127,10 +127,10 @@ aws-us-gov
 aws-cn
 - `description` (String) Description about the connection
 - `iam_role_anywhere` (Attributes) (see [below for nested schema](#nestedatt--iam_role_anywhere))
-- `is_role_anywhere` (Boolean) Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.
+- `is_role_anywhere` (Boolean) (Immutable) Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
-- `products` (List of String) Array of the CipherTrust products associated with the connection
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. Any other value is rejected by CipherTrust Manager with a 422 error.
 - `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user
 
 ### Read-Only

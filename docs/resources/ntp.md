@@ -60,12 +60,12 @@ output "ntp_server_host" {
 
 ### Required
 
-- `host` (String) Host (hostname/ip) of NTP server to add
+- `host` (String) (Immutable) Host (hostname/ip) of NTP server to add
 
 ### Optional
 
-- `key` (String) Symmetric key value to be used for authenticated NTP servers
-- `key_type` (String) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)
+- `key` (String) (Immutable) Symmetric key value to be used for authenticated NTP servers
+- `key_type` (String) (Immutable) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256)
 
 ### Read-Only
 

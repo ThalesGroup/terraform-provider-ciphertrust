@@ -17,8 +17,8 @@ Enables and configures the Prometheus metrics endpoint on the CipherTrust Manage
 
 ### Required
 
-- `enabled` (Boolean)
+- `enabled` (Boolean) Whether the Prometheus metrics endpoint is enabled on the CipherTrust Manager appliance.
 
 ### Read-Only
 
-- `token` (String)
+- `token` (String, Sensitive)

@@ -453,9 +453,9 @@ func Test_CM_AccCMGroup_userIDsOmittedUnmanaged(t *testing.T) {
 	})
 }
 
-// TestAccCMGroup_NameImmutable verifies that modifiers.ImmutableString() blocks a
+// Test_CM_AccCMGroup_NameImmutable verifies that modifiers.ImmutableString() blocks a
 // group rename at plan time before any API call is made.
-func TestAccCMGroup_NameImmutable(t *testing.T) {
+func Test_CM_AccCMGroup_NameImmutable(t *testing.T) {
 	RequireCM(t)
 	name := "TFTestGroupImm-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
@@ -476,7 +476,7 @@ func TestAccCMGroup_NameImmutable(t *testing.T) {
 	})
 }
 
-func TestAccCMGroup_attributeDrift(t *testing.T) {
+func Test_CM_AccCMGroup_attributeDrift(t *testing.T) {
 	name := "TFTestGroupAttrDrift-" + uuid.New().String()[:8]
 	var capturedID string
 

@@ -1040,9 +1040,9 @@ func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableBool_xts verifies that changing xts after creation
+// Test_CM_CipherTrust_CMKey_ImmutableBool_xts verifies that changing xts after creation
 // produces a plan-time "Attribute is immutable" error from modifiers.ImmutableBool().
-func TestCipherTrust_CMKey_ImmutableBool_xts(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableBool_xts(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1075,9 +1075,9 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableObject_wrapPbe verifies that changing wrap_pbe after
+// Test_CM_CipherTrust_CMKey_ImmutableObject_wrapPbe verifies that changing wrap_pbe after
 // creation produces a plan-time "Attribute is immutable" error from modifiers.ImmutableObject().
-func TestCipherTrust_CMKey_ImmutableObject_wrapPbe(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableObject_wrapPbe(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1122,9 +1122,9 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableInt64_keySize validates the ImmutableInt64 contract
+// Test_CM_CipherTrust_CMKey_ImmutableInt64_keySize validates the ImmutableInt64 contract
 // via modifiers.ImmutableInt64() on key_size.
-func TestCipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1143,9 +1143,9 @@ func TestCipherTrust_CMKey_ImmutableInt64_keySize(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMKey_MutableFieldsUnaffected confirms that mutable fields
+// Test_CM_CipherTrust_CMKey_MutableFieldsUnaffected confirms that mutable fields
 // (description, rotation_frequency_days, usage_mask) produce no immutable-field error.
-func TestCipherTrust_CMKey_MutableFieldsUnaffected(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MutableFieldsUnaffected(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1220,9 +1220,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableAlgorithm verifies that changing algorithm after
+// Test_CM_CipherTrust_CMKey_ImmutableAlgorithm verifies that changing algorithm after
 // creation produces a plan-time "Attribute is immutable" error.
-func TestCipherTrust_CMKey_ImmutableAlgorithm(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableAlgorithm(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1247,9 +1247,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableKeySize verifies that changing key_size after
+// Test_CM_CipherTrust_CMKey_ImmutableKeySize verifies that changing key_size after
 // creation produces a plan-time "Attribute is immutable" error.
-func TestCipherTrust_CMKey_ImmutableKeySize(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableKeySize(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1268,10 +1268,10 @@ func TestCipherTrust_CMKey_ImmutableKeySize(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableName verifies that changing name after creation
+// Test_CM_CipherTrust_CMKey_ImmutableName verifies that changing name after creation
 // produces a plan-time "Attribute is immutable" error containing both current and
 // proposed values.
-func TestCipherTrust_CMKey_ImmutableName(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableName(t *testing.T) {
 	RequireCM(t)
 	rName := "test-key-immutable-name-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1299,9 +1299,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableCurveid verifies that changing curveid after
+// Test_CM_CipherTrust_CMKey_ImmutableCurveid verifies that changing curveid after
 // creation produces a plan-time "Attribute is immutable" error.
-func TestCipherTrust_CMKey_ImmutableCurveid(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableCurveid(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1332,9 +1332,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCipherTrust_CMKey_ImmutableObjectType verifies that changing object_type after
+// Test_CM_CipherTrust_CMKey_ImmutableObjectType verifies that changing object_type after
 // creation produces a plan-time "Attribute is immutable" error.
-func TestCipherTrust_CMKey_ImmutableObjectType(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_ImmutableObjectType(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
@@ -1367,9 +1367,9 @@ resource "ciphertrust_cm_key" "test_key" {
 	})
 }
 
-// TestCipherTrust_CMKey_MutableFieldsUpdate confirms that changing mutable fields
+// Test_CM_CipherTrust_CMKey_MutableFieldsUpdate confirms that changing mutable fields
 // (description) does not produce an immutable error and terraform apply succeeds.
-func TestCipherTrust_CMKey_MutableFieldsUpdate(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MutableFieldsUpdate(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{

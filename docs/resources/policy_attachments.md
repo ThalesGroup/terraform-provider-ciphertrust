@@ -66,14 +66,14 @@ output "cm_policy_attachment_id" {
 
 ### Required
 
-- `policy` (String) The ID for the policy to be attached.
-- `principal_selector` (Map of String) Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.
+- `policy` (String) (Immutable) The ID for the policy to be attached. Changing this forces a new resource.
+- `principal_selector` (Map of String) (Immutable) Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.
 
 ### Optional
 
-- `actions` (List of String) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
-- `jurisdiction` (String) Jurisdiction to which the policy applies.
-- `resources` (List of String) Resources is a list of URI strings, which must be in URI format.
+- `actions` (List of String) (Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
+- `jurisdiction` (String) (Immutable) Jurisdiction to which the policy applies.
+- `resources` (List of String) (Immutable) Resources is a list of URI strings, which must be in URI format.
 
 ### Read-Only
 

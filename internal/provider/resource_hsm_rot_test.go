@@ -257,6 +257,79 @@ func Test_CM_CipherTrust_HSMRot_ImmutableReset(t *testing.T) {
 	})
 }
 
+// hsmRotConfigNoOptionals returns an HCL config with only the Required fields (type and
+// conn_info), omitting reset and delay. Used for null-to-non-null immutability tests.
+func hsmRotConfigNoOptionals() string {
+	return providerConfig + `
+resource "ciphertrust_hsm_root_of_trust_setup" "test" {
+  type  = "lunapci"
+  conn_info = {
+    partition_name     = "test-partition"
+    partition_password = "test-password"
+  }
+}
+`
+}
+
+// Test_CM_CipherTrust_HSMRoT_ImmutableReset_NullToNonNull verifies that adding reset=true to a
+// resource where it was null in prior state fires the ImmutableBool modifier at plan time
+// after the IsNull→IsUnknown fix.
+func Test_CM_CipherTrust_HSMRoT_ImmutableReset_NullToNonNull(t *testing.T) {
+	RequireCM(t)
+	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hsmRotConfigNoOptionals(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
+				),
+			},
+			{
+				Config:      hsmRotConfigWithReset(true),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_HSMRoT_ImmutableDelay_NullToNonNull verifies that adding delay=5 to a
+// resource where it was null in prior state fires the ImmutableInt64 modifier at plan time
+// after the IsNull→IsUnknown fix.
+func Test_CM_CipherTrust_HSMRoT_ImmutableDelay_NullToNonNull(t *testing.T) {
+	RequireCM(t)
+	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: hsmRotConfigNoOptionals(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_hsm_root_of_trust_setup" "test" {
+  type  = "lunapci"
+  conn_info = {
+    partition_name     = "test-partition"
+    partition_password = "test-password"
+  }
+  delay = 5
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+			},
+		},
+	})
+}
+
 // Test_CM_CipherTrust_HSMRot_DestroyNotFound verifies that terraform destroy succeeds when the
 // HSM setup record was already deleted out-of-band (the notFoundError guard in Delete()
 // prevents an error).
