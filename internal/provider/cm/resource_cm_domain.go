@@ -260,9 +260,9 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 			resp.Diagnostics.AddWarning(
 				"Domain Not Found",
 				"The Domain resource was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+					"It may have been deleted outside of Terraform. Retaining it in state; "+
+					"run terraform destroy or remove it from state/config to clear it.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
