@@ -361,6 +361,40 @@ func deleteAWSConnection(id string) {
 	)
 }
 
+// TestAWSConnectionCreateUpdateDestroy verifies the full create, update, and destroy
+// lifecycle for an AWS connection using IAM credentials from environment variables.
+func TestAWSConnectionCreateUpdateDestroy(t *testing.T) {
+	RequireCM(t)
+	requireAWSIAMCredentials(t)
+	suffix := uuid.New().String()[:8]
+	name := "tf-test-aws-conn-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnConfig(name, "initial description"),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "uri"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "name", name),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "initial description"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "access_key_id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "created_at"),
+				),
+			},
+			{
+				Config: awsConnConfig(name, "updated description"),
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "description", "updated description"),
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "access_key_id"),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_AWSConnection_drift verifies that Read() surfaces an out-of-band
 // description change as a non-empty plan.
 func Test_CM_AWSConnection_drift(t *testing.T) {

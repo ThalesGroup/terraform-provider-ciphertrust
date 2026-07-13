@@ -44,6 +44,36 @@ resource "ciphertrust_cm_prometheus" "cm_prometheus" {
 	})
 }
 
+func TestCMPrometheusCreateAndToggle(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_prometheus" "test" {
+  enabled = true
+}
+`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_prometheus.test", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_prometheus.test", "token"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_cm_prometheus" "test" {
+  enabled = false
+}
+`,
+				Check: checkStep(t, "toggle-off",
+					resource.TestCheckResourceAttr("ciphertrust_cm_prometheus.test", "enabled", "false"),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_CipherTrust_CMPrometheus_TokenSensitive verifies token is stored in state after
 // create, is Sensitive (UseStateForUnknown prevents perpetual known-after-apply), is
 // preserved in state when disabled, and is refreshed when re-enabled.

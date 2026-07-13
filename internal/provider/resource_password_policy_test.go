@@ -89,6 +89,75 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 	})
 }
 
+func TestCMPasswordPolicyCreateAndUpdate(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "test" {
+    policy_name                       = "tf-test-policy"
+    inclusive_min_total_length        = 8
+    inclusive_max_total_length        = 64
+    inclusive_min_digits              = 1
+    inclusive_min_lower_case          = 1
+    inclusive_min_upper_case          = 1
+    inclusive_min_other               = 1
+    password_lifetime                 = 90
+    password_history_threshold        = 3
+    password_change_min_days          = 1
+    failed_logins_lockout_thresholds  = [0, 5]
+}
+`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "policy_name", "tf-test-policy"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "8"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_max_total_length", "64"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_lower_case", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_other", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_lifetime", "90"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_history_threshold", "3"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_change_min_days", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "2"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "test" {
+    policy_name                       = "tf-test-policy"
+    inclusive_min_total_length        = 10
+    inclusive_max_total_length        = 128
+    inclusive_min_digits              = 2
+    inclusive_min_lower_case          = 2
+    inclusive_min_upper_case          = 2
+    inclusive_min_other               = 2
+    password_lifetime                 = 60
+    password_history_threshold        = 5
+    password_change_min_days          = 2
+    failed_logins_lockout_thresholds  = [0, 10, 30]
+}
+`,
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_max_total_length", "128"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_lower_case", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_other", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_lifetime", "60"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_history_threshold", "5"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_change_min_days", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "3"),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_AccCipherTrustPasswordPolicy_drift verifies that Read() surfaces out-of-band
 // changes to all nine configured numeric fields and failed_logins_lockout_thresholds.
 func Test_CM_AccCipherTrustPasswordPolicy_drift(t *testing.T) {
