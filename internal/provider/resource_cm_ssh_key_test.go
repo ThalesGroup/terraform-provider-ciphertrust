@@ -192,3 +192,39 @@ resource "ciphertrust_cm_ssh_key" "test" {
 		},
 	})
 }
+
+// Test_CM_SSHKey_BasicCreate verifies that a ciphertrust_cm_ssh_key resource can be
+// created, that server-assigned Computed fields (id, name, algorithm, fingerprint) are
+// populated after apply, and that the key material is preserved in state.
+// Required env var: CM_TEST_SSH_PUBLIC_KEY (an SSH public key string).
+func Test_CM_SSHKey_BasicCreate(t *testing.T) {
+	RequireCM(t)
+	pubKey := os.Getenv("CM_TEST_SSH_PUBLIC_KEY")
+	if pubKey == "" {
+		t.Skip("CM_TEST_SSH_PUBLIC_KEY not set — skipping SSH key basic-create acceptance test")
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccSSHKeyConfig(pubKey),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "algorithm"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "fingerprint"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "key"),
+				),
+			},
+		},
+	})
+}
+
+func testAccSSHKeyConfig(pubKey string) string {
+	return bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, pubKey)
+}

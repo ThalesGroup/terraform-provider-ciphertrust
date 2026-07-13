@@ -106,6 +106,47 @@ resource "ciphertrust_license" "test" {
 	})
 }
 
+// Test_CM_License_BasicCreate verifies that a ciphertrust_license resource can be
+// created, that all stable Computed fields are populated after apply, and that
+// terraform destroy completes without error.
+// Required env var: CM_TEST_LICENSE (the license string to activate).
+func Test_CM_License_BasicCreate(t *testing.T) {
+	RequireCM(t)
+
+	licenseStr := os.Getenv("CM_TEST_LICENSE")
+	if licenseStr == "" {
+		t.Skip("CM_TEST_LICENSE not set — skipping license basic-create acceptance test")
+	}
+
+	t.Setenv("TF_VAR_cm_license_basic", licenseStr)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLicenseConfig(),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "state"),
+					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "hash"),
+				),
+			},
+		},
+	})
+}
+
+func testAccLicenseConfig() string {
+	return providerConfig + `
+variable "cm_license_basic" {
+  type = string
+}
+
+resource "ciphertrust_license" "test" {
+  license = var.cm_license_basic
+}
+`
+}
+
 // Test_CM_CipherTrust_License_ImmutableBindType_InitialCreate verifies that supplying bind_type
 // on first create succeeds without immutability error, confirming the IsUnknown() guard
 // preserves first-create behavior.

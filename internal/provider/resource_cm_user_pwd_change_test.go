@@ -122,3 +122,61 @@ resource "ciphertrust_cm_user_password_change" "test" {
 		},
 	})
 }
+
+// Test_CM_UserPasswordChange_Create verifies that a ciphertrust_cm_user_password_change
+// resource can be applied (changing the specified user's password) and that the id field
+// is populated in state. This resource is a one-shot action; destroy is a no-op.
+// Required env vars: CM_TEST_USERNAME, CM_TEST_OLD_PASSWORD, CM_TEST_NEW_PASSWORD.
+func Test_CM_UserPasswordChange_Create(t *testing.T) {
+	RequireCM(t)
+
+	username := os.Getenv("CM_TEST_USERNAME")
+	if username == "" {
+		t.Skip("CM_TEST_USERNAME not set — skipping user-password-change acceptance test")
+	}
+	if os.Getenv("CM_TEST_OLD_PASSWORD") == "" {
+		t.Skip("CM_TEST_OLD_PASSWORD not set — skipping user-password-change acceptance test")
+	}
+	if os.Getenv("CM_TEST_NEW_PASSWORD") == "" {
+		t.Skip("CM_TEST_NEW_PASSWORD not set — skipping user-password-change acceptance test")
+	}
+
+	t.Setenv("TF_VAR_cm_pwd_change_username", username)
+	t.Setenv("TF_VAR_cm_pwd_change_old_password", os.Getenv("CM_TEST_OLD_PASSWORD"))
+	t.Setenv("TF_VAR_cm_pwd_change_new_password", os.Getenv("CM_TEST_NEW_PASSWORD"))
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccUserPasswordChangeConfig(),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_user_password_change.test", "username", username),
+				),
+			},
+		},
+	})
+}
+
+func testAccUserPasswordChangeConfig() string {
+	return bootstrapProviderConfig() + `
+variable "cm_pwd_change_username" {
+  type = string
+}
+variable "cm_pwd_change_old_password" {
+  type      = string
+  sensitive = true
+}
+variable "cm_pwd_change_new_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "ciphertrust_cm_user_password_change" "test" {
+  username     = var.cm_pwd_change_username
+  password     = var.cm_pwd_change_old_password
+  new_password = var.cm_pwd_change_new_password
+}
+`
+}
