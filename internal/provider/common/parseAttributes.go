@@ -40,18 +40,25 @@ func ParseMap(response string, diagnostics *diag.Diagnostics, paramName string) 
 	return types.MapValueMust(types.StringType, convertedMap)
 }
 
+// ParseArray reads a list-of-strings field from a CM API response. CM omits
+// this field when empty rather than returning [], so a missing key returns an empty list, not null.
 func ParseArray(response string, paramName string) types.List {
-	productsField := gjson.Get(response, paramName)
-	var products types.List
-	if productsField.IsArray() {
-		var productValues []attr.Value
-		productsField.ForEach(func(_, value gjson.Result) bool {
-			productValues = append(productValues, types.StringValue(value.String()))
+	field := gjson.Get(response, paramName)
+
+	if field.IsArray() {
+		var values []attr.Value
+		field.ForEach(func(_, value gjson.Result) bool {
+			values = append(values, types.StringValue(value.String()))
 			return true
 		})
-		products, _ = types.ListValue(types.StringType, productValues)
-	} else {
-		products = types.ListNull(types.StringType)
+		list, _ := types.ListValue(types.StringType, values)
+		return list
 	}
-	return products
+
+	if !field.Exists() {
+		emptyList, _ := types.ListValue(types.StringType, []attr.Value{})
+		return emptyList
+	}
+
+	return types.ListNull(types.StringType)
 }
