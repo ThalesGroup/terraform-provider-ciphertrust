@@ -187,13 +187,6 @@ func Test_CM_AzureRead_OOBDelete_ErrorSentinel(t *testing.T) {
 	}
 }
 
-// stringValidatorsAttribute is satisfied by schema.StringAttribute; used to pull
-// the configured Validators back out of the built schema without depending on
-// the concrete attribute struct.
-type stringValidatorsAttribute interface {
-	StringValidators() []validator.String
-}
-
 // Test_CM_AzureConnection_CloudNameEnumValidator verifies that cloud_name
 // rejects any value other than the four documented Azure clouds at plan
 // time, closing the gap where arbitrary strings were silently accepted and

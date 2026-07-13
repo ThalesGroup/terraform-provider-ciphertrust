@@ -24,24 +24,24 @@ import (
 )
 
 var (
-	_ resource.Resource              = &ResourceGCPConnection{}
-	_ resource.ResourceWithConfigure = &ResourceGCPConnection{}
+	_ resource.Resource              = &resourceGCPConnection{}
+	_ resource.ResourceWithConfigure = &resourceGCPConnection{}
 )
 
 func NewResourceGCPConnection() resource.Resource {
-	return &ResourceGCPConnection{}
+	return &resourceGCPConnection{}
 }
 
-type ResourceGCPConnection struct {
+type resourceGCPConnection struct {
 	client *common.Client
 }
 
-func (r *ResourceGCPConnection) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *resourceGCPConnection) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_gcp_connection"
 }
 
 // Schema defines the schema for the resource.
-func (r *ResourceGCPConnection) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -113,7 +113,7 @@ func (r *ResourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 }
 
 // Create creates the resource and sets the initial Terraform state.
-func (r *ResourceGCPConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_gcp_connection.go -> Create]["+id+"]")
 
@@ -162,7 +162,7 @@ func (r *ResourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	keyFile, errMsg := ResolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
 	if errMsg != "" {
 		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -194,7 +194,7 @@ func (r *ResourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 	}
 
 	tflog.Debug(ctx, "[resource_gcp_connection.go -> Create Output]["+response+"]")
-	GetGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
+	getGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_gcp_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -205,7 +205,7 @@ func (r *ResourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 }
 
 // Read refreshes the Terraform state with the latest data.
-func (r *ResourceGCPConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *resourceGCPConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state GCPConnectionTFSDK
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_gcp_connection.go -> Read]["+id+"]")
@@ -232,7 +232,7 @@ func (r *ResourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 	}
 	tflog.Debug(ctx, "resource_gcp_connection.go: response :"+response)
 
-	GetGcpParamsFromResponse(response, &resp.Diagnostics, &state)
+	getGcpParamsFromResponse(response, &resp.Diagnostics, &state)
 	// required parameters are fetched separately
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 
@@ -247,7 +247,7 @@ func (r *ResourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
-func (r *ResourceGCPConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_gcp_connection.go -> Update]["+id+"]")
 	var plan GCPConnectionTFSDK
@@ -290,7 +290,7 @@ func (r *ResourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	keyFile, errMsg := ResolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
 	if errMsg != "" {
 		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -320,7 +320,7 @@ func (r *ResourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		)
 		return
 	}
-	GetGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
+	getGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
 	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
 
 	diags = resp.State.Set(ctx, plan)
@@ -331,7 +331,7 @@ func (r *ResourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
-func (r *ResourceGCPConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *resourceGCPConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state GCPConnectionTFSDK
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_gcp_connection.go -> Delete]["+state.ID.ValueString()+"]")
 
@@ -354,7 +354,7 @@ func (r *ResourceGCPConnection) Delete(ctx context.Context, req resource.DeleteR
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_gcp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 }
 
-func (d *ResourceGCPConnection) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (d *resourceGCPConnection) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -372,7 +372,7 @@ func (d *ResourceGCPConnection) Configure(_ context.Context, req resource.Config
 	d.client = client
 }
 
-func GetGcpKeyFile(ctx context.Context, file string) string {
+func getGcpKeyFile(ctx context.Context, file string) string {
 
 	file = strings.TrimSpace(file)
 	_, err := os.Stat(file)
@@ -387,17 +387,17 @@ func GetGcpKeyFile(ctx context.Context, file string) string {
 	return file
 }
 
-// ResolveGcpKeyFile wraps GetGcpKeyFile and returns errMsg instead of a resolved
+// resolveGcpKeyFile wraps getGcpKeyFile and returns errMsg instead of a resolved
 // value whenever resolution collapses to empty, so callers can reject the change.
-func ResolveGcpKeyFile(ctx context.Context, rawKeyFile string) (resolved string, errMsg string) {
-	resolved = GetGcpKeyFile(ctx, rawKeyFile)
+func resolveGcpKeyFile(ctx context.Context, rawKeyFile string) (resolved string, errMsg string) {
+	resolved = getGcpKeyFile(ctx, rawKeyFile)
 	if resolved == "" {
 		return "", "key_file resolved to an empty value; provide a non-empty GCP service account key, either inline JSON or a path to a readable, non-empty key file"
 	}
 	return resolved, ""
 }
 
-func GetGcpParamsFromResponse(response string, diag *diag.Diagnostics, data *GCPConnectionTFSDK) {
+func getGcpParamsFromResponse(response string, diag *diag.Diagnostics, data *GCPConnectionTFSDK) {
 	// Common parameters for all connections
 	data.ID = types.StringValue(gjson.Get(response, "id").String())
 	data.URI = types.StringValue(gjson.Get(response, "uri").String())
