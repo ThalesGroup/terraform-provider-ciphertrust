@@ -519,6 +519,132 @@ resource "ciphertrust_domain" "testDomain" {
 	})
 }
 
+// Test_CM_AccCMDomain_Drift verifies that out-of-band mutations to meta_data surface as
+// drift when the !state.Meta.IsNull() guard is active (meta_data is configured in step 1).
+func Test_CM_AccCMDomain_Drift(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-drift2-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	var domainID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, map[string]string{"env": "test"}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.env", "test"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_domain.test"]
+						if !ok {
+							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
+						}
+						domainID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Out-of-band mutation — change meta_data value.
+				// The three-branch Read() (with !state.Meta.IsNull() guard active because
+				// prior state has non-null meta_data) must surface the drift.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.UpdateData(
+						context.Background(),
+						domainID,
+						common.URL_DOMAIN,
+						[]byte(`{"meta":{"env":"changed-oob"}}`),
+						"updatedAt",
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMDomain_DeleteOutOfBand verifies that when a domain is deleted out-of-band,
+// the fixed Read() calls RemoveResource (not AddWarning) on 404 and Terraform plans recreation.
+func Test_CM_AccCMDomain_DeleteOutOfBand(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-oob2-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	var domainID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    cmDomainOOBConfig(rName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.oob", "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_domain.oob"]
+						if !ok {
+							return fmt.Errorf("resource ciphertrust_domain.oob not found in state")
+						}
+						domainID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// OOB delete — Read() must call RemoveResource on 404; plan proposes recreation.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
+					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMDomain_Idempotency verifies that when meta_data is absent from config,
+// the !state.Meta.IsNull() guard in Read() leaves state as MapNull even when CM returns
+// "{}", producing no phantom drift on a second plan.
+func Test_CM_AccCMDomain_Idempotency(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-idem-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	// Use domainConfig with nil meta so no meta_data block appears in HCL.
+	cfg := domainConfig(rName, []string{"admin"}, false, nil)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    cfg,
+				Check: checkStep(t, "Idempotency: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "name", rName),
+				),
+			},
+			// Second plan with identical config — must be empty (no phantom meta_data drift).
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // Test_CM_AccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
 // mutable field (meta_data) after creation. The CM domain PATCH endpoint uses the
 // domain name as the path key.

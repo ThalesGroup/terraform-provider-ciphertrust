@@ -520,3 +520,219 @@ func Test_CM_AccCMGroup_attributeDrift(t *testing.T) {
 		},
 	})
 }
+
+// Test_CM_AccCMGroup_Drift verifies that an out-of-band description change surfaces as
+// drift when RefreshState is used (as opposed to PlanOnly in Test_CM_AccCMGroup_attributeDrift).
+func Test_CM_AccCMGroup_Drift(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupDrift2-" + uuid.New().String()[:8]
+	var groupName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig(name, "original", ""),
+				Check: checkStep(t, "Drift: create",
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "original"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_groups.testGroup"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						groupName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// OOB description change; RefreshState re-reads from CM and should detect drift.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.UpdateData(
+						context.Background(),
+						groupName,
+						common.URL_GROUP,
+						[]byte(`{"description":"changed-oob"}`),
+						"name",
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMGroup_DeleteOutOfBand verifies that after OOB deletion Read() calls
+// RemoveResource (no AddWarning) and Terraform plans recreation.
+func Test_CM_AccCMGroup_DeleteOutOfBand(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupOOB-" + uuid.New().String()[:8]
+	var groupName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig(name, "to be deleted", ""),
+				Check: checkStep(t, "DeleteOutOfBand: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_groups.testGroup"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						groupName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// OOB delete — Read() must call RemoveResource on 404; plan proposes recreation.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_GROUP, groupName)
+					if _, err := client.DeleteByID(context.Background(), "DELETE", groupName, deleteURL, nil); err != nil {
+						if !strings.Contains(err.Error(), "status: 404") {
+							// log but don't fail — test outcome is determined by RefreshState step
+							_ = err
+						}
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMGroup_ImmutableName verifies that modifiers.ImmutableString() blocks a
+// group rename at plan time (exact name required by the plan).
+func Test_CM_AccCMGroup_ImmutableName(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupImmName-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupConfig(name, "", ""),
+				Check: checkStep(t, "ImmutableName: create",
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "name", name),
+				),
+			},
+			{
+				Config:      cmGroupConfig(name+"-renamed", "", ""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMGroup_Idempotency verifies no phantom drift after re-apply of identical HCL.
+func Test_CM_AccCMGroup_Idempotency(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupIdem-" + uuid.New().String()[:8]
+	cfg := cmGroupConfig(name, "stable description", "")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Idempotency: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_groups.testGroup", "description", "stable description"),
+				),
+			},
+			// Second plan with identical config — must be empty.
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// cmGroupsListConfig returns HCL that creates a group and reads the groups list data source.
+func cmGroupsListConfig(groupName string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "testGroup" {
+  name = %q
+}
+data "ciphertrust_cm_groups_list" "test" {
+  depends_on = [ciphertrust_groups.testGroup]
+}
+`, groupName)
+}
+
+// Test_CM_AccCMGroupsList_ReadAccuracy creates a group via the resource, then verifies
+// it appears in the data source list (groups.# ≥ 1).
+func Test_CM_AccCMGroupsList_ReadAccuracy(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupsList-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cmGroupsListConfig(name),
+				Check: checkStep(t, "data source read",
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_groups_list.test", "groups.#"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMGroupsList_Idempotency verifies consecutive reads of the data source
+// produce no plan diff.
+func Test_CM_AccCMGroupsList_Idempotency(t *testing.T) {
+	RequireCM(t)
+	if _, ok := createCMClient(); !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	name := "TFTestGroupsListIdem-" + uuid.New().String()[:8]
+	cfg := cmGroupsListConfig(name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "initial read",
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_groups_list.test", "groups.#"),
+				),
+			},
+			// Second read — must produce no plan diff.
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

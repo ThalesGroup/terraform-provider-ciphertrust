@@ -11,6 +11,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -256,13 +257,9 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"Domain Not Found",
-				"The Domain resource was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Retaining it in state; "+
-					"run terraform destroy or remove it from state/config to clear it.",
-			)
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Warn(ctx, "Domain not found, removing from state [resource_cm_domain.go -> Read]["+id+"]")
+			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
@@ -323,22 +320,29 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		// If omitted, preserve prior state to avoid false drift.
 	}
 
-	// Read meta_data map — two-branch: absent or {} → MapNull; non-empty → MapValueFrom
-	metaResult := gjson.Get(response, "meta")
-	if metaResult.Exists() && len(metaResult.Map()) > 0 {
-		metaMap := make(map[string]string)
-		metaResult.ForEach(func(key, value gjson.Result) bool {
-			metaMap[key.String()] = value.String()
-			return true
-		})
-		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
-		if diags2.HasError() {
-			resp.Diagnostics.Append(diags2...)
+	// Read meta_data map — three-branch with !state.Meta.IsNull() outer guard.
+	// When state.Meta.IsNull() (user never configured meta_data), leave state.Meta
+	// unchanged (null). CM returns "{}" for unconfigured domains; without the guard
+	// that would cause perpetual null→{} drift.
+	if !state.Meta.IsNull() {
+		metaResult := gjson.Get(response, "meta")
+		if !metaResult.Exists() {
+			state.Meta = types.MapNull(types.StringType)
+		} else if len(metaResult.Map()) == 0 {
+			state.Meta = types.MapValueMust(types.StringType, map[string]attr.Value{})
 		} else {
-			state.Meta = mapValue
+			metaMap := make(map[string]string)
+			metaResult.ForEach(func(key, value gjson.Result) bool {
+				metaMap[key.String()] = value.String()
+				return true
+			})
+			mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
+			if diags2.HasError() {
+				resp.Diagnostics.Append(diags2...)
+			} else {
+				state.Meta = mapValue
+			}
 		}
-	} else {
-		state.Meta = types.MapNull(types.StringType)
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Read]["+id+"]")
@@ -501,21 +505,27 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		// If omitted, preserve prior state to avoid false drift.
 	}
 
-	metaReadResult := gjson.Get(readResponse, "meta")
-	if metaReadResult.Exists() && len(metaReadResult.Map()) > 0 {
-		metaMap := make(map[string]string)
-		metaReadResult.ForEach(func(key, value gjson.Result) bool {
-			metaMap[key.String()] = value.String()
-			return true
-		})
-		mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
-		if diags2.HasError() {
-			resp.Diagnostics.Append(diags2...)
+	// Post-PATCH meta_data read-back — three-branch with !state.Meta.IsNull() outer guard.
+	// Guard uses state.Meta (prior state) — same logic as Read().
+	if !state.Meta.IsNull() {
+		metaReadResult := gjson.Get(readResponse, "meta")
+		if !metaReadResult.Exists() {
+			plan.Meta = types.MapNull(types.StringType)
+		} else if len(metaReadResult.Map()) == 0 {
+			plan.Meta = types.MapValueMust(types.StringType, map[string]attr.Value{})
 		} else {
-			plan.Meta = mapValue
+			metaMap := make(map[string]string)
+			metaReadResult.ForEach(func(key, value gjson.Result) bool {
+				metaMap[key.String()] = value.String()
+				return true
+			})
+			mapValue, diags2 := types.MapValueFrom(ctx, types.StringType, metaMap)
+			if diags2.HasError() {
+				resp.Diagnostics.Append(diags2...)
+			} else {
+				plan.Meta = mapValue
+			}
 		}
-	} else {
-		plan.Meta = types.MapNull(types.StringType)
 	}
 
 	diags = resp.State.Set(ctx, plan)
