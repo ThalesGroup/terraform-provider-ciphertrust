@@ -1,10 +1,14 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 )
 
 func Test_CM_ResourceCMPrometheus(t *testing.T) {
@@ -157,6 +161,67 @@ resource "ciphertrust_cm_prometheus" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("ciphertrust_cm_prometheus.test", "enabled", "false"),
 				),
+			},
+		},
+	})
+}
+
+const prometheusEnabledConfig = `
+resource "ciphertrust_cm_prometheus" "test" {
+  enabled = true
+}
+`
+
+// Test_CM_AccCMPrometheus_NoDrift verifies Read() introduces no spurious drift when CM state matches Terraform state.
+func Test_CM_AccCMPrometheus_NoDrift(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + prometheusEnabledConfig,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_prometheus.test", "enabled", "true"),
+				),
+			},
+			{
+				Config:             providerConfig + prometheusEnabledConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPrometheus_DriftDetection verifies Read() surfaces an out-of-band change to enabled as a plan diff.
+func Test_CM_AccCMPrometheus_DriftDetection(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + prometheusEnabledConfig,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_prometheus.test", "enabled", "true"),
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					ctx := context.Background()
+					payload, _ := json.Marshal(map[string]interface{}{})
+					_, err := client.PostDataV2(ctx, "", common.URL_PROMETHEUS_DISABLE, payload)
+					if err != nil {
+						t.Logf("PreConfig disable failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})

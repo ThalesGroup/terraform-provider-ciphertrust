@@ -836,7 +836,7 @@ type CMPrometheusMetricsConfigTFSDK struct {
 }
 
 type CMPrometheusMetricsConfigJSON struct {
-	Token   string `json:"id"`
+	Token   string `json:"token"`
 	Enabled bool   `json:"enabled"`
 }
 
