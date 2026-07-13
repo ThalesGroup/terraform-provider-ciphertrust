@@ -11,11 +11,13 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -52,16 +54,18 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 				Required:    true,
 				Sensitive:   true,
 				Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string.",
+				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "(Immutable) Unique connection name.",
+				Required:      true,
+				Description:   "(Immutable) Unique connection name.",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
 				Description: "Name of the cloud. Default value is gcp.\n\nOptions:\n\ngcp",
+				Validators:  []validator.String{stringvalidator.OneOf("gcp")},
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
@@ -158,9 +162,16 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	if plan.KeyFile.ValueString() != "" && plan.KeyFile.ValueString() != types.StringNull().ValueString() {
-		payload.KeyFile = getGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	if errMsg != "" {
+		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Create]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: GCP connection Creation",
+			errMsg,
+		)
+		return
 	}
+	payload.KeyFile = keyFile
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -279,9 +290,16 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	if plan.KeyFile.ValueString() != "" && plan.KeyFile.ValueString() != types.StringNull().ValueString() {
-		payload.KeyFile = getGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	if errMsg != "" {
+		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Update]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Invalid data input: GCP connection update",
+			errMsg,
+		)
+		return
 	}
+	payload.KeyFile = keyFile
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -367,6 +385,16 @@ func getGcpKeyFile(ctx context.Context, file string) string {
 		return string(data)
 	}
 	return file
+}
+
+// resolveGcpKeyFile wraps getGcpKeyFile and returns errMsg instead of a resolved
+// value whenever resolution collapses to empty, so callers can reject the change.
+func resolveGcpKeyFile(ctx context.Context, rawKeyFile string) (resolved string, errMsg string) {
+	resolved = getGcpKeyFile(ctx, rawKeyFile)
+	if resolved == "" {
+		return "", "key_file resolved to an empty value; provide a non-empty GCP service account key, either inline JSON or a path to a readable, non-empty key file"
+	}
+	return resolved, ""
 }
 
 func getGcpParamsFromResponse(response string, diag *diag.Diagnostics, data *GCPConnectionTFSDK) {

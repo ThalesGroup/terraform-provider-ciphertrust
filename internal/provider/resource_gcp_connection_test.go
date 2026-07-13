@@ -62,21 +62,21 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
 				),
 			},
 
-		// Step 2: Update — product and description
-		{
-			Config: providerConfig + updateConfig,
-			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "private_key_id"),
-				resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "client_email"),
-				resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "description", "updated connection description"),
-				resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.#", "1"),
-				resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.0", updateProduct),
-			),
-		},
+			// Step 2: Update — product and description
+			{
+				Config: providerConfig + updateConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "private_key_id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "client_email"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "description", "updated connection description"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.0", updateProduct),
+				),
+			},
 
-		// Step 3: Attempt to rename — must fail at plan time with a clear error.
-		{
-			Config: providerConfig + fmt.Sprintf(`
+			// Step 3: Attempt to rename — must fail at plan time with a clear error.
+			{
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_gcp_connection" "gcp_connection" {
   name     = "test-gcp-connection-renamed"
   key_file = <<-EOT
@@ -84,10 +84,26 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
   EOT
 }
 `, gcpKeyFile),
-			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
-			PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+				PlanOnly:    true,
+			},
+
+			// Step 4: Attempt to set cloud_name to an unsupported value — must
+			// fail at plan time. cloud_name only supports "gcp".
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "gcp_connection" {
+  name       = %q
+  key_file   = <<-EOT
+    %s
+  EOT
+  cloud_name = "gcp-invalid"
+}
+`, name, gcpKeyFile),
+				ExpectError: regexp.MustCompile(`(?i)value must be one of`),
+				PlanOnly:    true,
+			},
 		},
-	},
 	})
 }
 

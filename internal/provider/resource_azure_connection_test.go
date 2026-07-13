@@ -45,9 +45,9 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 				),
 			},
 
-		// Step 2: Update the resource
-		{
-			Config: providerConfig + `
+			// Step 2: Update the resource
+			{
+				Config: providerConfig + `
 resource "ciphertrust_azure_connection" "azure_connection" {
   name        = "TestAzureConnection"
   client_id="updated-client-id"
@@ -60,16 +60,16 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 }
 			`,
 
-			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "tenant_id", "updated-tenant-id"),
-				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "description", "updated description of the connection"),
-				resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "client_id", "updated-client-id"),
-			),
-		},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "tenant_id", "updated-tenant-id"),
+					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "description", "updated description of the connection"),
+					resource.TestCheckResourceAttr("ciphertrust_azure_connection.azure_connection", "client_id", "updated-client-id"),
+				),
+			},
 
-		// Step 3: Attempt to rename — must fail at plan time with a clear error.
-		{
-			Config: providerConfig + `
+			// Step 3: Attempt to rename — must fail at plan time with a clear error.
+			{
+				Config: providerConfig + `
 resource "ciphertrust_azure_connection" "azure_connection" {
   name      = "TestAzureConnection-renamed"
   client_id = "updated-client-id"
@@ -77,10 +77,28 @@ resource "ciphertrust_azure_connection" "azure_connection" {
   products  = ["cckm"]
 }
 `,
-			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
-			PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+				PlanOnly:    true,
+			},
+
+			// Step 4: Attempt to set cloud_name to an unsupported value — must
+			// fail at plan time. cloud_name only supports the four documented
+			// Azure clouds (AzureCloud, AzureChinaCloud, AzureUSGovernment,
+			// AzureStack).
+			{
+				Config: providerConfig + `
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name       = "TestAzureConnection"
+  client_id  = "updated-client-id"
+  tenant_id  = "updated-tenant-id"
+  products   = ["cckm"]
+  cloud_name = "AzureBogusCloud"
+}
+`,
+				ExpectError: regexp.MustCompile(`(?i)value must be one of`),
+				PlanOnly:    true,
+			},
 		},
-	},
 	})
 }
 

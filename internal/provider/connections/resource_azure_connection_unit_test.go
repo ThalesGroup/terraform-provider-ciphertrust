@@ -1,11 +1,15 @@
 package connections
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -181,4 +185,68 @@ func Test_CM_AzureRead_OOBDelete_ErrorSentinel(t *testing.T) {
 	if !strings.Contains(simulatedErr.Error(), "status: 404") {
 		t.Errorf("sentinel check failed: %q does not contain %q", simulatedErr.Error(), "status: 404")
 	}
+}
+
+// Test_CM_AzureConnection_CloudNameEnumValidator verifies that cloud_name
+// rejects any value other than the four documented Azure clouds at plan
+// time, closing the gap where arbitrary strings were silently accepted and
+// persisted on CM.
+func Test_CM_AzureConnection_CloudNameEnumValidator(t *testing.T) {
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	(&resourceAzureConnection{}).Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	attr, ok := schemaResp.Schema.Attributes["cloud_name"]
+	if !ok {
+		t.Fatal("cloud_name attribute not found in schema")
+	}
+	withValidators, ok := attr.(stringValidatorsAttribute)
+	if !ok {
+		t.Fatalf("cloud_name attribute (%T) does not expose StringValidators", attr)
+	}
+	validators := withValidators.StringValidators()
+	if len(validators) == 0 {
+		t.Fatal("cloud_name has no validators; expected an enum validator restricting it to the documented Azure clouds")
+	}
+
+	runValidators := func(value types.String) diag.Diagnostics {
+		var diags diag.Diagnostics
+		for _, v := range validators {
+			req := validator.StringRequest{Path: path.Root("cloud_name"), ConfigValue: value}
+			var resp validator.StringResponse
+			v.ValidateString(ctx, req, &resp)
+			diags.Append(resp.Diagnostics...)
+		}
+		return diags
+	}
+
+	for _, valid := range []string{"AzureCloud", "AzureChinaCloud", "AzureUSGovernment", "AzureStack"} {
+		t.Run("documented value \""+valid+"\" is accepted", func(t *testing.T) {
+			if diags := runValidators(types.StringValue(valid)); diags.HasError() {
+				t.Errorf("unexpected error for %q: %v", valid, diags)
+			}
+		})
+	}
+
+	t.Run("an arbitrary string is rejected", func(t *testing.T) {
+		if diags := runValidators(types.StringValue("AzureBogusCloud")); !diags.HasError() {
+			t.Error("expected an error for \"AzureBogusCloud\", got none")
+		}
+	})
+
+	t.Run("case does not bypass the enum check", func(t *testing.T) {
+		if diags := runValidators(types.StringValue("azurecloud")); !diags.HasError() {
+			t.Error("expected an error for \"azurecloud\", got none")
+		}
+	})
+
+	t.Run("unset (null) config value is left to Optional+Computed defaulting", func(t *testing.T) {
+		if diags := runValidators(types.StringNull()); diags.HasError() {
+			t.Errorf("unexpected error for a null config value: %v", diags)
+		}
+	})
 }
