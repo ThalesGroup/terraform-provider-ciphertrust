@@ -54,6 +54,45 @@ resource "ciphertrust_property" "property_1" {
 	})
 }
 
+// TestCMPropertyCreateAndUpdate is blocked pending confirmation of a valid writable
+// CM system property name and values from a live CM instance.
+// Uncomment and fill in propertyName, initialValue, updatedValue before activating.
+// Note: "ALLOW_UNKNOWN_FIELDS" with values "false"/"true" is a known working example
+// (see Test_CM_ResourceCMProperty above).
+//
+// func TestCMPropertyCreateAndUpdate(t *testing.T) {
+//     RequireCM(t)
+//     const propertyName = "" // TODO: confirm from live CM (e.g. "ALLOW_UNKNOWN_FIELDS")
+//     const initialValue = "" // TODO: confirm from live CM (e.g. "false")
+//     const updatedValue = "" // TODO: confirm from live CM (e.g. "true")
+//     resource.Test(t, resource.TestCase{
+//         ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+//         Steps: []resource.TestStep{
+//             {
+//                 Config: fmt.Sprintf(providerConfig+`resource "ciphertrust_property" "test" {
+//                     name  = %q
+//                     value = %q
+//                 }`, propertyName, initialValue),
+//                 Check: checkStep(t, "create",
+//                     resource.TestCheckResourceAttr("ciphertrust_property.test", "name", propertyName),
+//                     resource.TestCheckResourceAttr("ciphertrust_property.test", "value", initialValue),
+//                     resource.TestCheckResourceAttrSet("ciphertrust_property.test", "description"),
+//                 ),
+//             },
+//             {
+//                 Config: fmt.Sprintf(providerConfig+`resource "ciphertrust_property" "test" {
+//                     name  = %q
+//                     value = %q
+//                 }`, propertyName, updatedValue),
+//                 Check: checkStep(t, "update",
+//                     resource.TestCheckResourceAttr("ciphertrust_property.test", "value", updatedValue),
+//                     resource.TestCheckResourceAttrSet("ciphertrust_property.test", "description"),
+//                 ),
+//             },
+//         },
+//     })
+// }
+
 func Test_CM_AccCipherTrustProperty_drift(t *testing.T) {
 	RequireCM(t)
 	const propertyName = "ALLOW_UNKNOWN_FIELDS"

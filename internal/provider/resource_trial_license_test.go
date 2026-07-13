@@ -25,6 +25,28 @@ resource "ciphertrust_trial_license" "trial_license" {
 	})
 }
 
+func TestCMTrialLicenseCreateAndDestroy(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_trial_license" "test" {
+}
+`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_trial_license.test", "status", "activated"),
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "description"),
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "activated_at"),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_AccCipherTrust_TrialLicense_StableComputedFields verifies that name and description
 // do not show as (known after apply) on subsequent plans after the first apply.
 func Test_CM_AccCipherTrust_TrialLicense_StableComputedFields(t *testing.T) {
