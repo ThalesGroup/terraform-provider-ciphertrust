@@ -278,15 +278,9 @@ resource "ciphertrust_interface" "test" {
 				),
 			},
 			{
-				// Identical config — no PATCH issued, so updated_at is stable.
-				// Verifies no spurious diff from any attribute.
-				Config: providerConfig + `
-resource "ciphertrust_interface" "test" {
-  port           = 9100
-  name           = "kmip-test-9100"
-  interface_type = "kmip"
-}`,
-				PlanOnly:           true,
+				// Refresh state from CM without any config change.
+				// No PATCH was issued so Read() must return the same values; plan must be empty.
+				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
 			},
 		},
