@@ -67,24 +67,8 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 				),
 			},
 
-			// Step 3: Attempt to rename — must fail at plan time with a clear error.
-			{
-				Config: providerConfig + `
-resource "ciphertrust_azure_connection" "azure_connection" {
-  name      = "TestAzureConnection-renamed"
-  client_id = "updated-client-id"
-  tenant_id = "updated-tenant-id"
-  products  = ["cckm"]
-}
-`,
-				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
-				PlanOnly:    true,
-			},
-
-			// Step 4: Attempt to set cloud_name to an unsupported value — must
-			// fail at plan time. cloud_name only supports the four documented
-			// Azure clouds (AzureCloud, AzureChinaCloud, AzureUSGovernment,
-			// AzureStack).
+			// Step 3: cloud_name rejects unsupported values at plan time. Must not be
+			// last — the OneOf validator also runs during the post-test destroy plan.
 			{
 				Config: providerConfig + `
 resource "ciphertrust_azure_connection" "azure_connection" {
@@ -96,6 +80,21 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 }
 `,
 				ExpectError: regexp.MustCompile(`(?i)value must be one of`),
+				PlanOnly:    true,
+			},
+
+			// Step 4: renaming is immutable and fails at plan time. Kept last since
+			// this plan modifier only fires on updates, not destroy.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name      = "TestAzureConnection-renamed"
+  client_id = "updated-client-id"
+  tenant_id = "updated-tenant-id"
+  products  = ["cckm"]
+}
+`,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 				PlanOnly:    true,
 			},
 		},
