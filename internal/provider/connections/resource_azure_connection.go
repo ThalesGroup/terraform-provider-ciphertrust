@@ -104,13 +104,19 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"client_secret": schema.StringAttribute{
 				Optional:  true,
+				Computed:  true,
 				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "Secret key for the Azure application. Required in Azure Stack connection. " +
 					"Write-only: CM never returns this field on GET, so its live value cannot be verified " +
 					"after apply and out-of-band changes are not detectable by terraform plan. " +
-					"Once set, this field cannot be cleared back to null/empty: CM does not support clearing " +
-					"it, and the provider rejects the attempt at apply time rather than silently leaving state " +
-					"and CM's live value out of sync. To rotate the secret, set a new value.",
+					"Omitting this attribute in a later apply leaves the previously configured secret " +
+					"untouched (no diff). Once set, this field cannot be cleared back to empty by explicitly " +
+					"setting it to \"\": CM does not support clearing it, and the provider rejects the attempt " +
+					"at apply time rather than silently leaving state and CM's live value out of sync. To " +
+					"rotate the secret, set a new value.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
@@ -646,4 +652,13 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 		data.CertDuration = types.Int64Null()
 	}
 	data.Products = common.ParseArray(response, "products")
+	// client_secret is now Optional+Computed (so omitting it in a later apply preserves the
+	// prior state value via UseStateForUnknown instead of being read as an intent to clear).
+	// On Create, a connection that never sets client_secret (e.g. certificate-based auth) has
+	// no prior state to fall back on, so it arrives here still unknown — resolve it to null or
+	// Terraform errors with "provider produced an unknown value after apply". CM never returns
+	// this write-only field, so there is nothing to read it back from either way.
+	if data.ClientSecret.IsUnknown() {
+		data.ClientSecret = types.StringNull()
+	}
 }

@@ -11,8 +11,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 // azureResponse returns a JSON response for getAzureParamsFromResponse with only the
@@ -622,4 +626,52 @@ func Test_CM_AzureClientSecret_ClearBlocked(t *testing.T) {
 			t.Error("did not expect setting a secret for the first time to be blocked")
 		}
 	})
+}
+
+// Test_CM_AzureClientSecret_OmittedPreservesState is a regression test for a real CI
+// failure: Test_CM_ResourceAzureConnection's update step omits client_secret (a normal
+// pattern — users don't retype a secret on every apply). Without Computed +
+// UseStateForUnknown, an omitted Optional string attribute plans as a known null,
+// which is indistinguishable from an explicit clear and wrongly tripped
+// clientSecretClearBlocked. This verifies the schema attribute carries the fix.
+func Test_CM_AzureClientSecret_OmittedPreservesState(t *testing.T) {
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	(&resourceAzureConnection{}).Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	attr, ok := schemaResp.Schema.Attributes["client_secret"]
+	if !ok {
+		t.Fatal("client_secret attribute not found in schema")
+	}
+	strAttr, ok := attr.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("client_secret attribute is %T, expected schema.StringAttribute", attr)
+	}
+	if !strAttr.Computed {
+		t.Fatal("client_secret must be Computed so an omitted value in a later apply resolves " +
+			"via a plan modifier instead of planning as an indistinguishable-from-clear null")
+	}
+	if len(strAttr.PlanModifiers) == 0 {
+		t.Fatal("client_secret must carry a plan modifier (UseStateForUnknown) to preserve the prior " +
+			"value when omitted from config")
+	}
+
+	// Simulate: existing state has a secret, later config omits the attribute entirely
+	// (unknown plan value, since Computed defers to the provider/plan modifiers).
+	req := planmodifier.StringRequest{
+		State:      tfsdk.State{Raw: tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{}}, map[string]tftypes.Value{})},
+		StateValue: types.StringValue("previously-set-secret"),
+		PlanValue:  types.StringUnknown(),
+	}
+	resp := &planmodifier.StringResponse{PlanValue: types.StringUnknown()}
+	for _, m := range strAttr.PlanModifiers {
+		m.PlanModifyString(ctx, req, resp)
+	}
+	if resp.PlanValue.ValueString() != "previously-set-secret" {
+		t.Errorf("expected omitted client_secret to resolve to the prior state value, got %v", resp.PlanValue)
+	}
 }
