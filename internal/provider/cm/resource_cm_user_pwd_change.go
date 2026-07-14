@@ -69,16 +69,16 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"auth_domain": schema.StringAttribute{
 				Optional:    true,
-				Description: "Authentication domain of the user whose password is being changed. Changing this value forces replacement of the resource.",
+				Description: "(Immutable) Authentication domain of the user whose password is being changed.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"password_hint": schema.StringAttribute{
 				Optional:    true,
-				Description: "Optional hint for the new password. Changing this value forces replacement of the resource.",
+				Description: "(Immutable) Optional hint for the new password.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
+					modifiers.ImmutableString(),
 				},
 			},
 		},

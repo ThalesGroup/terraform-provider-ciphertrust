@@ -255,6 +255,38 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
+// Test_CM_Interface_Idempotency verifies that after applying a KMIP interface, a second plan
+// with no config changes produces an empty diff (no spurious attribute drift).
+func Test_CM_Interface_Idempotency(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9015) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9015
+  name           = "kmip-test-9015"
+  interface_type = "kmip"
+}`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "created_at"),
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "updated_at"),
+				),
+			},
+			{
+				// Refresh state from CM without any config change.
+				// No PATCH was issued so Read() must return the same values; plan must be empty.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // Test_CM_AccCMInterface_OOBDelete verifies that Read() calls RemoveResource on 404 so Terraform plans to recreate.
 func Test_CM_AccCMInterface_OOBDelete(t *testing.T) {
 	RequireCM(t)

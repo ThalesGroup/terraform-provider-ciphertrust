@@ -37,7 +37,7 @@ resource "ciphertrust_azure_connection" "azure_connection" {
     "customer_meta_key2" = "custom_value2"  # Another custom metadata entry
   }
 }
-`,
+`, name),
 
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_azure_connection.azure_connection", "id"),
@@ -67,7 +67,8 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 				),
 			},
 
-			// Step 3: Attempt to rename — must fail at plan time with a clear error.
+			// Step 3: cloud_name rejects unsupported values at plan time. Must not be
+			// last — the OneOf validator also runs during the post-test destroy plan.
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_azure_connection" "azure_connection" {
@@ -81,10 +82,8 @@ resource "ciphertrust_azure_connection" "azure_connection" {
 				PlanOnly:    true,
 			},
 
-			// Step 4: Attempt to set cloud_name to an unsupported value — must
-			// fail at plan time. cloud_name only supports the four documented
-			// Azure clouds (AzureCloud, AzureChinaCloud, AzureUSGovernment,
-			// AzureStack).
+			// Step 4: renaming is immutable and fails at plan time. Kept last since
+			// this plan modifier only fires on updates, not destroy.
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_azure_connection" "azure_connection" {

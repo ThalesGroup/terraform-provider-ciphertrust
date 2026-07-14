@@ -438,6 +438,105 @@ func Test_CM_LogForwarder_BasicCreateUpdate(t *testing.T) {
 	})
 }
 
+// Test_CM_LogForwarder_Drift verifies that Read() surfaces an out-of-band name change
+// as drift when RefreshState is used (ExpectNonEmptyPlan: true).
+func Test_CM_LogForwarder_Drift(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-drift-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	var capturedID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, rName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "drift: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					payload := []byte(`{"name":"drifted-name"}`)
+					_, _ = client.UpdateDataV2(
+						context.Background(),
+						capturedID,
+						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						payload,
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_LogForwarder_OOBDeletion verifies that Read() calls RemoveResource on 404
+// and Terraform plans recreation when the resource is deleted out-of-band.
+func Test_CM_LogForwarder_OOBDeletion(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-oobdel-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	var capturedID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, rName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "oob-deletion: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(
+						context.Background(),
+						capturedID,
+						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+					)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 func testAccLogForwarderBasicConfig(connID, name string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_log_forwarder" "basic" {
