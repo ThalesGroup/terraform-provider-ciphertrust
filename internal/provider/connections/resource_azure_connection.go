@@ -602,10 +602,18 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	data.AzureStackConnectionType = types.StringValue(gjson.Get(response, "azure_stack_connection_type").String())
 	data.Labels = common.ParseMap(response, diag, "labels")
 	data.Meta = common.ParseMap(response, diag, "meta")
-	// Only update cert_duration when CM returns a non-zero value; for client_secret
-	// connections CM always returns 0, which would cause a post-apply inconsistency.
+	// Update cert_duration from the CM response.
+	// - Non-zero: always use the value CM returned (covers certificate connections and drift detection).
+	// - Zero + field is still unknown: CM doesn't use cert_duration for client_secret connections and
+	//   returns 0. If the user never configured the field, it arrives here as unknown (Terraform marks
+	//   Computed fields unknown during planning). We must resolve it to a known value (null) or
+	//   Terraform will error with "provider still indicated an unknown value after apply".
+	// - Zero + field already has a known value: the user configured cert_duration (e.g. 730) but CM
+	//   returned 0 — preserve the user's planned value to avoid a perpetual drift on every apply.
 	if certDuration := gjson.Get(response, "cert_duration").Int(); certDuration != 0 {
 		data.CertDuration = types.Int64Value(certDuration)
+	} else if data.CertDuration.IsUnknown() {
+		data.CertDuration = types.Int64Null()
 	}
 	data.Products = common.ParseArray(response, "products")
 }

@@ -475,6 +475,31 @@ func Test_CM_AzureCertDuration_ResponseParsing(t *testing.T) {
 			t.Errorf("cert_duration: expected 0 when both response and state are 0, got %d", got)
 		}
 	})
+
+	t.Run("response cert_duration=0 and unknown plan value → cert_duration becomes null (not unknown)", func(t *testing.T) {
+		// This is the regression case for the "provider still indicated an unknown value after apply"
+		// error. When cert_duration is not configured by the user, Terraform marks it as unknown in
+		// the plan (because it is Computed). After Create/Update, CM returns cert_duration=0 for
+		// client_secret connections. The provider must resolve the unknown to a known value (null)
+		// or Terraform will reject the apply result with a fatal error.
+		var data AzureConnectionTFSDK
+		data.CertDuration = types.Int64Unknown() // simulates plan value when cert_duration not configured
+
+		response := azureResponse(map[string]string{}) // cert_duration=0
+		var diags diag.Diagnostics
+		getAzureParamsFromResponse(response, &diags, &data)
+
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if data.CertDuration.IsUnknown() {
+			t.Error("cert_duration must not remain unknown after apply; Terraform requires all values to be known after apply")
+		}
+		// The resolved value should be null (not applicable for client_secret connections).
+		if !data.CertDuration.IsNull() {
+			t.Errorf("cert_duration: expected null when CM returns 0 and no prior value was set, got %v", data.CertDuration)
+		}
+	})
 }
 
 // Test_CM_AzureRead_OOBDelete_ErrorSentinel verifies that the exact error string produced
