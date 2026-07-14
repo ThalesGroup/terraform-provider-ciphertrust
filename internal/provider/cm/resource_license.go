@@ -286,7 +286,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
+		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				"License Not Found",
 				"The License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
@@ -305,11 +305,15 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	// Required — swagger Licenses definition confirms license is returned in GET response.
 	state.License = types.StringValue(gjson.Get(response, "license").String())
-	// Optional+Computed
-	if r := gjson.Get(response, "bind_type"); r.Exists() && r.String() != "" {
-		state.BindType = types.StringValue(r.String())
-	} else {
-		state.BindType = types.StringNull()
+	// Optional+Computed — only hydrate when user configured bind_type (state non-null).
+	// CM returns a non-empty default bind_type even when the user omitted it;
+	// preserving null avoids perpetual state="instance" vs config=null drift.
+	if !state.BindType.IsNull() {
+		if r := gjson.Get(response, "bind_type"); r.Exists() && r.String() != "" {
+			state.BindType = types.StringValue(r.String())
+		} else {
+			state.BindType = types.StringNull()
+		}
 	}
 	// Computed-only — unconditional hydration.
 	state.Hash = types.StringValue(gjson.Get(response, "hash").String())
@@ -354,6 +358,9 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust License",
 			"Could not delete license, unexpected error: "+err.Error(),
