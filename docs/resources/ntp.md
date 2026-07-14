@@ -70,3 +70,17 @@ output "ntp_server_host" {
 ### Read-Only
 
 - `id` (String) The unique identifier for the NTP server (same as host)
+
+## Behavior Notes
+
+### Immutable Fields
+
+The `host` attribute is immutable after creation. Attempting to change it will produce a plan-time error — no API call is made and the resource is not destroyed or recreated. To use a different NTP host, destroy the resource and create a new one.
+
+### Fields That Trigger Replacement
+
+The `key` and `key_type` attributes use `RequiresReplaceIfConfigured`. If either is set or changed after the initial `terraform apply`, Terraform will plan a destroy-and-recreate of the NTP resource. This is the expected behavior for authenticated NTP server changes.
+
+### Drift Detection
+
+NTP entries are identified by their `host` value, which is immutable. Out-of-band attribute changes are not applicable via drift detection. A subsequent `terraform plan` after `terraform apply` will consistently produce an empty plan (no diff) when no configuration changes have been made.
