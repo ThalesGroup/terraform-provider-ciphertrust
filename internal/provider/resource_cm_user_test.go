@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -212,6 +213,287 @@ resource "ciphertrust_user" "test" {
   password       = "CHAnge012!@#"
   is_domain_user = %t
 }`, username, isDomainUser)
+}
+
+// checkUsersListContains verifies that the given username appears in the users list
+// returned by a ciphertrust_cm_users_list data source. It scans all users.N.username
+// attributes without assuming a specific index.
+func checkUsersListContains(resourceName, username string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("resource %s not found", resourceName)
+		}
+		countStr := rs.Primary.Attributes["users.#"]
+		var count int
+		fmt.Sscanf(countStr, "%d", &count)
+		for i := 0; i < count; i++ {
+			if rs.Primary.Attributes[fmt.Sprintf("users.%d.username", i)] == username {
+				return nil
+			}
+		}
+		return fmt.Errorf("username %q not found in %s users list", username, resourceName)
+	}
+}
+
+// Test_CM_CMUser_Idempotency verifies that a second plan after apply produces no diff,
+// confirming that all Computed fields (id, user_id, email, name) are stable after create.
+func Test_CM_CMUser_Idempotency(t *testing.T) {
+	RequireCM(t)
+	pw := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pw == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	t.Setenv("TF_VAR_test_user_pw", pw)
+
+	username := fmt.Sprintf("tf-idem-user-%d", time.Now().Unix())
+	cfg := providerConfig + fmt.Sprintf(`
+variable "test_user_pw" {
+  type      = string
+  sensitive = true
+}
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = var.test_user_pw
+  email    = "idem@example.com"
+  name     = "Idempotency User"
+}
+`, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: create user",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "user_id"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMUser_EmailDrift verifies that an out-of-band email change is detected
+// as drift on the next terraform plan, confirming the gjson email fix in Read().
+func Test_CM_AccCMUser_EmailDrift(t *testing.T) {
+	RequireCM(t)
+	pw := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pw == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	t.Setenv("TF_VAR_test_user_pw", pw)
+
+	username := fmt.Sprintf("tf-email-drift-%d", time.Now().Unix())
+	var capturedID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+variable "test_user_pw" {
+  type      = string
+  sensitive = true
+}
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = var.test_user_pw
+  email    = "original@example.com"
+}
+`, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: create user with email",
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "email", "original@example.com"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: cfg,
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("createCMClient failed — skipping OOB email mutation")
+					}
+					payload, err := json.Marshal(map[string]interface{}{"email": "drifted@example.com"})
+					if err != nil {
+						t.Fatalf("Step 2 PreConfig: marshal failed: %v", err)
+					}
+					if _, err := client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id"); err != nil {
+						t.Fatalf("Step 2 PreConfig: UpdateData failed: %v", err)
+					}
+				},
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMUsersListReadAccuracy verifies that a user created via ciphertrust_user
+// appears in the ciphertrust_cm_users_list data source on the same apply.
+func Test_CM_CMUsersListReadAccuracy(t *testing.T) {
+	RequireCM(t)
+	pw := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pw == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	t.Setenv("TF_VAR_test_user_pw", pw)
+
+	username := fmt.Sprintf("tf-list-acc-%d", time.Now().Unix())
+	cfg := providerConfig + fmt.Sprintf(`
+variable "test_user_pw" {
+  type      = string
+  sensitive = true
+}
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = var.test_user_pw
+  email    = "listtest@example.com"
+}
+data "ciphertrust_cm_users_list" "all" {
+  filters = {
+    username = %q
+  }
+  depends_on = [ciphertrust_user.test]
+}
+`, username, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: user appears in data source list",
+					checkUsersListContains("data.ciphertrust_cm_users_list.all", username),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_CMUsersListStaleData verifies that after a user is deleted out-of-band,
+// a state refresh reflects the deletion and the plan shows recreation.
+func Test_CM_CMUsersListStaleData(t *testing.T) {
+	RequireCM(t)
+	pw := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pw == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	t.Setenv("TF_VAR_test_user_pw", pw)
+
+	username := fmt.Sprintf("tf-list-stale-%d", time.Now().Unix())
+	var capturedID string
+
+	cfg := providerConfig + fmt.Sprintf(`
+variable "test_user_pw" {
+  type      = string
+  sensitive = true
+}
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = var.test_user_pw
+}
+data "ciphertrust_cm_users_list" "all" {
+  filters = {
+    username = %q
+  }
+  depends_on = [ciphertrust_user.test]
+}
+`, username, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: create user and capture ID",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Skip("createCMClient failed — skipping OOB deletion")
+					}
+					endpoint := common.URL_USER_MANAGEMENT + "/" + capturedID
+					if _, err := client.DeleteByURL(context.Background(), capturedID, endpoint); err != nil {
+						t.Fatalf("Step 2 PreConfig: DeleteByURL failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMUsersListIdempotency verifies that consecutive data-source reads produce
+// no plan diff, confirming the data source read path is stable.
+func Test_CM_CMUsersListIdempotency(t *testing.T) {
+	RequireCM(t)
+	pw := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pw == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	t.Setenv("TF_VAR_test_user_pw", pw)
+
+	username := fmt.Sprintf("tf-list-idem-%d", time.Now().Unix())
+	cfg := providerConfig + fmt.Sprintf(`
+variable "test_user_pw" {
+  type      = string
+  sensitive = true
+}
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = var.test_user_pw
+}
+data "ciphertrust_cm_users_list" "all" {
+  filters = {
+    username = %q
+  }
+  depends_on = [ciphertrust_user.test]
+}
+`, username, username)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "Step 1: user in filtered list",
+					checkUsersListContains("data.ciphertrust_cm_users_list.all", username),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
 }
 
 // Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on

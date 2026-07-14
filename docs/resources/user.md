@@ -86,5 +86,30 @@ output "username" {
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
-- `user_id` (String)
+- `id` (String) The ID of this resource. Equivalent to `user_id`; both contain the CM-assigned UUID.
+- `user_id` (String) The CM-assigned UUID for this user. Equivalent to `id`.
+
+## Immutable Fields
+
+The following fields cannot be changed after the user is created. Attempting to change them in Terraform configuration will produce an error at plan time (no apply is required):
+
+- `username` — the user's login name is fixed at creation time.
+- `is_domain_user` — whether the user is a domain user cannot be changed after creation.
+
+To change an immutable field, destroy and recreate the resource.
+
+## Drift Detection
+
+The provider detects out-of-band changes to the following attributes on every `terraform plan` or `terraform refresh`:
+
+- `email`, `name`, `nickname` — if these are changed directly on CipherTrust Manager, Terraform will surface the difference as a plan diff.
+- `is_domain_user`, `prevent_ui_login`, `password_change_required` — boolean attributes are re-read from the API on every refresh.
+
+If the user is deleted out-of-band (directly on CipherTrust Manager), `Read()` receives a 404 response, removes the resource from state, and Terraform plans a `+create` to restore it on the next apply.
+
+## Computed Attributes
+
+The following attributes are populated by CipherTrust Manager after the resource is created and are available for use in other resources or outputs:
+
+- `id` — CM-assigned UUID (stable after creation; same value as `user_id`).
+- `user_id` — same as `id`; provided for convenience when referencing user identity.

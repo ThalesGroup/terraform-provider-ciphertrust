@@ -253,7 +253,11 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	// if the API auto-populates them with values matching other fields
 	// This prevents drift when user doesn't explicitly set these fields
 
-	state.Email = types.StringValue(user.Email)
+	if gj := gjson.Get(userResponse, "email"); gj.Exists() {
+		state.Email = types.StringValue(gj.String())
+	} else {
+		state.Email = types.StringNull()
+	}
 	state.UserName = types.StringValue(user.UserName)
 	state.UserID = types.StringValue(user.UserID)
 	state.ID = types.StringValue(user.UserID)
@@ -272,14 +276,26 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	} else {
 		state.Nickname = types.StringNull()
 	}
-	if user.Metadata != nil {
-		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
+	if !state.Metadata.IsNull() {
+		metaResult := gjson.Get(userResponse, "user_metadata")
+		if !metaResult.Exists() || len(metaResult.Map()) == 0 {
+			state.Metadata = types.MapNull(types.StringType)
+		} else {
+			metaMap := make(map[string]string)
+			metaResult.ForEach(func(k, v gjson.Result) bool {
+				if v.Type == gjson.String {
+					metaMap[k.String()] = v.String()
+				} else {
+					metaMap[k.String()] = v.Raw
+				}
+				return true
+			})
+			state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, metaMap)
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
-	} else {
-		state.Metadata = types.MapNull(types.StringType)
 	}
 
 	diags = resp.State.Set(ctx, &state)
@@ -383,7 +399,32 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			} else {
 				plan.Nickname = types.StringNull()
 			}
-			plan.Email = types.StringValue(user.Email)
+			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
+				plan.Email = types.StringValue(gj.String())
+			} else {
+				plan.Email = types.StringNull()
+			}
+			if !plan.Metadata.IsNull() {
+				metaResult := gjson.Get(userResponse, "user_metadata")
+				if !metaResult.Exists() || len(metaResult.Map()) == 0 {
+					plan.Metadata = types.MapNull(types.StringType)
+				} else {
+					metaMap := make(map[string]string)
+					metaResult.ForEach(func(k, v gjson.Result) bool {
+						if v.Type == gjson.String {
+							metaMap[k.String()] = v.String()
+						} else {
+							metaMap[k.String()] = v.Raw
+						}
+						return true
+					})
+					plan.Metadata, diags = types.MapValueFrom(ctx, types.StringType, metaMap)
+					resp.Diagnostics.Append(diags...)
+					if resp.Diagnostics.HasError() {
+						return
+					}
+				}
+			}
 		}
 	}
 

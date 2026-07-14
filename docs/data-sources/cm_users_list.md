@@ -17,25 +17,47 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Key-value pairs sent as URL query parameters to filter the user list (e.g. `{ username = "alice" }`). Each entry becomes a `key=value` query parameter appended to the list API call. Supported filter keys match the CM user list API query parameters such as `username`, `email`, `name`, and `connection`. At most 10 users are returned per read.
 
 ### Read-Only
 
-- `users` (Attributes List) (see [below for nested schema](#nestedatt--users))
+- `users` (Attributes List) The list of users returned by CipherTrust Manager matching the given filters. (see [below for nested schema](#nestedatt--users))
 
 <a id="nestedatt--users"></a>
 ### Nested Schema for `users`
 
 Read-Only:
 
-- `email` (String)
-- `id` (String)
-- `is_domain_user` (Boolean)
-- `name` (String)
-- `nickname` (String)
-- `password` (String)
-- `password_change_required` (Boolean)
-- `prevent_ui_login` (Boolean)
-- `user_id` (String)
-- `user_metadata` (Map of String)
-- `username` (String)
+- `email` (String) Email address of the user.
+- `id` (String) CM-assigned UUID for the user. Equivalent to `user_id`.
+- `is_domain_user` (Boolean) Whether the user is a domain user.
+- `name` (String) Full display name of the user.
+- `nickname` (String) Nickname of the user. CM auto-populates this from the username when not explicitly set.
+- `password` (String) Not populated by CM on list reads — always empty.
+- `password_change_required` (Boolean) Whether the user must change their password on next login.
+- `prevent_ui_login` (Boolean) Whether the user is blocked from logging in via the UI.
+- `user_id` (String) CM-assigned UUID for the user. Equivalent to `id`.
+- `user_metadata` (Map of String) Arbitrary key-value metadata associated with the user.
+- `username` (String) Login name of the user.
+
+## Usage Notes
+
+When using `ciphertrust_cm_users_list` alongside a `ciphertrust_user` resource in the same Terraform configuration, add `depends_on = [ciphertrust_user.<name>]` to ensure the user is created before the data source reads the list:
+
+```terraform
+resource "ciphertrust_user" "example" {
+  username = "alice"
+  password = "ChangeMe01!"
+}
+
+data "ciphertrust_cm_users_list" "all" {
+  filters = {
+    username = "alice"
+  }
+  depends_on = [ciphertrust_user.example]
+}
+```
+
+Without `depends_on`, Terraform may read the data source before the user is created, resulting in an empty or stale list.
+
+The data source returns at most 10 users per read. Use the `filters` attribute to narrow results when the CipherTrust Manager instance has many users.
