@@ -115,6 +115,11 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
+	// CM omits the "resources" field (gjson returns "") when zero entries match the filter.
+	if jsonStr == "" {
+		jsonStr = "[]"
+	}
+
 	users := []CMUserJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &users)
