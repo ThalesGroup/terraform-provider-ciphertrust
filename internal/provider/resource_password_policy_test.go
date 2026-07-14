@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -236,6 +237,162 @@ resource "ciphertrust_password_policy" "no_drift_test" {
 				// Refresh state from CM; expect no plan diff despite CM returning numeric defaults.
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_ImmutablePolicyName verifies that ImmutableString() rejects
+// an in-place policy_name change at plan time.
+func Test_CM_AccCMPasswordPolicy_ImmutablePolicyName(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "immut" {
+  policy_name = "tf-test-pwpolicy-immut"
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.immut", "policy_name", "tf-test-pwpolicy-immut"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "immut" {
+  policy_name = "tf-test-pwpolicy-immut-changed"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_Idempotency verifies no spurious plan diff after apply —
+// Computed id and policy_name do not cause perpetual drift.
+func Test_CM_AccCMPasswordPolicy_Idempotency(t *testing.T) {
+	RequireCM(t)
+
+	config := providerConfig + `
+resource "ciphertrust_password_policy" "idem" {
+  policy_name          = "tf-test-pwpolicy-idem"
+  inclusive_min_digits = 2
+  password_lifetime    = 60
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "id", "tf-test-pwpolicy-idem"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "policy_name", "tf-test-pwpolicy-idem"),
+				),
+			},
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_AttributeDrift verifies that Read() surfaces drift when
+// inclusive_min_digits is changed out-of-band.
+func Test_CM_AccCMPasswordPolicy_AttributeDrift(t *testing.T) {
+	RequireCM(t)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "drift" {
+  policy_name          = "tf-test-pwpolicy-drift"
+  inclusive_min_digits = 1
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.drift", "inclusive_min_digits", "1"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.drift"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_password_policy.drift not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, err := client.UpdateDataV2(context.Background(), capturedName, common.URL_CM_PASSWORD_POLICY, []byte(`{"inclusive_min_digits":5}`))
+					if err != nil {
+						_ = err
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource
+// on 404 and plans recreation after OOB deletion.
+func Test_CM_AccCMPasswordPolicy_OutOfBandDeletion(t *testing.T) {
+	RequireCM(t)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "oob" {
+  policy_name = "tf-test-pwpolicy-oob"
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.oob", "policy_name", "tf-test-pwpolicy-oob"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.oob"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_password_policy.oob not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_CM_PASSWORD_POLICY+"/"+capturedName)
+				},
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "oob" {
+  policy_name = "tf-test-pwpolicy-oob"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})

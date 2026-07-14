@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -164,6 +165,173 @@ resource "ciphertrust_policies" "test" {
 `,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableName verifies that ImmutableString() rejects an in-place
+// name change at plan time.
+func Test_CM_AccCMPolicy_ImmutableName(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "immut" {
+  name    = "tf-test-policy-immut"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_policies.immut", "name", "tf-test-policy-immut"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "immut" {
+  name    = "tf-test-policy-immut-changed"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_AttributeDrift verifies that Read() surfaces drift when effect is
+// changed out-of-band.
+func Test_CM_AccCMPolicy_AttributeDrift(t *testing.T) {
+	RequireCM(t)
+	var policyID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "drift" {
+  name    = "tf-test-policy-drift"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_policies.drift", "effect", "allow"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["ciphertrust_policies.drift"]
+						if rs == nil {
+							return fmt.Errorf("ciphertrust_policies.drift not found in state")
+						}
+						policyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, err := client.UpdateDataV2(context.Background(), policyID, common.URL_CM_POLICIES, []byte(`{"effect":"deny"}`))
+					if err != nil {
+						_ = err
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource on 404
+// and plans recreation after OOB deletion.
+func Test_CM_AccCMPolicy_OutOfBandDeletion(t *testing.T) {
+	RequireCM(t)
+	var policyID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_policies" "oob" {
+  name    = "tf-test-policy-oob"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttr("ciphertrust_policies.oob", "name", "tf-test-policy-oob"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["ciphertrust_policies.oob"]
+						if rs == nil {
+							return fmt.Errorf("ciphertrust_policies.oob not found in state")
+						}
+						policyID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_CM_POLICIES+"/"+policyID)
+				},
+				Config: providerConfig + `
+resource "ciphertrust_policies" "oob" {
+  name    = "tf-test-policy-oob"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_Idempotency verifies no spurious plan diff after apply from
+// Computed fields (id, uri, account, created_at).
+func Test_CM_AccCMPolicy_Idempotency(t *testing.T) {
+	RequireCM(t)
+
+	config := providerConfig + `
+resource "ciphertrust_policies" "idem" {
+  name    = "tf-test-policy-idem"
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.idem", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.idem", "uri"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.idem", "account"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.idem", "created_at"),
+				),
+			},
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
