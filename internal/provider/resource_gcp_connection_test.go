@@ -50,16 +50,28 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: Valid config — plan only (validates schema accepts valid cloud_name and key_file).
 			{
-				Config:   providerConfig + createConfig,
-				PlanOnly: true,
+				Config: providerConfig + createConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "private_key_id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "client_email"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "cloud_name", "gcp"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.0", "cckm"),
+				),
 			},
 
-			// Step 2: Updated config — plan only.
+			// Step 2: Update — product and description
 			{
-				Config:   providerConfig + updateConfig,
-				PlanOnly: true,
+				Config: providerConfig + updateConfig,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "private_key_id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "client_email"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "description", "updated connection description"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.gcp_connection", "products.0", updateProduct),
+				),
 			},
 
 			// Step 3: Attempt to rename — must fail at plan time with a clear error.
