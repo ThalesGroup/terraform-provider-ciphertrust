@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -128,6 +129,87 @@ func Test_CM_GetScpParamsFromResponse_PlainDrift(t *testing.T) {
 		}
 		if got := data.Port.ValueInt64(); got != 22 {
 			t.Errorf("port drift not detected: got %d, want 22", got)
+		}
+	})
+}
+
+// Test_CM_GetScpParamsFromResponse_MetaAndLabels verifies that getParamsFromResponse
+// correctly populates meta and labels from the CM API response so that drift in
+// those maps is visible to Terraform after a Read.
+func Test_CM_GetScpParamsFromResponse_MetaAndLabels(t *testing.T) {
+	t.Run("meta entries from response are stored in state", func(t *testing.T) {
+		response := `{
+			"id":"scp-id",
+			"meta":{"custom_meta_key1":"custom_value1","env":"prod"},
+			"labels":{"team":"infra"}
+		}`
+		var data CMScpConnectionTFSDK
+		var diags diag.Diagnostics
+		getParamsFromResponse(response, &diags, &data)
+
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+
+		wantMeta := map[string]string{
+			"custom_meta_key1": "custom_value1",
+			"env":              "prod",
+		}
+		for k, want := range wantMeta {
+			got, ok := data.Meta.Elements()[k]
+			if !ok {
+				t.Errorf("meta key %q missing from state", k)
+				continue
+			}
+			if gotStr := got.(types.String).ValueString(); gotStr != want {
+				t.Errorf("meta[%q]: got %q, want %q", k, gotStr, want)
+			}
+		}
+	})
+
+	t.Run("meta drift: CM value overwrites stale state", func(t *testing.T) {
+		// Simulate state already having old meta entries.
+		oldMeta, diags := types.MapValueFrom(
+			context.Background(),
+			types.StringType,
+			map[string]string{"custom_meta_key1": "old_value"},
+		)
+		if diags.HasError() {
+			t.Fatalf("setup error: %v", diags)
+		}
+
+		var data CMScpConnectionTFSDK
+		data.Meta = oldMeta
+
+		// CM now returns updated meta.
+		response := `{"id":"scp-id","meta":{"custom_meta_key1":"new_value"}}`
+		var rd diag.Diagnostics
+		getParamsFromResponse(response, &rd, &data)
+
+		if rd.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", rd)
+		}
+
+		got, ok := data.Meta.Elements()["custom_meta_key1"]
+		if !ok {
+			t.Fatal("meta key custom_meta_key1 missing after drift refresh")
+		}
+		if gotStr := got.(types.String).ValueString(); gotStr != "new_value" {
+			t.Errorf("meta drift not detected: got %q, want %q", gotStr, "new_value")
+		}
+	})
+
+	t.Run("empty meta in response yields empty map in state", func(t *testing.T) {
+		response := `{"id":"scp-id","meta":{}}`
+		var data CMScpConnectionTFSDK
+		var diags diag.Diagnostics
+		getParamsFromResponse(response, &diags, &data)
+
+		if diags.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", diags)
+		}
+		if n := len(data.Meta.Elements()); n != 0 {
+			t.Errorf("expected empty meta map, got %d elements", n)
 		}
 	})
 }

@@ -3,16 +3,22 @@ package connections
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 // gcpResponse returns a JSON response for getGcpParamsFromResponse with only the
@@ -151,6 +157,95 @@ func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 
 	if !strings.Contains(simulatedErr.Error(), "status: 404") {
 		t.Errorf("sentinel check failed: %q does not contain %q", simulatedErr.Error(), "status: 404")
+	}
+}
+
+// Test_CM_GCPRead_OOBDelete_GracefulStateRemoval is an end-to-end unit test that
+// proves Read() silently removes the resource from state — instead of returning an
+// error diagnostic — when CM responds with 404.  This is the out-of-band deletion
+// scenario described in TFIN-326: after an OOB delete the next terraform plan must
+// propose a clean +create rather than hard-erroring.
+//
+// The test uses net/http/httptest as a drop-in fake CM so no live endpoint is needed.
+func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
+	// Arrange: fake CM always returns 404 Not Found.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprintln(w, `{"code":16,"codeDesc":"NCERRResourceNotFound: Resource not found"}`)
+	}))
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceGCPConnection{client: client}
+	ctx := context.Background()
+
+	// Build the schema so we can construct a properly-typed tfsdk.State.
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+	// Construct a tftypes.Value representing a previously-stored connection state.
+	// Every attribute declared in the schema must appear in the map.
+	stateType := schemaResp.Schema.Type().TerraformType(ctx)
+	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
+		// GCP-specific attributes
+		"id":             tftypes.NewValue(tftypes.String, "nonexistent-gcp-id"),
+		"name":           tftypes.NewValue(tftypes.String, "my-gcp-conn"),
+		"key_file":       tftypes.NewValue(tftypes.String, `{"type":"service_account"}`),
+		"description":    tftypes.NewValue(tftypes.String, ""),
+		"cloud_name":     tftypes.NewValue(tftypes.String, "gcp"),
+		"client_email":   tftypes.NewValue(tftypes.String, ""),
+		"private_key_id": tftypes.NewValue(tftypes.String, ""),
+		// Common response attributes (from CMCreateConnectionResponseCommonTFSDK)
+		"uri":                   tftypes.NewValue(tftypes.String, ""),
+		"account":               tftypes.NewValue(tftypes.String, ""),
+		"created_at":            tftypes.NewValue(tftypes.String, ""),
+		"updated_at":            tftypes.NewValue(tftypes.String, ""),
+		"service":               tftypes.NewValue(tftypes.String, ""),
+		"category":              tftypes.NewValue(tftypes.String, ""),
+		"resource_url":          tftypes.NewValue(tftypes.String, ""),
+		"last_connection_ok":    tftypes.NewValue(tftypes.Bool, false),
+		"last_connection_error": tftypes.NewValue(tftypes.String, ""),
+		"last_connection_at":    tftypes.NewValue(tftypes.String, ""),
+		// Collection attributes
+		"products": tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{}),
+		"labels":   tftypes.NewValue(tftypes.Map{ElementType: tftypes.String}, map[string]tftypes.Value{}),
+		"meta":     tftypes.NewValue(tftypes.Map{ElementType: tftypes.String}, map[string]tftypes.Value{}),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    rawState,
+		},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    rawState,
+		},
+	}
+
+	// Act: simulate a terraform plan/refresh after the connection was deleted out-of-band.
+	r.Read(ctx, req, resp)
+
+	// Assert 1: Read() must NOT add any error diagnostic on 404.
+	// A non-nil error here means Terraform would surface a hard error instead of
+	// proposing +create — exactly the failure mode described in TFIN-326.
+	if resp.Diagnostics.HasError() {
+		t.Errorf("Read() must not add error diagnostics on OOB-delete 404, got: %v",
+			resp.Diagnostics)
+	}
+
+	// Assert 2: Read() must call resp.State.RemoveResource so the state becomes null.
+	// Terraform uses a null state as the signal to propose a +create on the next plan.
+	if !resp.State.Raw.IsNull() {
+		t.Errorf("Read() must remove the resource from state (state.Raw.IsNull) on 404, "+
+			"got non-null state: %v", resp.State.Raw)
 	}
 }
 

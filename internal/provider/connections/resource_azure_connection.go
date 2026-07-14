@@ -103,9 +103,13 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "User has the option to upload external certificate for Azure Cloud connection. This option cannot be used with option is_certificate_used and client_secret.User first has to generate a new Certificate Signing Request (CSR) in POST /v1/connectionmgmt/connections/csr. The generated CSR can be signed with any internal or external CA. The Certificate must have an RSA key strength of 2048 or 4096. User can also update the new external certificate in the existing connection. Any unused certificate will automatically deleted in 24 hours.The certificate should be provided in \\n (newline) format.",
 			},
 			"client_secret": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Secret key for the Azure application. Required in Azure Stack connection.",
+				Optional:  true,
+				Sensitive: true,
+				Description: "Secret key for the Azure application. Required in Azure Stack connection. " +
+					"Write-only: CM never returns this field on GET, so its live value cannot be verified " +
+					"after apply and out-of-band changes are not detectable by terraform plan. " +
+					"Setting this to null or empty will not send the field to CM (omitted from PATCH), " +
+					"leaving the previously configured secret in place on CM.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
@@ -118,7 +122,10 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description about the connection.",
+				Description: "Description about the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-string PATCH requests for this field.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"external_certificate_used": schema.BoolAttribute{
 				Computed:    true,
@@ -148,7 +155,10 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				ElementType: types.StringType,
 				Optional:    true,
 				Computed:    true,
-				Description: "Optional end-user or service data stored with the connection.",
+				Description: "Optional end-user or service data stored with the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-object PATCH requests for this field.",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.UseStateWhenClearingMap(),
+				},
 			},
 			"products": schema.ListAttribute{
 				ElementType: types.StringType,
@@ -251,21 +261,25 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		payload.KeyVaultDNSSuffix = plan.KeyVaultDNSSuffix.ValueString()
 	}
 
-	azureLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		azureLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		azureLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			azureLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = azureLabelsPayload
 	}
-	payload.Labels = azureLabelsPayload
 
 	if plan.ManagementURL.ValueString() != "" && plan.ManagementURL.ValueString() != types.StringNull().ValueString() {
 		payload.ManagementURL = plan.ManagementURL.ValueString()
 	}
 
-	azureMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		azureMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		azureMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			azureMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = azureMetadataPayload
 	}
-	payload.Meta = azureMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var azureProducts []string
@@ -302,6 +316,20 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		resp.Diagnostics.AddError(
 			"Error creating Azure Connection on CipherTrust Manager: ",
 			"Could not create azure connection, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Re-fetch the resource via GET so that state reflects what CM actually stored,
+	// rather than relying on the POST response body which may omit fields like labels.
+	newID := gjson.Get(response, "id").String()
+	tflog.Debug(ctx, "[resource_azure_connection.go -> Create] fetching created resource id="+newID)
+	response, err = r.client.GetById(ctx, id, newID, common.URL_AZURE_CONNECTION)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Create]["+id+"]")
+		resp.Diagnostics.AddError(
+			"Error reading Azure Connection after creation: ",
+			"Could not read back azure connection id: "+newID+", unexpected error: "+err.Error(),
 		)
 		return
 	}
@@ -382,6 +410,10 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.AzureStackServerCert = plan.AzureStackServerCert.ValueString()
 	}
 
+	if plan.CertDuration.ValueInt64() != 0 {
+		payload.CertDuration = plan.CertDuration.ValueInt64()
+	}
+
 	if plan.Certificate.ValueString() != "" && plan.Certificate.ValueString() != types.StringNull().ValueString() {
 		payload.Certificate = plan.Certificate.ValueString()
 	}
@@ -414,21 +446,25 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.KeyVaultDNSSuffix = plan.KeyVaultDNSSuffix.ValueString()
 	}
 
-	azureLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		azureLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		azureLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			azureLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = azureLabelsPayload
 	}
-	payload.Labels = azureLabelsPayload
 
 	if plan.ManagementURL.ValueString() != "" && plan.ManagementURL.ValueString() != types.StringNull().ValueString() {
 		payload.ManagementURL = plan.ManagementURL.ValueString()
 	}
 
-	azureMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		azureMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		azureMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			azureMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = azureMetadataPayload
 	}
-	payload.Meta = azureMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var azureProducts []string
@@ -462,12 +498,25 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AZURE_CONNECTION, payloadJSON)
+	_, err = r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AZURE_CONNECTION, payloadJSON)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Update]["+plan.ID.ValueString()+"]")
 		resp.Diagnostics.AddError(
 			"Error updating Azure Connection on CipherTrust Manager: ",
 			"Could not update azure connection, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	// Re-fetch the resource via GET so that state reflects what CM actually stored,
+	// rather than relying on the PATCH response body which may omit fields like labels.
+	tflog.Debug(ctx, "[resource_azure_connection.go -> Update] fetching updated resource id="+plan.ID.ValueString())
+	response, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AZURE_CONNECTION)
+	if err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Error reading Azure Connection after update: ",
+			"Could not read back azure connection id: "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
@@ -553,6 +602,10 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	data.AzureStackConnectionType = types.StringValue(gjson.Get(response, "azure_stack_connection_type").String())
 	data.Labels = common.ParseMap(response, diag, "labels")
 	data.Meta = common.ParseMap(response, diag, "meta")
-	data.CertDuration = types.Int64Value(gjson.Get(response, "cert_duration").Int())
+	// Only update cert_duration when CM returns a non-zero value; for client_secret
+	// connections CM always returns 0, which would cause a post-apply inconsistency.
+	if certDuration := gjson.Get(response, "cert_duration").Int(); certDuration != 0 {
+		data.CertDuration = types.Int64Value(certDuration)
+	}
 	data.Products = common.ParseArray(response, "products")
 }
