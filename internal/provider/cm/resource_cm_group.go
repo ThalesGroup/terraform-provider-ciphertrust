@@ -189,10 +189,6 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			tflog.Warn(ctx, "CipherTrust Group not found, removing from state [resource_cm_group.go -> Read]["+resourceID+"]")
-			resp.Diagnostics.AddWarning(
-				"CipherTrust Group Not Found",
-				"Group "+resourceID+" was not found on CipherTrust Manager and will be removed from state. "+err.Error(),
-			)
 			resp.State.RemoveResource(ctx)
 			return
 		}

@@ -104,6 +104,12 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
 				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
 				PlanOnly:    true,
 			},
+			// Step 5: Restore valid config so the framework can run a clean destroy.
+			// Without this, the cleanup phase uses Step 4's config (gcp-invalid)
+			// which the validator rejects, leaving dangling resources.
+			{
+				Config: providerConfig + fmt.Sprintf(updateConfig),
+			},
 		},
 	})
 }
