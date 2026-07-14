@@ -26,7 +26,9 @@ resource "ciphertrust_cm_reg_token" "test" {
   max_clients = 1
 }
 
-data "ciphertrust_cm_tokens_list" "test" {}
+data "ciphertrust_cm_tokens_list" "test" {
+  depends_on = [ciphertrust_cm_reg_token.test]
+}
 `,
 				Check: checkStep(t, "create and list",
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_tokens_list.test", "tokens.0.id"),
