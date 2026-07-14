@@ -577,3 +577,49 @@ func Test_CM_AzureConnection_CloudNameEnumValidator(t *testing.T) {
 		}
 	})
 }
+
+// Test_CM_AzureClientSecret_ClearBlocked verifies that attempting to clear a
+// previously-set client_secret is detected. CM never returns this write-only field
+// on GET, so a silently-accepted clear would leave Terraform state claiming the
+// secret was removed while CM's live value is unverifiable and possibly unchanged.
+func Test_CM_AzureClientSecret_ClearBlocked(t *testing.T) {
+	t.Run("clearing a previously-set secret to empty string is blocked", func(t *testing.T) {
+		state := AzureConnectionTFSDK{ClientSecret: types.StringValue("hunter2")}
+		plan := AzureConnectionTFSDK{ClientSecret: types.StringValue("")}
+		if !clientSecretClearBlocked(state, plan) {
+			t.Error("expected clearing a set secret to empty string to be blocked")
+		}
+	})
+
+	t.Run("clearing a previously-set secret to null is blocked", func(t *testing.T) {
+		state := AzureConnectionTFSDK{ClientSecret: types.StringValue("hunter2")}
+		plan := AzureConnectionTFSDK{ClientSecret: types.StringNull()}
+		if !clientSecretClearBlocked(state, plan) {
+			t.Error("expected clearing a set secret to null to be blocked")
+		}
+	})
+
+	t.Run("setting a new secret value is not blocked", func(t *testing.T) {
+		state := AzureConnectionTFSDK{ClientSecret: types.StringValue("hunter2")}
+		plan := AzureConnectionTFSDK{ClientSecret: types.StringValue("hunter3")}
+		if clientSecretClearBlocked(state, plan) {
+			t.Error("did not expect rotating to a new secret value to be blocked")
+		}
+	})
+
+	t.Run("never having set a secret is not blocked", func(t *testing.T) {
+		state := AzureConnectionTFSDK{ClientSecret: types.StringNull()}
+		plan := AzureConnectionTFSDK{ClientSecret: types.StringNull()}
+		if clientSecretClearBlocked(state, plan) {
+			t.Error("did not expect a never-set secret to be blocked")
+		}
+	})
+
+	t.Run("setting a secret for the first time is not blocked", func(t *testing.T) {
+		state := AzureConnectionTFSDK{ClientSecret: types.StringNull()}
+		plan := AzureConnectionTFSDK{ClientSecret: types.StringValue("hunter2")}
+		if clientSecretClearBlocked(state, plan) {
+			t.Error("did not expect setting a secret for the first time to be blocked")
+		}
+	})
+}

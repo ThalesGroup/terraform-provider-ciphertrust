@@ -95,6 +95,19 @@ func Test_CM_UseStateWhenClearingString(t *testing.T) {
 			t.Errorf("expected null plan value to pass through, got %q", got.ValueString())
 		}
 	})
+
+	t.Run("existing resource: clearing a non-empty state value surfaces a warning diagnostic", func(t *testing.T) {
+		req := planmodifier.StringRequest{
+			State:      nonNullRawState(),
+			StateValue: types.StringValue("some text"),
+			PlanValue:  types.StringNull(),
+		}
+		resp := &planmodifier.StringResponse{PlanValue: types.StringNull()}
+		mod.PlanModifyString(context.Background(), req, resp)
+		if len(resp.Diagnostics.Warnings()) == 0 {
+			t.Error("expected a warning diagnostic when a clear is silently ignored")
+		}
+	})
 }
 
 // ---- UseStateWhenClearingMap ---------------------------------------------------
@@ -174,6 +187,19 @@ func Test_CM_UseStateWhenClearingMap(t *testing.T) {
 		got := run(nonNullRawState(), types.MapNull(types.StringType), types.MapNull(types.StringType))
 		if !got.IsNull() {
 			t.Errorf("expected null plan to pass through when state is also null, got %v", got)
+		}
+	})
+
+	t.Run("existing resource: clearing a non-empty state map surfaces a warning diagnostic", func(t *testing.T) {
+		req := planmodifier.MapRequest{
+			State:      nonNullRawState(),
+			StateValue: nonEmptyMap,
+			PlanValue:  types.MapNull(types.StringType),
+		}
+		resp := &planmodifier.MapResponse{PlanValue: types.MapNull(types.StringType)}
+		mod.PlanModifyMap(context.Background(), req, resp)
+		if len(resp.Diagnostics.Warnings()) == 0 {
+			t.Error("expected a warning diagnostic when a clear is silently ignored")
 		}
 	})
 }

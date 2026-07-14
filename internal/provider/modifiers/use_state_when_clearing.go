@@ -56,6 +56,11 @@ func (m useStateWhenClearingStringModifier) PlanModifyString(_ context.Context, 
 	}
 	// Plan is trying to clear a non-empty state value. CM cannot honour this,
 	// so substitute the state value to suppress the perpetual diff.
+	resp.Diagnostics.AddAttributeWarning(
+		req.Path,
+		"Clear ignored by CipherTrust Manager",
+		"CM does not support clearing this field once set; the previous value has been retained.",
+	)
 	resp.PlanValue = req.StateValue
 }
 
@@ -93,5 +98,10 @@ func (m useStateWhenClearingMapModifier) PlanModifyMap(_ context.Context, req pl
 	}
 	// Plan is trying to clear a non-empty state map. CM cannot honour this,
 	// so substitute the state value to suppress the perpetual diff.
+	resp.Diagnostics.AddAttributeWarning(
+		req.Path,
+		"Clear ignored by CipherTrust Manager",
+		"CM does not support clearing this field once set; the previous value has been retained.",
+	)
 	resp.PlanValue = req.StateValue
 }

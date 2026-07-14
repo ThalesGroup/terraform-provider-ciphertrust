@@ -108,8 +108,9 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Secret key for the Azure application. Required in Azure Stack connection. " +
 					"Write-only: CM never returns this field on GET, so its live value cannot be verified " +
 					"after apply and out-of-band changes are not detectable by terraform plan. " +
-					"Setting this to null or empty will not send the field to CM (omitted from PATCH), " +
-					"leaving the previously configured secret in place on CM.",
+					"Once set, this field cannot be cleared back to null/empty: CM does not support clearing " +
+					"it, and the provider rejects the attempt at apply time rather than silently leaving state " +
+					"and CM's live value out of sync. To rotate the secret, set a new value.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
@@ -390,11 +391,29 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_azure_connection.go -> Update]["+id+"]")
 	var plan AzureConnectionTFSDK
+	var state AzureConnectionTFSDK
 	var payload AzureConnectionJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if clientSecretClearBlocked(state, plan) {
+		resp.Diagnostics.AddError(
+			"client_secret cannot be cleared",
+			"CipherTrust Manager does not support clearing client_secret once it has been set: the "+
+				"previously configured secret would remain active on CM even though Terraform state "+
+				"would show it as cleared. To rotate the secret, set client_secret to a new value. "+
+				"To remove client_secret-based auth entirely, destroy and recreate the connection.",
+		)
 		return
 	}
 
@@ -569,6 +588,17 @@ func (d *resourceAzureConnection) Configure(_ context.Context, req resource.Conf
 	}
 
 	d.client = client
+}
+
+// clientSecretClearBlocked reports whether the plan is attempting to clear a
+// previously-set client_secret. CM never returns this write-only field on GET, so the
+// provider cannot verify whether a clear PATCH actually took effect. Rather than writing
+// an unverifiable null into state (per TFIN-364-class bug), Update rejects the attempt
+// outright.
+func clientSecretClearBlocked(state, plan AzureConnectionTFSDK) bool {
+	hadSecret := !state.ClientSecret.IsNull() && state.ClientSecret.ValueString() != ""
+	clearing := plan.ClientSecret.IsNull() || plan.ClientSecret.ValueString() == ""
+	return hadSecret && clearing
 }
 
 func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *AzureConnectionTFSDK) {
