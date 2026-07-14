@@ -264,11 +264,11 @@ func Test_CM_Interface_Idempotency(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig: func() { interfaceSweep(9100) },
+				PreConfig: func() { interfaceSweep(9015) },
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
-  port           = 9100
-  name           = "kmip-test-9100"
+  port           = 9015
+  name           = "kmip-test-9015"
   interface_type = "kmip"
 }`,
 				Check: checkStep(t, "create",
