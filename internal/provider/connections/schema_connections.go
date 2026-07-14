@@ -159,17 +159,17 @@ type AzureConnectionJSON struct {
 	ActiveDirectoryEndpoint  string                 `json:"active_directory_endpoint"`
 	AzureStackConnectionType string                 `json:"azure_stack_connection_type"`
 	AzureStackServerCert     string                 `json:"azure_stack_server_cert"`
-	CertDuration             int64                  `json:"cert_duration"`
+	CertDuration             int64                  `json:"cert_duration,omitempty"`
 	Certificate              string                 `json:"certificate"`
-	ClientSecret             string                 `json:"client_secret"`
+	ClientSecret             string                 `json:"client_secret,omitempty"`
 	CloudName                string                 `json:"cloud_name"`
 	Description              string                 `json:"description"`
 	ExternalCertificateUsed  bool                   `json:"external_certificate_used"`
 	IsCertificateUsed        bool                   `json:"is_certificate_used"`
 	KeyVaultDNSSuffix        string                 `json:"key_vault_dns_suffix"`
-	Labels                   map[string]interface{} `json:"labels"`
+	Labels                   map[string]interface{} `json:"labels,omitempty"`
 	ManagementURL            string                 `json:"management_url"`
-	Meta                     interface{}            `json:"meta"`
+	Meta                     interface{}            `json:"meta,omitempty"`
 	Products                 []string               `json:"products"`
 	ResourceManagerURL       string                 `json:"resource_manager_url"`
 	VaultResourceURL         string                 `json:"vault_resource_url"`
