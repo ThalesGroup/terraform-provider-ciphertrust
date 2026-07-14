@@ -228,3 +228,78 @@ resource "ciphertrust_cm_ssh_key" "test" {
 }
 `, pubKey)
 }
+
+// TestAcc_CMSSHKey_immutable verifies that changing the immutable key field on an existing
+// ciphertrust_cm_ssh_key resource produces a plan-time error from modifiers.ImmutableString().
+// Required env vars: TF_ACC_SSH_PUBLIC_KEY, TF_ACC_SSH_PUBLIC_KEY_2.
+func TestAcc_CMSSHKey_immutable(t *testing.T) {
+	RequireCM(t)
+	pubKey := os.Getenv("TF_ACC_SSH_PUBLIC_KEY")
+	if pubKey == "" {
+		t.Skip("TF_ACC_SSH_PUBLIC_KEY not set — skipping TestAcc_CMSSHKey_immutable")
+	}
+	pubKey2 := os.Getenv("TF_ACC_SSH_PUBLIC_KEY_2")
+	if pubKey2 == "" {
+		t.Skip("TF_ACC_SSH_PUBLIC_KEY_2 not set — skipping TestAcc_CMSSHKey_immutable")
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, pubKey),
+			},
+			{
+				Config: bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, pubKey2),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)cannot be changed after creation`),
+			},
+		},
+	})
+}
+
+// TestAcc_CMSSHKey_idempotency verifies that a second plan with no config changes shows no
+// diff after apply, confirming name and algorithm carry UseStateForUnknown() and are correctly
+// hydrated as known values after Create().
+// Required env var: TF_ACC_SSH_PUBLIC_KEY.
+func TestAcc_CMSSHKey_idempotency(t *testing.T) {
+	RequireCM(t)
+	pubKey := os.Getenv("TF_ACC_SSH_PUBLIC_KEY")
+	if pubKey == "" {
+		t.Skip("TF_ACC_SSH_PUBLIC_KEY not set — skipping TestAcc_CMSSHKey_idempotency")
+	}
+
+	cfg := bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, pubKey)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+				Check: checkStep(t, "after-create",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "algorithm"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "fingerprint"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

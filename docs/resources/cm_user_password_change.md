@@ -69,8 +69,8 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 
 ### Optional
 
-- `auth_domain` (String) Authentication domain of the user whose password is being changed. Changing this value forces replacement of the resource.
-- `password_hint` (String) Optional hint for the new password. Changing this value forces replacement of the resource.
+- `auth_domain` (String) (Immutable) Authentication domain of the user whose password is being changed.
+- `password_hint` (String) (Immutable) Optional hint for the new password.
 
 ### Read-Only
 
