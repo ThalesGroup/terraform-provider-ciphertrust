@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -55,8 +56,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
 				},
-				Description: " The name for the custom password policy.",
+				Description: "(Immutable) The name for the custom password policy. Changing this field in place is not supported — it would silently target a different policy on CipherTrust Manager.",
 			},
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
@@ -324,6 +326,8 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMPasswordPolicyTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_password_policy.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -333,7 +337,7 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PASSWORD_POLICY)
 	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
+		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				"Password Policy Not Found",
 				"The Password Policy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
@@ -429,7 +433,6 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -523,6 +526,9 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 
 	tflog.Debug(ctx, "[resource_password_policy.go -> Update Output]["+responseUPD+"]")
 
+	plan.ID = types.StringValue(passwordPolicyName)
+	plan.Name = types.StringValue(passwordPolicyName)
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -547,7 +553,7 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 		output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Delete]["+id+"]["+output+"]")
 		if err != nil {
-			if strings.Contains(err.Error(), "status: 404") {
+			if strings.Contains(err.Error(), notFoundError) {
 				return
 			}
 			resp.Diagnostics.AddError(

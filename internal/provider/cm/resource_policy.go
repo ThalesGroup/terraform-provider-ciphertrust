@@ -699,6 +699,10 @@ func (r *resourceCMPolicy) Delete(ctx context.Context, req resource.DeleteReques
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy.go -> Delete]["+state.ID.ValueString()+"]")
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CM Policy",
 			"Could not delete policy, unexpected error: "+err.Error(),

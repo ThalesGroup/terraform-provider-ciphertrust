@@ -9,6 +9,7 @@ import (
 	"time"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -441,6 +442,106 @@ resource "ciphertrust_policy_attachments" "test_actions" {
 				Config:      step2Config,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicyAttachment_Idempotency verifies no spurious plan diff after apply
+// from Computed fields (id, uri, account, created_at).
+func Test_CM_AccCMPolicyAttachment_Idempotency(t *testing.T) {
+	RequireCM(t)
+	policyName := fmt.Sprintf("tf-test-attach-pol-idem-%d", time.Now().Unix())
+
+	config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "idem_pol" {
+  name    = %q
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "idem" {
+  policy = ciphertrust_policies.idem_pol.id
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.idem_pol]
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.idem", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.idem", "uri"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.idem", "account"),
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.idem", "created_at"),
+				),
+			},
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicyAttachment_OutOfBandDeletion verifies that Read() calls RemoveResource
+// on 404 and plans recreation after the attachment is deleted out-of-band.
+func Test_CM_AccCMPolicyAttachment_OutOfBandDeletion(t *testing.T) {
+	RequireCM(t)
+	policyName := fmt.Sprintf("tf-test-attach-pol-oob-%d", time.Now().Unix())
+	var attachmentID string
+
+	policyConfig := fmt.Sprintf(`
+resource "ciphertrust_policies" "oob_pol" {
+  name    = %q
+  actions = ["CreateKey"]
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "oob" {
+  policy = ciphertrust_policies.oob_pol.id
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.oob_pol]
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + policyConfig,
+				Check: checkStep(t, "step1",
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.oob", "id"),
+					func(s *terraform.State) error {
+						rs := s.RootModule().Resources["ciphertrust_policy_attachments.oob"]
+						if rs == nil {
+							return fmt.Errorf("ciphertrust_policy_attachments.oob not found in state")
+						}
+						attachmentID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_CM_POLICY_ATTACHMENTS+"/"+attachmentID)
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
