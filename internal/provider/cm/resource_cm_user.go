@@ -1,14 +1,16 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -120,8 +122,8 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	payload.UserName = common.TrimString(plan.UserName.String())
-	payload.Password = common.TrimString(plan.Password.String())
+	payload.UserName = common.TrimString(plan.UserName.ValueString())
+	payload.Password = common.TrimString(plan.Password.ValueString())
 
 	if plan.PreventUILogin.ValueBool() != types.BoolNull().ValueBool() {
 		loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
@@ -201,7 +203,11 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 			} else {
 				plan.Nickname = types.StringNull()
 			}
-			plan.Email = types.StringValue(user.Email)
+			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
+				plan.Email = types.StringValue(gj.String())
+			} else {
+				plan.Email = types.StringNull()
+			}
 		}
 	}
 
@@ -253,7 +259,11 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	// if the API auto-populates them with values matching other fields
 	// This prevents drift when user doesn't explicitly set these fields
 
-	state.Email = types.StringValue(user.Email)
+	if gj := gjson.Get(userResponse, "email"); gj.Exists() {
+		state.Email = types.StringValue(gj.String())
+	} else {
+		state.Email = types.StringNull()
+	}
 	state.UserName = types.StringValue(user.UserName)
 	state.UserID = types.StringValue(user.UserID)
 	state.ID = types.StringValue(user.UserID)
@@ -272,14 +282,28 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	} else {
 		state.Nickname = types.StringNull()
 	}
-	if user.Metadata != nil {
-		state.Metadata, diags = types.MapValueFrom(ctx, types.StringType, user.Metadata)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
+	if !state.Metadata.IsNull() {
+		metaResult := gjson.Get(userResponse, "user_metadata")
+		if !metaResult.Exists() {
+			state.Metadata = types.MapNull(types.StringType)
+		} else if len(metaResult.Map()) == 0 {
+			state.Metadata = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		} else {
+			metaMap := make(map[string]string, len(metaResult.Map()))
+			for k, v := range metaResult.Map() {
+				if v.Type == gjson.String {
+					metaMap[k] = v.String()
+				} else {
+					metaMap[k] = v.Raw
+				}
+			}
+			var metaDiags diag.Diagnostics
+			state.Metadata, metaDiags = types.MapValueFrom(ctx, types.StringType, metaMap)
+			resp.Diagnostics.Append(metaDiags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
-	} else {
-		state.Metadata = types.MapNull(types.StringType)
 	}
 
 	diags = resp.State.Set(ctx, &state)
@@ -307,6 +331,12 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	plan.ID = state.ID
 	plan.UserID = state.UserID
 
+	// Write-only preservation: if the user removed password from config, preserve
+	// the prior value rather than sending "" to CM.
+	if plan.Password.IsNull() || plan.Password.IsUnknown() {
+		plan.Password = state.Password
+	}
+
 	var loginFlags UserLoginFlagsJSON
 	var payload CMUserJSON
 	loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
@@ -324,7 +354,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 	// Only include password in the update if it has changed
 	if plan.Password.ValueString() != state.Password.ValueString() {
-		payload.Password = common.TrimString(plan.Password.String())
+		payload.Password = common.TrimString(plan.Password.ValueString())
 	}
 
 	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
@@ -383,7 +413,34 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			} else {
 				plan.Nickname = types.StringNull()
 			}
-			plan.Email = types.StringValue(user.Email)
+			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
+				plan.Email = types.StringValue(gj.String())
+			} else {
+				plan.Email = types.StringNull()
+			}
+			if !plan.Metadata.IsNull() {
+				metaResult := gjson.Get(userResponse, "user_metadata")
+				if !metaResult.Exists() {
+					plan.Metadata = types.MapNull(types.StringType)
+				} else if len(metaResult.Map()) == 0 {
+					plan.Metadata = types.MapValueMust(types.StringType, map[string]attr.Value{})
+				} else {
+					metaMap := make(map[string]string, len(metaResult.Map()))
+					for k, v := range metaResult.Map() {
+						if v.Type == gjson.String {
+							metaMap[k] = v.String()
+						} else {
+							metaMap[k] = v.Raw
+						}
+					}
+					var metaDiags diag.Diagnostics
+					plan.Metadata, metaDiags = types.MapValueFrom(ctx, types.StringType, metaMap)
+					resp.Diagnostics.Append(metaDiags...)
+					if resp.Diagnostics.HasError() {
+						return
+					}
+				}
+			}
 		}
 	}
 

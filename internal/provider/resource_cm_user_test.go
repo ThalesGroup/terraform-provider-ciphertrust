@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ resource "ciphertrust_user" "testUser" {
   name     = "%s"
   email    = "%s@local"
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
 }
 `, username, username, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -39,7 +40,7 @@ resource "ciphertrust_user" "testUser" {
   name     = "john"
   email    = "john@local"
   username = "%s"
-  password = "UPdate02!@"
+  password = "CHAnge012!@#"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -143,7 +144,7 @@ func Test_CM_ResourceCMUserUpdateWithoutName(t *testing.T) {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUserNoName" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -155,7 +156,7 @@ resource "ciphertrust_user" "testUserNoName" {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "testUserNoName" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
   email    = "noname@local"
 }
 `, username),
@@ -214,6 +215,294 @@ resource "ciphertrust_user" "test" {
 }`, username, isDomainUser)
 }
 
+// requireCMTestUserPassword reads TF_ACC_CM_TEST_USER_PASSWORD and skips the test
+// if the variable is not set.
+func requireCMTestUserPassword(t *testing.T) string {
+	t.Helper()
+	pwd := os.Getenv("TF_ACC_CM_TEST_USER_PASSWORD")
+	if pwd == "" {
+		t.Skip("TF_ACC_CM_TEST_USER_PASSWORD not set")
+	}
+	return pwd
+}
+
+// cmUserConfigFull returns HCL for a ciphertrust_user resource with username, email,
+// and password supplied via TF_VAR_test_user_password (never interpolated into the
+// config string to avoid plaintext logging by the testing framework).
+func cmUserConfigFull(username, email string) string {
+	return providerConfig + fmt.Sprintf(`
+variable "test_user_password" { sensitive = true }
+
+resource "ciphertrust_user" "test" {
+  username = %q
+  email    = %q
+  password = var.test_user_password
+}`, username, email)
+}
+
+// cmUserConfigWithMetadata returns HCL for a ciphertrust_user resource that includes
+// user_metadata so the metadata Bug 2/4 fix can be validated.
+func cmUserConfigWithMetadata(username, email string) string {
+	return providerConfig + fmt.Sprintf(`
+variable "test_user_password" { sensitive = true }
+
+resource "ciphertrust_user" "test" {
+  username      = %q
+  email         = %q
+  password      = var.test_user_password
+  user_metadata = { "env" = "test" }
+}`, username, email)
+}
+
+// cmUsersListConfig returns HCL for a ciphertrust_user resource plus a
+// ciphertrust_cm_users_list data source scoped to that exact user.
+func cmUsersListConfig(username, email string) string {
+	return providerConfig + fmt.Sprintf(`
+variable "test_user_password" { sensitive = true }
+
+resource "ciphertrust_user" "test" {
+  username = %q
+  email    = %q
+  password = var.test_user_password
+}
+
+data "ciphertrust_cm_users_list" "test" {
+  depends_on = [ciphertrust_user.test]
+  filters    = { username = %q }
+}`, username, email, username)
+}
+
+// cmUsersListConfigDataSourceOnly returns HCL for just the data source (no user
+// resource). Used in stale-data tests so the data source is not deferred during
+// planning due to a depends_on on a resource being created.
+func cmUsersListConfigDataSourceOnly(username string) string {
+	return providerConfig + fmt.Sprintf(`
+data "ciphertrust_cm_users_list" "test" {
+  filters = { username = %q }
+}`, username)
+}
+
+// Test_CM_User_Idempotency verifies no spurious drift (null→"" for email,
+// null→{} for user_metadata) when user_metadata is not configured.
+func Test_CM_User_Idempotency(t *testing.T) {
+	RequireCM(t)
+	pwd := requireCMTestUserPassword(t)
+	t.Setenv("TF_VAR_test_user_password", pwd)
+
+	username := fmt.Sprintf("tf-idem-%d", time.Now().Unix())
+	email := username + "@example.com"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply; id and user_id must be set.
+			{
+				Config: cmUserConfigFull(username, email),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "user_id"),
+				),
+			},
+			// Step 2: second plan must be empty (no null→"" email drift, no null→{} metadata drift).
+			{
+				Config:             cmUserConfigFull(username, email),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_User_Idempotency_WithMetadata verifies no spurious drift when
+// user_metadata is configured — confirms Bug 2 fix prevents empty-map drift.
+func Test_CM_User_Idempotency_WithMetadata(t *testing.T) {
+	RequireCM(t)
+	pwd := requireCMTestUserPassword(t)
+	t.Setenv("TF_VAR_test_user_password", pwd)
+
+	username := fmt.Sprintf("tf-meta-%d", time.Now().Unix())
+	email := username + "@example.com"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply with metadata; verify env key is present.
+			{
+				Config: cmUserConfigWithMetadata(username, email),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.env", "test"),
+				),
+			},
+			// Step 2: second plan must be empty (no empty-map drift).
+			{
+				Config:             cmUserConfigWithMetadata(username, email),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_User_DriftDetection creates a user, patches email/name/nickname
+// out-of-band, then asserts that Read() surfaces all three as drift.
+func Test_CM_User_DriftDetection(t *testing.T) {
+	RequireCM(t)
+	pwd := requireCMTestUserPassword(t)
+	t.Setenv("TF_VAR_test_user_password", pwd)
+
+	username := fmt.Sprintf("tf-drift-%d", time.Now().Unix())
+	email := username + "@example.com"
+
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply; capture user ID.
+			{
+				Config: cmUserConfigFull(username, email),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "user_id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: mutate email, name, and nickname out-of-band; RefreshState must
+			// detect the drift and produce a non-empty plan.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Fatal("createCMClient unavailable — CM must be reachable if RequireCM(t) passed")
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"email":    "drifted@example.com",
+						"name":     "Drifted Name",
+						"nickname": "driftednick",
+					})
+					if err != nil {
+						t.Fatalf("Step 2 PreConfig: marshal failed: %v", err)
+					}
+					if _, err := client.UpdateData(context.Background(), capturedID, common.URL_USER_MANAGEMENT, payload, "user_id"); err != nil {
+						t.Fatalf("Step 2 PreConfig: UpdateData failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMUsersListReadAccuracy validates that the ciphertrust_cm_users_list
+// data source returns the created user (Step 1) and that consecutive reads
+// produce no plan diff (Step 2).
+func Test_CM_CMUsersListReadAccuracy(t *testing.T) {
+	RequireCM(t)
+	pwd := requireCMTestUserPassword(t)
+	t.Setenv("TF_VAR_test_user_password", pwd)
+
+	username := fmt.Sprintf("tf-dsl-%d", time.Now().Unix())
+	email := username + "@example.com"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: read accuracy — data source must surface the created user.
+			{
+				Config: cmUsersListConfig(username, email),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.#", "1"),
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.0.username", username),
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.0.email", email),
+				),
+			},
+			// Step 2: idempotency — consecutive read must produce no plan diff.
+			{
+				Config:             cmUsersListConfig(username, email),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_CMUsersListStaleData creates a user, deletes it out-of-band, and
+// verifies that the data source reflects the deletion; then recreates the user
+// and asserts the data source returns one result again.
+func Test_CM_CMUsersListStaleData(t *testing.T) {
+	RequireCM(t)
+	pwd := requireCMTestUserPassword(t)
+	t.Setenv("TF_VAR_test_user_password", pwd)
+
+	username := fmt.Sprintf("tf-stale-%d", time.Now().Unix())
+	email := username + "@example.com"
+
+	var capturedUserID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply and verify data source returns one user; capture the user ID.
+			{
+				Config: cmUsersListConfig(username, email),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.#", "1"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						capturedUserID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: delete the user out-of-band; refresh state so ciphertrust_user.test
+			// leaves state (Read() hits 404 → RemoveResource). ExpectNonEmptyPlan: true
+			// because after removal the plan proposes re-creating the user.
+			// NOTE: RefreshState steps must NOT have a Config field.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Fatal("createCMClient unavailable — CM must be reachable if RequireCM(t) passed")
+					}
+					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_USER_MANAGEMENT, capturedUserID)
+					if _, err := client.DeleteByID(context.Background(), "DELETE", capturedUserID, deleteURL, nil); err != nil {
+						t.Fatalf("Step 2 PreConfig: DeleteByID failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 3: verify data source reflects deletion — returns 0 users.
+			// Uses the full config so the plan proposes re-creating ciphertrust_user.test
+			// (ExpectNonEmptyPlan: true). The data source is deferred due to depends_on
+			// on the resource being created, so its prior state value (users.# = "0",
+			// set during Step 2's refresh) is preserved in the planned state.
+			{
+				Config:             cmUsersListConfig(username, email),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				Check:              resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.#", "0"),
+			},
+			// Step 4: full apply recreates the user; data source returns 1 again.
+			{
+				Config: cmUsersListConfig(username, email),
+				Check:  resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.#", "1"),
+			},
+		},
+	})
+}
+
 // Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
 // CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
 // from state gracefully instead of returning a hard error.
@@ -250,7 +539,7 @@ func Test_CM_CMUserOutOfBandDeletion(t *testing.T) {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test_oob" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
 }
 `, username),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -270,7 +559,7 @@ resource "ciphertrust_user" "test_oob" {
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test_oob" {
   username = "%s"
-  password = "CHange01!@"
+  password = "CHAnge012!@#"
 }
 `, username),
 				PlanOnly:           true,
