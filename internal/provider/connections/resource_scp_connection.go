@@ -12,6 +12,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -107,8 +111,8 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Hostname or FQDN of SCP/SFTP remote machine.",
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "(Immutable) Unique connection name.",
+				Required:      true,
+				Description:   "(Immutable) Unique connection name.",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"path_to": schema.StringAttribute{
@@ -136,6 +140,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Description: labelsDescription,
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"meta": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -154,29 +161,95 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Description: "Port where SCP/SFTP service runs on host (usually 22).",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"products": schema.ListAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
 				Computed:    true,
 				Description: productsDescription,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"protocol": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
 				Description: "Use 'sftp' or 'scp'. 'sftp' is the default value",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			//common response parameters (read-only)
-			"uri":                   schema.StringAttribute{Computed: true, Description: "URI of the SCP connection resource."},
-			"account":               schema.StringAttribute{Computed: true, Description: "Account associated with the SCP connection."},
-			"created_at":            schema.StringAttribute{Computed: true, Description: "Timestamp when the connection was created."},
-			"updated_at":            schema.StringAttribute{Computed: true, Description: "Timestamp when the connection was last updated."},
-			"service":               schema.StringAttribute{Computed: true, Description: "Service type for the connection."},
-			"category":              schema.StringAttribute{Computed: true, Description: "Category of the connection."},
-			"resource_url":          schema.StringAttribute{Computed: true, Description: "Resource URL of the connection on CipherTrust Manager."},
-			"last_connection_ok":    schema.BoolAttribute{Computed: true, Description: "Whether the last connection attempt was successful."},
-			"last_connection_error": schema.StringAttribute{Computed: true, Description: "Error message from the last connection attempt, if any."},
-			"last_connection_at":    schema.StringAttribute{Computed: true, Description: "Timestamp of the last connection attempt."},
+			"uri": schema.StringAttribute{
+				Computed:    true,
+				Description: "URI of the SCP connection resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"account": schema.StringAttribute{
+				Computed:    true,
+				Description: "Account associated with the SCP connection.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp when the connection was created.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			// updated_at intentionally has no UseStateForUnknown(): CM sets a fresh
+			// timestamp on every successful update, so showing it as "known after
+			// apply" is accurate, not spurious drift.
+			"updated_at": schema.StringAttribute{Computed: true, Description: "Timestamp when the connection was last updated."},
+			"service": schema.StringAttribute{
+				Computed:    true,
+				Description: "Service type for the connection.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"category": schema.StringAttribute{
+				Computed:    true,
+				Description: "Category of the connection.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"resource_url": schema.StringAttribute{
+				Computed:    true,
+				Description: "Resource URL of the connection on CipherTrust Manager.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"last_connection_ok": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the last connection attempt was successful.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"last_connection_error": schema.StringAttribute{
+				Computed:    true,
+				Description: "Error message from the last connection attempt, if any.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"last_connection_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp of the last connection attempt.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 		},
 	}
 }
