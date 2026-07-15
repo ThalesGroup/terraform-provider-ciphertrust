@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -12,7 +14,49 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
+
+// keysListPageSize matches CipherTrust Manager's own default page size for
+// GET /vault/keys2/, so a single page still round-trips exactly like the
+// previous unpaginated GetAll() call, while additional pages are fetched
+// instead of being silently dropped.
+const keysListPageSize = 10
+
+// fetchAllKeys pages through GET /vault/keys2/ via limit/skip until a short
+// page (fewer than keysListPageSize items) is returned, accumulating every
+// key across all pages. This replaces a single GetAll() call, which only
+// ever returned the server's first page and silently truncated the rest.
+func fetchAllKeys(ctx context.Context, client *common.Client, uuid string) ([]map[string]any, error) {
+	var allKeys []map[string]any
+	skip := 0
+	for {
+		filters := url.Values{}
+		filters.Set("limit", strconv.Itoa(keysListPageSize))
+		filters.Set("skip", strconv.Itoa(skip))
+
+		body, err := client.ListWithFilters(ctx, uuid, common.URL_KEY_MANAGEMENT, filters)
+		if err != nil {
+			return nil, err
+		}
+
+		raw := gjson.Get(body, "resources").Raw
+		if raw == "" {
+			break
+		}
+		var page []map[string]any
+		if err := json.Unmarshal([]byte(raw), &page); err != nil {
+			return nil, err
+		}
+		allKeys = append(allKeys, page...)
+
+		if len(page) < keysListPageSize {
+			break
+		}
+		skip += keysListPageSize
+	}
+	return allKeys, nil
+}
 
 var (
 	_ datasource.DataSource              = &dataSourceKeys{}
@@ -126,20 +170,7 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_users.go -> Read]["+id+"]")
 	var state keysDataSourceModel
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_KEY_MANAGEMENT)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_keys.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read Keys from CM",
-			err.Error(),
-		)
-		return
-	}
-
-	var data []map[string]any
-
-	err = json.Unmarshal([]byte(jsonStr), &data)
-
+	data, err := fetchAllKeys(ctx, d.client, id)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_keys.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
