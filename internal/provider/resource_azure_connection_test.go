@@ -20,7 +20,7 @@ func Test_CM_ResourceAzureConnection(t *testing.T) {
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_azure_connection" "azure_connection" {
-  name = %q`, name) + `
+  name = %q
   client_id="3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
   tenant_id= "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
   client_secret="3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
@@ -33,8 +33,8 @@ resource "ciphertrust_azure_connection" "azure_connection" {
     "environment" = "devenv"
   }
   meta = {
-    "custom_meta_key1" = "custom_value1"  # Example custom metadata key-value pair
-    "customer_meta_key2" = "custom_value2"  # Another custom metadata entry
+    "custom_meta_key1" = "custom_value1"
+    "customer_meta_key2" = "custom_value2"
   }
 }
 `, name),
