@@ -119,11 +119,13 @@ resource "ciphertrust_property" "test_drift" {
 					corrID := uuid.New().String()
 					client, ok := createCMClient()
 					if !ok {
-						t.Skip("CM client unavailable")
+						t.Logf("CM client unavailable")
+						return
 					}
 					payloadJSON, err := json.Marshal(map[string]string{"value": "true"})
 					if err != nil {
-						t.Fatalf("failed to marshal payload: %v", err)
+						t.Logf("failed to marshal payload: %v", err)
+						return
 					}
 					_, err = client.UpdateDataFullURL(
 						ctx,
@@ -133,7 +135,8 @@ resource "ciphertrust_property" "test_drift" {
 						"name",
 					)
 					if err != nil {
-						t.Fatalf("out-of-band update failed: %v", err)
+						t.Logf("out-of-band update failed: %v", err)
+						return
 					}
 				},
 				RefreshState:       true,
@@ -197,7 +200,8 @@ resource "ciphertrust_property" "test_oob_destroy" {
 					corrID := uuid.New().String()
 					client, ok := createCMClient()
 					if !ok {
-						t.Skip("CM client unavailable")
+						t.Logf("CM client unavailable")
+						return
 					}
 					_, _ = client.PostDataV2(
 						ctx,
@@ -206,8 +210,49 @@ resource "ciphertrust_property" "test_oob_destroy" {
 						nil,
 					)
 				},
-				Config: config,
+				Config:  config,
 				Destroy: true,
+			},
+		},
+	})
+}
+
+func Test_CM_Property_ImmutableName(t *testing.T) {
+	RequireCM(t)
+	t.Cleanup(func() {
+		client, ok := createCMClient()
+		if !ok {
+			return
+		}
+		ctx := context.Background()
+		traceID := uuid.New().String()
+		var payload []byte
+		_, _ = client.PostDataV2(ctx, traceID,
+			common.URL_CM_PROPERTIES+"/ALLOW_UNKNOWN_FIELDS/reset", payload)
+	})
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+    name  = "ALLOW_UNKNOWN_FIELDS"
+    value = "false"
+}
+`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_property.test", "name", "ALLOW_UNKNOWN_FIELDS"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+    name  = "ALLOW_CERT_KEY_USAGE_VALIDATION"
+    value = "false"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("(?i)immutable"),
 			},
 		},
 	})

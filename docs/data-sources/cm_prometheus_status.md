@@ -19,3 +19,9 @@ description: |-
 
 - `enabled` (Boolean)
 - `token` (String)
+
+## Behavioral Notes
+
+- Consecutive reads produce no plan diff (`ExpectNonEmptyPlan: false`).
+- `token` reflects the live CM value as a plain string; CM retains the token value even when Prometheus is disabled, so `token` may be non-empty regardless of the `enabled` state.
+- Unlike the `ciphertrust_cm_prometheus` resource, this data source does not preserve the token across disable/re-enable cycles — it always returns whatever CM currently reports.
