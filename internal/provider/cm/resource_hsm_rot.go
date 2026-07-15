@@ -267,44 +267,55 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		m, d := types.MapValueFrom(ctx, types.StringType, connInfoMap)
 		resp.Diagnostics.Append(d...)
 		state.ConnInfo = m
-	} else {
-		state.ConnInfo = types.MapNull(types.StringType)
 	}
+	// else: CM omitted connInfo — preserve prior state.ConnInfo unchanged.
+	// Required field: assigning MapNull causes perpetual drift against the user's configured value.
+	// state.ConnInfo is already loaded from req.State.Get.
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// Optional field: initial_config.
 	// HSMSetupJSON.InitialConfig is map[string]interface{} — gjson.ForEach is correct here.
-	if r := gjson.Get(response, "initialConfig"); r.Exists() {
-		initialConfigMap := make(map[string]string)
-		r.ForEach(func(key, value gjson.Result) bool {
-			initialConfigMap[key.String()] = value.String()
-			return true
-		})
-		m, d := types.MapValueFrom(ctx, types.StringType, initialConfigMap)
-		resp.Diagnostics.Append(d...)
-		state.InitialConfig = m
-	} else {
-		state.InitialConfig = types.MapNull(types.StringType)
+	if !state.InitialConfig.IsNull() {
+		if r := gjson.Get(response, "initialConfig"); r.Exists() {
+			initialConfigMap := make(map[string]string)
+			r.ForEach(func(key, value gjson.Result) bool {
+				initialConfigMap[key.String()] = value.String()
+				return true
+			})
+			m, d := types.MapValueFrom(ctx, types.StringType, initialConfigMap)
+			resp.Diagnostics.Append(d...)
+			state.InitialConfig = m
+		}
+		// else: CM omitted initialConfig — preserve prior state.InitialConfig unchanged.
+		// No swagger GET evidence confirms CM always returns this field when set.
+		// For HSM types like lunapci, CM may legitimately omit it.
 	}
+	// outer else: user never configured initial_config — preserve null prior state.
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	// Optional field: reset
-	if r := gjson.Get(response, "reset"); r.Exists() {
-		state.Reset = types.BoolValue(r.Bool())
-	} else {
-		state.Reset = types.BoolNull()
+	if !state.Reset.IsNull() {
+		if r := gjson.Get(response, "reset"); r.Exists() {
+			state.Reset = types.BoolValue(r.Bool())
+		} else {
+			state.Reset = types.BoolNull()
+		}
 	}
+	// else: user never configured reset — preserve null prior state.
 
 	// Optional field: delay
-	if r := gjson.Get(response, "delay"); r.Exists() {
-		state.Delay = types.Int64Value(r.Int())
-	} else {
-		state.Delay = types.Int64Null()
+	if !state.Delay.IsNull() {
+		if r := gjson.Get(response, "delay"); r.Exists() {
+			state.Delay = types.Int64Value(r.Int())
+		} else {
+			state.Delay = types.Int64Null()
+		}
 	}
+	// else: user never configured delay — preserve null prior state.
 
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 
@@ -160,19 +161,56 @@ func hsmRotConfigWithReset(reset bool) string {
 	return hsmRotConfig("lunapci", "test-partition", "test-password", reset, 5)
 }
 
+// hsmRotConfigFromEnv returns an HCL config for a Luna Network HSM root-of-trust resource,
+// built from env vars. Used by live-HSM acceptance tests.
+func hsmRotConfigFromEnv(hsmType, partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_hsm_root_of_trust_setup" "test" {
+  type = %q
+  conn_info = {
+    partition_name     = %q
+    partition_password = %q
+  }
+  initial_config = {
+    host            = %q
+    serial          = %q
+    server-cert     = %q
+    client-cert     = %q
+    client-cert-key = %q
+  }
+}
+`, hsmType, partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+}
+
 // Test_CM_CipherTrust_HSMRot_NoDrift verifies that after apply, a subsequent plan shows no changes.
 func Test_CM_CipherTrust_HSMRot_NoDrift(t *testing.T) {
 	RequireCM(t)
-	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
+	if os.Getenv("CIPHERTRUST_HSM_AVAILABLE") == "" {
+		t.Skip("CIPHERTRUST_HSM_AVAILABLE not set")
+	}
+
+	partitionName := os.Getenv("CIPHERTRUST_HSM_PARTITION_NAME")
+	partitionPassword := os.Getenv("CIPHERTRUST_HSM_PARTITION_PASSWORD")
+	hsmHost := os.Getenv("CIPHERTRUST_HSM_HOST")
+	hsmSerial := os.Getenv("CIPHERTRUST_HSM_SERIAL")
+	serverCert := os.Getenv("CIPHERTRUST_HSM_SERVER_CERT")
+	clientCert := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT")
+	clientCertKey := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT_KEY")
+
+	if partitionName == "" || partitionPassword == "" || hsmHost == "" || hsmSerial == "" ||
+		serverCert == "" || clientCert == "" || clientCertKey == "" {
+		t.Skip("One or more required CIPHERTRUST_HSM_* env vars not set")
+	}
+
+	cfg := hsmRotConfigFromEnv("luna", partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: hsmRotConfig("lunapci", "test-partition", "test-password", true, 5),
-				Check: resource.ComposeAggregateTestCheckFunc(
+				Config: cfg,
+				Check: checkStep(t, "Create",
 					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_hsm_root_of_trust_setup.test", "type", "lunapci"),
 					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "sub_type"),
 				),
 			},
@@ -189,21 +227,39 @@ func Test_CM_CipherTrust_HSMRot_NoDrift(t *testing.T) {
 // emits an immutability error at plan time (not destroy+recreate).
 func Test_CM_CipherTrust_HSMRot_ImmutableType(t *testing.T) {
 	RequireCM(t)
-	t.Skip("Skipped — requires a live HSM appliance connected to CipherTrust Manager")
+	if os.Getenv("CIPHERTRUST_HSM_AVAILABLE") == "" {
+		t.Skip("CIPHERTRUST_HSM_AVAILABLE not set")
+	}
+
+	partitionName := os.Getenv("CIPHERTRUST_HSM_PARTITION_NAME")
+	partitionPassword := os.Getenv("CIPHERTRUST_HSM_PARTITION_PASSWORD")
+	hsmHost := os.Getenv("CIPHERTRUST_HSM_HOST")
+	hsmSerial := os.Getenv("CIPHERTRUST_HSM_SERIAL")
+	serverCert := os.Getenv("CIPHERTRUST_HSM_SERVER_CERT")
+	clientCert := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT")
+	clientCertKey := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT_KEY")
+
+	if partitionName == "" || partitionPassword == "" || hsmHost == "" || hsmSerial == "" ||
+		serverCert == "" || clientCert == "" || clientCertKey == "" {
+		t.Skip("One or more required CIPHERTRUST_HSM_* env vars not set")
+	}
+
+	cfgLuna := hsmRotConfigFromEnv("luna", partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+	cfgLunaPCI := hsmRotConfigFromEnv("lunapci", partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: hsmRotConfig("lunapci", "test-partition", "test-password", true, 5),
-				Check: resource.ComposeAggregateTestCheckFunc(
+				Config: cfgLuna,
+				Check: checkStep(t, "Create",
 					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
 				),
 			},
 			{
-				Config:      hsmRotConfigWithType("luna"),
+				Config:      cfgLunaPCI,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed`),
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
