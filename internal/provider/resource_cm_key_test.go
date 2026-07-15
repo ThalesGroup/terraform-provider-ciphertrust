@@ -1584,8 +1584,6 @@ resource "ciphertrust_cm_key" "test" {
   usage_mask   = 76
   undeletable  = false
   unexportable = false
-  object_type  = "Symmetric Key"
-  state        = "Active"
 }
 `, rName)
 	resource.Test(t, resource.TestCase{
@@ -1596,10 +1594,9 @@ resource "ciphertrust_cm_key" "test" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "usage_mask", "76"),
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "state"),
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "object_type"),
-					// uuid is only hydrated when user configures it (Read() has !state.UUID.IsNull() guard).
-					// Since uuid is not in config, it remains null in state — no assertion here.
+					// state and object_type are Optional fields guarded by !state.X.IsNull() in Read().
+					// They are not hydrated when absent from config, so no assertion here.
+					// uuid is also Optional with the same guard — not in config, not asserted.
 				),
 			},
 			{

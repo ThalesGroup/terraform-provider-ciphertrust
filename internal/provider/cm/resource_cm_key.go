@@ -1333,22 +1333,10 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	} else {
 		plan.Name = types.StringNull()
 	}
-	// algorithm: Optional field; hydrate only when the user configured it (state non-null).
-	// algorithm is ImmutableString — it cannot change after creation, so there is no real
-	// drift to detect. Preserve the prior state value to avoid casing conflicts: CM returns
-	// "AES" but configs may use "aes" or "AES". If the values match case-insensitively,
-	// keep the state casing to prevent ImmutableString() firing on a false case difference.
-	if !state.Algorithm.IsNull() {
-		if r := gjson.Get(response, "algorithm"); r.Exists() {
-			if strings.EqualFold(r.String(), state.Algorithm.ValueString()) {
-				plan.Algorithm = state.Algorithm // preserve state casing
-			} else {
-				plan.Algorithm = types.StringValue(strings.ToLower(r.String()))
-			}
-		} else {
-			plan.Algorithm = types.StringNull()
-		}
-	}
+	// algorithm is ImmutableString — it cannot change after creation, so no drift is
+	// possible. Do not re-read from CM: plan := state (above) already preserves whatever
+	// casing the user wrote in their config ("aes" or "AES"), avoiding spurious
+	// ImmutableString errors that would fire if CM returns a different case than config.
 	// usage_mask is Optional only — hydrate only when the user configured it (state
 	// non-null) to avoid perpetual drift for keys created without a usage_mask.
 	if !state.UsageMask.IsNull() {
