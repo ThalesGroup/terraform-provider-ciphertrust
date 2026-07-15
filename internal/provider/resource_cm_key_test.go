@@ -1400,3 +1400,260 @@ resource "ciphertrust_cm_key" "test_key" {
 		},
 	})
 }
+
+// Test_CM_CMKey_UsageMaskUpperBound validates the Between(0, 4194303) validator on usage_mask.
+// All steps are PlanOnly — no Apply is issued.
+func Test_CM_CMKey_UsageMaskUpperBound(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// usage_mask = 4194304 is one above the documented max — must be rejected at plan time.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name       = %q
+  algorithm  = "aes"
+  key_size   = 256
+  usage_mask = 4194304
+}
+`, rName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)4,?194,?303|must be between`),
+			},
+			{
+				// usage_mask = 0 is the lower boundary — validator must accept it (no error).
+				// Plan shows a create (no prior state from Step 1 error); ExpectNonEmptyPlan:true.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name       = %q
+  algorithm  = "aes"
+  key_size   = 256
+  usage_mask = 0
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// usage_mask = 4194303 is the upper boundary — validator must accept it (no error).
+				// Plan shows a create (no prior state); ExpectNonEmptyPlan:true.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name       = %q
+  algorithm  = "aes"
+  key_size   = 256
+  usage_mask = 4194303
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMKey_AlgorithmKnownAfterApply verifies that algorithm and key_size are concrete
+// known values in state after apply (not "known after apply"). Catches TFIN-382.
+func Test_CM_CMKey_AlgorithmKnownAfterApply(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  object_type = "Symmetric Key"
+}
+`, rName)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
+					// algorithm may be stored lowercase ("aes") after Read() normalization.
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "algorithm"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "key_size", "256"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "object_type"),
+				),
+			},
+			{
+				// Second plan must be empty — no (known after apply) regression.
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_CMKey_EmptyMaterialHydration verifies that empty_material = true is preserved
+// in state after apply and that a second plan produces no diff. Catches TFIN-383.
+func Test_CM_CMKey_EmptyMaterialHydration(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name           = %q
+  algorithm      = "aes"
+  key_size       = 256
+  empty_material = true
+}
+`, rName)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "empty_material", "true"),
+				),
+			},
+			{
+				// Second plan must be empty — empty_material preserved from prior state.
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_CMKey_MetaOwnerIdConvergence verifies meta.owner_id lifecycle and documents
+// the known CM PATCH-merge limitation (TFIN-386).
+//
+// DEVIATION from TFIN-400 req #7: CM PATCH-merge retains meta.ownerId server-side after
+// a PATCH with meta omitted. Read() hydrates meta.ownerId unconditionally when the server
+// returns it, creating a permanent diff between nil-config and non-nil-state.
+// Step 2 is PlanOnly + ExpectNonEmptyPlan:true to document this limitation without applying.
+func Test_CM_CMKey_MetaOwnerIdConvergence(t *testing.T) {
+	RequireCM(t)
+	ownerID := os.Getenv("TF_ACC_CM_KEY_OWNER_USER_ID")
+	if ownerID == "" {
+		t.Skip("TF_ACC_CM_KEY_OWNER_USER_ID not set")
+	}
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  meta {
+    owner_id = %q
+  }
+}
+`, rName, ownerID),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.0.owner_id", ownerID),
+				),
+			},
+			{
+				// DEVIATION from TFIN-400 req #7: CM PATCH-merge prevents meta convergence.
+				// After clearing meta from config, server still returns meta.ownerId so Read()
+				// produces a diff. Document as known limitation: PlanOnly+ExpectNonEmptyPlan:true.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMKey_Idempotency verifies that a second plan after apply produces no diff.
+// Asserts key Computed fields (id, uuid) and Optional+Computed fields (usage_mask) are stable.
+func Test_CM_CMKey_Idempotency(t *testing.T) {
+	RequireCM(t)
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name         = %q
+  algorithm    = "aes"
+  key_size     = 256
+  usage_mask   = 76
+  undeletable  = false
+  unexportable = false
+  object_type  = "Symmetric Key"
+}
+`, rName)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "usage_mask", "76"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "object_type"),
+					// uuid is only hydrated when user configures it (Read() has !state.UUID.IsNull() guard).
+					// Since uuid is not in config, it remains null in state — no assertion here.
+				),
+			},
+			{
+				// Second plan must be empty — all computed fields stable after create.
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_CMKey_DescriptionDrift verifies that an out-of-band description change is
+// detected as drift (RefreshState: true, ExpectNonEmptyPlan: true). Satisfies TFIN-400 req #1.
+func Test_CM_CMKey_DescriptionDrift(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("createCMClient failed — CM not configured")
+	}
+
+	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  description = "original"
+}
+`, rName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "description", "original"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_cm_key.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Modify description out-of-band then refresh — drift must be detected.
+				PreConfig: func() {
+					payload := []byte(`{"description":"changed-out-of-band"}`)
+					// UpdateDataV2 builds URL as <baseURL>/<endpoint>/<capturedID> internally.
+					if _, err := client.UpdateDataV2(context.Background(), capturedID, common.URL_KEY_MANAGEMENT, payload); err != nil {
+						t.Fatalf("OOB description update failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

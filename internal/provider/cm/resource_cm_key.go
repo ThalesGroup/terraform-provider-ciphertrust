@@ -16,6 +16,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -486,7 +487,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"usage_mask": schema.Int64Attribute{
 				Optional:    true,
-				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks).",
+				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks). Must be between 0 and 4194303 (inclusive).",
+				Validators: []validator.Int64{
+					int64validator.Between(0, 4194303),
+				},
 			},
 			"uuid": schema.StringAttribute{
 				Optional:    true,
@@ -1329,14 +1333,14 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	} else {
 		plan.Name = types.StringNull()
 	}
-	// algorithm: CM normalizes to uppercase ("AES") but existing configs use both
-	// "aes" and "AES". When state is null (import passthrough), hydrate from server
-	// and lowercase to match the typical config casing. Otherwise preserve state to
-	// avoid perpetual casing drift.
-	if state.Algorithm.IsNull() && state.Name.IsNull() {
-		// Import path: state has only ID populated; hydrate algorithm from server.
+	// algorithm: hydrate when user explicitly configured it (state non-null).
+	// CM returns uppercase (e.g. "AES"); lowercase to match typical config casing
+	// and prevent ImmutableString() from firing on casing differences.
+	if !state.Algorithm.IsNull() {
 		if r := gjson.Get(response, "algorithm"); r.Exists() {
 			plan.Algorithm = types.StringValue(strings.ToLower(r.String()))
+		} else {
+			plan.Algorithm = types.StringNull()
 		}
 	}
 	// usage_mask is Optional only — hydrate only when the user configured it (state
@@ -1348,11 +1352,11 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			plan.UsageMask = types.Int64Null()
 		}
 	}
-	// key_size: hydrate when user configured it (non-null) OR on import (name null).
-	if !state.Size.IsNull() || state.Name.IsNull() {
+	// key_size: hydrate when user explicitly configured it (state non-null).
+	if !state.Size.IsNull() {
 		if r := gjson.Get(response, "size"); r.Exists() {
 			plan.Size = types.Int64Value(r.Int())
-		} else if !state.Size.IsNull() {
+		} else {
 			plan.Size = types.Int64Null()
 		}
 	}
@@ -1480,7 +1484,7 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 				m[k] = v.String()
 			}
 			if len(m) == 0 {
-				plan.Labels = types.MapNull(types.StringType)
+				plan.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
 			} else {
 				plan.Labels, diags = types.MapValueFrom(ctx, types.StringType, m)
 				resp.Diagnostics.Append(diags...)
