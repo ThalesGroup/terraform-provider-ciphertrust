@@ -36,3 +36,9 @@ Read-Only:
 - `state` (String)
 - `subject` (String)
 - `uri` (String)
+
+## Behavioral Notes
+
+- Consecutive reads produce no plan diff (`ExpectNonEmptyPlan: false`).
+- An empty CM (no local CAs) produces an empty `cas` list without error.
+- `account`, `created_at`, and `updated_at` from the CM API are intentionally not exposed by this data source.
