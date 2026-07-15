@@ -664,12 +664,13 @@ func Test_CM_AccCMKey_import(t *testing.T) {
 				ResourceName:  "ciphertrust_cm_key.imported",
 				ImportState:   true,
 				ImportStateId: importedID,
-				// Minimal config that matches what Read() will populate.
+				// Minimal config: algorithm and key_size are Optional fields with
+				// !state.IsNull() guards in Read(), so they are not hydrated on import
+				// (state starts null after ImportState). Only name is unconditionally
+				// hydrated and must match the config to avoid a post-import plan diff.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "imported" {
-  name      = %q
-  algorithm = "aes"
-  key_size  = 256
+  name = %q
 }
 `, keyName),
 				ImportStatePersist: true,
@@ -678,9 +679,7 @@ resource "ciphertrust_cm_key" "imported" {
 				// After import, plan must produce no diff.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "imported" {
-  name      = %q
-  algorithm = "aes"
-  key_size  = 256
+  name = %q
 }
 `, keyName),
 				PlanOnly:           true,
@@ -1586,6 +1585,7 @@ resource "ciphertrust_cm_key" "test" {
   undeletable  = false
   unexportable = false
   object_type  = "Symmetric Key"
+  state        = "Active"
 }
 `, rName)
 	resource.Test(t, resource.TestCase{
@@ -1596,6 +1596,7 @@ resource "ciphertrust_cm_key" "test" {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "usage_mask", "76"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "state"),
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test", "object_type"),
 					// uuid is only hydrated when user configures it (Read() has !state.UUID.IsNull() guard).
 					// Since uuid is not in config, it remains null in state — no assertion here.

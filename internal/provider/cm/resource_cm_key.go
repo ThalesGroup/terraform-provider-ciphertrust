@@ -1333,9 +1333,10 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	} else {
 		plan.Name = types.StringNull()
 	}
-	// algorithm: hydrate when user explicitly configured it (state non-null).
-	// CM returns uppercase (e.g. "AES"); lowercase to match typical config casing
-	// and prevent ImmutableString() from firing on casing differences.
+	// algorithm: Optional field; hydrate only when the user configured it (state non-null)
+	// to prevent perpetual drift for keys created without an algorithm in config.
+	// ToLower normalises "AES" → "aes" to match typical config casing so ImmutableString()
+	// does not fire on casing differences.
 	if !state.Algorithm.IsNull() {
 		if r := gjson.Get(response, "algorithm"); r.Exists() {
 			plan.Algorithm = types.StringValue(strings.ToLower(r.String()))
@@ -1352,7 +1353,8 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			plan.UsageMask = types.Int64Null()
 		}
 	}
-	// key_size: hydrate when user explicitly configured it (state non-null).
+	// key_size: Optional field; hydrate only when the user configured it (state non-null)
+	// to prevent perpetual drift for keys created without a key_size in config.
 	if !state.Size.IsNull() {
 		if r := gjson.Get(response, "size"); r.Exists() {
 			plan.Size = types.Int64Value(r.Int())
