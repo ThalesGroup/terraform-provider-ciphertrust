@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -140,7 +141,11 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"is_certificate_used": schema.BoolAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "User has the option to choose the Certificate Authentication method instead of Client Secret for Azure Cloud connection. In order to use the Certificate, set it to true. Once the connection is created, in the response user will get a certificate. By default, the certificate is valid for 2 Years. User can update the certificate in the existing connection by setting it to true.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"key_vault_dns_suffix": schema.StringAttribute{
 				Optional:    true,
@@ -186,17 +191,47 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"certificate_thumbprint": schema.StringAttribute{
 				Computed: true,
 			},
-			//common response parameters (optional)
-			"uri":                   schema.StringAttribute{Computed: true, Optional: true},
-			"account":               schema.StringAttribute{Computed: true, Optional: true},
-			"created_at":            schema.StringAttribute{Computed: true, Optional: true},
-			"updated_at":            schema.StringAttribute{Computed: true, Optional: true},
-			"service":               schema.StringAttribute{Computed: true, Optional: true},
-			"category":              schema.StringAttribute{Computed: true, Optional: true},
-			"resource_url":          schema.StringAttribute{Computed: true, Optional: true},
-			"last_connection_ok":    schema.BoolAttribute{Computed: true, Optional: true},
-			"last_connection_error": schema.StringAttribute{Computed: true, Optional: true},
-			"last_connection_at":    schema.StringAttribute{Computed: true, Optional: true},
+			//common response parameters (read-only)
+			"uri": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"account": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			// updated_at intentionally has no UseStateForUnknown(): CM sets a fresh
+			// timestamp on every successful update, so showing it as "known after
+			// apply" is accurate, not spurious drift.
+			"updated_at": schema.StringAttribute{Computed: true},
+			"service": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"category": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"resource_url": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_ok": schema.BoolAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_error": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 		},
 	}
 }
@@ -625,6 +660,7 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
 	data.ExternalCertificateUsed = types.BoolValue(gjson.Get(response, "external_certificate_used").Bool())
+	data.IsCertificateUsed = types.BoolValue(gjson.Get(response, "is_certificate_used").Bool())
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
 	data.TenantID = types.StringValue(gjson.Get(response, "tenant_id").String())
 	data.ClientID = types.StringValue(gjson.Get(response, "client_id").String())
