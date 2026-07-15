@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -57,7 +58,10 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
-				Description: "The hostname or IP address of the syslog connection.",
+				Description: "(Immutable) The hostname or IP address of the syslog connection.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"transport": schema.StringAttribute{
 				Required:    true,
@@ -83,8 +87,9 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Computed: true,
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
+					modifiers.ImmutableInt64(),
 				},
-				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
 			},
 			"account": schema.StringAttribute{
 				Computed: true,
@@ -249,18 +254,15 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	// Check if there are actual changes - if not, skip the update
-	if plan.Host.Equal(state.Host) &&
-		plan.Transport.Equal(state.Transport) &&
+	if plan.Transport.Equal(state.Transport) &&
 		plan.CACert.Equal(state.CACert) &&
-		plan.MessageFormat.Equal(state.MessageFormat) &&
-		plan.Port.Equal(state.Port) {
+		plan.MessageFormat.Equal(state.MessageFormat) {
 		// No changes, just set the state and return
 		diags = resp.State.Set(ctx, plan)
 		resp.Diagnostics.Append(diags...)
 		return
 	}
 
-	payload.Host = plan.Host.ValueString()
 	payload.Transport = plan.Transport.ValueString()
 
 	if plan.CACert.ValueString() != "" && plan.CACert.ValueString() != types.StringNull().ValueString() {
@@ -269,10 +271,6 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 
 	if plan.MessageFormat.ValueString() != "" && plan.MessageFormat.ValueString() != types.StringNull().ValueString() {
 		payload.MessageFormat = plan.MessageFormat.ValueString()
-	}
-
-	if plan.Port.ValueInt64() != types.Int64Unknown().ValueInt64() {
-		payload.Port = plan.Port.ValueInt64()
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -331,6 +329,9 @@ func (r *resourceCMSyslog) Delete(ctx context.Context, req resource.DeleteReques
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting Syslog",
 			"Could not delete Syslog, unexpected error: "+err.Error(),
