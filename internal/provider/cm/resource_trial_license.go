@@ -55,6 +55,9 @@ func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequ
 			"status": schema.StringAttribute{
 				Computed:    true,
 				Description: "Current status of the trial license",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Computed:    true,
@@ -73,10 +76,16 @@ func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequ
 			"activated_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Date of the last activation",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"deactivated_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Date of the last de-activation",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}

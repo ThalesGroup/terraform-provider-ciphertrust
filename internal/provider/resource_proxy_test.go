@@ -1,10 +1,14 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	uuid "github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -50,4 +54,116 @@ resource "ciphertrust_proxy" "test" {
   http_proxy = %q
 }
 `, httpProxy)
+}
+
+func proxyCleanup(t *testing.T) {
+	t.Helper()
+	client, ok := createCMClient()
+	if !ok {
+		return
+	}
+	ctx := context.Background()
+	traceID := uuid.New().String()
+	payload, err := json.Marshal(map[string]interface{}{
+		"http_proxy":  "",
+		"https_proxy": "",
+		"no_proxy":    []string{},
+		"certificate": "",
+	})
+	if err != nil {
+		return
+	}
+	_, _ = client.PutData(ctx, traceID, common.URL_CM_PROXY, payload)
+}
+
+func Test_CM_Proxy_DriftDetection(t *testing.T) {
+	RequireCM(t)
+	t.Cleanup(func() { proxyCleanup(t) })
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProxyConfig("http://10.0.0.1:3128"),
+				Check: checkStep(t, "apply",
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://10.0.0.1:3128"),
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client not available; skipping OOB proxy update")
+						return
+					}
+					ctx := context.Background()
+					traceID := uuid.New().String()
+					payload, err := json.Marshal(map[string]string{"http_proxy": "http://10.0.0.2:3128"})
+					if err != nil {
+						t.Logf("failed to marshal OOB proxy payload: %v", err)
+						return
+					}
+					_, err = client.PutData(ctx, traceID, common.URL_CM_PROXY, payload)
+					if err != nil {
+						t.Logf("OOB proxy update failed: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+func Test_CM_Proxy_NoImmutableFields(t *testing.T) {
+	RequireCM(t)
+	t.Cleanup(func() { proxyCleanup(t) })
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProxyConfig("http://10.0.0.1:3128"),
+				Check: checkStep(t, "initial apply",
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://10.0.0.1:3128"),
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy  = "http://10.0.0.3:3128"
+  https_proxy = "http://10.0.0.3:3129"
+}
+`,
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://10.0.0.3:3128"),
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "https_proxy", "http://10.0.0.3:3129"),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_Proxy_Idempotency(t *testing.T) {
+	RequireCM(t)
+	t.Cleanup(func() { proxyCleanup(t) })
+
+	config := testAccProxyConfig("http://10.0.0.1:3128")
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "apply",
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://10.0.0.1:3128"),
+				),
+			},
+			{
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
 }
