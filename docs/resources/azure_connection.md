@@ -118,7 +118,7 @@ output "azure_connection_name" {
 - `cert_duration` (Number) Duration in days for which the azure certificate is valid, default (730 i.e. 2 Years).
 - `certificate` (String) User has the option to upload external certificate for Azure Cloud connection. This option cannot be used with option is_certificate_used and client_secret.User first has to generate a new Certificate Signing Request (CSR) in POST /v1/connectionmgmt/connections/csr. The generated CSR can be signed with any internal or external CA. The Certificate must have an RSA key strength of 2048 or 4096. User can also update the new external certificate in the existing connection. Any unused certificate will automatically deleted in 24 hours.The certificate should be provided in \n (newline) format.
 - `client_id` (String) Unique Identifier (client ID) for the Azure application.
-- `client_secret` (String, Sensitive) Secret key for the Azure application. Required in Azure Stack connection.
+- `client_secret` (String, Sensitive) Secret key for the Azure application. Required in Azure Stack connection. Write-only: CM never returns this field on GET, so its live value cannot be verified after apply and out-of-band changes are not detectable by terraform plan. Omitting this attribute in a later apply leaves the previously configured secret untouched (no diff). Once set, this field cannot be cleared back to empty by explicitly setting it to "": CM does not support clearing it, and the provider rejects the attempt at apply time rather than silently leaving state and CM's live value out of sync. To rotate the secret, set a new value.
 - `cloud_name` (String) Name of the cloud.
 
 	Options:
@@ -128,7 +128,7 @@ output "azure_connection_name" {
 		AzureUSGovernment
 		AzureStack
 - `created_at` (String)
-- `description` (String) Description about the connection.
+- `description` (String) Description about the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-string PATCH requests for this field.
 - `is_certificate_used` (Boolean) User has the option to choose the Certificate Authentication method instead of Client Secret for Azure Cloud connection. In order to use the Certificate, set it to true. Once the connection is created, in the response user will get a certificate. By default, the certificate is valid for 2 Years. User can update the certificate in the existing connection by setting it to true.
 - `key_vault_dns_suffix` (String) Azure stack key vault dns suffix
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
@@ -149,7 +149,7 @@ To remove a key/value pair, pass value null to the particular key
 - `last_connection_error` (String)
 - `last_connection_ok` (Boolean)
 - `management_url` (String) Azure stack management URL
-- `meta` (Map of String) Optional end-user or service data stored with the connection.
+- `meta` (Map of String) Optional end-user or service data stored with the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-object PATCH requests for this field.
 - `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
 
     "cckm" for:

@@ -126,7 +126,10 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "Description about the connection.",
+				Description: "Description about the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-string PATCH requests for this field.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -138,7 +141,10 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				ElementType: types.StringType,
 				Computed:    true,
 				Optional:    true,
-				Description: "Optional end-user or service data stored with the connection.",
+				Description: "Optional end-user or service data stored with the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-object PATCH requests for this field.",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.UseStateWhenClearingMap(),
+				},
 			},
 			"password": schema.StringAttribute{
 				Optional:    true,
