@@ -59,9 +59,18 @@ output "trial_license_info" {
 
 ### Read-Only
 
-- `activated_at` (String) Date of the last activation
-- `deactivated_at` (String) Date of the last de-activation
-- `description` (String) Description of the license
-- `id` (String) ID of the trial license
-- `name` (String) Name of the trial license
-- `status` (String) Current status of the trial license
+- `activated_at` (String) Date of the last activation. Populated after `terraform apply`; stable on subsequent plans.
+- `deactivated_at` (String) Date of the last de-activation. Empty string until the first `terraform destroy`.
+- `description` (String) Description of the license.
+- `id` (String) ID of the trial license.
+- `name` (String) Name of the trial license.
+- `status` (String) Current status of the trial license. One of `available`, `activated`, or `deactivated`. Stable on subsequent plans after the initial apply.
+
+## Behavioral Notes
+
+- **Activation on apply**: Running `terraform apply` activates the CipherTrust Manager trial license (sets `status = "activated"`). If the trial is already activated, the resource is imported into state without re-activating.
+- **Deactivation on destroy**: Running `terraform destroy` deactivates the trial license (sets `status = "deactivated"` on the CM instance).
+- **Computed-only resource**: All attributes are server-assigned. There are no user-configurable fields in the Terraform configuration — the resource block is always empty (`resource "ciphertrust_trial_license" "name" {}`).
+- **Stable after first apply**: `status`, `activated_at`, and `deactivated_at` show their prior state value on subsequent `terraform plan` runs (via `UseStateForUnknown`). This prevents spurious `(known after apply)` churn.
+- **`deactivated_at` is empty until first deactivation**: This field is an empty string immediately after `terraform apply`. It is populated with a timestamp only after `terraform destroy` deactivates the trial.
+- **Shared CM instance warning**: Running this resource on a shared CipherTrust Manager instance will activate and deactivate the trial license, which may affect other users or workloads. Use a dedicated test CM instance when running acceptance tests.
