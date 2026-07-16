@@ -1012,3 +1012,87 @@ resource "ciphertrust_groups" "test_group" {
 		},
 	})
 }
+
+// TestCipherTrust_CMGroup_ClientMetadataNullClear verifies that removing
+// client_metadata from config clears it on CM and converges without a
+// perpetual plan diff (TFIN-402).
+func TestCipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
+	RequireCM(t)
+
+	name := "tftest-group-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create group with client_metadata set.
+			{
+				Config: cmGroupConfigWithClientMetadata(name, `{"key":"value"}`),
+				Check: checkStep(t, "client_metadata set",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "client_metadata", `{"key":"value"}`),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_groups.test"]
+						if !ok {
+							return fmt.Errorf("resource ciphertrust_groups.test not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Clear client_metadata (omit from config = Terraform null).
+			{
+				Config: cmGroupConfigNoClientMetadata(name),
+				Check: checkStep(t, "client_metadata cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test", "client_metadata"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Explicit idempotency re-plan.
+			{
+				Config:             cmGroupConfigNoClientMetadata(name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 4: Out-of-band drift detection.
+			{
+				Config: cmGroupConfigNoClientMetadata(name),
+				PreConfig: func() {
+					if capturedID == "" {
+						log.Printf("[WARN] TestCipherTrust_CMGroup_ClientMetadataNullClear: capturedID empty, skipping drift injection")
+						return
+					}
+					client, ok := createCMClient()
+					if !ok {
+						log.Printf("[WARN] TestCipherTrust_CMGroup_ClientMetadataNullClear: CM client unavailable, skipping drift injection")
+						return
+					}
+					driftPayload := []byte(`{"client_metadata":{"key":"drifted"}}`)
+					_, err := client.UpdateData(context.Background(), capturedID, common.URL_GROUP, driftPayload, "name")
+					if err != nil {
+						log.Printf("[WARN] TestCipherTrust_CMGroup_ClientMetadataNullClear: drift injection failed: %v", err)
+					}
+				},
+				ExpectNonEmptyPlan: true,
+				PlanOnly:           true,
+			},
+		},
+	})
+}
+
+func cmGroupConfigWithClientMetadata(name, metadata string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test" {
+  name            = %q
+  client_metadata = %q
+}
+`, name, metadata)
+}
+
+func cmGroupConfigNoClientMetadata(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test" {
+  name = %q
+}
+`, name)
+}
