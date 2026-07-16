@@ -247,8 +247,9 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Update]["+id+"]")
 	var plan, state CMGroupTFSDK
-	var payload CMGroupJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -260,6 +261,8 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	var payload CMGroupJSON
 
 	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
 		payload.Name = plan.Name.ValueString()
@@ -273,6 +276,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
 			payload.AppMetadata = meta
 		}
+	} else if plan.AppMetadata.IsNull() && !state.AppMetadata.IsNull() {
+		// CM treats "app_metadata":null as no-op; send {} to explicitly clear the field.
+		// Guard: only when previously set in state, to avoid spurious {} on unrelated updates.
+		payload.AppMetadata = map[string]interface{}{}
 	}
 
 	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
@@ -280,6 +287,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
 			payload.ClientMetadata = meta
 		}
+	} else if plan.ClientMetadata.IsNull() && !state.ClientMetadata.IsNull() {
+		// Same as app_metadata: CM treats null as no-op; {} is the explicit clear signal.
+		// Guard: only when previously set in state.
+		payload.ClientMetadata = map[string]interface{}{}
 	}
 
 	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
@@ -287,6 +298,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
 			payload.UserMetadata = meta
 		}
+	} else if plan.UserMetadata.IsNull() && !state.UserMetadata.IsNull() {
+		// Confirmed defective (TFIN-403): CM retains old user_metadata when PATCH body
+		// contains null. Sending {} clears it. Guard: only when previously set in state.
+		payload.UserMetadata = map[string]interface{}{}
 	}
 
 	payloadJSON, err := json.Marshal(payload)

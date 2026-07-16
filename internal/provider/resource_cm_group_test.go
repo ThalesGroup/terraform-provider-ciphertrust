@@ -736,3 +736,234 @@ func Test_CM_AccCMGroupsList_Idempotency(t *testing.T) {
 		},
 	})
 }
+
+// groupConfigWithMetadata returns an HCL block for ciphertrust_groups with name and
+// one metadata field set. field must be one of: user_metadata, app_metadata, client_metadata.
+func groupConfigWithMetadata(name, field, value string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test" {
+  name     = %q
+  %s       = %q
+}
+`, name, field, value)
+}
+
+// groupConfigBase returns an HCL block for ciphertrust_groups with only name set.
+// All metadata fields are absent (null in plan).
+func groupConfigBase(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test" {
+  name = %q
+}
+`, name)
+}
+
+// TestCipherTrust_CMGroup_UserMetadataNullClear confirms that clearing user_metadata to
+// null converges after a single apply and produces no subsequent diff.
+func TestCipherTrust_CMGroup_UserMetadataNullClear(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-group-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "user_metadata", `{"key":"value"}`),
+				Check: checkStep(t, "user_metadata set",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "user_metadata", `{"key":"value"}`),
+				),
+			},
+			{
+				Config: groupConfigBase(name),
+				Check: checkStep(t, "user_metadata cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test", "user_metadata"),
+				),
+			},
+			{
+				Config:             groupConfigBase(name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMGroup_AppMetadataNullClear confirms that clearing app_metadata to
+// null converges after a single apply and produces no subsequent diff.
+func TestCipherTrust_CMGroup_AppMetadataNullClear(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-group-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "app_metadata", `{"k":"v"}`),
+				Check: checkStep(t, "app_metadata set",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "app_metadata", `{"k":"v"}`),
+				),
+			},
+			{
+				Config: groupConfigBase(name),
+				Check: checkStep(t, "app_metadata cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test", "app_metadata"),
+				),
+			},
+			{
+				Config:             groupConfigBase(name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMGroup_ClientMetadataNullClear confirms that clearing client_metadata to
+// null converges after a single apply and produces no subsequent diff.
+func TestCipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-group-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "client_metadata", `{"k":"v"}`),
+				Check: checkStep(t, "client_metadata set",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "client_metadata", `{"k":"v"}`),
+				),
+			},
+			{
+				Config: groupConfigBase(name),
+				Check: checkStep(t, "client_metadata cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test", "client_metadata"),
+				),
+			},
+			{
+				Config:             groupConfigBase(name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMGroup_UserMetadataDrift confirms that Read() surfaces an out-of-band
+// change to user_metadata and that a subsequent plan detects drift.
+func TestCipherTrust_CMGroup_UserMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable")
+	}
+	name := "tftest-group-" + uuid.New().String()[:8]
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "user_metadata", `{"initial":"value"}`),
+				Check: checkStep(t, "user_metadata set, capture name",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "user_metadata", `{"initial":"value"}`),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_groups.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					payload := []byte(`{"user_metadata":{"drifted":"true"}}`)
+					if _, err := client.UpdateData(context.Background(), capturedName, common.URL_GROUP, payload, "name"); err != nil {
+						t.Logf("OOB UpdateData failed: %v — drift step will be vacuous", err)
+						return
+					}
+				},
+				Config:             groupConfigWithMetadata(name, "user_metadata", `{"initial":"value"}`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMGroup_AppMetadataDrift confirms that Read() surfaces an out-of-band
+// change to app_metadata and that a subsequent plan detects drift.
+func TestCipherTrust_CMGroup_AppMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable")
+	}
+	name := "tftest-group-" + uuid.New().String()[:8]
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "app_metadata", `{"initial":"value"}`),
+				Check: checkStep(t, "app_metadata set, capture name",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "app_metadata", `{"initial":"value"}`),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_groups.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					payload := []byte(`{"app_metadata":{"drifted":"true"}}`)
+					if _, err := client.UpdateData(context.Background(), capturedName, common.URL_GROUP, payload, "name"); err != nil {
+						t.Logf("OOB UpdateData failed: %v — drift step will be vacuous", err)
+						return
+					}
+				},
+				Config:             groupConfigWithMetadata(name, "app_metadata", `{"initial":"value"}`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMGroup_ClientMetadataDrift confirms that Read() surfaces an out-of-band
+// change to client_metadata and that a subsequent plan detects drift.
+func TestCipherTrust_CMGroup_ClientMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable")
+	}
+	name := "tftest-group-" + uuid.New().String()[:8]
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: groupConfigWithMetadata(name, "client_metadata", `{"initial":"value"}`),
+				Check: checkStep(t, "client_metadata set, capture name",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test", "client_metadata", `{"initial":"value"}`),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_groups.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					payload := []byte(`{"client_metadata":{"drifted":"true"}}`)
+					if _, err := client.UpdateData(context.Background(), capturedName, common.URL_GROUP, payload, "name"); err != nil {
+						t.Logf("OOB UpdateData failed: %v — drift step will be vacuous", err)
+						return
+					}
+				},
+				Config:             groupConfigWithMetadata(name, "client_metadata", `{"initial":"value"}`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
