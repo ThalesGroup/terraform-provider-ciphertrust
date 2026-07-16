@@ -68,7 +68,8 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 							Computed: true,
 						},
 						"password": schema.StringAttribute{
-							Computed: true,
+							Computed:  true,
+							Sensitive: true,
 						},
 						"is_domain_user": schema.BoolAttribute{
 							Computed: true,
