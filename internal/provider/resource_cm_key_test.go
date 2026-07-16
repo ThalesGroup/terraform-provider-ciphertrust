@@ -1764,7 +1764,7 @@ resource "ciphertrust_cm_key" "test" {
   key_size  = 256
   name      = %q
 }`, name),
-				ExpectError: regexp.MustCompile(`(?i)immutable attribute`),
+				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
 			},
 		},
 	})
@@ -1803,8 +1803,9 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
-// TestCipherTrust_CMKey_MetaOwnerIdUpdate verifies that a non-null → non-null meta.owner_id
-// change succeeds without the meta-clear guard incorrectly blocking it.
+// TestCipherTrust_CMKey_MetaOwnerIdUpdate verifies that any attempt to change meta.owner_id
+// after creation is blocked at plan time by ImmutableObject() — including non-null → non-null
+// changes. meta is fully immutable: CM's merge-PATCH cannot clear or reliably update sub-fields.
 func TestCipherTrust_CMKey_MetaOwnerIdUpdate(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-metaupd-" + uuid.New().String()[:8]
@@ -1826,7 +1827,9 @@ resource "ciphertrust_cm_key" "test" {
 				),
 			},
 			{
-				// Change owner_id to "admin2" (non-null → non-null); guard must NOT fire.
+				// Attempt to change owner_id (non-null → non-null); ImmutableObject() must fire.
+				// meta is fully immutable — CM's merge-PATCH cannot reliably update sub-fields
+				// either, so any post-creation meta change is blocked at plan time.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "test" {
   algorithm = "aes"
@@ -1836,9 +1839,8 @@ resource "ciphertrust_cm_key" "test" {
     owner_id = "admin2"
   }
 }`, name),
-				Check: checkStep(t, "updated meta",
-					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin2"),
-				),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
 			},
 		},
 	})
