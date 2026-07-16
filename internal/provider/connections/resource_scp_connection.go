@@ -236,12 +236,14 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			// timestamp on every successful update, so showing it as "known after
 			// apply" is accurate, not spurious drift.
 			"updated_at": schema.StringAttribute{Computed: true, Description: "Timestamp when the connection was last updated."},
+			// service is derived server-side from protocol (e.g. protocol "scp" is
+			// reported back as service "secure-copy"), so it must NOT use
+			// UseStateForUnknown() — carrying the prior value forward causes a
+			// "Provider produced inconsistent result after apply" error whenever
+			// an update triggers CM to return a freshly normalized value.
 			"service": schema.StringAttribute{
 				Computed:    true,
 				Description: "Service type for the connection.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"category": schema.StringAttribute{
 				Computed:    true,

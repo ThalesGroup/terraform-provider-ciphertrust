@@ -645,7 +645,7 @@ type CMInterfaceJSON struct {
 	InterfaceType           string                          `json:"interface_type,omitempty"`
 	KMIPEnableHardDelete    int64                           `json:"kmip_enable_hard_delete,omitempty"`
 	MaximumTLSVersion       string                          `json:"maximum_tls_version,omitempty"`
-	Meta                    CMInterfaceMetadataJSON         `json:"meta,omitempty"`
+	Meta                    *CMInterfaceMetadataJSON        `json:"meta,omitempty"`
 	MinimumTLSVersion       string                          `json:"minimum_tls_version,omitempty"`
 	Mode                    string                          `json:"mode,omitempty"`
 	Name                    string                          `json:"name,omitempty"`
@@ -653,7 +653,7 @@ type CMInterfaceJSON struct {
 	RegToken                string                          `json:"registration_token,omitempty"`
 	TrustedCAs              *CMInterfacTrustedCAsJSON       `json:"trusted_cas,omitempty"`
 	Certificate             *CMInterfacCertificateJSON      `json:"certificate,omitempty"`
-	LocalAutogenAttributes  CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
+	LocalAutogenAttributes  *CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
 	TLSCiphers              []TLSCiphersJSON                `json:"tls_ciphers,omitempty"`
 	CreatedAt               string                          `json:"createdAt,omitempty"`
 	UpdatedAt               string                          `json:"updatedAt,omitempty"`

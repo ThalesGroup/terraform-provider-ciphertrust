@@ -355,7 +355,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 				metadata.NAE = metadataNAE
 			}
 		}
-		payload.Meta = metadata
+		payload.Meta = &metadata
 	}
 	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload.MinimumTLSVersion = plan.MinimumTLSVersion.ValueString()
@@ -939,7 +939,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			attributes.UID = plan.LocalAutogenAttributes.UID.ValueString()
 		}
 
-		payload.LocalAutogenAttributes = attributes
+		payload.LocalAutogenAttributes = &attributes
 	}
 
 	if plan.MaximumTLSVersion.ValueString() != "" && plan.MaximumTLSVersion.ValueString() != types.StringNull().ValueString() {
@@ -955,7 +955,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 				metadata.NAE = metadataNAE
 			}
 		}
-		payload.Meta = metadata
+		payload.Meta = &metadata
 	}
 	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload.MinimumTLSVersion = plan.MinimumTLSVersion.ValueString()
