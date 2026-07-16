@@ -85,7 +85,7 @@ output "interface_id" {
 - `meta` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--meta))
 - `minimum_tls_version` (String) Minimum TLS version to be configured for NAE or KMIP interface, default is v1.2 (tls_1_2).
 - `mode` (String) The interface mode can be one of the following: no-tls-pw-opt, no-tls-pw-req, unauth-tls-pw-opt, tls-cert-opt-pw-opt, tls-pw-opt, tls-pw-req, tls-cert-pw-opt, or tls-cert-and-pw. Default mode is no-tls-pw-opt. Refer to the top level discussion of the Interface section for further details.
-- `name` (String) (Immutable) The name of the interface. Not valid for interface_type nae.
+- `name` (String) (Immutable) The name of the interface. Not valid for interface_type nae or kmip — CM auto-assigns the name for those types.
 - `network_interface` (String) Defines what ethernet adapter the interface should listen to, use "all" for all. Defaults to all if not specified.
 - `registration_token` (String) Registration token in case auto registration is true.
 - `tls_ciphers` (Attributes List) Certificate to be associated with the interface (see [below for nested schema](#nestedatt--tls_ciphers))
