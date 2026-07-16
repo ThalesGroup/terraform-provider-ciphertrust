@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
@@ -628,6 +629,94 @@ resource "ciphertrust_user" "test_user" {
 				Check: checkStep(t, "Step 4: refreshed state reflects OOB name change",
 					resource.TestCheckResourceAttr("ciphertrust_user.test_user", "name", "changed-out-of-band"),
 				),
+			},
+		},
+	})
+}
+
+// TestAccCMUser_NicknameImmutable verifies that changing nickname on an existing
+// ciphertrust_user is rejected at plan time with an immutability error.
+func TestAccCMUser_NicknameImmutable(t *testing.T) {
+	RequireCM(t)
+	name := "tfin407-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, name),
+				Check: checkStep(t, "create without nickname",
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "username", name),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "nickname"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+  nickname = "custom_nickname"
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be updated in place`),
+			},
+		},
+	})
+}
+
+// TestAccCMUser_NicknameNoDriftAfterCreate verifies that after creating a ciphertrust_user
+// without setting nickname (CM auto-populates it), a subsequent terraform plan with no
+// config changes produces an empty plan.
+func TestAccCMUser_NicknameNoDriftAfterCreate(t *testing.T) {
+	RequireCM(t)
+	name := "tfin407nd-" + uuid.New().String()[:8]
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, name)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create without nickname",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "nickname"),
+				),
+			},
+			{
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccCMUser_NicknameOutOfBandDrift verifies the drift behaviour when Read()
+// returns the CM-side nickname after a refresh. With no explicit nickname in config,
+// UseStateForUnknown() ensures no spurious diff is produced.
+func TestAccCMUser_NicknameOutOfBandDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tfin407ood-" + uuid.New().String()[:8]
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, name)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create and capture nickname",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "nickname"),
+				),
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

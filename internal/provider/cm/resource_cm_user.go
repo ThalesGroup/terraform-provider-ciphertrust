@@ -56,10 +56,12 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"nickname": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "(Effectively immutable) Display name / nickname of the user. CM's PATCH /api/v1/usermgmt/users/{id} silently ignores changes to this field (HTTP 200, value unchanged). Set at creation time only; changing this attribute on an existing resource will produce a plan-time error. Destroy and recreate to change nickname.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"email": schema.StringAttribute{
@@ -358,9 +360,9 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	if name := common.TrimString(plan.Name.ValueString()); name != "" {
 		payload.Name = name
 	}
-	if nickname := common.TrimString(plan.Nickname.ValueString()); nickname != "" {
-		payload.Nickname = nickname
-	}
+	// nickname is effectively immutable — CM's PATCH silently ignores this field.
+	// ImmutableString() in the schema prevents plan-time changes from reaching Update().
+	// Omit from payload to avoid sending a field that CM will discard.
 	// Only include password in the update if it has changed
 	if plan.Password.ValueString() != state.Password.ValueString() {
 		payload.Password = common.TrimString(plan.Password.ValueString())
@@ -417,11 +419,11 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			} else {
 				plan.Name = types.StringNull()
 			}
-			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
-				plan.Nickname = types.StringValue(gj.String())
-			} else {
-				plan.Nickname = types.StringNull()
-			}
+			// nickname: preserve the plan value — do NOT overwrite from GET response.
+			// CM's PATCH does not persist nickname changes; overwriting plan.Nickname with the
+			// GET-returned (old) value would conflict with Terraform's planned value and trip the
+			// framework's post-apply consistency check. Since ImmutableString() blocks plan-time
+			// changes, plan.Nickname already equals state.Nickname here; preserving it is correct.
 			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
 				plan.Email = types.StringValue(gj.String())
 			} else {

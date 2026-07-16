@@ -79,7 +79,7 @@ output "username" {
 - `email` (String)
 - `is_domain_user` (Boolean) (Immutable) Set to true if user is a domain user. Removing this attribute from config after setting it to true also triggers the immutability error — destroy and recreate to change.
 - `name` (String) Users full name
-- `nickname` (String)
+- `nickname` (String) (Effectively immutable) Display name / nickname of the user. CM's PATCH /api/v1/usermgmt/users/{id} silently ignores changes to this field (HTTP 200, value unchanged). Set at creation time only; changing this attribute on an existing resource will produce a plan-time error. Destroy and recreate to change nickname.
 - `password_change_required` (Boolean)
 - `prevent_ui_login` (Boolean)
 - `user_metadata` (Map of String) Information that can be stored with the user.
