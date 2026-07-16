@@ -247,6 +247,8 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Update]["+id+"]")
 	var plan, state CMGroupTFSDK
 	var payload CMGroupJSON
 
@@ -268,21 +270,64 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		payload.Description = plan.Description.ValueString()
 	}
 
-	if !plan.AppMetadata.IsNull() && !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
+	// Three-branch pattern for each metadata field:
+	//
+	//   IsNull()    → per-key null deletion (confirmed live: CM ignores {} and null at the
+	//                 field level, but honours {"key":null} to delete individual keys).
+	//                 Parse the prior state JSON to extract existing keys, then set each to
+	//                 nil so CM's merge-PATCH deletes them. Read()'s guard (v.Raw != "{}")
+	//                 maps the resulting {} or absent response back to types.StringNull().
+	//
+	//   IsUnknown() → skip (deferred reference; CM value preserved).
+	//   else        → unmarshal and send the JSON object.
+	if plan.AppMetadata.IsNull() {
+		if !state.AppMetadata.IsNull() && state.AppMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.AppMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.AppMetadata = nullMap
+			}
+		}
+	} else if !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
 			payload.AppMetadata = meta
 		}
 	}
 
-	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
+	if plan.ClientMetadata.IsNull() {
+		if !state.ClientMetadata.IsNull() && state.ClientMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.ClientMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.ClientMetadata = nullMap
+			}
+		}
+	} else if !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
 			payload.ClientMetadata = meta
 		}
 	}
 
-	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
+	if plan.UserMetadata.IsNull() {
+		if !state.UserMetadata.IsNull() && state.UserMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.UserMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.UserMetadata = nullMap
+			}
+		}
+	} else if !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
 			payload.UserMetadata = meta
@@ -346,11 +391,40 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		plan.UserIDs = state.UserIDs
 	}
 
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
+	// Seed resp.State with the updated plan so Read() can locate the resource by ID.
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Delegate final state hydration to Read() so state reflects what CM actually
+	// persisted (metadata cleared/updated, compact-normalised values, membership)
+	// rather than the raw plan values.
+	//
+	// RemoveResource guard: the existing Read() calls resp.State.RemoveResource(ctx)
+	// on 404. RemoveResource does NOT add an error diagnostic, so HasError() alone
+	// cannot detect it. The Plugin Framework's RemoveResource sets the underlying
+	// tftypes.Value to a null object (IsNull() → true). A fresh ReadResponse
+	// initialised with State: resp.State starts with a non-null, non-undefined
+	// tftypes.Value; after r.Read() runs, the combined IsNull()||Type()==nil
+	// guard correctly distinguishes a RemoveResource call from a successful hydration.
+	readReq := resource.ReadRequest{State: resp.State}
+	readResp := &resource.ReadResponse{State: resp.State}
+	r.Read(ctx, readReq, readResp)
+	if readResp.Diagnostics.HasError() {
+		resp.Diagnostics.Append(readResp.Diagnostics...)
+		return
+	}
+	if readResp.State.Raw.IsNull() || readResp.State.Raw.Type() == nil {
+		// Read() called RemoveResource (transient 404 after successful PATCH).
+		// Retain the seeded plan state; log a warning for operator visibility.
+		tflog.Warn(ctx, "[resource_cm_group.go -> Update] Read() returned empty state after "+
+			"successful PATCH (possible transient 404); retaining seeded plan state. "+
+			"Resource: "+plan.Name.ValueString()+" ["+id+"]")
+		return
+	}
+	// Read succeeded — use its hydrated state.
+	resp.State = readResp.State
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
