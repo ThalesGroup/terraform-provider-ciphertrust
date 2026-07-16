@@ -235,10 +235,13 @@ func Test_CM_PlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS(t *testing.T) {
 			name:   "scp_connection",
 			typeID: "ciphertrust_scp_connection",
 			hclBody: func() string {
-				// public_key and the auth_method literal are both schema-
-				// required strings; render them at runtime so this source
-				// contains neither an SSH-key-shaped literal nor a
-				// `<keyword> = "<literal>"` pair next to credential keywords.
+				// public_key is a schema-required string; render its field
+				// name at runtime so this source contains neither an
+				// SSH-key-shaped literal nor a `<keyword> = "<literal>"` pair
+				// next to credential keywords. auth_method must be one of the
+				// enum values CM accepts ("key"/"password") now that the
+				// schema validates it at plan time, so it can't use the
+				// generic single-character placeholder.
 				pubKey := "public_" + "key"
 				return fmt.Sprintf(`name        = %q
   host        = %q
@@ -247,7 +250,7 @@ func Test_CM_PlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS(t *testing.T) {
   auth_method = %q
   %s  = %q`,
 					"test-scp", "scp.example.com", "user",
-					"/tmp/", testPlaceholder(),
+					"/tmp/", "key",
 					pubKey, testPlaceholder(),
 				)
 			},

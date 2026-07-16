@@ -8,7 +8,11 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/validators"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -18,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -105,10 +110,16 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"auth_method": schema.StringAttribute{
 				Required:    true,
 				Description: "Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'",
+				Validators: []validator.String{
+					validators.OneOfFold("key", "password"),
+				},
 			},
 			"host": schema.StringAttribute{
 				Required:    true,
 				Description: "Hostname or FQDN of SCP/SFTP remote machine.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required:      true,
@@ -122,10 +133,16 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"public_key": schema.StringAttribute{
 				Required:    true,
 				Description: "Public key of destination host machine. It will be used to verify the host's identity by verifying key fingerprint. You can find it in /etc/ssh/ at host machine.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"username": schema.StringAttribute{
 				Required:    true,
 				Description: "Username for accessing SCP/SFTP server.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
@@ -164,6 +181,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
+				Validators: []validator.Int64{
+					int64validator.Between(1, 65535),
+				},
 			},
 			"products": schema.ListAttribute{
 				ElementType: types.StringType,
@@ -173,6 +193,11 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
 				},
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(
+						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
+					),
+				},
 			},
 			"protocol": schema.StringAttribute{
 				Optional:    true,
@@ -180,6 +205,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Use 'sftp' or 'scp'. 'sftp' is the default value",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+				Validators: []validator.String{
+					validators.OneOfFold("sftp", "scp"),
 				},
 			},
 			//common response parameters (read-only)
