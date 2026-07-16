@@ -309,6 +309,7 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_oci_key_version.go -> Update][get response:"+redactOCIResponse(response)+"]")
 	updateVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key version", updateVersionState, "OCI")

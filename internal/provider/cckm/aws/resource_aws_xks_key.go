@@ -452,6 +452,22 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		tflog.Warn(ctx, details)
 		resp.Diagnostics.AddWarning(details, "")
+		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
+			policyPlanUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
+			policyStateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
+			var policyDiags diag.Diagnostics
+			updateKeyPolicy(ctx, id, r.client, policyPlanUpdate, policyStateUpdate, &policyDiags)
+			for _, d := range policyDiags {
+				if d.Severity() == diag.SeverityError {
+					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+				} else {
+					resp.Diagnostics.Append(d)
+				}
+			}
+		}
+		r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		return
 	}
 
 	if plan.LocalHostParams != nil {
@@ -525,26 +541,18 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		Description: types.StringNull(),
 	}
 
-	updateCommon := false
 	if plan.EnableRotation != nil {
 		planUpdate.EnableRotation = plan.EnableRotation
-		updateCommon = true
 	}
 	if plan.KeyPolicy != nil {
 		planUpdate.KeyPolicy = plan.KeyPolicy
-		updateCommon = true
 	}
-
 	if planAwsParam != nil && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsUnknown() {
 		planUpdate.Description = planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description
-		updateCommon = true
 	}
-
-	if updateCommon {
-		updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	if planAwsParam != nil {

@@ -401,6 +401,8 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Update][get response:"+redactAWSResponse(response)+"]")
+
 	keyID := gjson.Get(response, "id").String()
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if gjson.Get(response, "linked_state").Bool() &&
@@ -447,8 +449,6 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if planP != nil {
 		planDesc = planP.AWSKeyStoreCommonAwsParamTFSDK.Description
 	}
-	planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, Description: planDesc, KeyPolicy: plan.KeyPolicy, EnableRotation: plan.EnableRotation}
-	stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy, EnableRotation: state.EnableRotation}
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
 	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() {
 		if !keyEnabled && plan.EnableKey.ValueBool() {
@@ -458,6 +458,8 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 			}
 		}
 	}
+	planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, Description: planDesc, KeyPolicy: plan.KeyPolicy, EnableRotation: plan.EnableRotation}
+	stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy, EnableRotation: state.EnableRotation}
 	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

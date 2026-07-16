@@ -322,6 +322,7 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_key_material.go -> Update][get response:"+redactAWSResponse(keyJSON))
 
 	// Step 3: refresh the key from AWS and wait for rotation history to reflect the
 	// refresh. This ensures the provider operates on AWS-current data rather than

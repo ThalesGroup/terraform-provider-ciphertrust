@@ -447,6 +447,8 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_byok_key.go -> Update][get response:"+redactAWSResponse(response))
+
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "BYOK key", updateKeyState, "AWS")

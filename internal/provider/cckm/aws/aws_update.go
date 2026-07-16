@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -162,8 +162,8 @@ func updateAwsKeyCommon(ctx context.Context, id string, client *common.Client, p
 			return
 		}
 	}
-	if planInput.EnableRotation != nil || stateInput.EnableRotation != nil {
-		enableDisableKeyRotation(ctx, id, client, planInput, stateInput, diags)
+	if planInput.EnableRotation != nil || gjson.Get(keyJSON, "labels.job_config_id").String() != "" {
+		enableDisableKeyRotation(ctx, id, client, planInput, keyJSON, diags)
 		if diags.HasError() {
 			return
 		}
@@ -245,25 +245,29 @@ func updateDescription(ctx context.Context, id string, client *common.Client, ke
 }
 
 // enableDisableKeyRotation enables or disables the CipherTrust Manager scheduled rotation job for an AWS key
-// based on the difference between plan and state. Used by resourceAWSKey, resourceAWSXKSKey, resourceAWSCloudHSMKey.
-// When plan has no enable_rotation block but state does, the rotation job is disabled. When plan and state
-// differ, the rotation job is enabled with the new plan parameters.
-func enableDisableKeyRotation(ctx context.Context, id string, client *common.Client, planInput *AWSKeyUpdateInputTFSDK, stateInput *AWSKeyUpdateInputTFSDK, diags *diag.Diagnostics) {
+// based on the difference between the plan and the live API state (keyJSON labels).
+// Used by resourceAWSKey, resourceAWSXKSKey, resourceAWSCloudHSMKey.
+// When plan has no enable_rotation block but a rotation job exists on the key, the job is disabled.
+// When plan fields differ from the live labels, the job is enabled with the plan parameters.
+func enableDisableKeyRotation(ctx context.Context, id string, client *common.Client, planInput *AWSKeyUpdateInputTFSDK, keyJSON string, diags *diag.Diagnostics) {
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_update.go -> enableDisableKeyRotation]["+id+"]")
 	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_update.go -> enableDisableKeyRotation]["+id+"]")
-	planHasRotation := planInput.EnableRotation != nil
-	stateHasRotation := stateInput.EnableRotation != nil
-	if !planHasRotation && stateHasRotation {
-		disableKeyRotationJob(ctx, id, client, planInput.KeyID, diags)
-		if diags.HasError() {
-			return
+	actualJobID := gjson.Get(keyJSON, "labels.job_config_id").String()
+
+	if planInput.EnableRotation == nil {
+		if actualJobID != "" {
+			disableKeyRotationJob(ctx, id, client, planInput.KeyID, diags)
 		}
+		return
 	}
-	if planHasRotation && (stateInput.EnableRotation == nil || !reflect.DeepEqual(*planInput.EnableRotation, *stateInput.EnableRotation)) {
+
+	p := planInput.EnableRotation
+	changed := p.JobConfigID.ValueString() != actualJobID ||
+		p.AutoRotateKeySource.ValueString() != gjson.Get(keyJSON, "labels.auto_rotate_key_source").String() ||
+		strconv.FormatBool(p.AutoRotateDisableEncrypt.ValueBool()) != gjson.Get(keyJSON, "labels.disable_encrypt_on_auto_rotate").String() ||
+		strconv.FormatBool(p.AutoRotateDisableEncryptOnAllAccounts.ValueBool()) != gjson.Get(keyJSON, "labels.disable_encrypt_for_all_accounts_on_auto_rotate").String()
+	if changed {
 		enableKeyRotationJob(ctx, id, client, planInput.KeyID, planInput.EnableRotation, diags)
-		if diags.HasError() {
-			return
-		}
 	}
 }
 

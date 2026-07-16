@@ -466,6 +466,8 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_oci_key.go -> Update][get response:"+redactOCIResponse(preCheckResponse)+"]")
+
 	preCheckKeyState := gjson.Get(preCheckResponse, "oci_params.lifecycle_state").String()
 	if preCheckKeyState == keyStateScheduledForDeletion || preCheckKeyState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key", preCheckKeyState, "OCI")
@@ -480,7 +482,7 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	updateKey(ctx, id, r.client, keyID, &plan.KeyCommonTFSDK, &state.KeyCommonTFSDK, &resp.Diagnostics)
+	updateKey(ctx, id, r.client, keyID, &plan.KeyCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -494,10 +496,12 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	tflog.Debug(ctx, "[resource_oci_key.go -> Update][response:"+redactOCIResponse(response)+"]")
+
 	setKeyState(ctx, id, r.client, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 

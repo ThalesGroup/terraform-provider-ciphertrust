@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -301,6 +302,9 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 		"ciphertrust_cm_key.cm_aes_key.id", "ciphertrust_oci_byok_key.aes.id")
 	updateResourceStr := fmt.Sprintf(updateConfig, localsResource, connectionResource)
 	minResourceStr := fmt.Sprintf(minConfig, localsResource, connectionResource)
+	// resetResourceStr resets schedule_for_deletion_days to 7 so keys are left with the
+	// default deletion window after the non-default values tested in earlier steps.
+	resetResourceStr := strings.NewReplacer("schedule_for_deletion_days = 8", "schedule_for_deletion_days = 7").Replace(minResourceStr)
 	modifyKeyConfigStr := fmt.Sprintf(maxConfig, localsResource, connectionResource,
 		`"tf-fake-source-key-id"`, "ciphertrust_oci_byok_key.aes.id")
 	modifyVersionConfigStr := fmt.Sprintf(maxConfig, localsResource, connectionResource,
@@ -448,6 +452,17 @@ func TestCckmOCIKeysAndVersionsBYOK(t *testing.T) {
 					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
 					// Key version list data source
 					resource.TestCheckResourceAttr(versionDataSource, "versions.#", "4"),
+				),
+			},
+			{
+				// Reset step: explicitly set schedule_for_deletion_days = 7 so any remaining
+				// resources are left with the default 7-day deletion window before error-only steps.
+				Config: resetResourceStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
 				),
 			},
 			// ModifyPlan: source_key_id changed to a fake value - expect plan-time error on byok key.

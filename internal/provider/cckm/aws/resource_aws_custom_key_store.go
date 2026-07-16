@@ -614,6 +614,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][response:"+redactAWSResponse(response)+"]")
 
 	var awsParamJSON AWSParamJSON
 	var planAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
@@ -670,8 +671,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	}
 
 	actualAuditEvent := gjson.Get(response, "enable_success_audit_event").Bool()
-	if plan.EnableSuccessAuditEvent.ValueBool() != types.BoolNull().ValueBool() &&
-		plan.EnableSuccessAuditEvent.ValueBool() != actualAuditEvent {
+	if plan.EnableSuccessAuditEvent.ValueBool() != actualAuditEvent {
 		payload.EnableSuccessAuditEvent = plan.EnableSuccessAuditEvent.ValueBool()
 		toBeUpdated = true
 	}
@@ -701,15 +701,19 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		payload.AWSParams = &awsParamJSON
 	}
 
+	actualXKSProxyURIEndpoint := gjson.Get(response, "aws_param.xks_proxy_uri_endpoint").String()
 	if planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != "" &&
-		planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() {
+		planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != types.StringNull().ValueString() &&
+		planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString() != actualXKSProxyURIEndpoint {
 		awsParamJSON.XKSProxyURIEndpoint = planAWSParamTFSDK.XKSProxyURIEndpoint.ValueString()
 		toBeUpdated = true
 		payload.AWSParams = &awsParamJSON
 	}
 
+	actualXKSProxyVPCEndpointServiceName := gjson.Get(response, "aws_param.xks_proxy_vpc_endpoint_service_name").String()
 	if planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != "" &&
-		planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != types.StringNull().ValueString() {
+		planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != types.StringNull().ValueString() &&
+		planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString() != actualXKSProxyVPCEndpointServiceName {
 		awsParamJSON.XKSProxyVPCEndpointServiceName = planAWSParamTFSDK.XKSProxyVPCEndpointServiceName.ValueString()
 		toBeUpdated = true
 		payload.AWSParams = &awsParamJSON
@@ -799,13 +803,14 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.setCustomKeyStoreState(ctx, response, &plan, &resp.Diagnostics)
+	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][final response:"+redactAWSResponse(response)+"]")
 
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][response:"+redactAWSResponse(response)+"]")
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	r.setCustomKeyStoreState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 // Delete deletes the AWS custom key store from CipherTrust Manager.
