@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func Test_CM_ResourceCMUser(t *testing.T) {
@@ -498,6 +502,132 @@ func Test_CM_CMUsersListStaleData(t *testing.T) {
 			{
 				Config: cmUsersListConfig(username, email),
 				Check:  resource.TestCheckResourceAttr("data.ciphertrust_cm_users_list.test", "users.#", "1"),
+			},
+		},
+	})
+}
+
+func testAccCMUserUseStateForUnknownCheckDestroy(userID *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		client, ok := createCMClient()
+		if !ok {
+			return fmt.Errorf("could not create CM client for CheckDestroy")
+		}
+		_, err := client.GetById(context.Background(), "", *userID, common.URL_USER_MANAGEMENT)
+		if err != nil && strings.Contains(err.Error(), "status: 404") {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("unexpected error checking user destruction: %w", err)
+		}
+		return fmt.Errorf("user %s still exists in CM after destroy", *userID)
+	}
+}
+
+// TestAccCMUser_UseStateForUnknown verifies that email, name, and nickname
+// remain stable known values in the plan (not "(known after apply)") when another
+// attribute has a pending change, confirming UseStateForUnknown() is effective.
+func TestAccCMUser_UseStateForUnknown(t *testing.T) {
+	RequireCM(t)
+
+	username := fmt.Sprintf("tf-usfu-%d", time.Now().Unix())
+	var capturedUserID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCMUserUseStateForUnknownCheckDestroy(&capturedUserID),
+		Steps: []resource.TestStep{
+			// Step 1: Create with username/password only; CM auto-populates email/name/nickname.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_user" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, username),
+				Check: checkStep(t, "Step 1: create, CM auto-populates email/name/nickname",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "email"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "nickname"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test_user"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test_user not found in state")
+						}
+						capturedUserID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Apply prevent_ui_login=true (unrelated change). PreApply checks verify
+			// that email/name/nickname are known values in the plan — not "(known after apply)".
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_user" {
+  username         = %q
+  password         = "CHAnge012!@#"
+  prevent_ui_login = true
+}`, username),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue(
+							"ciphertrust_user.test_user",
+							tfjsonpath.New("email"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+						plancheck.ExpectKnownValue(
+							"ciphertrust_user.test_user",
+							tfjsonpath.New("name"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+						plancheck.ExpectKnownValue(
+							"ciphertrust_user.test_user",
+							tfjsonpath.New("nickname"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+					},
+				},
+				Check: checkStep(t, "Step 2: apply prevent_ui_login=true; email/name/nickname still set",
+					resource.TestCheckResourceAttr("ciphertrust_user.test_user", "prevent_ui_login", "true"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "email"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_user", "nickname"),
+				),
+			},
+			// Step 3: Idempotency — no drift after apply.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_user" {
+  username         = %q
+  password         = "CHAnge012!@#"
+  prevent_ui_login = true
+}`, username),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 4: OOB name change; RefreshState confirms Read() updates state correctly,
+			// verifying UseStateForUnknown() does not suppress Read()-based drift detection.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("Step 4 PreConfig: createCMClient failed — skipping OOB mutation")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{"name": "changed-out-of-band"})
+					if err != nil {
+						t.Logf("Step 4 PreConfig: marshal failed: %v", err)
+						return
+					}
+					if _, err := client.UpdateData(context.Background(), capturedUserID, common.URL_USER_MANAGEMENT, payload, "user_id"); err != nil {
+						t.Logf("Step 4 PreConfig: UpdateData failed: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				Check: checkStep(t, "Step 4: refreshed state reflects OOB name change",
+					resource.TestCheckResourceAttr("ciphertrust_user.test_user", "name", "changed-out-of-band"),
+				),
 			},
 		},
 	})
