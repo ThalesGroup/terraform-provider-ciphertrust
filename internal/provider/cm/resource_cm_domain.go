@@ -419,11 +419,31 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 	}
 	// allow_user_management is not updatable via PATCH — CM ignores it and returns
 	// the original value. Omit from the payload to prevent plan inconsistency.
-	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+	if (!plan.Meta.IsNull() && !plan.Meta.IsUnknown()) || (!state.Meta.IsNull() && !state.Meta.IsUnknown()) {
 		metadataPayload := make(map[string]interface{})
-		for k, v := range plan.Meta.Elements() {
-			metadataPayload[k] = v.(types.String).ValueString()
+
+		// Add/update keys present in the new plan value.
+		if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+			for k, v := range plan.Meta.Elements() {
+				metadataPayload[k] = v.(types.String).ValueString()
+			}
 		}
+
+		// Explicitly null out keys that existed in prior state but are absent from the
+		// new plan. CM's merge-patch semantics require an explicit null to delete a key;
+		// omitting the key leaves it untouched server-side.
+		if !state.Meta.IsNull() && !state.Meta.IsUnknown() {
+			newElements := map[string]attr.Value{}
+			if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+				newElements = plan.Meta.Elements()
+			}
+			for k := range state.Meta.Elements() {
+				if _, exists := newElements[k]; !exists {
+					metadataPayload[k] = nil
+				}
+			}
+		}
+
 		patchMap["meta"] = metadataPayload
 	}
 
@@ -505,9 +525,15 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		// If omitted, preserve prior state to avoid false drift.
 	}
 
-	// Post-PATCH meta_data read-back — three-branch with !state.Meta.IsNull() outer guard.
-	// Guard uses state.Meta (prior state) — same logic as Read().
-	if !state.Meta.IsNull() {
+	// Post-PATCH meta_data read-back.
+	if plan.Meta.IsNull() {
+		// User removed meta_data from config entirely. All prior keys were sent as nil
+		// in the PATCH payload above. Set state to null so the next plan sees no diff.
+		plan.Meta = types.MapNull(types.StringType)
+	} else if !state.Meta.IsNull() {
+		// plan.Meta is non-null and state.Meta was non-null: partial clear, full clear
+		// via meta_data = {}, or a key-value update. Read back from CM to get the
+		// authoritative post-PATCH state.
 		metaReadResult := gjson.Get(readResponse, "meta")
 		if !metaReadResult.Exists() {
 			plan.Meta = types.MapNull(types.StringType)
@@ -527,6 +553,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 			}
 		}
 	}
+	// If plan.Meta is non-null and state.Meta is null (first-time meta_data addition via
+	// Update), neither branch fires and plan.Meta retains the user-configured value.
+	// The next terraform refresh / Read() syncs state from CM.
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
