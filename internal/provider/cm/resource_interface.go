@@ -165,7 +165,7 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Immutable) The name of the interface. Not valid for interface_type nae.",
+				Description: "(Immutable) The name of the interface. Not valid for interface_type nae or kmip — CM auto-assigns the name for those types.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					modifiers.ImmutableString(),
@@ -363,7 +363,12 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
 		payload.Mode = plan.Mode.ValueString()
 	}
-	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+	// CM rejects an explicit name on create for nae and kmip interfaces
+	// ("Name is not allowed while creating KMIP interface") — it auto-assigns
+	// one instead. Only forward a user-supplied name for interface types that
+	// accept it (web, snmp).
+	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() &&
+		plan.InterfaceType.ValueString() != "nae" && plan.InterfaceType.ValueString() != "kmip" {
 		payload.Name = plan.Name.ValueString()
 	}
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {

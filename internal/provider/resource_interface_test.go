@@ -264,15 +264,17 @@ func Test_CM_Interface_Idempotency(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				// Create without specifying name — CM rejects an explicit name on
+				// KMIP interface create (same restriction as NAE) and auto-assigns one.
 				PreConfig: func() { interfaceSweep(9015) },
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
   port           = 9015
-  name           = "kmip-test-9015"
   interface_type = "kmip"
 }`,
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "name"),
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "created_at"),
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "updated_at"),
 				),
