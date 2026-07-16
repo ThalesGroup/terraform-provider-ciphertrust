@@ -1764,7 +1764,7 @@ resource "ciphertrust_cm_key" "test" {
   key_size  = 256
   name      = %q
 }`, name),
-				ExpectError: regexp.MustCompile(`(?i)cannot clear meta|cannot be removed once|merge-PATCH`),
+				ExpectError: regexp.MustCompile(`(?i)immutable attribute`),
 			},
 		},
 	})

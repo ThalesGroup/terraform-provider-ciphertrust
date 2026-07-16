@@ -327,9 +327,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"meta": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "Optional end-user or service data stored with the key. " +
+				Description: "(Immutable) Optional end-user or service data stored with the key. " +
 					"PATCH merges JSON objects: removing a field from config does NOT clear it on the server. " +
 					"On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id.",
+				PlanModifiers: []planmodifier.Object{
+					modifiers.ImmutableObject(),
+				},
 				Attributes: map[string]schema.Attribute{
 					"owner_id": schema.StringAttribute{
 						Optional:    true,
@@ -1662,26 +1665,6 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// Detect meta-clear attempt: CM merge-PATCH cannot null out an existing meta block.
-	// If the prior state had meta set and the new plan omits it entirely, we would silently
-	// send no meta field in the PATCH — CM ignores the omission, owner_id persists on the
-	// server, and Read() re-hydrates it, creating an infinite plan/apply loop. Surface this
-	// as an explicit error instead of a silent false-success.
-	if state.Metadata != nil && plan.Metadata == nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+
-			"meta clear attempted but CM merge-PATCH cannot remove existing meta fields"+
-			" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Cannot Clear meta After Creation",
-			"The meta field cannot be removed once it has been set on a ciphertrust_cm_key resource. "+
-				"CM uses merge-PATCH semantics: omitting meta from the PATCH body does not clear "+
-				"existing meta fields on the server (owner_id and other sub-fields persist). "+
-				"To suppress this error, restore meta in your configuration to match the current "+
-				"server value, or destroy and recreate the key.",
-		)
 		return
 	}
 
