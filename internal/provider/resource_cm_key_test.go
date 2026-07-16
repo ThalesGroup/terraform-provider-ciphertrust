@@ -1771,3 +1771,174 @@ resource "ciphertrust_cm_key" "test" {
 		},
 	})
 }
+
+// TestCipherTrust_CMKey_MetaClearRejected verifies that attempting to remove meta from
+// config after it was set produces a hard AddError diagnostic instead of a false success.
+func TestCipherTrust_CMKey_MetaClearRejected(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-meta-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  meta = {
+    owner_id = "admin"
+  }
+}`, name),
+				Check: checkStep(t, "meta set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin"),
+				),
+			},
+			{
+				// Remove meta entirely — must produce AddError, not succeed.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_MetaSetAndStable verifies that a key created with meta.owner_id
+// does not exhibit spurious drift when the identical config is re-applied.
+func TestCipherTrust_CMKey_MetaSetAndStable(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-metastable-" + uuid.New().String()[:8]
+	config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  meta = {
+    owner_id = "admin"
+  }
+}`, name)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "meta set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin"),
+				),
+			},
+			{
+				// Re-apply identical config; no plan changes expected.
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_MetaOwnerIdUpdate verifies that any attempt to change meta.owner_id
+// after creation is blocked at plan time by ImmutableObject() — including non-null → non-null
+// changes. meta is fully immutable: CM's merge-PATCH cannot clear or reliably update sub-fields.
+func TestCipherTrust_CMKey_MetaOwnerIdUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-metaupd-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  meta = {
+    owner_id = "admin"
+  }
+}`, name),
+				Check: checkStep(t, "initial meta",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin"),
+				),
+			},
+			{
+				// Attempt to change owner_id (non-null → non-null); ImmutableObject() must fire.
+				// meta is fully immutable — CM's merge-PATCH cannot reliably update sub-fields
+				// either, so any post-creation meta change is blocked at plan time.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  meta = {
+    owner_id = "admin2"
+  }
+}`, name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMKey_MetaOwnerIdDrift verifies that out-of-band changes to meta.owner_id
+// on the CM server are detected by terraform plan (surfaced as a non-empty plan after RefreshState).
+func TestCipherTrust_CMKey_MetaOwnerIdDrift(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("createCMClient failed — CM not configured")
+	}
+
+	name := "tf-test-metadrift-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  meta = {
+    owner_id = "admin"
+  }
+}`, name),
+				Check: checkStep(t, "initial meta",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_cm_key.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Out-of-band change: update owner_id to "driftuser" via CM API directly.
+				// PreConfig fires before Terraform refresh/plan.
+				PreConfig: func() {
+					if capturedID == "" {
+						t.Logf("capturedID empty — skipping OOB patch")
+						return
+					}
+					patchPayload, err := json.Marshal(map[string]interface{}{
+						"meta": map[string]interface{}{"owner_id": "driftuser"},
+					})
+					if err != nil {
+						t.Logf("OOB patch marshal failed: %v", err)
+						return
+					}
+					if _, err := client.UpdateDataV2(context.Background(), capturedID, common.URL_KEY_MANAGEMENT, patchPayload); err != nil {
+						t.Logf("OOB meta patch failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

@@ -327,9 +327,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"meta": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "Optional end-user or service data stored with the key. " +
+				Description: "(Immutable) Optional end-user or service data stored with the key. " +
 					"PATCH merges JSON objects: removing a field from config does NOT clear it on the server. " +
 					"On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id.",
+				PlanModifiers: []planmodifier.Object{
+					modifiers.ImmutableObject(),
+				},
 				Attributes: map[string]schema.Attribute{
 					"owner_id": schema.StringAttribute{
 						Optional:    true,
