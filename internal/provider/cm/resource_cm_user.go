@@ -278,7 +278,10 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	state.UserName = types.StringValue(user.UserName)
 	state.UserID = types.StringValue(user.UserID)
 	state.ID = types.StringValue(user.UserID)
-	state.IsDomainUser = types.BoolValue(user.IsDomainUser)
+	if gj := gjson.Get(userResponse, "is_domain_user"); gj.Exists() {
+		state.IsDomainUser = types.BoolValue(gj.Bool())
+	}
+	// else: CM omits this key for local users; preserve state instead of resetting to false.
 	state.PasswordChangeRequired = types.BoolValue(user.PasswordChangeRequired)
 	state.PreventUILogin = types.BoolValue(user.LoginFlags.PreventUILogin)
 
