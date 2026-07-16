@@ -1333,10 +1333,28 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	} else {
 		plan.Name = types.StringNull()
 	}
-	// algorithm is ImmutableString — it cannot change after creation, so no drift is
-	// possible. Do not re-read from CM: plan := state (above) already preserves whatever
-	// casing the user wrote in their config ("aes" or "AES"), avoiding spurious
-	// ImmutableString errors that would fire if CM returns a different case than config.
+	// algorithm: hydrate from CM to correct any stale/corrupted state value.
+	// Normalize casing: if CM value and state value differ only in case (same algorithm),
+	// preserve the user's configured casing to avoid spurious ImmutableString plan diffs.
+	// If they differ in substance (genuine drift), use the CM value so the discrepancy
+	// surfaces in the plan.
+	// Guard on !IsNull(): keys created via template never set algorithm in config; their
+	// null state is intentionally preserved (template-driven null drift is not detectable).
+	if !state.Algorithm.IsNull() {
+		if r := gjson.Get(response, "algorithm"); r.Exists() {
+			cmAlgo := r.String()
+			stateAlgo := state.Algorithm.ValueString()
+			if strings.EqualFold(cmAlgo, stateAlgo) {
+				// Same algorithm, different case — preserve user's casing.
+				plan.Algorithm = state.Algorithm
+			} else {
+				// Genuinely different algorithm (drift) — surface the CM value.
+				plan.Algorithm = types.StringValue(cmAlgo)
+			}
+		} else {
+			plan.Algorithm = types.StringNull()
+		}
+	}
 	// usage_mask is Optional only — hydrate only when the user configured it (state
 	// non-null) to avoid perpetual drift for keys created without a usage_mask.
 	if !state.UsageMask.IsNull() {

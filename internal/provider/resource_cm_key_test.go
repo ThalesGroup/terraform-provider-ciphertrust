@@ -1655,3 +1655,81 @@ resource "ciphertrust_cm_key" "test" {
 		},
 	})
 }
+
+func TestCipherTrust_CMKey_AlgorithmDriftCorrection(t *testing.T) {
+	RequireCM(t)
+	var capturedID string
+	keyName := "tftest-algo-drift-" + acctest.RandString(8)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name      = %q
+  algorithm = "rsa"
+  key_size  = 2048
+}
+`, keyName),
+				Check: checkStep(t, "create RSA key",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "algorithm", "rsa"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_cm_key.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM not configured — skipping OOB step")
+						return
+					}
+					ctx := context.Background()
+					payload, _ := json.Marshal(map[string]interface{}{"description": "drift-test"})
+					client.UpdateData(ctx, capturedID, common.URL_KEY_MANAGEMENT, payload, "updatedAt")
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				Check: checkStep(t, "algorithm casing preserved after refresh",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "algorithm", "rsa"),
+				),
+			},
+		},
+	})
+}
+
+func TestCipherTrust_CMKey_AlgorithmNullTemplateKey(t *testing.T) {
+	RequireCM(t)
+	templateID := os.Getenv("CM_KEY_TEMPLATE_ID")
+	if templateID == "" {
+		t.Skip("CM_KEY_TEMPLATE_ID not set — skipping template key test")
+	}
+	keyName := "tftest-tmpl-algo-" + acctest.RandString(8)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name        = %q
+  template_id = %q
+}
+`, keyName, templateID),
+				Check: checkStep(t, "template key has no algorithm in state",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.test", "algorithm"),
+				),
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				Check: checkStep(t, "null algorithm preserved after refresh",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.test", "algorithm"),
+				),
+			},
+		},
+	})
+}
