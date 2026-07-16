@@ -1701,6 +1701,44 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
+// TestAccCMKey_EmptyMaterialReadback verifies that empty_material = true is
+// preserved in Terraform state after apply and that a second plan with identical
+// config produces no spurious drift. Covers TFIN-383.
+func TestAccCMKey_EmptyMaterialReadback(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-em-" + uuid.New().String()[:8]
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  name           = %q
+  algorithm      = "aes"
+  key_size       = 256
+  empty_material = true
+}`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with empty_material = true; confirm Read() returns it.
+			{
+				Config: createCfg,
+				Check: checkStep(t, "create+readback",
+					resource.TestCheckResourceAttr(
+						"ciphertrust_cm_key.test", "empty_material", "true"),
+				),
+			},
+			// Step 2: Re-apply identical config; confirm no spurious drift.
+			{
+				Config: createCfg,
+				Check: checkStep(t, "no-drift",
+					resource.TestCheckResourceAttr(
+						"ciphertrust_cm_key.test", "empty_material", "true"),
+				),
+			},
+		},
+	})
+}
+
 func TestCipherTrust_CMKey_AlgorithmNullTemplateKey(t *testing.T) {
 	RequireCM(t)
 	templateID := os.Getenv("CM_KEY_TEMPLATE_ID")

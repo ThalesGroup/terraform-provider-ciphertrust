@@ -59,20 +59,20 @@ output "license_id" {
 
 ### Required
 
-- `license` (String) (Immutable) License String. Cannot be changed after creation — destroy and recreate the resource to apply a different license.
+- `license` (String) (Immutable) License String
 
 ### Optional
 
-- `bind_type` (String) (Immutable) Binding type for this license. Can be either `instance` or `cluster`. If omitted, then CM attempts to bind the license to the cluster; if that fails with a lock-code error, it falls back to binding to the instance. Cannot be changed after creation. **Omitting `bind_type` from the configuration is safe — Terraform will not report drift** even though CM returns a default value, because the provider only reads `bind_type` back from the API when the user has explicitly set it.
+- `bind_type` (String) (Immutable) Binding type for this license. Can be either 'instance' or 'cluster'. If omitted, then CM attempts to bind the license to the cluster. If this step fails with a lock code error, it will attempt to bind to the instance.
 
 ### Read-Only
 
-- `expiration` (String) The date when the license expires.
-- `hash` (String) The hash of the license string.
+- `expiration` (String)
+- `hash` (String)
 - `id` (String) The ID of this resource.
-- `license_count` (Number) Number of licensed units included in this license.
-- `start` (String) The date when the license becomes effective.
-- `state` (String) Current state of the license (e.g. `Active`, `Expired`). This value changes over the license lifecycle and is always refreshed from the API on every `terraform plan` or `terraform apply`.
-- `trial_seconds_remaining` (String) Seconds remaining for a trial license. Returns an empty string (`""`) for non-trial licenses, which is stable and does not cause drift.
-- `type` (String) The license type as returned by CipherTrust Manager.
-- `version` (String) The license version.
+- `license_count` (Number)
+- `start` (String)
+- `state` (String)
+- `trial_seconds_remaining` (String)
+- `type` (String)
+- `version` (String)

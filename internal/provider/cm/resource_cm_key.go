@@ -1420,6 +1420,13 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			plan.UnExportable = types.BoolValue(r.Bool())
 		}
 	}
+	if !state.EmptyMaterial.IsNull() {
+		if r := gjson.Get(response, "emptyMaterial"); r.Exists() {
+			plan.EmptyMaterial = types.BoolValue(r.Bool())
+		} else {
+			plan.EmptyMaterial = types.BoolNull()
+		}
+	}
 	if !state.XTS.IsNull() {
 		// xts is not in the Key GET response schema; preserve state value when absent.
 		if r := gjson.Get(response, "xts"); r.Exists() {
