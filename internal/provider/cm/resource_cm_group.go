@@ -272,22 +272,25 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	// Three-branch pattern for each metadata field:
 	//
-	//   IsNull()    → send {} (non-nil empty map serialises as "field":{} because
-	//                 CMGroupJSON tags have no omitempty). Under RFC 7396 merge-PATCH,
-	//                 {} replaces the field with an empty object. Read()'s guard
-	//                 (v.Raw != "{}") maps the {} or absent API response back to
-	//                 types.StringNull(), achieving Terraform convergence.
-	//
-	//                 RISK: CM's merge-PATCH behaviour for {} is inferred from RFC 7396
-	//                 and must be validated against a live CM instance before merge (see
-	//                 Validation Gate in CM API Alignment section). If CM treats {} as
-	//                 "no change", Read() will restore the CM value and re-surface the
-	//                 drift — visible and diagnosable, not silent state corruption.
+	//   IsNull()    → per-key null deletion (confirmed live: CM ignores {} and null at the
+	//                 field level, but honours {"key":null} to delete individual keys).
+	//                 Parse the prior state JSON to extract existing keys, then set each to
+	//                 nil so CM's merge-PATCH deletes them. Read()'s guard (v.Raw != "{}")
+	//                 maps the resulting {} or absent response back to types.StringNull().
 	//
 	//   IsUnknown() → skip (deferred reference; CM value preserved).
 	//   else        → unmarshal and send the JSON object.
 	if plan.AppMetadata.IsNull() {
-		payload.AppMetadata = map[string]interface{}{}
+		if !state.AppMetadata.IsNull() && state.AppMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.AppMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.AppMetadata = nullMap
+			}
+		}
 	} else if !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
@@ -296,7 +299,16 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if plan.ClientMetadata.IsNull() {
-		payload.ClientMetadata = map[string]interface{}{}
+		if !state.ClientMetadata.IsNull() && state.ClientMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.ClientMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.ClientMetadata = nullMap
+			}
+		}
 	} else if !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
@@ -305,7 +317,16 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if plan.UserMetadata.IsNull() {
-		payload.UserMetadata = map[string]interface{}{}
+		if !state.UserMetadata.IsNull() && state.UserMetadata.ValueString() != "" {
+			var stateMap map[string]interface{}
+			if json.Unmarshal([]byte(state.UserMetadata.ValueString()), &stateMap) == nil {
+				nullMap := make(map[string]interface{}, len(stateMap))
+				for k := range stateMap {
+					nullMap[k] = nil
+				}
+				payload.UserMetadata = nullMap
+			}
+		}
 	} else if !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
