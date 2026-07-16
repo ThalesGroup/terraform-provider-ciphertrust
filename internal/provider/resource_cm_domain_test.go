@@ -645,6 +645,178 @@ func Test_CM_AccCMDomain_Idempotency(t *testing.T) {
 	})
 }
 
+// domainConfigEmptyMeta returns an HCL config for a domain with meta_data = {}.
+// The domainConfig() helper cannot produce this because an empty map is treated
+// the same as nil (no meta_data attribute).
+func domainConfigEmptyMeta(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name                  = %q
+  admins                = ["admin"]
+  allow_user_management = false
+  meta_data             = {}
+}
+`, name)
+}
+
+// TestCipherTrust_CMDomain_MetaDataClear verifies that clearing meta_data to an empty
+// map ({}) removes all keys from CM and leaves state as {} (not null), and that a
+// subsequent terraform plan produces no diff (acceptance condition 2).
+func TestCipherTrust_CMDomain_MetaDataClear(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz", "newkey": "newval"}),
+				Check: checkStep(t, "MetaDataClear: create",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.abc", "xyz"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.newkey", "newval"),
+				),
+			},
+			{
+				Config: domainConfigEmptyMeta(rName),
+				Check: checkStep(t, "MetaDataClear: clear to {}",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.%", "0"),
+				),
+			},
+			{
+				Config:             domainConfigEmptyMeta(rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMDomain_MetaDataPartialRemove verifies that removing one key from
+// meta_data deletes only that key on CM while preserving the remaining key, and that
+// a subsequent terraform plan produces no diff (acceptance condition 3).
+func TestCipherTrust_CMDomain_MetaDataPartialRemove(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz", "newkey": "newval"}),
+				Check: checkStep(t, "MetaDataPartialRemove: create",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.abc", "xyz"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.newkey", "newval"),
+				),
+			},
+			{
+				Config: domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz"}),
+				Check: checkStep(t, "MetaDataPartialRemove: remove newkey",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.abc", "xyz"),
+					resource.TestCheckNoResourceAttr("ciphertrust_domain.test", "meta_data.newkey"),
+				),
+			},
+			{
+				Config:             domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz"}),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMDomain_MetaDataRemoveAttribute verifies that removing the meta_data
+// attribute entirely from config (null) deletes all CM meta keys, leaves state as null
+// (not {}), and produces no diff on a subsequent plan (acceptance condition 4).
+func TestCipherTrust_CMDomain_MetaDataRemoveAttribute(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz"}),
+				Check: checkStep(t, "MetaDataRemoveAttribute: create",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.abc", "xyz"),
+				),
+			},
+			{
+				// domainConfig with nil meta omits the meta_data attribute entirely (null).
+				Config: domainConfig(rName, []string{"admin"}, false, nil),
+				Check: checkStep(t, "MetaDataRemoveAttribute: remove attribute",
+					resource.TestCheckNoResourceAttr("ciphertrust_domain.test", "meta_data.abc"),
+					resource.TestCheckNoResourceAttr("ciphertrust_domain.test", "meta_data.%"),
+				),
+			},
+			{
+				Config:             domainConfig(rName, []string{"admin"}, false, nil),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCipherTrust_CMDomain_MetaDataDrift verifies that out-of-band addition of a key to
+// meta on CM is detected on the next terraform refresh (acceptance condition 5).
+func TestCipherTrust_CMDomain_MetaDataDrift(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-" + uuid.New().String()[:8]
+	var domainID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, map[string]string{"abc": "xyz"}),
+				Check: checkStep(t, "MetaDataDrift: create",
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "meta_data.abc", "xyz"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_domain.test"]
+						if !ok {
+							return fmt.Errorf("resource ciphertrust_domain.test not found in state")
+						}
+						domainID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				// Out-of-band: add a new key to meta on CM, then refresh.
+				// Read() with !state.Meta.IsNull() guard active will detect the drift.
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping OOB step")
+						return
+					}
+					_, err := client.UpdateData(
+						context.Background(),
+						domainID,
+						common.URL_DOMAIN,
+						[]byte(`{"meta":{"oob":"val"}}`),
+						"updatedAt",
+					)
+					if err != nil {
+						t.Logf("OOB PATCH failed: %v — skipping", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 // Test_CM_AccCMDomain_MutableFieldUpdate verifies that Update() successfully PATCHes a
 // mutable field (meta_data) after creation. The CM domain PATCH endpoint uses the
 // domain name as the path key.

@@ -60,14 +60,14 @@ output "syslog_connection_value" {
 
 ### Required
 
-- `host` (String) (Immutable) The hostname or IP address of the syslog connection. Cannot be changed after creation.
+- `host` (String) (Immutable) The hostname or IP address of the syslog connection.
 - `transport` (String) udp, tcp or tls
 
 ### Optional
 
 - `ca_cert` (String) The trusted CA cert in PEM format. Only used in TLS transport mode
 - `message_format` (String) The log message format for new log messages: rfc5424 (default) plain_message cef leef.
-- `port` (Number) (Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls. Cannot be changed after creation.
+- `port` (Number) (Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls
 
 ### Read-Only
 
@@ -75,11 +75,3 @@ output "syslog_connection_value" {
 - `created_at` (String)
 - `id` (String) The ID of this resource.
 - `updated_at` (String)
-
-## Behavioral Notes
-
-- **Drift detection**: `terraform plan` re-reads the syslog connection from CipherTrust Manager on every run. Any out-of-band change to `message_format` or other mutable fields is surfaced as drift.
-- **Out-of-band deletion**: If the syslog connection is deleted directly on CipherTrust Manager, `Read()` detects the HTTP 404 and removes the resource from Terraform state. The next `terraform plan` will show a plan to recreate it.
-- **Immutable fields**: `host` and `port` cannot be changed after the resource is created. Attempting to change either in the Terraform configuration is blocked at plan time with an error — no API call is made and no destroy+recreate occurs. To change `host` or `port`, destroy and recreate the resource.
-- **Mutable fields**: `transport` and `message_format` can be updated in place via `terraform apply` without recreating the resource.
-- **Transport constraints**: `ca_cert` is only used when `transport = "tls"`. The default port depends on the chosen transport: 514 (udp), 601 (tcp), 6514 (tls).
