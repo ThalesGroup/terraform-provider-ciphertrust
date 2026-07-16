@@ -758,9 +758,9 @@ resource "ciphertrust_groups" "test" {
 `, name)
 }
 
-// TestCipherTrust_CMGroup_UserMetadataNullClear confirms that clearing user_metadata to
+// TestAccCMGroup_UserMetadataNullClear confirms that clearing user_metadata to
 // null converges after a single apply and produces no subsequent diff.
-func TestCipherTrust_CMGroup_UserMetadataNullClear(t *testing.T) {
+func TestAccCMGroup_UserMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 	name := "tftest-group-" + uuid.New().String()[:8]
 
@@ -788,9 +788,9 @@ func TestCipherTrust_CMGroup_UserMetadataNullClear(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMGroup_AppMetadataNullClear confirms that clearing app_metadata to
+// TestAccCMGroup_AppMetadataNullClear confirms that clearing app_metadata to
 // null converges after a single apply and produces no subsequent diff.
-func TestCipherTrust_CMGroup_AppMetadataNullClear(t *testing.T) {
+func TestAccCMGroup_AppMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 	name := "tftest-group-" + uuid.New().String()[:8]
 
@@ -818,9 +818,9 @@ func TestCipherTrust_CMGroup_AppMetadataNullClear(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMGroup_ClientMetadataNullClear confirms that clearing client_metadata to
+// TestAccCMGroup_ClientMetadataNullClear confirms that clearing client_metadata to
 // null converges after a single apply and produces no subsequent diff.
-func TestCipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
+func TestAccCMGroup_ClientMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 	name := "tftest-group-" + uuid.New().String()[:8]
 
@@ -848,9 +848,9 @@ func TestCipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMGroup_UserMetadataDrift confirms that Read() surfaces an out-of-band
+// TestAccCMGroup_UserMetadataDrift confirms that Read() surfaces an out-of-band
 // change to user_metadata and that a subsequent plan detects drift.
-func TestCipherTrust_CMGroup_UserMetadataDrift(t *testing.T) {
+func TestAccCMGroup_UserMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -888,9 +888,9 @@ func TestCipherTrust_CMGroup_UserMetadataDrift(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMGroup_AppMetadataDrift confirms that Read() surfaces an out-of-band
+// TestAccCMGroup_AppMetadataDrift confirms that Read() surfaces an out-of-band
 // change to app_metadata and that a subsequent plan detects drift.
-func TestCipherTrust_CMGroup_AppMetadataDrift(t *testing.T) {
+func TestAccCMGroup_AppMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
@@ -928,9 +928,9 @@ func TestCipherTrust_CMGroup_AppMetadataDrift(t *testing.T) {
 	})
 }
 
-// TestCipherTrust_CMGroup_ClientMetadataDrift confirms that Read() surfaces an out-of-band
+// TestAccCMGroup_ClientMetadataDrift confirms that Read() surfaces an out-of-band
 // change to client_metadata and that a subsequent plan detects drift.
-func TestCipherTrust_CMGroup_ClientMetadataDrift(t *testing.T) {
+func TestAccCMGroup_ClientMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {

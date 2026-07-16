@@ -264,10 +264,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	var payload CMGroupJSON
 
-	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+	if plan.Name.ValueString() != "" {
 		payload.Name = plan.Name.ValueString()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
+	if plan.Description.ValueString() != "" {
 		payload.Description = plan.Description.ValueString()
 	}
 
@@ -408,6 +408,23 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+// nullifyMapKeys parses a JSON object string and returns a map where every
+// top-level key is set to nil. Sending this as a PATCH field instructs CM to
+// remove each key via RFC 7396 merge-patch semantics, leaving the field as {}.
+// Read() then converts {} to null in Terraform state. If jsonStr cannot be
+// parsed, an empty map is returned (safe no-op on CM).
+func nullifyMapKeys(jsonStr string) map[string]interface{} {
+	var existing map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &existing); err != nil {
+		return map[string]interface{}{}
+	}
+	nullified := make(map[string]interface{}, len(existing))
+	for k := range existing {
+		nullified[k] = nil
+	}
+	return nullified
 }
 
 // compactJSONString returns s compacted (no extra whitespace). If compaction
