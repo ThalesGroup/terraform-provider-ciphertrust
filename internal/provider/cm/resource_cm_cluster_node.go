@@ -572,6 +572,11 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 	state.StatusCode = types.StringValue(gjson.Get(response, "status.code").String())
 	state.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
 
+	if nodeInfo, nerr := r.client.GetById(ctx, id, nodeID, common.URL_NODES); nerr == nil {
+		state.PublicAddress = types.StringValue(gjson.Get(nodeInfo, "publicAddress").String())
+	}
+	// else: leave state.PublicAddress unchanged; a transient fetch failure shouldn't fail Read.
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
