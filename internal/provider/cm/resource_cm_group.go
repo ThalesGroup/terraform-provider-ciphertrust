@@ -272,11 +272,17 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	// Three-branch pattern for each metadata field:
 	//
-	//   IsNull()    → send {} (non-nil empty map → serialises as "field":{} because
+	//   IsNull()    → send {} (non-nil empty map serialises as "field":{} because
 	//                 CMGroupJSON tags have no omitempty). Under RFC 7396 merge-PATCH,
 	//                 {} replaces the field with an empty object. Read()'s guard
 	//                 (v.Raw != "{}") maps the {} or absent API response back to
 	//                 types.StringNull(), achieving Terraform convergence.
+	//
+	//                 RISK: CM's merge-PATCH behaviour for {} is inferred from RFC 7396
+	//                 and must be validated against a live CM instance before merge (see
+	//                 Validation Gate in CM API Alignment section). If CM treats {} as
+	//                 "no change", Read() will restore the CM value and re-surface the
+	//                 drift — visible and diagnosable, not silent state corruption.
 	//
 	//   IsUnknown() → skip (deferred reference; CM value preserved).
 	//   else        → unmarshal and send the JSON object.
@@ -440,24 +446,6 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
-}
-
-// nullifyMetaKeys builds a per-key-null patch map from prior state so CM removes
-// each key via RFC 7396 merge-PATCH (key set to null → key deleted from object).
-// If state is null/unknown/empty/unparseable, returns an empty map so the field
-// is set to {} (a no-op clear that still satisfies the omitempty-absent contract).
-func nullifyMetaKeys(state types.String) map[string]interface{} {
-	if !state.IsNull() && !state.IsUnknown() && state.ValueString() != "" {
-		var old map[string]interface{}
-		if json.Unmarshal([]byte(state.ValueString()), &old) == nil && len(old) > 0 {
-			patch := make(map[string]interface{}, len(old))
-			for k := range old {
-				patch[k] = nil
-			}
-			return patch
-		}
-	}
-	return map[string]interface{}{}
 }
 
 // compactJSONString returns s compacted (no extra whitespace). If compaction
