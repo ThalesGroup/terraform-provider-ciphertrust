@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -730,6 +732,280 @@ func Test_CM_AccCMGroupsList_Idempotency(t *testing.T) {
 			// Second read — must produce no plan diff.
 			{
 				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// checkGroupDestroyed returns a TestCheckFunc that verifies the named group no
+// longer exists in CM.
+func checkGroupDestroyed(name string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		client, ok := createCMClient()
+		if !ok {
+			return fmt.Errorf("createCMClient failed — cannot verify group %q was destroyed", name)
+		}
+		_, err := client.GetById(context.Background(), uuid.New().String(), name, common.URL_GROUP)
+		if err == nil {
+			return fmt.Errorf("group %q still exists in CM after destroy", name)
+		}
+		if strings.Contains(err.Error(), "status: 404") {
+			return nil
+		}
+		return fmt.Errorf("unexpected error verifying destruction of group %q: %v", name, err)
+	}
+}
+
+// TestAccCMGroup_MetadataClearConverges verifies that clearing all three
+// metadata fields to null converges after one apply and produces an empty plan.
+func TestAccCMGroup_MetadataClearConverges(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-" + uuid.New().String()[:8]
+	clearConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name = %q
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkGroupDestroyed(name),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name            = %q
+  app_metadata    = jsonencode({ key = "value" })
+  client_metadata = jsonencode({ ckey = "cval" })
+  user_metadata   = jsonencode({ ukey = "uval" })
+}
+`, name),
+				Check: checkStep(t, "metadata clear: create with metadata set",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "app_metadata"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "client_metadata"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "user_metadata"),
+				),
+			},
+			{
+				Config: clearConfig,
+				Check: checkStep(t, "metadata clear: all three cleared to null",
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test_group", "app_metadata"),
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test_group", "client_metadata"),
+					resource.TestCheckNoResourceAttr("ciphertrust_groups.test_group", "user_metadata"),
+				),
+			},
+			{
+				// Convergence check: plan must be empty after clearing.
+				Config:             clearConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccCMGroup_AppMetadataDrift verifies that an out-of-band change to
+// app_metadata is detected on the next plan refresh.
+func TestAccCMGroup_AppMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-" + uuid.New().String()[:8]
+	var groupName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkGroupDestroyed(name),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name         = %q
+  app_metadata = jsonencode({ initial = "value" })
+}
+`, name),
+				Check: checkStep(t, "app_metadata drift: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "app_metadata"),
+					func(s *terraform.State) error {
+						groupName = s.RootModule().Resources["ciphertrust_groups.test_group"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						log.Printf("[WARN] TestAccCMGroup_AppMetadataDrift: createCMClient failed — skipping out-of-band app_metadata patch")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"app_metadata": map[string]interface{}{"drifted": "app"},
+					})
+					if err != nil {
+						log.Printf("[WARN] TestAccCMGroup_AppMetadataDrift: json.Marshal error: %v", err)
+						return
+					}
+					if _, err = client.UpdateData(context.Background(), groupName, common.URL_GROUP, payload, "name"); err != nil {
+						log.Printf("[WARN] TestAccCMGroup_AppMetadataDrift: UpdateData error: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCMGroup_ClientMetadataDrift verifies that an out-of-band change to
+// client_metadata is detected on the next plan refresh.
+func TestAccCMGroup_ClientMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-" + uuid.New().String()[:8]
+	var groupName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkGroupDestroyed(name),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name            = %q
+  client_metadata = jsonencode({ cinitial = "cvalue" })
+}
+`, name),
+				Check: checkStep(t, "client_metadata drift: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "client_metadata"),
+					func(s *terraform.State) error {
+						groupName = s.RootModule().Resources["ciphertrust_groups.test_group"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						log.Printf("[WARN] TestAccCMGroup_ClientMetadataDrift: createCMClient failed — skipping out-of-band client_metadata patch")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"client_metadata": map[string]interface{}{"drifted": "client"},
+					})
+					if err != nil {
+						log.Printf("[WARN] TestAccCMGroup_ClientMetadataDrift: json.Marshal error: %v", err)
+						return
+					}
+					if _, err = client.UpdateData(context.Background(), groupName, common.URL_GROUP, payload, "name"); err != nil {
+						log.Printf("[WARN] TestAccCMGroup_ClientMetadataDrift: UpdateData error: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCMGroup_UserMetadataDrift verifies that an out-of-band change to
+// user_metadata is detected on the next plan refresh.
+func TestAccCMGroup_UserMetadataDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-" + uuid.New().String()[:8]
+	var groupName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkGroupDestroyed(name),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name          = %q
+  user_metadata = jsonencode({ uinitial = "uvalue" })
+}
+`, name),
+				Check: checkStep(t, "user_metadata drift: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "user_metadata"),
+					func(s *terraform.State) error {
+						groupName = s.RootModule().Resources["ciphertrust_groups.test_group"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						log.Printf("[WARN] TestAccCMGroup_UserMetadataDrift: createCMClient failed — skipping out-of-band user_metadata patch")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"user_metadata": map[string]interface{}{"drifted": "user"},
+					})
+					if err != nil {
+						log.Printf("[WARN] TestAccCMGroup_UserMetadataDrift: json.Marshal error: %v", err)
+						return
+					}
+					if _, err = client.UpdateData(context.Background(), groupName, common.URL_GROUP, payload, "name"); err != nil {
+						log.Printf("[WARN] TestAccCMGroup_UserMetadataDrift: UpdateData error: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestAccCMGroup_MetadataUpdate verifies that updating all three metadata fields
+// from one non-null value to another converges correctly after the delegated Read().
+func TestAccCMGroup_MetadataUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-" + uuid.New().String()[:8]
+	updatedConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name            = %q
+  app_metadata    = jsonencode({ k1 = "v1", k2 = "v2" })
+  client_metadata = jsonencode({ ck1 = "cv1", ck2 = "cv2" })
+  user_metadata   = jsonencode({ uk1 = "uv1", uk2 = "uv2" })
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             checkGroupDestroyed(name),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "test_group" {
+  name            = %q
+  app_metadata    = jsonencode({ k1 = "v1" })
+  client_metadata = jsonencode({ ck1 = "cv1" })
+  user_metadata   = jsonencode({ uk1 = "uv1" })
+}
+`, name),
+				Check: checkStep(t, "metadata update: create with initial values",
+					resource.TestCheckResourceAttr("ciphertrust_groups.test_group", "app_metadata", `{"k1":"v1"}`),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "client_metadata"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "user_metadata"),
+				),
+			},
+			{
+				Config: updatedConfig,
+				Check: checkStep(t, "metadata update: updated to new values",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "app_metadata"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "client_metadata"),
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.test_group", "user_metadata"),
+				),
+			},
+			{
+				// Convergence check: plan must be empty after update.
+				Config:             updatedConfig,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},

@@ -247,6 +247,8 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Update]["+id+"]")
 	var plan, state CMGroupTFSDK
 	var payload CMGroupJSON
 
@@ -268,21 +270,37 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		payload.Description = plan.Description.ValueString()
 	}
 
-	if !plan.AppMetadata.IsNull() && !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
+	// Three-branch pattern for each metadata field:
+	//
+	//   IsNull()    → send {} (non-nil empty map → serialises as "field":{} because
+	//                 CMGroupJSON tags have no omitempty). Under RFC 7396 merge-PATCH,
+	//                 {} replaces the field with an empty object. Read()'s guard
+	//                 (v.Raw != "{}") maps the {} or absent API response back to
+	//                 types.StringNull(), achieving Terraform convergence.
+	//
+	//   IsUnknown() → skip (deferred reference; CM value preserved).
+	//   else        → unmarshal and send the JSON object.
+	if plan.AppMetadata.IsNull() {
+		payload.AppMetadata = map[string]interface{}{}
+	} else if !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
 			payload.AppMetadata = meta
 		}
 	}
 
-	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
+	if plan.ClientMetadata.IsNull() {
+		payload.ClientMetadata = map[string]interface{}{}
+	} else if !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
 			payload.ClientMetadata = meta
 		}
 	}
 
-	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
+	if plan.UserMetadata.IsNull() {
+		payload.UserMetadata = map[string]interface{}{}
+	} else if !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
 		var meta map[string]interface{}
 		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
 			payload.UserMetadata = meta
@@ -346,11 +364,40 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		plan.UserIDs = state.UserIDs
 	}
 
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
+	// Seed resp.State with the updated plan so Read() can locate the resource by ID.
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Delegate final state hydration to Read() so state reflects what CM actually
+	// persisted (metadata cleared/updated, compact-normalised values, membership)
+	// rather than the raw plan values.
+	//
+	// RemoveResource guard: the existing Read() calls resp.State.RemoveResource(ctx)
+	// on 404. RemoveResource does NOT add an error diagnostic, so HasError() alone
+	// cannot detect it. The Plugin Framework's RemoveResource sets the underlying
+	// tftypes.Value to a null object (IsNull() → true). A fresh ReadResponse
+	// initialised with State: resp.State starts with a non-null, non-undefined
+	// tftypes.Value; after r.Read() runs, the combined IsNull()||Type()==nil
+	// guard correctly distinguishes a RemoveResource call from a successful hydration.
+	readReq := resource.ReadRequest{State: resp.State}
+	readResp := &resource.ReadResponse{State: resp.State}
+	r.Read(ctx, readReq, readResp)
+	if readResp.Diagnostics.HasError() {
+		resp.Diagnostics.Append(readResp.Diagnostics...)
+		return
+	}
+	if readResp.State.Raw.IsNull() || readResp.State.Raw.Type() == nil {
+		// Read() called RemoveResource (transient 404 after successful PATCH).
+		// Retain the seeded plan state; log a warning for operator visibility.
+		tflog.Warn(ctx, "[resource_cm_group.go -> Update] Read() returned empty state after "+
+			"successful PATCH (possible transient 404); retaining seeded plan state. "+
+			"Resource: "+plan.Name.ValueString()+" ["+id+"]")
+		return
+	}
+	// Read succeeded — use its hydrated state.
+	resp.State = readResp.State
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -393,6 +440,24 @@ func (d *resourceCMGroup) Configure(_ context.Context, req resource.ConfigureReq
 	}
 
 	d.client = client
+}
+
+// nullifyMetaKeys builds a per-key-null patch map from prior state so CM removes
+// each key via RFC 7396 merge-PATCH (key set to null → key deleted from object).
+// If state is null/unknown/empty/unparseable, returns an empty map so the field
+// is set to {} (a no-op clear that still satisfies the omitempty-absent contract).
+func nullifyMetaKeys(state types.String) map[string]interface{} {
+	if !state.IsNull() && !state.IsUnknown() && state.ValueString() != "" {
+		var old map[string]interface{}
+		if json.Unmarshal([]byte(state.ValueString()), &old) == nil && len(old) > 0 {
+			patch := make(map[string]interface{}, len(old))
+			for k := range old {
+				patch[k] = nil
+			}
+			return patch
+		}
+	}
+	return map[string]interface{}{}
 }
 
 // compactJSONString returns s compacted (no extra whitespace). If compaction
