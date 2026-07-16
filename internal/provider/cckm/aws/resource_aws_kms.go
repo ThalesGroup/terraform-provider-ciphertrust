@@ -326,6 +326,8 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_kms.go -> Update][get response:"+redactAWSResponse(kmsResponse)+"]")
+
 	kmsAccount := gjson.Get(kmsResponse, "account").String()
 	mutexKey := fmt.Sprintf("aws-kms-%s", kmsAccount)
 	mutex.CckmMutex.Lock(mutexKey)

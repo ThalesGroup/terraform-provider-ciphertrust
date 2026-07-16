@@ -24,9 +24,9 @@ const (
 )
 
 // updateKey applies all mutable changes to an OCI key.
-func updateKey(ctx context.Context, id string, client *common.Client, keyID string, plan *models.KeyCommonTFSDK, state *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
+func updateKey(ctx context.Context, id string, client *common.Client, keyID string, plan *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
 
-	if !plan.RestoreFromBackup.IsNull() && plan.RestoreFromBackup != state.RestoreFromBackup {
+	if !plan.RestoreFromBackup.IsNull() && plan.RestoreFromBackup.ValueString() != "" {
 		restoreKeyFromBackup(ctx, id, client, keyID, diags)
 		if diags.HasError() {
 			return
@@ -55,16 +55,19 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 		}
 	}
 
-	keyRotationEnabled := gjson.Get(response, "auto_rotate").Bool()
+	keyJobConfigID := gjson.Get(response, "labels.job_config_id").String()
 	if plan.EnableAutoRotation == nil {
-		if keyRotationEnabled {
+		if keyJobConfigID != "" {
 			disableSchedulerRotation(ctx, id, client, keyID, diags)
 			if diags.HasError() {
 				return
 			}
 		}
 	} else {
-		if !keyRotationEnabled || plan.EnableAutoRotation != state.EnableAutoRotation {
+		planJobConfigID := plan.EnableAutoRotation.JobConfigID.ValueString()
+		planKeySource := plan.EnableAutoRotation.KeySource.ValueString()
+		keyKeySource := gjson.Get(response, "labels.auto_rotate_key_source").String()
+		if planJobConfigID != keyJobConfigID || planKeySource != keyKeySource {
 			enableSchedulerRotation(ctx, id, client, keyID, plan.EnableAutoRotation, diags)
 			if diags.HasError() {
 				return

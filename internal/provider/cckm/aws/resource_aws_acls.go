@@ -264,6 +264,8 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_acls.go -> Update][get response:"+redactAWSResponse(response)+"]")
+
 	if !acls.AclExistsInResponse(response, resourceID) {
 		msg := "AWS KMS ACL was not found, cannot update."
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})

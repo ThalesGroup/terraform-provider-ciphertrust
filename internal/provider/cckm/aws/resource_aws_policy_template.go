@@ -243,6 +243,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	tflog.Debug(ctx, "[resource_aws_policy_template.go -> Update][get response:"+redactAWSResponse(response)+"]")
 
 	keyPolicyParams := r.getUpdatePolicyTemplateParams(ctx, &plan, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {

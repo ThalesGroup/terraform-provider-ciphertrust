@@ -85,14 +85,14 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 				protection_mode = "SOFTWARE"
 			}
 			name                       = local.oci_key_name
-			schedule_for_deletion_days = 8
+			schedule_for_deletion_days = 7
 			vault                      = %s
 		}
 
 		# Add a native version to the key
 		resource "ciphertrust_oci_key_version" "version" {
 			cckm_key_id                = %s
-			schedule_for_deletion_days = 8
+			schedule_for_deletion_days = 7
 		}
 
 		# List the key
@@ -169,14 +169,14 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
 					resource.TestCheckResourceAttrSet(keyResource, "oci_key_params.key_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "vault_id"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					// Version resource
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
 					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.vault_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.key_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "8"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
 					// Key list data source
 					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
 					resource.TestCheckResourceAttr(keysDataSource, "matched", "1"),
@@ -214,10 +214,10 @@ func TestCckmOCIKeysAndVersionsNative(t *testing.T) {
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					// Version resource
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "8"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
 					// Key list data source
 					resource.TestCheckResourceAttrPair(keyResource, "id", keysDataSource, "keys.0.id"),
 					resource.TestCheckResourceAttr(keysDataSource, "matched", "1"),
