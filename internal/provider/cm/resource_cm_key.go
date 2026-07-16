@@ -1665,6 +1665,26 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	// Detect meta-clear attempt: CM merge-PATCH cannot null out an existing meta block.
+	// If the prior state had meta set and the new plan omits it entirely, we would silently
+	// send no meta field in the PATCH — CM ignores the omission, owner_id persists on the
+	// server, and Read() re-hydrates it, creating an infinite plan/apply loop. Surface this
+	// as an explicit error instead of a silent false-success.
+	if state.Metadata != nil && plan.Metadata == nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+
+			"meta clear attempted but CM merge-PATCH cannot remove existing meta fields"+
+			" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
+		resp.Diagnostics.AddError(
+			"Cannot Clear meta After Creation",
+			"The meta field cannot be removed once it has been set on a ciphertrust_cm_key resource. "+
+				"CM uses merge-PATCH semantics: omitting meta from the PATCH body does not clear "+
+				"existing meta fields on the server (owner_id and other sub-fields persist). "+
+				"To suppress this error, restore meta in your configuration to match the current "+
+				"server value, or destroy and recreate the key.",
+		)
+		return
+	}
+
 	if plan.ActivationDate.ValueString() != "" {
 		payload.ActivationDate = plan.ActivationDate.ValueString()
 	}
