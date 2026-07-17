@@ -662,7 +662,7 @@ resource "ciphertrust_domain" "test" {
 // TestCipherTrust_CMDomain_MetaDataClear verifies that clearing meta_data to an empty
 // map ({}) removes all keys from CM and leaves state as {} (not null), and that a
 // subsequent terraform plan produces no diff (acceptance condition 2).
-func TestCipherTrust_CMDomain_MetaDataClear(t *testing.T) {
+func Test_CM_CipherTrust_CMDomain_MetaDataClear(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + uuid.New().String()[:8]
@@ -696,7 +696,7 @@ func TestCipherTrust_CMDomain_MetaDataClear(t *testing.T) {
 // TestCipherTrust_CMDomain_MetaDataPartialRemove verifies that removing one key from
 // meta_data deletes only that key on CM while preserving the remaining key, and that
 // a subsequent terraform plan produces no diff (acceptance condition 3).
-func TestCipherTrust_CMDomain_MetaDataPartialRemove(t *testing.T) {
+func Test_CM_CipherTrust_CMDomain_MetaDataPartialRemove(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + uuid.New().String()[:8]
@@ -731,7 +731,7 @@ func TestCipherTrust_CMDomain_MetaDataPartialRemove(t *testing.T) {
 // TestCipherTrust_CMDomain_MetaDataRemoveAttribute verifies that removing the meta_data
 // attribute entirely from config (null) deletes all CM meta keys, leaves state as null
 // (not {}), and produces no diff on a subsequent plan (acceptance condition 4).
-func TestCipherTrust_CMDomain_MetaDataRemoveAttribute(t *testing.T) {
+func Test_CM_CipherTrust_CMDomain_MetaDataRemoveAttribute(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + uuid.New().String()[:8]
@@ -765,7 +765,7 @@ func TestCipherTrust_CMDomain_MetaDataRemoveAttribute(t *testing.T) {
 
 // TestCipherTrust_CMDomain_MetaDataDrift verifies that out-of-band addition of a key to
 // meta on CM is detected on the next terraform refresh (acceptance condition 5).
-func TestCipherTrust_CMDomain_MetaDataDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMDomain_MetaDataDrift(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := "tf-domain-" + uuid.New().String()[:8]

@@ -90,7 +90,7 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 	})
 }
 
-func TestCMPasswordPolicyCreateAndUpdate(t *testing.T) {
+func Test_CM_PasswordPolicyCreateAndUpdate(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

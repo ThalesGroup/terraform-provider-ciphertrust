@@ -14,7 +14,7 @@ import (
 
 // TestAccDataSourceCMRegTokensList_basic creates one reg token and verifies the
 // ciphertrust_cm_tokens_list data source returns at least one token with an id.
-func TestAccDataSourceCMRegTokensList_basic(t *testing.T) {
+func Test_CM_AccDataSourceCMRegTokensList_basic(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -50,7 +50,7 @@ data "ciphertrust_cm_tokens_list" "test" {}
 // TestAccDataSourceCMRegTokensList_staleData validates that the data source reflects
 // an out-of-band deletion: after the token is deleted outside Terraform, the next
 // apply no longer surfaces that token in the data source list.
-func TestAccDataSourceCMRegTokensList_staleData(t *testing.T) {
+func Test_CM_AccDataSourceCMRegTokensList_staleData(t *testing.T) {
 	t.Skip("pre-existing failure unrelated to TFIN-371 — tracked separately")
 	RequireCM(t)
 	var tokenID string

@@ -528,7 +528,7 @@ func testAccCMUserUseStateForUnknownCheckDestroy(userID *string) resource.TestCh
 // TestAccCMUser_UseStateForUnknown verifies that email, name, and nickname
 // remain stable known values in the plan (not "(known after apply)") when another
 // attribute has a pending change, confirming UseStateForUnknown() is effective.
-func TestAccCMUser_UseStateForUnknown(t *testing.T) {
+func Test_CM_AccCMUser_UseStateForUnknown(t *testing.T) {
 	RequireCM(t)
 
 	username := fmt.Sprintf("tf-usfu-%d", time.Now().Unix())
@@ -636,7 +636,7 @@ resource "ciphertrust_user" "test_user" {
 
 // TestAccCMUser_NicknameImmutable verifies that changing nickname on an existing
 // ciphertrust_user is rejected at plan time with an immutability error.
-func TestAccCMUser_NicknameImmutable(t *testing.T) {
+func Test_CM_AccCMUser_NicknameImmutable(t *testing.T) {
 	RequireCM(t)
 	name := "tfin407-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
@@ -669,7 +669,7 @@ resource "ciphertrust_user" "test" {
 // TestAccCMUser_NicknameNoDriftAfterCreate verifies that after creating a ciphertrust_user
 // without setting nickname (CM auto-populates it), a subsequent terraform plan with no
 // config changes produces an empty plan.
-func TestAccCMUser_NicknameNoDriftAfterCreate(t *testing.T) {
+func Test_CM_AccCMUser_NicknameNoDriftAfterCreate(t *testing.T) {
 	RequireCM(t)
 	name := "tfin407nd-" + uuid.New().String()[:8]
 	cfg := providerConfig + fmt.Sprintf(`
@@ -697,7 +697,7 @@ resource "ciphertrust_user" "test" {
 // TestAccCMUser_NicknameOutOfBandDrift verifies the drift behaviour when Read()
 // returns the CM-side nickname after a refresh. With no explicit nickname in config,
 // UseStateForUnknown() ensures no spurious diff is produced.
-func TestAccCMUser_NicknameOutOfBandDrift(t *testing.T) {
+func Test_CM_AccCMUser_NicknameOutOfBandDrift(t *testing.T) {
 	RequireCM(t)
 	name := "tfin407ood-" + uuid.New().String()[:8]
 	cfg := providerConfig + fmt.Sprintf(`
@@ -788,7 +788,7 @@ resource "ciphertrust_user" "test_oob" {
 	})
 }
 
-func TestAccCMUser_UserMetadata(t *testing.T) {
+func Test_CM_AccCMUser_UserMetadata(t *testing.T) {
 	RequireCM(t)
 
 	name := "tf-user-meta-" + uuid.New().String()[:8]
@@ -959,65 +959,3 @@ resource "ciphertrust_user" "test" {
 // Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
 // CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
 // from state gracefully instead of returning a hard error.
-func Test_CM_CMUserOutOfBandDeletion(t *testing.T) {
-	username := fmt.Sprintf("tf-oob-%d", time.Now().Unix())
-
-	deleteOutOfBand := func(resourceName string) resource.TestCheckFunc {
-		return func(s *terraform.State) error {
-			rs, ok := s.RootModule().Resources[resourceName]
-			if !ok {
-				return fmt.Errorf("resource %s not found in state", resourceName)
-			}
-			id := rs.Primary.ID
-			client, ok := createCMClient()
-			if !ok {
-				t.Skip("Skipping out-of-band deletion test: CM client could not be created (check CIPHERTRUST_* env vars)")
-			}
-			endpoint := common.URL_USER_MANAGEMENT + "/" + id
-			if _, err := client.DeleteByURL(context.Background(), id, endpoint); err != nil {
-				return fmt.Errorf("out-of-band delete failed: %s", err)
-			}
-			return nil
-		}
-	}
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			// Step 1: Create the user, then delete it from CM directly.
-			// ExpectNonEmptyPlan: true suppresses the post-step consistency
-			// check failure that occurs because the OOB delete causes the
-			// resource to disappear from state during the refresh check.
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "test_oob" {
-  username = "%s"
-  password = "CHAnge012!@#"
-}
-`, username),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_user.test_oob", "id"),
-					deleteOutOfBand("ciphertrust_user.test_oob"),
-				),
-				ExpectNonEmptyPlan: true,
-			},
-			// Step 2: Refresh — Read() detects 404, removes from state, no error.
-			// ExpectNonEmptyPlan: true because after removal the plan shows +create.
-			{
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-			},
-			// Step 3: Plan — user gone from state, Terraform proposes + create.
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "test_oob" {
-  username = "%s"
-  password = "CHAnge012!@#"
-}
-`, username),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
-			},
-		},
-	})
-}

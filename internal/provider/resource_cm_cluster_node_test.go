@@ -11,7 +11,7 @@ import (
 
 // TestCipherTrust_ClusterNode_ImmutableFields verifies that host, port, member_host, and
 // member_port are immutable on ciphertrust_cluster_node. Requires a real two-node CM cluster.
-func TestCipherTrust_ClusterNode_ImmutableFields(t *testing.T) {
+func Test_CM_CipherTrust_ClusterNode_ImmutableFields(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("CM_CLUSTER_NODE_HOST") == "" {
 		t.Skip("CM_CLUSTER_NODE_HOST not set — skipping cluster_node immutability test (requires real two-node cluster)")

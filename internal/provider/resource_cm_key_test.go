@@ -1656,7 +1656,7 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
-func TestCipherTrust_CMKey_AlgorithmDriftCorrection(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_AlgorithmDriftCorrection(t *testing.T) {
 	RequireCM(t)
 	var capturedID string
 	keyName := "tftest-algo-drift-" + acctest.RandString(8)
@@ -1704,7 +1704,7 @@ resource "ciphertrust_cm_key" "test" {
 // TestAccCMKey_EmptyMaterialReadback verifies that empty_material = true is
 // preserved in Terraform state after apply and that a second plan with identical
 // config produces no spurious drift. Covers TFIN-383.
-func TestAccCMKey_EmptyMaterialReadback(t *testing.T) {
+func Test_CM_AccCMKey_EmptyMaterialReadback(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-em-" + uuid.New().String()[:8]
 
@@ -1739,7 +1739,7 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
-func TestCipherTrust_CMKey_AlgorithmNullTemplateKey(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_AlgorithmNullTemplateKey(t *testing.T) {
 	RequireCM(t)
 	templateID := os.Getenv("CM_KEY_TEMPLATE_ID")
 	if templateID == "" {
@@ -1774,7 +1774,7 @@ resource "ciphertrust_cm_key" "test" {
 
 // TestCipherTrust_CMKey_MetaClearRejected verifies that attempting to remove meta from
 // config after it was set produces a hard AddError diagnostic instead of a false success.
-func TestCipherTrust_CMKey_MetaClearRejected(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MetaClearRejected(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-meta-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
@@ -1810,7 +1810,7 @@ resource "ciphertrust_cm_key" "test" {
 
 // TestCipherTrust_CMKey_MetaSetAndStable verifies that a key created with meta.owner_id
 // does not exhibit spurious drift when the identical config is re-applied.
-func TestCipherTrust_CMKey_MetaSetAndStable(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MetaSetAndStable(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-metastable-" + uuid.New().String()[:8]
 	config := providerConfig + fmt.Sprintf(`
@@ -1844,7 +1844,7 @@ resource "ciphertrust_cm_key" "test" {
 // TestCipherTrust_CMKey_MetaOwnerIdUpdate verifies that any attempt to change meta.owner_id
 // after creation is blocked at plan time by ImmutableObject() — including non-null → non-null
 // changes. meta is fully immutable: CM's merge-PATCH cannot clear or reliably update sub-fields.
-func TestCipherTrust_CMKey_MetaOwnerIdUpdate(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MetaOwnerIdUpdate(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-metaupd-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
@@ -1886,7 +1886,7 @@ resource "ciphertrust_cm_key" "test" {
 
 // TestCipherTrust_CMKey_MetaOwnerIdDrift verifies that out-of-band changes to meta.owner_id
 // on the CM server are detected by terraform plan (surfaced as a non-empty plan after RefreshState).
-func TestCipherTrust_CMKey_MetaOwnerIdDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMKey_MetaOwnerIdDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
 	if !ok {
