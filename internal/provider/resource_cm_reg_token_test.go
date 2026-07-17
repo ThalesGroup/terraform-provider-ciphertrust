@@ -395,6 +395,190 @@ resource "ciphertrust_cm_reg_token" "test" {
 }`, profile)
 }
 
+// Test_CM_CMRegToken_ValidatorMaxClients verifies that max_clients = -1 is rejected at
+// plan time by the int64validator.AtLeast(0) constraint — no CM instance needed.
+func Test_CM_CMRegToken_ValidatorMaxClients(t *testing.T) {
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  max_clients = -1
+}`, name),
+				ExpectError: regexp.MustCompile(`at least 0`),
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_ValidatorLifetimeInvalid verifies that an invalid lifetime format is
+// rejected at plan time — no CM instance needed.
+func Test_CM_CMRegToken_ValidatorLifetimeInvalid(t *testing.T) {
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "garbage_format"
+}`, name),
+				ExpectError: regexp.MustCompile(`positive integer`),
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_ValidatorLifetimeValid verifies that a valid lifetime format ("30d")
+// applies successfully against a live CM.
+func Test_CM_CMRegToken_ValidatorLifetimeValid(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30d"
+}`, name),
+				Check: checkStep(t, "valid lifetime applies",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "30d"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_TokenSensitive verifies that after apply, the token attribute is
+// populated in state (Computed hydration not broken by Sensitive: true addition).
+func Test_CM_CMRegToken_TokenSensitive(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+}`, name),
+				Check: checkStep(t, "token is populated after apply",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.test", "token"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_ClientMgmtProfileIDOutOfBandDrift verifies that an out-of-band PATCH
+// setting client_management_profile_id on a token (which has it null in state) is detected
+// as drift by Read() on the next RefreshState.
+func Test_CM_CMRegToken_ClientMgmtProfileIDOutOfBandDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	// profileUUID is any UUID — CM accepts any value for this field without validation.
+	profileUUID := uuid.New().String()
+
+	var tokenID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+}`, name),
+				Check: checkStep(t, "out-of-band drift: create without profile id",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.test", "id"),
+					func(s *terraform.State) error {
+						tokenID = s.RootModule().Resources["ciphertrust_cm_reg_token.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping out-of-band PATCH")
+						return
+					}
+					payload, _ := json.Marshal(map[string]string{
+						"client_management_profile_id": profileUUID,
+					})
+					_, err := client.UpdateData(context.Background(), tokenID, common.URL_REG_TOKEN, payload, "id")
+					if err != nil {
+						t.Logf("out-of-band PATCH failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_ClientMgmtProfileIDTFDrivenDrift verifies that after a TF-driven
+// "clear" (removing client_management_profile_id from config) which CM silently no-ops,
+// a subsequent RefreshState surfaces the drift (null in state vs UUID in CM).
+//
+// CM validates client_management_profile_id on CREATE (400 for non-existent profile) but
+// not on PATCH. So this test sets the field via Update (step 2), then removes it (step 3),
+// then verifies drift is detected on the next RefreshState (step 4).
+func Test_CM_CMRegToken_ClientMgmtProfileIDTFDrivenDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-regtoken-" + uuid.New().String()[:8]
+	// profileUUID is any UUID — CM accepts any value in PATCH without existence validation.
+	profileUUID := uuid.New().String()
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create without client_management_profile_id (CM validates on POST).
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+}`, name),
+				Check: checkStep(t, "TF-driven drift: create without profile id",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_reg_token.test", "id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "client_management_profile_id"),
+				),
+			},
+			{
+				// Step 2: Update to set client_management_profile_id via PATCH (no existence validation).
+				// CM stores the UUID; state is updated to match.
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix                  = %q
+  client_management_profile_id = %q
+}`, name, profileUUID),
+				Check: checkStep(t, "TF-driven drift: update with profile id",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "client_management_profile_id", profileUUID),
+				),
+			},
+			{
+				// Step 3: remove client_management_profile_id from config and apply.
+				// TF state drops the field to null; Update() sends "" to CM but CM retains the UUID.
+				// After apply, the framework's internal post-apply refresh reads CM (still has UUID)
+				// and detects drift (null → UUID), so ExpectNonEmptyPlan: true is required.
+				Config: fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+}`, name),
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 // Test_CM_CMRegToken_LifetimeNoDrift verifies Fix (a): lifetime is not nulled by Read() after
 // Create or Update. CM never returns lifetime in GET responses (write-only field).
 func Test_CM_CMRegToken_LifetimeNoDrift(t *testing.T) {
