@@ -760,7 +760,7 @@ func checkGroupDestroyed(name string) resource.TestCheckFunc {
 
 // TestAccCMGroup_MetadataClearConverges verifies that clearing all three
 // metadata fields to null converges after one apply and produces an empty plan.
-func TestAccCMGroup_MetadataClearConverges(t *testing.T) {
+func Test_CM_AccCMGroup_MetadataClearConverges(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-" + uuid.New().String()[:8]
 	clearConfig := providerConfig + fmt.Sprintf(`
@@ -808,7 +808,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestAccCMGroup_AppMetadataDrift verifies that an out-of-band change to
 // app_metadata is detected on the next plan refresh.
-func TestAccCMGroup_AppMetadataDrift(t *testing.T) {
+func Test_CM_AccCMGroup_AppMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-" + uuid.New().String()[:8]
 	var groupName string
@@ -860,7 +860,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestAccCMGroup_ClientMetadataDrift verifies that an out-of-band change to
 // client_metadata is detected on the next plan refresh.
-func TestAccCMGroup_ClientMetadataDrift(t *testing.T) {
+func Test_CM_AccCMGroup_ClientMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-" + uuid.New().String()[:8]
 	var groupName string
@@ -912,7 +912,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestAccCMGroup_UserMetadataDrift verifies that an out-of-band change to
 // user_metadata is detected on the next plan refresh.
-func TestAccCMGroup_UserMetadataDrift(t *testing.T) {
+func Test_CM_AccCMGroup_UserMetadataDrift(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-" + uuid.New().String()[:8]
 	var groupName string
@@ -964,7 +964,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestAccCMGroup_MetadataUpdate verifies that updating all three metadata fields
 // from one non-null value to another converges correctly after the delegated Read().
-func TestAccCMGroup_MetadataUpdate(t *testing.T) {
+func Test_CM_AccCMGroup_MetadataUpdate(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-" + uuid.New().String()[:8]
 	updatedConfig := providerConfig + fmt.Sprintf(`
@@ -1016,7 +1016,7 @@ resource "ciphertrust_groups" "test_group" {
 // TestCipherTrust_CMGroup_ClientMetadataNullClear verifies that removing
 // client_metadata from config clears it on CM and converges without a
 // perpetual plan diff (TFIN-402).
-func TestCipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
+func Test_CM_CipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 
 	name := "tftest-group-" + uuid.New().String()[:8]

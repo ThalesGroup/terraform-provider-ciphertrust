@@ -25,7 +25,7 @@ func generateComplexPassword() string {
 // action with no retrievable server state; Read() preserves state unchanged.
 // Skipped unless CM_TEST_PASSWORD_CHANGE=true, TEST_CM_BOOTSTRAP_PASSWORD, and
 // TEST_CM_BOOTSTRAP_NEW_PASSWORD are all set.
-func TestCipherTrust_CMUserPwdChange_ReadStability(t *testing.T) {
+func Test_CM_CipherTrust_CMUserPwdChange_ReadStability(t *testing.T) {
 	RequireCM(t)
 
 	if os.Getenv("CM_TEST_PASSWORD_CHANGE") != "true" {
@@ -221,7 +221,7 @@ variable "tfacc_pwdchg_alt_new_password" {
 // TestAcc_CMUserPasswordChange_immutable verifies that changing any immutable field on a
 // ciphertrust_cm_user_password_change resource produces a plan-time error.
 // Required env vars: TF_ACC_CM_TEST_USERNAME, TF_ACC_CM_TEST_PASSWORD, TF_ACC_CM_TEST_NEW_PASSWORD.
-func TestAcc_CMUserPasswordChange_immutable(t *testing.T) {
+func Test_CM_Acc_CMUserPasswordChange_immutable(t *testing.T) {
 	RequireCM(t)
 
 	username := os.Getenv("TF_ACC_CM_TEST_USERNAME")
@@ -341,7 +341,7 @@ resource "ciphertrust_cm_user_password_change" "test" {
 // TestAcc_CMUserPasswordChange_idempotency verifies that a second plan with no config changes
 // shows no diff after apply, confirming id is correctly hydrated and Read() is stable.
 // Required env vars: TF_ACC_CM_TEST_USERNAME, TF_ACC_CM_TEST_PASSWORD, TF_ACC_CM_TEST_NEW_PASSWORD.
-func TestAcc_CMUserPasswordChange_idempotency(t *testing.T) {
+func Test_CM_Acc_CMUserPasswordChange_idempotency(t *testing.T) {
 	RequireCM(t)
 
 	username := os.Getenv("TF_ACC_CM_TEST_USERNAME")

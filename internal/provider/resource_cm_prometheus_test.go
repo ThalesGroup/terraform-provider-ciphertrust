@@ -48,7 +48,7 @@ resource "ciphertrust_cm_prometheus" "cm_prometheus" {
 	})
 }
 
-func TestCMPrometheusCreateAndToggle(t *testing.T) {
+func Test_CM_PrometheusCreateAndToggle(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

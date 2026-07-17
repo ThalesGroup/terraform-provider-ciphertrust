@@ -25,7 +25,7 @@ resource "ciphertrust_trial_license" "trial_license" {
 	})
 }
 
-func TestCMTrialLicenseCreateAndDestroy(t *testing.T) {
+func Test_CM_TrialLicenseCreateAndDestroy(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

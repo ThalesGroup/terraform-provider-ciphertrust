@@ -14,7 +14,7 @@ import (
 // TestCipherTrust_CMDomain_OOBDelete verifies that when a domain is deleted
 // directly on CipherTrust Manager (out-of-band), terraform refresh removes it
 // from state gracefully and produces a non-empty plan (recreate).
-func TestCipherTrust_CMDomain_OOBDelete(t *testing.T) {
+func Test_CM_CipherTrust_CMDomain_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	requireDomainCreationLicensed(t)
 	rName := fmt.Sprintf("tf-domain-oob-%d", time.Now().Unix())
@@ -63,7 +63,7 @@ resource "ciphertrust_domain" "test" {
 // TestCipherTrust_CMPolicy_OOBDelete verifies that when a policy is deleted
 // directly on CipherTrust Manager (out-of-band), terraform refresh removes it
 // from state gracefully and produces a non-empty plan (recreate).
-func TestCipherTrust_CMPolicy_OOBDelete(t *testing.T) {
+func Test_CM_CipherTrust_CMPolicy_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	policyName := fmt.Sprintf("tf-policy-oob-%d", time.Now().Unix())
 	var policyID string
@@ -112,7 +112,7 @@ resource "ciphertrust_policies" "test" {
 // TestCipherTrust_CMLogForwarder_OOBDelete verifies that when a log forwarder is
 // deleted directly on CipherTrust Manager (out-of-band), terraform refresh removes
 // it from state gracefully and produces a non-empty plan (recreate).
-func TestCipherTrust_CMLogForwarder_OOBDelete(t *testing.T) {
+func Test_CM_CipherTrust_CMLogForwarder_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	connID := requireLogForwarderConnID(t)
 	rName := fmt.Sprintf("tf-lf-oob-%d", time.Now().Unix())

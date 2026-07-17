@@ -363,7 +363,7 @@ func deleteAWSConnection(id string) {
 
 // TestAWSConnectionCreateUpdateDestroy verifies the full create, update, and destroy
 // lifecycle for an AWS connection using IAM credentials from environment variables.
-func TestAWSConnectionCreateUpdateDestroy(t *testing.T) {
+func Test_CM_AWSConnectionCreateUpdateDestroy(t *testing.T) {
 	RequireCM(t)
 	requireAWSIAMCredentials(t)
 	suffix := uuid.New().String()[:8]

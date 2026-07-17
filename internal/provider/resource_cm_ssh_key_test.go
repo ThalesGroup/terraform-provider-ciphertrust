@@ -112,7 +112,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 // deletion of the SSH key and removes it from state so a subsequent plan proposes
 // recreation. Skipped when TEST_SSH_PUBLIC_KEY is not set, or when the CM API
 // does not support SSH key deletion via normal authentication.
-func TestCipherTrust_CMSSHKey_OOBDelete(t *testing.T) {
+func Test_CM_CipherTrust_CMSSHKey_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
 	if sshKey == "" {
@@ -164,7 +164,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 // the server-assigned id (Computed) and the write-only key material; there are no
 // server-settable mutable attributes that can produce attribute-level drift, so this
 // test confirms Read() stability: refresh after apply must show no changes.
-func TestCipherTrust_CMSSHKey_AttributeDrift(t *testing.T) {
+func Test_CM_CipherTrust_CMSSHKey_AttributeDrift(t *testing.T) {
 	RequireCM(t)
 	sshKey := os.Getenv("TEST_SSH_PUBLIC_KEY")
 	if sshKey == "" {
@@ -232,7 +232,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 // TestAcc_CMSSHKey_immutable verifies that changing the immutable key field on an existing
 // ciphertrust_cm_ssh_key resource produces a plan-time error from modifiers.ImmutableString().
 // Required env vars: TF_ACC_SSH_PUBLIC_KEY, TF_ACC_SSH_PUBLIC_KEY_2.
-func TestAcc_CMSSHKey_immutable(t *testing.T) {
+func Test_CM_Acc_CMSSHKey_immutable(t *testing.T) {
 	RequireCM(t)
 	pubKey := os.Getenv("TF_ACC_SSH_PUBLIC_KEY")
 	if pubKey == "" {
@@ -270,7 +270,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 // diff after apply, confirming name and algorithm carry UseStateForUnknown() and are correctly
 // hydrated as known values after Create().
 // Required env var: TF_ACC_SSH_PUBLIC_KEY.
-func TestAcc_CMSSHKey_idempotency(t *testing.T) {
+func Test_CM_Acc_CMSSHKey_idempotency(t *testing.T) {
 	RequireCM(t)
 	pubKey := os.Getenv("TF_ACC_SSH_PUBLIC_KEY")
 	if pubKey == "" {
