@@ -239,9 +239,9 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 	if !state.Lifetime.IsNull() {
 		if r := gjson.Get(response, "lifetime"); r.Exists() {
 			state.Lifetime = types.StringValue(r.String())
-		} else {
-			state.Lifetime = types.StringNull()
 		}
+		// No else branch: CM never returns lifetime in GET responses (write-only).
+		// Prior state value is retained as-is, preventing perpetual drift.
 	}
 
 	if !state.NamePrefix.IsNull() {
@@ -288,21 +288,27 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	labelsResult := gjson.Get(response, "labels")
-	if !labelsResult.Exists() || labelsResult.Type == gjson.Null {
-		state.Labels = types.MapNull(types.StringType)
-	} else if len(labelsResult.Map()) == 0 {
-		state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
-	} else {
-		labelsMap := make(map[string]string)
-		labelsResult.ForEach(func(k, v gjson.Result) bool {
-			labelsMap[k.String()] = v.String()
-			return true
-		})
-		lv, diag := types.MapValueFrom(ctx, types.StringType, labelsMap)
-		resp.Diagnostics.Append(diag...)
-		if !resp.Diagnostics.HasError() {
-			state.Labels = lv
+	// labels: only hydrate when the user has configured this field (state non-null).
+	// When config omits labels (state null), CM returns labels:{} after PATCH.
+	// Without this guard, Read() writes an empty map into state, causing perpetual
+	// null→{} drift. When state is non-null, the inner three-branch logic applies.
+	if !state.Labels.IsNull() {
+		labelsResult := gjson.Get(response, "labels")
+		if !labelsResult.Exists() || labelsResult.Type == gjson.Null {
+			state.Labels = types.MapNull(types.StringType)
+		} else if len(labelsResult.Map()) == 0 {
+			state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		} else {
+			labelsMap := make(map[string]string)
+			labelsResult.ForEach(func(k, v gjson.Result) bool {
+				labelsMap[k.String()] = v.String()
+				return true
+			})
+			lv, diag := types.MapValueFrom(ctx, types.StringType, labelsMap)
+			resp.Diagnostics.Append(diag...)
+			if !resp.Diagnostics.HasError() {
+				state.Labels = lv
+			}
 		}
 	}
 

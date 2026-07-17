@@ -394,3 +394,106 @@ resource "ciphertrust_cm_reg_token" "test" {
   }
 }`, profile)
 }
+
+// Test_CM_CMRegToken_LifetimeNoDrift verifies Fix (a): lifetime is not nulled by Read() after
+// Create or Update. CM never returns lifetime in GET responses (write-only field).
+func Test_CM_CMRegToken_LifetimeNoDrift(t *testing.T) {
+	RequireCM(t)
+
+	configCreate := providerConfig + `
+resource "ciphertrust_cm_reg_token" "test" {
+  lifetime    = "10h"
+  max_clients = 5
+}
+`
+	configUpdate := providerConfig + `
+resource "ciphertrust_cm_reg_token" "test" {
+  lifetime    = "10h"
+  max_clients = 10
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Apply (Create)
+			{
+				Config: configCreate,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "10h"),
+				),
+			},
+			// Step 2: No-op Apply after Create — primary regression gate for Fix (a).
+			// If Read() nulls lifetime, Terraform proposes + lifetime = "10h" and this step fails.
+			{
+				Config: configCreate,
+				Check: checkStep(t, "noop-after-create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "10h"),
+				),
+			},
+			// Step 3: Apply (Update — change max_clients)
+			{
+				Config: configUpdate,
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "10h"),
+				),
+			},
+			// Step 4: No-op Apply after Update — second regression gate.
+			{
+				Config: configUpdate,
+				Check: checkStep(t, "noop-after-update",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "lifetime", "10h"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_CMRegToken_LabelsNoDrift verifies Fix (b): labels does not produce {} → null drift
+// when config omits the field and CM returns labels:{} after PATCH.
+func Test_CM_CMRegToken_LabelsNoDrift(t *testing.T) {
+	RequireCM(t)
+
+	configCreate := providerConfig + `
+resource "ciphertrust_cm_reg_token" "test" {
+  max_clients = 5
+}
+`
+	configUpdate := providerConfig + `
+resource "ciphertrust_cm_reg_token" "test" {
+  max_clients = 10
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Apply (Create) omitting labels
+			{
+				Config: configCreate,
+				Check: checkStep(t, "create",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.%"),
+				),
+			},
+			// Step 2: Apply (Update — triggers PATCH; CM returns labels:{} after PATCH)
+			{
+				Config: configUpdate,
+				Check: checkStep(t, "update",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.%"),
+				),
+			},
+			// Step 3: No-op Apply after Update — primary regression gate for Fix (b).
+			// If !state.Labels.IsNull() guard is absent, Read() writes {} into state,
+			// plan proposes - labels = {} -> null, and this step fails.
+			{
+				Config: configUpdate,
+				Check: checkStep(t, "noop-after-update",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.%"),
+				),
+			},
+		},
+	})
+}

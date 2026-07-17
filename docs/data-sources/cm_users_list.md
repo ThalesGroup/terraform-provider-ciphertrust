@@ -33,7 +33,7 @@ Read-Only:
 - `is_domain_user` (Boolean)
 - `name` (String)
 - `nickname` (String)
-- `password` (String)
+- `password` (String, Sensitive)
 - `password_change_required` (Boolean)
 - `prevent_ui_login` (Boolean)
 - `user_id` (String)
