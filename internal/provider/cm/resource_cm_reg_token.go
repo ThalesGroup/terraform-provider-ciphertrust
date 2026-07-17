@@ -4,17 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -49,7 +53,8 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"token": schema.StringAttribute{
 				Computed:    true,
-				Description: "Set the token recieved from the API call to the state.",
+				Sensitive:   true,
+				Description: "Registration token secret returned by the API. Marked sensitive — value is redacted in plan/apply output.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -80,12 +85,28 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "Labels are key/value pairs used to group resources. They are based on Kubernetes Labels",
 			},
 			"lifetime": schema.StringAttribute{
-				Optional:    true,
-				Description: "Duration in minutes/hours/days for which this token can be used for registering CipherTrust Manager clients. No limit by default. For 'x' amount of time, it should formatted as xm for x minutes, xh for hours and xd for days.",
+				Optional: true,
+				Description: "Duration the token is valid. Must be a positive integer followed by a unit: " +
+					"s (seconds), m (minutes), h (hours), or d (days). Example: '30d', '24h', '3600s'. " +
+					"Empty string disables expiry.",
+				Validators: []validator.String{
+					stringvalidator.Any(
+						// LengthBetween(0,0) intentionally matches ONLY the empty string ""
+						// to allow lifetime="" to disable expiry. This is not a typo.
+						stringvalidator.LengthBetween(0, 0),
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(`^\d+[smhd]$`),
+							"must be a positive integer followed by s, m, h, or d (e.g. '30d', '24h', '3600s')",
+						),
+					),
+				},
 			},
 			"max_clients": schema.Int64Attribute{
 				Optional:    true,
-				Description: "Maximum number of clients that can be registered using this registration token. No limit by default.",
+				Description: "Maximum number of clients that can be registered using this token. Must be 0 or greater.",
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 			},
 			"name_prefix": schema.StringAttribute{
 				Optional:    true,
@@ -214,7 +235,12 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 
 	// Computed-only fields — hydrate unconditionally
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	state.Token = types.StringValue(gjson.Get(response, "token").String())
+	// token: Computed field — preserve existing state value if API omits or scrubs it.
+	// UseStateForUnknown() is plan-phase only and does not protect against Read() overwrite.
+	if r := gjson.Get(response, "token"); r.Exists() && r.String() != "" {
+		state.Token = types.StringValue(r.String())
+	}
+	// else: API did not return token (scrubbed or absent) — preserve prior state value.
 
 	// Optional string scalars — CM may not echo back these fields in GET responses.
 	// The !state.X.IsNull() guard prevents null→"" drift for unconfigured fields.
@@ -228,12 +254,14 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	if !state.ClientManagementProfileID.IsNull() {
-		if r := gjson.Get(response, "client_management_profile_id"); r.Exists() {
-			state.ClientManagementProfileID = types.StringValue(r.String())
-		} else {
-			state.ClientManagementProfileID = types.StringNull()
-		}
+	// TFIN-415: Hydrate unconditionally — remove the !IsNull() guard on state.
+	// Without this guard, out-of-band changes (external PATCH) and CM-side no-ops
+	// on TF-driven "clear" attempts are both visible on the next plan/refresh.
+	// r.Type != gjson.Null guards against explicit JSON null in the response body.
+	if r := gjson.Get(response, "client_management_profile_id"); r.Exists() && r.Type != gjson.Null {
+		state.ClientManagementProfileID = types.StringValue(r.String())
+	} else {
+		state.ClientManagementProfileID = types.StringNull()
 	}
 
 	if !state.Lifetime.IsNull() {
@@ -343,9 +371,14 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.CertDuration.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.CertDuration = plan.CertDuration.ValueInt64()
 	}
-	if plan.ClientManagementProfileID.ValueString() != "" && plan.ClientManagementProfileID.ValueString() != types.StringNull().ValueString() {
-		payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
-	}
+	// TFIN-415: Always include client_management_profile_id in the PATCH body.
+	// When the user removes the field from config (plan value is null/empty), send ""
+	// so CM receives an explicit clear attempt. CM-side behaviour note: as of the
+	// ticket investigation, CM does not honour "" as a clear for this field (the value
+	// is retained server-side). The subsequent Read() will hydrate the CM-held value
+	// into state, surfacing the CM-side retention as drift on the next plan.
+	// This is the correct Terraform behaviour: state reflects CM reality, not config intent.
+	payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
 
 	// Add labels to payload — null guard prevents sending {} when unconfigured
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {

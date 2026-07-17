@@ -77,11 +77,11 @@ output "reg_token_value" {
 - `client_management_profile_id` (String) ID of the client management profile
 - `label` (Map of String) (Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels
-- `lifetime` (String) Duration in minutes/hours/days for which this token can be used for registering CipherTrust Manager clients. No limit by default. For 'x' amount of time, it should formatted as xm for x minutes, xh for hours and xd for days.
-- `max_clients` (Number) Maximum number of clients that can be registered using this registration token. No limit by default.
+- `lifetime` (String) Duration the token is valid. Must be a positive integer followed by a unit: s (seconds), m (minutes), h (hours), or d (days). Example: '30d', '24h', '3600s'. Empty string disables expiry.
+- `max_clients` (Number) Maximum number of clients that can be registered using this token. Must be 0 or greater.
 - `name_prefix` (String) (Immutable) Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name will be constructed as 'name_prefix{nth client registered using this registation token}', If name_prefix is not specified, CipherTrust Manager server will generate a random name for the client.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `token` (String) Set the token recieved from the API call to the state.
+- `token` (String, Sensitive) Registration token secret returned by the API. Marked sensitive — value is redacted in plan/apply output.

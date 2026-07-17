@@ -66,7 +66,8 @@ func (d *dataSourceRegTokens) Schema(_ context.Context, _ datasource.SchemaReque
 							Computed: true,
 						},
 						"token": schema.StringAttribute{
-							Computed: true,
+							Computed:  true,
+							Sensitive: true,
 						},
 						"valid_until": schema.StringAttribute{
 							Computed: true,

@@ -37,7 +37,7 @@ Read-Only:
 - `id` (String)
 - `max_clients` (Number)
 - `name_prefix` (String)
-- `token` (String)
+- `token` (String, Sensitive)
 - `updated_at` (String)
 - `uri` (String)
 - `valid_until` (String)
