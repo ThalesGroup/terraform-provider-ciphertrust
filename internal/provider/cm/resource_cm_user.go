@@ -329,6 +329,10 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Update]["+id+"]")
+
 	var plan CMUserTFSDK
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -375,26 +379,72 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	payload.LoginFlags = loginFlags
 	payload.PasswordChangeRequired = plan.PasswordChangeRequired.ValueBool()
 
-	// if len(plan.Metadata.Elements()) != 0 {
-	// 	metadata := make(map[string]string, len(plan.Metadata.Elements()))
-	// 	resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
-	// 	if resp.Diagnostics.HasError() {
-	// 		return
-	// 	}
-	// }
-	if !plan.Metadata.IsNull() && !plan.Metadata.IsUnknown() {
-		metadata := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
+	// Three-branch metadata payload builder.
+	//
+	// CM's PATCH endpoint merges user_metadata instead of replacing it:
+	//   - Omitting the field: CM preserves all existing keys unchanged.
+	//   - Sending {"user_metadata": {}}: CM no-ops (merge of empty = no change).
+	//   - Sending {"user_metadata": null}: CM rejects with HTTP 422.
+	//   - Sending {"user_metadata": {"key": null}}: CM deletes that key.
+	//
+	// Consequence: both full clear and partial key removal require explicit
+	// per-key nulls. Keys absent from the plan but present in state must be
+	// sent as json.RawMessage("null").
+	//
+	// Note: state.Metadata is types.Map — use ElementsAs, NOT json.Unmarshal
+	// (the group resource's json.Unmarshal-from-string pattern applies only to
+	// types.String metadata fields in resource_cm_group.go).
+	switch {
+	case !plan.Metadata.IsNull() && !plan.Metadata.IsUnknown():
+		// New/updated or partial-removal metadata.
+		// Compute the diff between state and plan:
+		//   - Surviving keys (in plan): send their string values.
+		//   - Deleted keys (in state but absent from plan): send json null.
+		planMeta := make(map[string]string, len(plan.Metadata.Elements()))
+		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &planMeta, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		// Convert map[string]string to map[string]interface{}
-		payload.Metadata = stringsToRawJSON(metadata)
+
+		// Start with surviving keys.
+		metaPayload := stringsToRawJSON(planMeta)
+
+		// Null out deleted keys (present in state but absent from plan).
+		if !state.Metadata.IsNull() && !state.Metadata.IsUnknown() {
+			stateMeta := make(map[string]string, len(state.Metadata.Elements()))
+			resp.Diagnostics.Append(state.Metadata.ElementsAs(ctx, &stateMeta, false)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			for k := range stateMeta {
+				if _, exists := planMeta[k]; !exists {
+					metaPayload[k] = json.RawMessage("null")
+				}
+			}
+		}
+		payload.Metadata = metaPayload
+
+	case plan.Metadata.IsNull() && !state.Metadata.IsNull():
+		// Plan clears metadata entirely; state shows keys were previously set.
+		// Send {"key": null} for each existing key to trigger per-key deletion.
+		existing := make(map[string]string, len(state.Metadata.Elements()))
+		resp.Diagnostics.Append(state.Metadata.ElementsAs(ctx, &existing, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if len(existing) > 0 {
+			nullMap := make(map[string]json.RawMessage, len(existing))
+			for k := range existing {
+				nullMap[k] = json.RawMessage("null")
+			}
+			payload.Metadata = nullMap
+		}
+	// default: both plan and state are null, or plan is unknown — nothing to send.
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: User Update",
 			err.Error(),
@@ -404,7 +454,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 
 	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+plan.UserID.ValueString()+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error updating user on CipherTrust Manager: ",
 			"Could not update user, unexpected error: "+err.Error(),
@@ -432,7 +482,21 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			} else {
 				plan.Email = types.StringNull()
 			}
-			if !plan.Metadata.IsNull() {
+			// Post-PATCH read-back is plan-aware to prevent {} → null oscillation.
+			//
+			// Clearing case (plan null): regardless of whether CM returns absent or {},
+			// write MapNull so state matches config intent. The per-key null PATCH above
+			// attempted to clear all keys; if it succeeded CM returns absent or {}; if
+			// it silently no-oped (transient CM error), we write MapNull anyway and the
+			// residual CM data becomes invisible until state.Metadata becomes non-null
+			// again. This is an accepted residual risk (see Change Summary).
+			//
+			// Non-null plan: re-read from CM authoritatively via the three-branch pattern.
+			// Writing CM's actual post-PATCH value (not the plan value) prevents state
+			// drift when CM silently ignores a key value.
+			if plan.Metadata.IsNull() {
+				plan.Metadata = types.MapNull(types.StringType)
+			} else {
 				metaResult := gjson.Get(userResponse, "user_metadata")
 				if !metaResult.Exists() {
 					plan.Metadata = types.MapNull(types.StringType)
