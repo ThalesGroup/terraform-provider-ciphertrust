@@ -787,3 +787,237 @@ resource "ciphertrust_user" "test_oob" {
 		},
 	})
 }
+
+func TestAccCMUser_UserMetadata(t *testing.T) {
+	RequireCM(t)
+
+	name := "tf-user-meta-" + uuid.New().String()[:8]
+	var userID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply with user_metadata set; capture user ID.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username      = %q
+  password      = "CHAnge012!@#"
+  user_metadata = { "repro_key" = "repro_value" }
+}`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.repro_key", "repro_value"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						userID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: remove user_metadata from config entirely; apply must converge.
+			// ExpectNonEmptyPlan: false (default) — the framework's built-in post-apply
+			// plan check confirms convergence. CM-side verification confirms the key is gone.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+}`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("ciphertrust_user.test", "user_metadata.repro_key"),
+					func(s *terraform.State) error {
+						client, ok := createCMClient()
+						if !ok {
+							return fmt.Errorf("could not create CM client for CM-side verification")
+						}
+						response, err := client.GetById(context.Background(), uuid.New().String(), userID, common.URL_USER_MANAGEMENT)
+						if err != nil {
+							return fmt.Errorf("CM GetById failed: %w", err)
+						}
+						var parsed map[string]interface{}
+						if err := json.Unmarshal([]byte(response), &parsed); err != nil {
+							return fmt.Errorf("CM response parse failed: %w", err)
+						}
+						if meta, ok := parsed["user_metadata"]; ok {
+							if m, ok := meta.(map[string]interface{}); ok && len(m) > 0 {
+								return fmt.Errorf("expected user_metadata to be empty in CM after clear, got: %v", m)
+							}
+						}
+						return nil
+					},
+				),
+			},
+			// Step 3: apply with two metadata keys.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username      = %q
+  password      = "CHAnge012!@#"
+  user_metadata = { "a" = "1", "b" = "2" }
+}`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.a", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.b", "2"),
+				),
+			},
+			// Step 4: drop key "b"; apply must converge — key "a" preserved, key "b" deleted.
+			// ExpectNonEmptyPlan: false — post-apply plan check confirms convergence.
+			// CM-side verification confirms key "b" is absent.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username      = %q
+  password      = "CHAnge012!@#"
+  user_metadata = { "a" = "1" }
+}`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.a", "1"),
+					resource.TestCheckNoResourceAttr("ciphertrust_user.test", "user_metadata.b"),
+					func(s *terraform.State) error {
+						client, ok := createCMClient()
+						if !ok {
+							return fmt.Errorf("could not create CM client for CM-side verification")
+						}
+						response, err := client.GetById(context.Background(), uuid.New().String(), userID, common.URL_USER_MANAGEMENT)
+						if err != nil {
+							return fmt.Errorf("CM GetById failed: %w", err)
+						}
+						var parsed map[string]interface{}
+						if err := json.Unmarshal([]byte(response), &parsed); err != nil {
+							return fmt.Errorf("CM response parse failed: %w", err)
+						}
+						meta, hasMeta := parsed["user_metadata"]
+						if !hasMeta {
+							return fmt.Errorf("expected user_metadata to exist in CM, got absent")
+						}
+						m, ok := meta.(map[string]interface{})
+						if !ok {
+							return fmt.Errorf("user_metadata is not a map in CM response")
+						}
+						if _, hasB := m["b"]; hasB {
+							return fmt.Errorf("expected key 'b' to be deleted in CM, but it still exists")
+						}
+						aVal, hasA := m["a"]
+						if !hasA || fmt.Sprintf("%v", aVal) != "1" {
+							return fmt.Errorf("expected key 'a'='1' in CM, got: %v", m)
+						}
+						return nil
+					},
+				),
+			},
+			// Step 5: apply with one metadata key; capture user ID for drift test.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username      = %q
+  password      = "CHAnge012!@#"
+  user_metadata = { "c" = "3" }
+}`, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "user_metadata.c", "3"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test"]
+						if !ok {
+							return fmt.Errorf("ciphertrust_user.test not found in state")
+						}
+						userID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 6: add key "d" out-of-band; RefreshState must detect the drift.
+			// userID is captured in Step 5's Check closure and available here.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("Step 6 PreConfig: createCMClient failed — skipping OOB mutation")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"user_metadata": map[string]interface{}{"d": "4"},
+					})
+					if err != nil {
+						t.Logf("Step 6 PreConfig: marshal failed: %v", err)
+						return
+					}
+					if _, err := client.UpdateData(context.Background(), userID, common.URL_USER_MANAGEMENT, payload, "user_id"); err != nil {
+						t.Logf("Step 6 PreConfig: UpdateData failed: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
+// CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
+// from state gracefully instead of returning a hard error.
+func Test_CM_CMUserOutOfBandDeletion(t *testing.T) {
+	username := fmt.Sprintf("tf-oob-%d", time.Now().Unix())
+
+	deleteOutOfBand := func(resourceName string) resource.TestCheckFunc {
+		return func(s *terraform.State) error {
+			rs, ok := s.RootModule().Resources[resourceName]
+			if !ok {
+				return fmt.Errorf("resource %s not found in state", resourceName)
+			}
+			id := rs.Primary.ID
+			client, ok := createCMClient()
+			if !ok {
+				t.Skip("Skipping out-of-band deletion test: CM client could not be created (check CIPHERTRUST_* env vars)")
+			}
+			endpoint := common.URL_USER_MANAGEMENT + "/" + id
+			if _, err := client.DeleteByURL(context.Background(), id, endpoint); err != nil {
+				return fmt.Errorf("out-of-band delete failed: %s", err)
+			}
+			return nil
+		}
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create the user, then delete it from CM directly.
+			// ExpectNonEmptyPlan: true suppresses the post-step consistency
+			// check failure that occurs because the OOB delete causes the
+			// resource to disappear from state during the refresh check.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_oob" {
+  username = "%s"
+  password = "CHAnge012!@#"
+}
+`, username),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test_oob", "id"),
+					deleteOutOfBand("ciphertrust_user.test_oob"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 2: Refresh — Read() detects 404, removes from state, no error.
+			// ExpectNonEmptyPlan: true because after removal the plan shows +create.
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 3: Plan — user gone from state, Terraform proposes + create.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_oob" {
+  username = "%s"
+  password = "CHAnge012!@#"
+}
+`, username),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
