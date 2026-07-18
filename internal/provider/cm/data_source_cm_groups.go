@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -83,17 +84,10 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	var envelope struct {
-		Resources json.RawMessage `json:"resources"`
-	}
-	if err := json.Unmarshal([]byte(rawBody), &envelope); err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
-		return
-	}
+	jsonStr := gjson.Get(rawBody, "resources").String()
 
 	groups := []CMGroupJSON{}
-	if err := json.Unmarshal(envelope.Resources, &groups); err != nil {
+	if err := json.Unmarshal([]byte(jsonStr), &groups); err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
 		return
