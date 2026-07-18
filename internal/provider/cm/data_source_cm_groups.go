@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/google/uuid"
 
@@ -57,19 +58,22 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_groups.go -> Read]["+id+"]")
 	var state CMGroupsDataSourceModelTFSDK
 
-	//Read config first so Filters gets its type info populated
 	diags := req.Config.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// If filters aren't set in config, initialize it as typed null
 	if state.Filters.IsNull() || state.Filters.IsUnknown() {
 		state.Filters = types.MapNull(types.StringType)
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_GROUP)
+	filters := url.Values{}
+	for k, v := range state.Filters.Elements() {
+		filters.Set(k, v.(types.String).ValueString())
+	}
+
+	rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -79,8 +83,17 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
+	var envelope struct {
+		Resources json.RawMessage `json:"resources"`
+	}
+	if err := json.Unmarshal([]byte(rawBody), &envelope); err != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
+		resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
+		return
+	}
+
 	groups := []CMGroupJSON{}
-	if err := json.Unmarshal([]byte(jsonStr), &groups); err != nil {
+	if err := json.Unmarshal(envelope.Resources, &groups); err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
 		return

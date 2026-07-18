@@ -66,7 +66,7 @@ func Test_CM_FetchAllKeys_SinglePage(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	keys, err := fetchAllKeys(context.Background(), client, "test-uuid")
+	keys, err := fetchAllKeys(context.Background(), client, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ func Test_CM_FetchAllKeys_MultiplePages(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	keys, err := fetchAllKeys(context.Background(), client, "test-uuid")
+	keys, err := fetchAllKeys(context.Background(), client, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +124,7 @@ func Test_CM_FetchAllKeys_ExactMultipleOfPageSize(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	keys, err := fetchAllKeys(context.Background(), client, "test-uuid")
+	keys, err := fetchAllKeys(context.Background(), client, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +143,7 @@ func Test_CM_FetchAllKeys_Empty(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	keys, err := fetchAllKeys(context.Background(), client, "test-uuid")
+	keys, err := fetchAllKeys(context.Background(), client, "test-uuid", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +165,7 @@ func Test_CM_FetchAllKeys_ServerError(t *testing.T) {
 	defer srv.Close()
 
 	client := newTestClient(srv.URL)
-	_, err := fetchAllKeys(context.Background(), client, "test-uuid")
+	_, err := fetchAllKeys(context.Background(), client, "test-uuid", nil)
 	if err == nil {
 		t.Fatal("expected an error from a failing server, got nil")
 	}

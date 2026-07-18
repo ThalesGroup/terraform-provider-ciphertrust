@@ -25,13 +25,18 @@ const keysListPageSize = 10
 
 // fetchAllKeys pages through GET /vault/keys2/ via limit/skip until a short
 // page (fewer than keysListPageSize items) is returned, accumulating every
-// key across all pages. This replaces a single GetAll() call, which only
-// ever returned the server's first page and silently truncated the rest.
-func fetchAllKeys(ctx context.Context, client *common.Client, uuid string) ([]map[string]any, error) {
+// key across all pages. userFilters are merged with the pagination params on
+// every request so caller-supplied filters (e.g. name=foo) are preserved.
+func fetchAllKeys(ctx context.Context, client *common.Client, uuid string, userFilters url.Values) ([]map[string]any, error) {
 	var allKeys []map[string]any
 	skip := 0
 	for {
 		filters := url.Values{}
+		for k, vals := range userFilters {
+			for _, v := range vals {
+				filters.Add(k, v)
+			}
+		}
 		filters.Set("limit", strconv.Itoa(keysListPageSize))
 		filters.Set("skip", strconv.Itoa(skip))
 
@@ -72,7 +77,8 @@ type dataSourceKeys struct {
 }
 
 type keysDataSourceModel struct {
-	Keys []CMKeysListTFSDK `tfsdk:"keys"`
+	Filters types.Map         `tfsdk:"filters"`
+	Keys    []CMKeysListTFSDK `tfsdk:"keys"`
 }
 
 func (d *dataSourceKeys) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -82,6 +88,10 @@ func (d *dataSourceKeys) Metadata(_ context.Context, req datasource.MetadataRequ
 func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"filters": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+			},
 			"keys": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -170,7 +180,14 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_users.go -> Read]["+id+"]")
 	var state keysDataSourceModel
 
-	data, err := fetchAllKeys(ctx, d.client, id)
+	req.Config.Get(ctx, &state)
+
+	userFilters := url.Values{}
+	for k, v := range state.Filters.Elements() {
+		userFilters.Set(k, v.(types.String).ValueString())
+	}
+
+	data, err := fetchAllKeys(ctx, d.client, id, userFilters)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_keys.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

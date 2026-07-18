@@ -360,19 +360,24 @@ type CMKeyJSON struct {
 }
 
 type CMRegTokensListTFSDK struct {
-	ID                types.String `tfsdk:"id"`
-	URI               types.String `tfsdk:"uri"`
-	Account           types.String `tfsdk:"account"`
-	Application       types.String `tfsdk:"application"`
-	DevAccount        types.String `tfsdk:"dev_account"`
-	CreatedAt         types.String `tfsdk:"created_at"`
-	UpdatedAt         types.String `tfsdk:"updated_at"`
-	Token             types.String `tfsdk:"token"`
-	ValidUntil        types.String `tfsdk:"valid_until"`
-	MaxClients        types.Int64  `tfsdk:"max_clients"`
-	ClientsRegistered types.Int64  `tfsdk:"clients_registered"`
-	CAID              types.String `tfsdk:"ca_id"`
-	NamePrefix        types.String `tfsdk:"name_prefix"`
+	ID                        types.String `tfsdk:"id"`
+	URI                       types.String `tfsdk:"uri"`
+	Account                   types.String `tfsdk:"account"`
+	Application               types.String `tfsdk:"application"`
+	DevAccount                types.String `tfsdk:"dev_account"`
+	CreatedAt                 types.String `tfsdk:"created_at"`
+	UpdatedAt                 types.String `tfsdk:"updated_at"`
+	Token                     types.String `tfsdk:"token"`
+	ValidUntil                types.String `tfsdk:"valid_until"`
+	MaxClients                types.Int64  `tfsdk:"max_clients"`
+	ClientsRegistered         types.Int64  `tfsdk:"clients_registered"`
+	CAID                      types.String `tfsdk:"ca_id"`
+	NamePrefix                types.String `tfsdk:"name_prefix"`
+	CertDuration              types.Int64  `tfsdk:"cert_duration"`
+	ClientManagementProfileID types.String `tfsdk:"client_management_profile_id"`
+	Lifetime                  types.String `tfsdk:"lifetime"`
+	Label                     types.Map    `tfsdk:"label"`
+	Labels                    types.Map    `tfsdk:"labels"`
 }
 
 type CMRegTokensListJSON struct {
@@ -380,9 +385,9 @@ type CMRegTokensListJSON struct {
 	URI               string `json:"uri"`
 	Account           string `json:"account"`
 	Application       string `json:"application"`
-	DevAccount        string `json:"dev_account"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
+	DevAccount        string `json:"devAccount"`
+	CreatedAt         string `json:"createdAt"`
+	UpdatedAt         string `json:"updatedAt"`
 	Token             string `json:"token"`
 	ValidUntil        string `json:"valid_until"`
 	MaxClients        int64  `json:"max_clients"`

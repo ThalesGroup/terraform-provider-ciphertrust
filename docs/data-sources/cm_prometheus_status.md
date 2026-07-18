@@ -18,4 +18,4 @@ description: |-
 ### Read-Only
 
 - `enabled` (Boolean)
-- `token` (String)
+- `token` (String, Sensitive)
