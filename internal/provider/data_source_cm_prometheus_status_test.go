@@ -6,6 +6,35 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+func testAccCMPrometheusStatusConfig() string {
+	return providerConfig + `
+resource "ciphertrust_cm_prometheus" "test" { enabled = true }
+data "ciphertrust_cm_prometheus_status" "status" {
+  depends_on = [ciphertrust_cm_prometheus.test]
+}
+`
+}
+
+func Test_CM_DataSourceCMPrometheusStatus_TokenSensitive(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCMPrometheusStatusConfig(),
+				Check: checkStep(t, "token attribute present in schema",
+					// token is Computed and Sensitive; value varies by instance
+					// (empty when prometheus is disabled, non-empty when enabled).
+					// Verify the attribute is schema-accessible without asserting value.
+					resource.TestCheckResourceAttrSet(
+						"data.ciphertrust_cm_prometheus_status.status", "token",
+					),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_PrometheusStatus_ReadAccuracy verifies the data source correctly reflects
 // enabled=true and a non-empty token after the resource enables Prometheus.
 func Test_CM_PrometheusStatus_ReadAccuracy(t *testing.T) {

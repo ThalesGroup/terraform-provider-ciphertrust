@@ -2,12 +2,13 @@ package cm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -84,6 +85,23 @@ func (d *dataSourceRegTokens) Schema(_ context.Context, _ datasource.SchemaReque
 						"name_prefix": schema.StringAttribute{
 							Computed: true,
 						},
+						"cert_duration": schema.Int64Attribute{
+							Computed: true,
+						},
+						"client_management_profile_id": schema.StringAttribute{
+							Computed: true,
+						},
+						"lifetime": schema.StringAttribute{
+							Computed: true,
+						},
+						"label": schema.MapAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
+						},
+						"labels": schema.MapAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
+						},
 					},
 				},
 			},
@@ -98,6 +116,8 @@ func (d *dataSourceRegTokens) Schema(_ context.Context, _ datasource.SchemaReque
 func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_reg_tokens.go -> Read]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_reg_tokens.go -> Read]["+id+"]")
+
 	var state RegTokensDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -109,8 +129,7 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 	jsonStr, err := d.client.GetAll(
 		ctx,
 		id,
-		common.URL_REG_TOKEN+"/?"+strings.Join(kvs, "")+"skip=0&limit=10")
-
+		common.URL_REG_TOKEN+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_reg_tokens.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -120,44 +139,87 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	tokens := []CMRegTokensListJSON{}
-
-	err = json.Unmarshal([]byte(jsonStr), &tokens)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_reg_tokens.go -> Read]["+id+"]")
+	rawTokens := gjson.Parse(jsonStr)
+	if !rawTokens.IsArray() {
+		tflog.Debug(ctx, common.ERR_METHOD_END+"response is not a JSON array [data_source_cm_reg_tokens.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Unable to read reg tokens from CM",
-			err.Error(),
+			"CM returned an unexpected non-array response: "+jsonStr,
 		)
 		return
 	}
 
-	for _, token := range tokens {
+	rawTokens.ForEach(func(_, rawToken gjson.Result) bool {
+		raw := rawToken.Raw
+
 		tokenState := CMRegTokensListTFSDK{
-			ID:                types.StringValue(token.ID),
-			URI:               types.StringValue(token.URI),
-			Account:           types.StringValue(token.Account),
-			Application:       types.StringValue(token.Application),
-			DevAccount:        types.StringValue(token.DevAccount),
-			CreatedAt:         types.StringValue(token.CreatedAt),
-			UpdatedAt:         types.StringValue(token.UpdatedAt),
-			Token:             types.StringValue(token.Token),
-			ValidUntil:        types.StringValue(token.ValidUntil),
-			MaxClients:        types.Int64Value(token.MaxClients),
-			ClientsRegistered: types.Int64Value(token.ClientsRegistered),
-			CAID:              types.StringValue(token.CAID),
-			NamePrefix:        types.StringValue(token.NamePrefix),
+			ID:                        types.StringValue(gjson.Get(raw, "id").String()),
+			URI:                       types.StringValue(gjson.Get(raw, "uri").String()),
+			Account:                   types.StringValue(gjson.Get(raw, "account").String()),
+			Application:               types.StringValue(gjson.Get(raw, "application").String()),
+			DevAccount:                types.StringValue(gjson.Get(raw, "devAccount").String()),
+			CreatedAt:                 types.StringValue(gjson.Get(raw, "createdAt").String()),
+			UpdatedAt:                 types.StringValue(gjson.Get(raw, "updatedAt").String()),
+			Token:                     types.StringValue(gjson.Get(raw, "token").String()),
+			ValidUntil:                types.StringValue(gjson.Get(raw, "valid_until").String()),
+			MaxClients:                types.Int64Value(gjson.Get(raw, "max_clients").Int()),
+			ClientsRegistered:         types.Int64Value(gjson.Get(raw, "clients_registered").Int()),
+			CAID:                      types.StringValue(gjson.Get(raw, "ca_id").String()),
+			NamePrefix:                types.StringValue(gjson.Get(raw, "name_prefix").String()),
+			CertDuration:              types.Int64Value(gjson.Get(raw, "cert_duration").Int()),
+			ClientManagementProfileID: types.StringValue(gjson.Get(raw, "client_management_profile_id").String()),
+			Lifetime:                  types.StringValue(gjson.Get(raw, "lifetime").String()),
+		}
+
+		// label — three-branch: absent/null → MapNull, empty → MapValueMust({}), present → MapValueFrom
+		labelResult := gjson.Get(raw, "label")
+		if !labelResult.Exists() || labelResult.Type == gjson.Null {
+			tokenState.Label = types.MapNull(types.StringType)
+		} else if len(labelResult.Map()) == 0 {
+			tokenState.Label = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		} else {
+			labelMap := make(map[string]string)
+			labelResult.ForEach(func(k, v gjson.Result) bool {
+				labelMap[k.String()] = v.String()
+				return true
+			})
+			lv, diag := types.MapValueFrom(ctx, types.StringType, labelMap)
+			resp.Diagnostics.Append(diag...)
+			if resp.Diagnostics.HasError() {
+				return false
+			}
+			tokenState.Label = lv
+		}
+
+		// labels — same three-branch pattern
+		labelsResult := gjson.Get(raw, "labels")
+		if !labelsResult.Exists() || labelsResult.Type == gjson.Null {
+			tokenState.Labels = types.MapNull(types.StringType)
+		} else if len(labelsResult.Map()) == 0 {
+			tokenState.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		} else {
+			labelsMap := make(map[string]string)
+			labelsResult.ForEach(func(k, v gjson.Result) bool {
+				labelsMap[k.String()] = v.String()
+				return true
+			})
+			lv, diag := types.MapValueFrom(ctx, types.StringType, labelsMap)
+			resp.Diagnostics.Append(diag...)
+			if resp.Diagnostics.HasError() {
+				return false
+			}
+			tokenState.Labels = lv
 		}
 
 		state.Tokens = append(state.Tokens, tokenState)
-	}
-
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_reg_tokens.go -> Read]["+id+"]")
-	diags := resp.State.Set(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+		return true
+	})
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	diags := resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 }
 
 func (d *dataSourceRegTokens) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {

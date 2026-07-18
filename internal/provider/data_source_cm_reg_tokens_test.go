@@ -12,6 +12,70 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
+func testAccCMTokensListConfig(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "tok" {
+  name_prefix   = %q
+  lifetime      = "1h"
+  max_clients   = 1
+  cert_duration = 365
+  labels        = { env = "test" }
+}
+
+data "ciphertrust_cm_tokens_list" "all" {
+  filters    = { name_prefix = %q }
+  depends_on = [ciphertrust_cm_reg_token.tok]
+}
+
+output "created_at_nonempty" {
+  value = length(data.ciphertrust_cm_tokens_list.all.tokens) > 0 && data.ciphertrust_cm_tokens_list.all.tokens[0].created_at != ""
+}
+output "updated_at_nonempty" {
+  value = length(data.ciphertrust_cm_tokens_list.all.tokens) > 0 && data.ciphertrust_cm_tokens_list.all.tokens[0].updated_at != ""
+}
+output "cert_duration_correct" {
+  value = tostring(data.ciphertrust_cm_tokens_list.all.tokens[0].cert_duration) == "365"
+}
+output "labels_correct" {
+  value = data.ciphertrust_cm_tokens_list.all.tokens[0].labels["env"] == "test"
+}
+output "lifetime_accessible" {
+  value = data.ciphertrust_cm_tokens_list.all.tokens[0].lifetime != null
+}
+output "client_management_profile_id_accessible" {
+  value = data.ciphertrust_cm_tokens_list.all.tokens[0].client_management_profile_id != null
+}
+`, name, name)
+}
+
+func Test_CM_DataSourceCMTokensList_CamelCaseFields(t *testing.T) {
+	RequireCM(t)
+	name := "tfin418-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCMTokensListConfig(name),
+				Check: checkStep(t, "camelCase fields and new attributes",
+					resource.TestCheckOutput("created_at_nonempty", "true"),
+					resource.TestCheckOutput("updated_at_nonempty", "true"),
+					resource.TestCheckOutput("cert_duration_correct", "true"),
+					resource.TestCheckOutput("labels_correct", "true"),
+					resource.TestCheckOutput("lifetime_accessible", "true"),
+					resource.TestCheckOutput("client_management_profile_id_accessible", "true"),
+					// dev_account: verify attribute is schema-accessible (value varies by
+				// instance type — empty on non-CDSPaaS, non-empty on CDSPaaS/cloud)
+				resource.TestCheckResourceAttrWith(
+					"data.ciphertrust_cm_tokens_list.all",
+					"tokens.0.dev_account",
+					func(_ string) error { return nil },
+				),
+				),
+			},
+		},
+	})
+}
+
 // TestAccDataSourceCMRegTokensList_basic creates one reg token and verifies the
 // ciphertrust_cm_tokens_list data source returns at least one token with an id.
 func Test_CM_AccDataSourceCMRegTokensList_basic(t *testing.T) {

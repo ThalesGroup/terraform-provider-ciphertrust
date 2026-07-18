@@ -36,7 +36,8 @@ func (d *dataSourcePrometheus) Schema(_ context.Context, _ datasource.SchemaRequ
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"token": schema.StringAttribute{
-				Computed: true,
+				Computed:  true,
+				Sensitive: true,
 			},
 			"enabled": schema.BoolAttribute{
 				Computed: true,
