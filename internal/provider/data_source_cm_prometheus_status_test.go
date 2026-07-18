@@ -8,7 +8,10 @@ import (
 
 func testAccCMPrometheusStatusConfig() string {
 	return providerConfig + `
-data "ciphertrust_cm_prometheus_status" "status" {}
+resource "ciphertrust_cm_prometheus" "test" { enabled = true }
+data "ciphertrust_cm_prometheus_status" "status" {
+  depends_on = [ciphertrust_cm_prometheus.test]
+}
 `
 }
 
@@ -21,12 +24,11 @@ func Test_CM_DataSourceCMPrometheusStatus_TokenSensitive(t *testing.T) {
 				Config: testAccCMPrometheusStatusConfig(),
 				Check: checkStep(t, "token attribute present in schema",
 					// token is Computed and Sensitive; value varies by instance
-				// (empty when prometheus is disabled, non-empty when enabled).
-				// Verify the attribute is schema-accessible without asserting value.
-				resource.TestCheckResourceAttrWith(
-					"data.ciphertrust_cm_prometheus_status.status", "token",
-					func(_ string) error { return nil },
-				),
+					// (empty when prometheus is disabled, non-empty when enabled).
+					// Verify the attribute is schema-accessible without asserting value.
+					resource.TestCheckResourceAttrSet(
+						"data.ciphertrust_cm_prometheus_status.status", "token",
+					),
 				),
 			},
 		},
