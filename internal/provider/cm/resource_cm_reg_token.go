@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -19,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
@@ -27,6 +31,7 @@ import (
 var (
 	_ resource.Resource              = &resourceCMRegToken{}
 	_ resource.ResourceWithConfigure = &resourceCMRegToken{}
+	_ resource.ResourceWithImportState = &resourceCMRegToken{}
 )
 
 func NewResourceCMRegToken() resource.Resource {
@@ -61,7 +66,10 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.",
+				Description: "(Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"cert_duration": schema.Int64Attribute{
 				Optional:    true,
@@ -134,14 +142,17 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	if plan.CAID.ValueString() != "" && plan.CAID.ValueString() != types.StringNull().ValueString() {
-		payload.CAID = plan.CAID.ValueString()
+	if !plan.CAID.IsNull() && !plan.CAID.IsUnknown() && plan.CAID.ValueString() != "" {
+		caID := plan.CAID.ValueString()
+		payload.CAID = &caID
 	}
-	if plan.CertDuration.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.CertDuration = plan.CertDuration.ValueInt64()
+	if !plan.CertDuration.IsNull() && !plan.CertDuration.IsUnknown() {
+		certDur := plan.CertDuration.ValueInt64()
+		payload.CertDuration = &certDur
 	}
-	if plan.ClientManagementProfileID.ValueString() != "" && plan.ClientManagementProfileID.ValueString() != types.StringNull().ValueString() {
-		payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
+	if !plan.ClientManagementProfileID.IsNull() && !plan.ClientManagementProfileID.IsUnknown() && plan.ClientManagementProfileID.ValueString() != "" {
+		cmpID := plan.ClientManagementProfileID.ValueString()
+		payload.ClientManagementProfileID = &cmpID
 	}
 
 	// Add label to payload — fix: both blocks previously iterated plan.Labels (bug); first block now iterates plan.Label
@@ -162,14 +173,17 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 		payload.Labels = labelsPayload
 	}
 
-	if plan.Lifetime.ValueString() != "" && plan.Lifetime.ValueString() != types.StringNull().ValueString() {
-		payload.Lifetime = plan.Lifetime.ValueString()
+	if !plan.Lifetime.IsNull() && !plan.Lifetime.IsUnknown() && plan.Lifetime.ValueString() != "" {
+		lifetime := plan.Lifetime.ValueString()
+		payload.Lifetime = &lifetime
 	}
-	if plan.MaxClients.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.MaxClients = plan.MaxClients.ValueInt64()
+	if !plan.MaxClients.IsNull() && !plan.MaxClients.IsUnknown() {
+		maxClients := plan.MaxClients.ValueInt64()
+		payload.MaxClients = &maxClients
 	}
-	if plan.NamePrefix.ValueString() != "" && plan.NamePrefix.ValueString() != types.StringNull().ValueString() {
-		payload.NamePrefix = plan.NamePrefix.ValueString()
+	if !plan.NamePrefix.IsNull() && !plan.NamePrefix.IsUnknown() && plan.NamePrefix.ValueString() != "" {
+		namePrefix := plan.NamePrefix.ValueString()
+		payload.NamePrefix = &namePrefix
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -297,22 +311,25 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	// Optional map fields — three-branch: absent/null → MapNull, empty → MapValueMust({}), present → MapValueFrom
-	labelResult := gjson.Get(response, "label")
-	if !labelResult.Exists() || labelResult.Type == gjson.Null {
-		state.Label = types.MapNull(types.StringType)
-	} else if len(labelResult.Map()) == 0 {
-		state.Label = types.MapValueMust(types.StringType, map[string]attr.Value{})
-	} else {
-		labelMap := make(map[string]string)
-		labelResult.ForEach(func(k, v gjson.Result) bool {
-			labelMap[k.String()] = v.String()
-			return true
-		})
-		lv, diag := types.MapValueFrom(ctx, types.StringType, labelMap)
-		resp.Diagnostics.Append(diag...)
-		if !resp.Diagnostics.HasError() {
-			state.Label = lv
+	// label: only hydrate when the user has configured this field (state non-null).
+	// Without this guard, Read() writes an empty map into state if the API returns {}, causing perpetual null→{} drift.
+	if !state.Label.IsNull() {
+		labelResult := gjson.Get(response, "label")
+		if !labelResult.Exists() || labelResult.Type == gjson.Null {
+			state.Label = types.MapNull(types.StringType)
+		} else if len(labelResult.Map()) == 0 {
+			state.Label = types.MapValueMust(types.StringType, map[string]attr.Value{})
+		} else {
+			labelMap := make(map[string]string)
+			labelResult.ForEach(func(k, v gjson.Result) bool {
+				labelMap[k.String()] = v.String()
+				return true
+			})
+			lv, diag := types.MapValueFrom(ctx, types.StringType, labelMap)
+			resp.Diagnostics.Append(diag...)
+			if !resp.Diagnostics.HasError() {
+				state.Label = lv
+			}
 		}
 	}
 
@@ -365,11 +382,13 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	plan.Token = state.Token
 
-	if plan.CAID.ValueString() != "" && plan.CAID.ValueString() != types.StringNull().ValueString() {
-		payload.CAID = plan.CAID.ValueString()
+	if !plan.CAID.IsNull() && !plan.CAID.IsUnknown() && plan.CAID.ValueString() != "" {
+		caID := plan.CAID.ValueString()
+		payload.CAID = &caID
 	}
-	if plan.CertDuration.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.CertDuration = plan.CertDuration.ValueInt64()
+	if !plan.CertDuration.IsNull() && !plan.CertDuration.IsUnknown() {
+		certDur := plan.CertDuration.ValueInt64()
+		payload.CertDuration = &certDur
 	}
 	// TFIN-415: Always include client_management_profile_id in the PATCH body.
 	// When the user removes the field from config (plan value is null/empty), send ""
@@ -378,7 +397,8 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 	// is retained server-side). The subsequent Read() will hydrate the CM-held value
 	// into state, surfacing the CM-side retention as drift on the next plan.
 	// This is the correct Terraform behaviour: state reflects CM reality, not config intent.
-	payload.ClientManagementProfileID = plan.ClientManagementProfileID.ValueString()
+	cmpID := plan.ClientManagementProfileID.ValueString()
+	payload.ClientManagementProfileID = &cmpID
 
 	// Add labels to payload — null guard prevents sending {} when unconfigured
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
@@ -389,11 +409,17 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 		payload.Labels = labelsPayload
 	}
 
-	if plan.Lifetime.ValueString() != "" && plan.Lifetime.ValueString() != types.StringNull().ValueString() {
-		payload.Lifetime = plan.Lifetime.ValueString()
+	// REG-02 Expiry Unsetability: explicitly pass empty string "" if lifetime is unset/null/empty in plan
+	if plan.Lifetime.IsNull() || plan.Lifetime.IsUnknown() || plan.Lifetime.ValueString() == "" {
+		lifetime := ""
+		payload.Lifetime = &lifetime
+	} else {
+		lifetime := plan.Lifetime.ValueString()
+		payload.Lifetime = &lifetime
 	}
-	if plan.MaxClients.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.MaxClients = plan.MaxClients.ValueInt64()
+	if !plan.MaxClients.IsNull() && !plan.MaxClients.IsUnknown() {
+		maxClients := plan.MaxClients.ValueInt64()
+		payload.MaxClients = &maxClients
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -472,4 +498,8 @@ func (d *resourceCMRegToken) Configure(_ context.Context, req resource.Configure
 	}
 
 	d.client = client
+}
+
+func (r *resourceCMRegToken) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

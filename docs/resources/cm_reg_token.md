@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -63,7 +63,7 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
 
 # Output the created registration token
 output "reg_token_value" {
-	value = ciphertrust_cm_reg_token.reg_token.token
+  value = ciphertrust_cm_reg_token.reg_token.token
 }
 ```
 
@@ -72,7 +72,7 @@ output "reg_token_value" {
 
 ### Optional
 
-- `ca_id` (String) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.
+- `ca_id` (String) (Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.
 - `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. The value cannot be negative. If 0 is provided then the value will be ignored. It is not recommended to use this parameter. Please use the one supported in client profile.
 - `client_management_profile_id` (String) ID of the client management profile
 - `label` (Map of String) (Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.

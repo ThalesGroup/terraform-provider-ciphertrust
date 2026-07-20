@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -412,14 +415,14 @@ type CMRegTokenTFSDK struct {
 type CMRegTokenJSON struct {
 	ID                        string                 `json:"id"`
 	Token                     string                 `json:"token"`
-	CAID                      string                 `json:"ca_id"`
-	CertDuration              int64                  `json:"cert_duration"`
-	ClientManagementProfileID string                 `json:"client_management_profile_id"`
+	CAID                      *string                `json:"ca_id,omitempty"`
+	CertDuration              *int64                 `json:"cert_duration,omitempty"`
+	ClientManagementProfileID *string                `json:"client_management_profile_id,omitempty"`
 	Label                     map[string]interface{} `json:"label,omitempty"`
-	Labels                    map[string]interface{} `json:"labels"`
-	Lifetime                  string                 `json:"lifetime"`
-	MaxClients                int64                  `json:"max_clients"`
-	NamePrefix                string                 `json:"name_prefix,omitempty"`
+	Labels                    map[string]interface{} `json:"labels,omitempty"`
+	Lifetime                  *string                `json:"lifetime,omitempty"`
+	MaxClients                *int64                 `json:"max_clients,omitempty"`
+	NamePrefix                *string                `json:"name_prefix,omitempty"`
 }
 
 type CMUserTFSDK struct {

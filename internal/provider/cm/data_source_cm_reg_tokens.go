@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -126,30 +129,44 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 		kvs = append(kvs, kv)
 	}
 
-	jsonStr, err := d.client.GetAll(
-		ctx,
-		id,
-		common.URL_REG_TOKEN+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_reg_tokens.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read reg tokens from CM",
-			err.Error(),
-		)
-		return
+	var allRawTokens []gjson.Result
+	limit := 100
+	skip := 0
+	for {
+		url := fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_REG_TOKEN, strings.Join(kvs, ""), skip, limit)
+		jsonStr, err := d.client.GetAll(ctx, id, url)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_reg_tokens.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Unable to read reg tokens from CM",
+				err.Error(),
+			)
+			return
+		}
+
+		rawTokens := gjson.Parse(jsonStr)
+		if !rawTokens.IsArray() {
+			tflog.Debug(ctx, common.ERR_METHOD_END+"response is not a JSON array [data_source_cm_reg_tokens.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Unable to read reg tokens from CM",
+				"CM returned an unexpected non-array response: "+jsonStr,
+			)
+			return
+		}
+
+		results := rawTokens.Array()
+		if len(results) == 0 {
+			break
+		}
+
+		allRawTokens = append(allRawTokens, results...)
+		if len(results) < limit {
+			break
+		}
+		skip += limit
 	}
 
-	rawTokens := gjson.Parse(jsonStr)
-	if !rawTokens.IsArray() {
-		tflog.Debug(ctx, common.ERR_METHOD_END+"response is not a JSON array [data_source_cm_reg_tokens.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read reg tokens from CM",
-			"CM returned an unexpected non-array response: "+jsonStr,
-		)
-		return
-	}
-
-	rawTokens.ForEach(func(_, rawToken gjson.Result) bool {
+	for _, rawToken := range allRawTokens {
 		raw := rawToken.Raw
 
 		tokenState := CMRegTokensListTFSDK{
@@ -186,7 +203,7 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 			lv, diag := types.MapValueFrom(ctx, types.StringType, labelMap)
 			resp.Diagnostics.Append(diag...)
 			if resp.Diagnostics.HasError() {
-				return false
+				return
 			}
 			tokenState.Label = lv
 		}
@@ -206,14 +223,13 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 			lv, diag := types.MapValueFrom(ctx, types.StringType, labelsMap)
 			resp.Diagnostics.Append(diag...)
 			if resp.Diagnostics.HasError() {
-				return false
+				return
 			}
 			tokenState.Labels = lv
 		}
 
 		state.Tokens = append(state.Tokens, tokenState)
-		return true
-	})
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
