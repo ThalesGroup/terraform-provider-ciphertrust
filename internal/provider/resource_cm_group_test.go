@@ -1096,3 +1096,39 @@ resource "ciphertrust_groups" "test" {
 }
 `, name)
 }
+
+// Test_CM_Group_Metadata_Compacted asserts that specifying multi-line formatted JSON
+// values in client_metadata or user_metadata does not result in perpetual plan drift.
+func Test_CM_Group_Metadata_Compacted(t *testing.T) {
+	name := "TFTestGroupMeta-" + uuid.New().String()[:8]
+	formattedJSON := "{\n  \"env\": \"test\",\n  \"service\": \"web\"\n}"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "testGroup" {
+  name            = %q
+  client_metadata = %q
+  user_metadata   = %q
+}
+`, name, formattedJSON, formattedJSON),
+				Check: checkStep(t, "create with formatted metadata JSON",
+					resource.TestCheckResourceAttrSet("ciphertrust_groups.testGroup", "id"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_groups" "testGroup" {
+  name            = %q
+  client_metadata = %q
+  user_metadata   = %q
+}
+`, name, formattedJSON, formattedJSON),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

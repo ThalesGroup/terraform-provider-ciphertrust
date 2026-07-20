@@ -868,3 +868,41 @@ resource "ciphertrust_domain" "test" {
 		},
 	})
 }
+
+// Test_CM_Domain_ParentCAId_Recreation_Idempotency verifies that omitting parent_ca_id
+// and hsm_kek_label in the configuration does not trigger domain replacement or plan drift
+// during subsequent plans/applies after state hydration.
+func Test_CM_Domain_ParentCAId_Recreation_Idempotency(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-idemp-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name   = %q
+  admins = ["admin"]
+}
+`, rName),
+				Check: checkStep(t, "create domain without parent_ca_id",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "parent_ca_id"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name   = %q
+  admins = ["admin"]
+}
+`, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

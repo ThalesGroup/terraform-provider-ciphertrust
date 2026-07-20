@@ -76,11 +76,11 @@ output "group_name" {
 
 ### Optional
 
-- `app_metadata` (String)
-- `client_metadata` (String)
-- `description` (String)
+- `app_metadata` (String) Application-specific metadata associated with the group. Stored as compacted JSON string.
+- `client_metadata` (String) Client-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.
+- `description` (String) Human-readable description of the group.
 - `user_ids` (Set of String) Set of user IDs that are members of this group. Managed declaratively: users in the set are added to the group; users removed from the set are removed from the group. If omitted, group membership is left as-is.
-- `user_metadata` (String)
+- `user_metadata` (String) User-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.
 
 ### Read-Only
 

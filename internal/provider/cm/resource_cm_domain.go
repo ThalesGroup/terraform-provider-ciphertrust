@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -5,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -84,7 +88,11 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"hsm_kek_label": schema.StringAttribute{
 				Optional:    true,
-				Description: "Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label.",
+				Computed:    true,
+				Description: "Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label. Computed to prevent plan-time drift.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"meta_data": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -93,9 +101,11 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"parent_ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.",
+				Computed:    true,
+				Description: "(Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied. Computed to prevent plan-time drift.",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"uri": schema.StringAttribute{
@@ -156,7 +166,13 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	for _, str := range plan.Admins {
 		admins = append(admins, str.ValueString())
 	}
+	sort.Strings(admins)
 	payload.Admins = admins
+	var sortedPlanAdmins []types.String
+	for _, admin := range admins {
+		sortedPlanAdmins = append(sortedPlanAdmins, types.StringValue(admin))
+	}
+	plan.Admins = sortedPlanAdmins
 
 	if !plan.AllowUserManagement.IsNull() && !plan.AllowUserManagement.IsUnknown() {
 		val := plan.AllowUserManagement.ValueBool()
@@ -310,9 +326,14 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	// Read admins list
 	adminsResult := gjson.Get(response, "admins")
 	if adminsResult.Exists() && adminsResult.IsArray() {
-		var admins []types.String
+		var adminsStr []string
 		for _, admin := range adminsResult.Array() {
-			admins = append(admins, types.StringValue(admin.String()))
+			adminsStr = append(adminsStr, admin.String())
+		}
+		sort.Strings(adminsStr)
+		var admins []types.String
+		for _, admin := range adminsStr {
+			admins = append(admins, types.StringValue(admin))
 		}
 		state.Admins = admins
 	} else {
@@ -515,9 +536,14 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	adminsReadResult := gjson.Get(readResponse, "admins")
 	if adminsReadResult.Exists() && adminsReadResult.IsArray() {
-		var admins []types.String
+		var adminsStr []string
 		for _, a := range adminsReadResult.Array() {
-			admins = append(admins, types.StringValue(a.String()))
+			adminsStr = append(adminsStr, a.String())
+		}
+		sort.Strings(adminsStr)
+		var admins []types.String
+		for _, a := range adminsStr {
+			admins = append(admins, types.StringValue(a))
 		}
 		plan.Admins = admins
 	} else {
