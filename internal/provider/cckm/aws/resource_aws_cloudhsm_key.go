@@ -210,10 +210,6 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Computed:    true,
 				Description: "Parameter to indicate if AWS CloudHSM key is linked with AWS.",
 			},
-			"blocked": schema.BoolAttribute{
-				Computed:    true,
-				Description: "Parameter to indicate if AWS CloudHSM key is blocked for any data plane operation.",
-			},
 			"key_policy":      keyStoreKeyPolicySchemaAttribute(),
 			"enable_rotation": enableRotationSchemaAttribute(),
 		},

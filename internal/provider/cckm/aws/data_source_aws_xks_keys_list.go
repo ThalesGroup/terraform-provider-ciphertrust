@@ -8,7 +8,6 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -121,6 +120,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 // setXKSKeyState populates the Terraform data source state for an AWS XKS key from an API response JSON string.
 func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
 	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
+	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
 	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
 }
@@ -130,7 +130,6 @@ func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response strin
 // the aws_param nested block via setKeyStoreDSAwsParam; they are not set at the outer level.
 func setCustomKeyStoreKeyCommonState(ctx context.Context, response string, plan *AWSKeyStoreKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyDataSourceState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
-	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
 	plan.KMSName = types.StringValue(gjson.Get(response, "kms").String())
 	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
@@ -138,28 +137,15 @@ func setCustomKeyStoreKeyCommonState(ctx context.Context, response string, plan 
 	plan.Linked = types.BoolValue(gjson.Get(response, "linked_state").Bool())
 	plan.Region = types.StringValue(gjson.Get(response, "region").String())
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.AWSParam = setKeyStoreDSAwsParam(ctx, response, plan.Linked.ValueBool(), diags)
+	plan.AWSParam = setKeyStoreDSAwsParam(ctx, response, diags)
 }
 
 // setKeyStoreDSAwsParam builds the computed-only AWSKeyStoreDSAwsParamTFSDK block from an
-// API response JSON string. Alias, description, and tags are only populated for linked keys.
-// All other aws_param computed fields are populated regardless of linked state.
-func setKeyStoreDSAwsParam(ctx context.Context, response string, linked bool, diags *diag.Diagnostics) *AWSKeyStoreDSAwsParamTFSDK {
+// API response JSON string. All aws_param fields are populated regardless of linked state.
+func setKeyStoreDSAwsParam(ctx context.Context, response string, diags *diag.Diagnostics) *AWSKeyStoreDSAwsParamTFSDK {
 	p := &AWSKeyStoreDSAwsParamTFSDK{}
-	if linked {
-		setAliases(response, &p.Alias, diags)
-		setKeyTags(ctx, response, &p.Tags, diags)
-	} else {
-		var d diag.Diagnostics
-		p.Alias, d = types.SetValue(types.StringType, []attr.Value{})
-		if d.HasError() {
-			diags.Append(d...)
-		}
-		p.Tags, d = types.MapValueFrom(ctx, types.StringType, map[string]string{})
-		if d.HasError() {
-			diags.Append(d...)
-		}
-	}
+	setAliases(response, &p.Alias, diags)
+	setKeyTags(ctx, response, &p.Tags, diags)
 	p.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 	// Computed fields from aws_param populated for all keys.
 	p.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())

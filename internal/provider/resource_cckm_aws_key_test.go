@@ -183,7 +183,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			enable_key   = true
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
-				key_source    = "ciphertrust"
+				key_source    = "local"
 			}
 			key_policy = {
 				key_admins  = ["%s"]
@@ -234,7 +234,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			enable_key   = false
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler_two.id
-				key_source    = "ciphertrust"
+				key_source    = "local"
 			}
 			key_policy = {
 				policy = <<-EOT
@@ -331,7 +331,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
@@ -391,7 +391,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", createKeyRotationPeriodInDays),
@@ -489,7 +489,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 			enable_key   = true
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
-				key_source    = "ciphertrust"
+				key_source    = "local"
 			}
 			key_policy = {
 				key_admins       = ["%s"]
@@ -531,7 +531,7 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),

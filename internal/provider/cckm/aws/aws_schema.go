@@ -418,8 +418,10 @@ type XKSKeyLocalHostedParamsTFSDK struct {
 // AWSXKSKeyTFSDK holds the Terraform state for the aws_xks_key resource.
 // Top-level fields are provided by AWSKeyStoreResourceCommonTFSDK (slim struct).
 // All AWS response fields (arn, key_id, key_state, etc.) live inside AWSParam.
+// Blocked is XKS-only: CloudHSM keys can never be blocked.
 type AWSXKSKeyTFSDK struct {
 	AWSKeyStoreResourceCommonTFSDK
+	Blocked         types.Bool                    `tfsdk:"blocked"`
 	LocalHostParams *XKSKeyLocalHostedParamsTFSDK `tfsdk:"local_hosted_params"`
 }
 
@@ -529,7 +531,6 @@ type AWSKeyStoreResourceCommonTFSDK struct {
 	KeySourceContainerID           types.String `tfsdk:"key_source_container_id"`
 	CustomKeyStoreID               types.String `tfsdk:"custom_key_store_id"`
 	Linked                         types.Bool   `tfsdk:"linked"`
-	Blocked                        types.Bool   `tfsdk:"blocked"`
 	LocalKeyID                     types.String `tfsdk:"local_key_id"`
 	LocalKeyName                   types.String `tfsdk:"local_key_name"`
 	// aws_param holds the full AWS parameter block as a typed Object.
@@ -691,12 +692,14 @@ type AWSKeyStoreKeyDataSourceCommonTFSDK struct {
 	KMSID               types.String                `tfsdk:"kms_id"`
 	CustomKeyStoreID    types.String                `tfsdk:"custom_key_store_id"`
 	Linked              types.Bool                  `tfsdk:"linked"`
-	Blocked             types.Bool                  `tfsdk:"blocked"`
 	AWSCustomKeyStoreID types.String                `tfsdk:"aws_custom_key_store_id"`
 }
 
+// AWSXKSKeyDataSourceTFSDK holds the datasource state for a single XKS key list item.
+// Blocked is XKS-only: CloudHSM keys can never be blocked.
 type AWSXKSKeyDataSourceTFSDK struct {
 	AWSKeyStoreKeyDataSourceCommonTFSDK
+	Blocked       types.Bool   `tfsdk:"blocked"`
 	AWSXKSKeyID   types.String `tfsdk:"aws_xks_key_id"`
 	SourceKeyTier types.String `tfsdk:"source_key_tier"`
 }
@@ -994,8 +997,8 @@ func enableRotationSchemaAttribute() schema.Attribute {
 			},
 			"key_source": schema.StringAttribute{
 				Required:    true,
-				Description: "Key source for rotation. Options: 'ciphertrust', 'local'.",
-				Validators:  []validator.String{stringvalidator.OneOf([]string{"ciphertrust", "local"}...)},
+				Description: "Key source for rotation. Options: 'local'.",
+				Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
 			},
 			"disable_encrypt": schema.BoolAttribute{
 				Optional:    true,

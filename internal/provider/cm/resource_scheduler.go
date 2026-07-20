@@ -247,9 +247,11 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Computed: true,
 					},
 					"rotate_material": schema.BoolAttribute{
-						Optional:    true,
-						Description: "If true, rotate the key material during the key rotation job. The attribute is only valid for CipherTrustManager version 2.21 or later.",
-						Computed:    true,
+						Optional: true,
+						Description: "If true, rotate the key material during the key rotation job. " +
+							"Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and  " +
+							"valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.",
+						Computed: true,
 					},
 					"cloud_name": schema.StringAttribute{
 						Required:    true,
