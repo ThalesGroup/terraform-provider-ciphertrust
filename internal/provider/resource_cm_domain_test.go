@@ -890,7 +890,7 @@ resource "ciphertrust_domain" "test" {
 `, rName),
 				Check: checkStep(t, "create domain without parent_ca_id",
 					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
-					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "parent_ca_id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_domain.test", "parent_ca_id"),
 				),
 			},
 			{

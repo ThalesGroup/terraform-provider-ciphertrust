@@ -77,8 +77,8 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Computed:    true,
 				Description: "(Immutable) To allow user creation and management in the domain, set it to true. The default value is false.",
 				PlanModifiers: []planmodifier.Bool{
-					modifiers.ImmutableBool(),
 					modifiers.UseStateForNullOrUnknownBool(),
+					modifiers.ImmutableBool(),
 				},
 			},
 			"hsm_connection_id": schema.StringAttribute{
@@ -103,8 +103,8 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Computed:    true,
 				Description: "(Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied. Computed to prevent plan-time drift.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
 					modifiers.UseStateForNullOrUnknownString(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"uri": schema.StringAttribute{
