@@ -29,7 +29,7 @@ func NewResourceCMPwdChange() resource.Resource {
 }
 
 type resourceCMPwdChange struct {
-	client *common.CMClientBootstrap
+	client common.CMClient
 }
 
 func (r *resourceCMPwdChange) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -205,11 +205,11 @@ func (d *resourceCMPwdChange) Configure(_ context.Context, req resource.Configur
 		return
 	}
 
-	client, ok := req.ProviderData.(*common.CMClientBootstrap)
+	client, ok := req.ProviderData.(common.CMClient)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Error in fetching client from provider",
-			fmt.Sprintf("Expected *provider.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected common.CMClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
