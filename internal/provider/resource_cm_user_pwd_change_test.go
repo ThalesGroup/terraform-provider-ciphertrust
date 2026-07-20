@@ -15,9 +15,10 @@ import (
 // special character.  Uses acctest.RandStringFromCharSet for the random portion
 // so no two test runs share the same alternate credential.
 func generateComplexPassword() string {
-	// Fixed prefix guarantees all required character classes.
+	// Fixed prefix guarantees strict character class requirements on live CM instances:
+	// 3 uppercase, 3 lowercase, 3 digits, 3 special characters.
 	// Random alphanumeric suffix ensures uniqueness across test runs.
-	return "Tf@1" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	return "ABCdef123!@#" + acctest.RandStringFromCharSet(6, acctest.CharSetAlphaNum)
 }
 
 // TestCipherTrust_CMUserPwdChange_ReadStability verifies that a terraform plan
@@ -396,7 +397,7 @@ func Test_CM_UserPwdChange_Idempotency(t *testing.T) {
 	t.Setenv("TF_VAR_cm_test_initial_password", initialPassword)
 	t.Setenv("TF_VAR_cm_test_changed_password", changedPassword)
 
-	cfg := bootstrapProviderConfig() + `
+	cfg := providerConfig + `
 variable "cm_test_initial_password" {
   type      = string
   sensitive = true

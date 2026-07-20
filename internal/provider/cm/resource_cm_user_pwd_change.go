@@ -120,7 +120,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	response, err := r.client.PatchDataBootstrap(ctx, id, common.URL_CHANGE_USER_PWD, payloadJSON)
+	_, err = r.client.PatchDataBootstrap(ctx, id, common.URL_CHANGE_USER_PWD, payloadJSON)
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "authentication failed") || strings.Contains(errStr, "invalid credentials") || strings.Contains(errStr, "401") {
@@ -186,10 +186,41 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create Output]["+response+"]")
+	// Fetch the actual user_id from the user list endpoint since the successful
+	// password change PATCH response (HTTP 204 No Content) has an empty body.
+	usersJSON, listErr := r.client.GetByIdBootstrap(ctx, id, "", common.URL_USER_MANAGEMENT)
+	var targetUserID string
+	if listErr == nil {
+		var userRecords []gjson.Result
+		if gjson.Get(usersJSON, "resources").Exists() {
+			userRecords = gjson.Get(usersJSON, "resources").Array()
+		} else {
+			parsed := gjson.Parse(usersJSON)
+			if parsed.IsArray() {
+				userRecords = parsed.Array()
+			} else {
+				userRecords = []gjson.Result{parsed}
+			}
+		}
 
-	// Store the server-assigned user_id so Read() can perform 404 detection.
-	plan.ID = types.StringValue(gjson.Get(response, "user_id").String())
+		for _, userRec := range userRecords {
+			uName := userRec.Get("username").String()
+			if strings.EqualFold(uName, plan.Username.ValueString()) {
+				targetUserID = userRec.Get("user_id").String()
+				if targetUserID == "" {
+					targetUserID = userRec.Get("id").String()
+				}
+				break
+			}
+		}
+	}
+
+	if targetUserID == "" {
+		// Fallback to generating a unique UUID so the resource ID is never empty or null.
+		targetUserID = uuid.New().String()
+	}
+
+	plan.ID = types.StringValue(targetUserID)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
