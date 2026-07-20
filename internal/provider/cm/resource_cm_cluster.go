@@ -114,7 +114,10 @@ func (r *resourceCMCluster) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"raft_status": schema.StringAttribute{
 				Computed:    true,
-				Description: "Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response. UseStateForUnknown() is intentionally absent — value changes on leader elections and suppressing it causes 'inconsistent result after apply' errors.",
+				Description: "Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
