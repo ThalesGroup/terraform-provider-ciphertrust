@@ -59,7 +59,7 @@ data "ciphertrust_cm_groups_list" "all" {
 }
 `, name),
 				Check: checkStep(t, "pagination auto-listing",
-					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_groups_list.all", "id"),
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_groups_list.all", "groups.0.name"),
 				),
 			},
 		},

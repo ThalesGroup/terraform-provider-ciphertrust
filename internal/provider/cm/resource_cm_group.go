@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
@@ -190,6 +191,10 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
+	priorAppMetadata := state.AppMetadata
+	priorClientMetadata := state.ClientMetadata
+	priorUserMetadata := state.UserMetadata
+
 	resourceID := state.ID.ValueString()
 
 	response, err := r.client.GetById(ctx, id, resourceID, common.URL_GROUP)
@@ -217,22 +222,49 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	if v := gjson.Get(response, "app_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		// Normalize to compact JSON so whitespace differences between CM and
-		// CDSPaaS responses don't surface as phantom drift in subsequent plans.
-		compacted := compactJSONString(v.Raw)
-		state.AppMetadata = types.StringValue(compacted)
+		apiJSON := v.Raw
+		if !priorAppMetadata.IsNull() && !priorAppMetadata.IsUnknown() {
+			priorVal := priorAppMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.AppMetadata = types.StringValue(priorVal)
+			} else {
+				state.AppMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.AppMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.AppMetadata = types.StringNull()
 	}
 
 	if v := gjson.Get(response, "client_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		state.ClientMetadata = types.StringValue(compactJSONString(v.Raw))
+		apiJSON := v.Raw
+		if !priorClientMetadata.IsNull() && !priorClientMetadata.IsUnknown() {
+			priorVal := priorClientMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.ClientMetadata = types.StringValue(priorVal)
+			} else {
+				state.ClientMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.ClientMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.ClientMetadata = types.StringNull()
 	}
 
 	if v := gjson.Get(response, "user_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		state.UserMetadata = types.StringValue(compactJSONString(v.Raw))
+		apiJSON := v.Raw
+		if !priorUserMetadata.IsNull() && !priorUserMetadata.IsUnknown() {
+			priorVal := priorUserMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.UserMetadata = types.StringValue(priorVal)
+			} else {
+				state.UserMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.UserMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.UserMetadata = types.StringNull()
 	}
@@ -604,4 +636,17 @@ func diffStringSlices(current, desired []string) (toAdd, toRemove []string) {
 		}
 	}
 	return toAdd, toRemove
+}
+
+// semanticallyEqualJSON unmarshals both strings and returns true if they are
+// semantically equivalent JSON objects.
+func semanticallyEqualJSON(s1, s2 string) bool {
+	var j1, j2 interface{}
+	if err := json.Unmarshal([]byte(s1), &j1); err != nil {
+		return false
+	}
+	if err := json.Unmarshal([]byte(s2), &j2); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(j1, j2)
 }
