@@ -59,7 +59,7 @@ output "license_id" {
 
 ### Required
 
-- `license` (String) **(Immutable)** License String. **WARNING:** Deleting a `ciphertrust_license` resource uninstalls the license from the CipherTrust appliance, which can immediately disrupt services and revoke access to KMS features.
+- `license` (String) (Immutable) License String
 
 ### Optional
 

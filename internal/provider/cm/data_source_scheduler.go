@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"strings"
-	"time"
+	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -119,16 +120,13 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 						"cckm_key_rotation_params": schema.SingleNestedAttribute{
 							Computed: true,
 							Attributes: map[string]schema.Attribute{
-								"aws_params": schema.SingleNestedAttribute{
-									Computed: true,
-									Attributes: map[string]schema.Attribute{
-										"retain_alias": schema.BoolAttribute{
-											Computed: true,
-										},
-										"rotate_material": schema.BoolAttribute{
-											Computed: true,
-										},
-									},
+								"aws_retain_alias": schema.BoolAttribute{
+									Computed:    true,
+									Description: "AWS: whether to retain the key alias during rotation. Null when not applicable.",
+								},
+								"rotate_material": schema.BoolAttribute{
+									Computed:    true,
+									Description: "AWS: whether to rotate the key material. Null when not applicable.",
 								},
 								"cloud_name": schema.StringAttribute{
 									Computed: true,
@@ -232,8 +230,8 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 				RunAt:       types.StringValue(jobs.RunAt),
 				RunOn:       types.StringValue(jobs.RunOn),
 				Disabled:    types.BoolValue(jobs.Disabled),
-				StartDate:   types.StringValue(jobs.StartDate.Format(time.RFC3339)),
-				EndDate:     types.StringValue(jobs.EndDate.Format(time.RFC3339)),
+				StartDate:   types.StringValue(jobs.StartDate),
+				EndDate:     types.StringValue(jobs.EndDate),
 			},
 		}
 
@@ -334,31 +332,22 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 }
 
 func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
-	var cckmKeyRotationParams CCKMKeyRotationParamsJSON
-	err := json.Unmarshal(jobConfigParams, &cckmKeyRotationParams)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
-		diags.AddError(
-			"Unable to read scheduler cckm key rotation params",
-			err.Error(),
-		)
-		return
-	}
+	itemJSON := string(jobConfigParams)
 	keyRotationParams := &CCKMKeyRotationParamsDatasourceTFSDK{
-		CloudName: types.StringValue(cckmKeyRotationParams.CloudName),
-		AwsParams: CCKMAwsKeyRotationParamsDatasourceTFSDK{
-			RetainAlias:    types.BoolValue(cckmKeyRotationParams.RetainAlias),
-			RotateMaterial: types.BoolValue(cckmKeyRotationParams.RotateMaterial),
-		},
+		CloudName:     types.StringValue(gjson.Get(itemJSON, "cloud_name").String()),
+		Expiration:    types.StringValue(gjson.Get(itemJSON, "expiration").String()),
+		ExpireIn:      types.StringValue(gjson.Get(itemJSON, "expire_in").String()),
+		RotationAfter: types.StringValue(gjson.Get(itemJSON, "rotation_after").String()),
 	}
-	if cckmKeyRotationParams.Expiration != nil {
-		keyRotationParams.Expiration = types.StringValue(*cckmKeyRotationParams.Expiration)
+	if r := gjson.Get(itemJSON, "aws_param.retain_alias"); r.Exists() {
+		keyRotationParams.AWSRetainAlias = types.BoolValue(r.Bool())
+	} else {
+		keyRotationParams.AWSRetainAlias = types.BoolNull()
 	}
-	if cckmKeyRotationParams.ExpireIn != nil {
-		keyRotationParams.ExpireIn = types.StringValue(*cckmKeyRotationParams.ExpireIn)
-	}
-	if cckmKeyRotationParams.RotationAfter != nil {
-		keyRotationParams.RotationAfter = types.StringValue(*cckmKeyRotationParams.RotationAfter)
+	if r := gjson.Get(itemJSON, "aws_param.rotate_material"); r.Exists() {
+		keyRotationParams.RotateMaterial = types.BoolValue(r.Bool())
+	} else {
+		keyRotationParams.RotateMaterial = types.BoolNull()
 	}
 	schedulerJobs.CCKMKeyRotationParams = keyRotationParams
 }

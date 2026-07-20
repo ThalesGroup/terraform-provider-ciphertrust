@@ -120,24 +120,34 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "By default, the job configuration starts in an active state. True disables the job configuration.",
 			},
 			"start_date": schema.StringAttribute{
-				Computed:    true,
-				Optional:    true,
-				Description: "Date the job configuration becomes active. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z",
+				Optional: true,
+				Description: "Start date/time for the scheduler job. Use empty string (\"\") to clear a " +
+					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
+					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
+					"leaves the existing CM value unchanged.",
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(schedulerDateRegEx),
-						"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+					stringvalidator.Any(
+						stringvalidator.LengthBetween(0, 0),
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(schedulerDateRegEx),
+							"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+						),
 					),
 				},
 			},
 			"end_date": schema.StringAttribute{
-				Computed:    true,
-				Optional:    true,
-				Description: "Date the job configuration becomes inactive. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z",
+				Optional: true,
+				Description: "End date/time for the scheduler job. Use empty string (\"\") to clear a " +
+					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
+					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
+					"leaves the existing CM value unchanged.",
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(schedulerDateRegEx),
-						"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+					stringvalidator.Any(
+						stringvalidator.LengthBetween(0, 0),
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(schedulerDateRegEx),
+							"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+						),
 					),
 				},
 			},
@@ -480,9 +490,22 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError("Read Error", "Error fetching scheduler job configs : "+err.Error())
 		return
 	}
+	// Capture prior state values before getParamsFromResponse overwrites them.
+	prevStartDate := state.StartDate
+	prevEndDate := state.EndDate
 	getParamsFromResponse(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	// State-guarded hydration: if the user never set start_date (null in state),
+	// leave it null to avoid drift. If they set it, getParamsFromResponse already
+	// wrote the CM value (or "" when CM omits the cleared field). When state was ""
+	// (explicit clear), getParamsFromResponse wrote "" — that's correct.
+	if prevStartDate.IsNull() {
+		state.StartDate = types.StringNull()
+	}
+	if prevEndDate.IsNull() {
+		state.EndDate = types.StringNull()
 	}
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Operation = types.StringValue(gjson.Get(response, "operation").String())
@@ -555,31 +578,21 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	if plan.StartDate.ValueString() != "" && plan.StartDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.StartDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided start_date is not in RFC3339 format ",
-				"Error parsing the start_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.StartDate = parsedTime
+	if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() {
+		s := plan.StartDate.ValueString()
+		payload.StartDate = &s
 	}
 
-	if plan.EndDate.ValueString() != "" && plan.EndDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.EndDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided end_date is not in RFC3339 format ",
-				"Error parsing the end_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.EndDate = parsedTime
+	if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() {
+		s := plan.EndDate.ValueString()
+		payload.EndDate = &s
 	}
+
+	// Capture plan date values before getParamsFromResponse may overwrite them.
+	// Used below to restore null when the user is not managing these fields,
+	// even if CM echoes back an existing value in the PATCH response.
+	planStartDate := plan.StartDate
+	planEndDate := plan.EndDate
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -604,6 +617,15 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 	getParamsFromResponse(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Null-is-no-op for date fields: if the user did not set start_date/end_date
+	// in this update, restore null so that state does not drift to "" on the next plan.
+	if planStartDate.IsNull() {
+		plan.StartDate = types.StringNull()
+	}
+	if planEndDate.IsNull() {
+		plan.EndDate = types.StringNull()
 	}
 
 	tflog.Debug(ctx, "[resource_scheduler.go -> Update Output]["+response+"]")
@@ -848,8 +870,22 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	plan.Disabled = types.BoolValue(gjson.Get(response, "disabled").Bool())
 	plan.Description = types.StringValue(gjson.Get(response, "description").String())
 	plan.RunOn = types.StringValue(gjson.Get(response, "run_on").String())
-	plan.StartDate = types.StringValue(gjson.Get(response, "start_date").String())
-	plan.EndDate = types.StringValue(gjson.Get(response, "end_date").String())
+	// start_date / end_date: preserve null when the API omits them and the current
+	// plan value is null (meaning the user has never configured them). This prevents
+	// writing "" to state for fields that were never managed, avoiding perpetual drift
+	// on subsequent plans where the user omits these Optional-only attributes.
+	if r := gjson.Get(response, "start_date"); r.Exists() {
+		plan.StartDate = types.StringValue(r.String())
+	} else if !plan.StartDate.IsNull() {
+		// Was previously set (or explicitly cleared); CM omits the field → write "" to
+		// reflect the explicit-clear state.
+		plan.StartDate = types.StringValue("")
+	}
+	if r := gjson.Get(response, "end_date"); r.Exists() {
+		plan.EndDate = types.StringValue(r.String())
+	} else if !plan.EndDate.IsNull() {
+		plan.EndDate = types.StringValue("")
+	}
 
 	// Derive the operation from the API response (source of truth) so that
 	// Read correctly hydrates params even when plan.Operation is unset or stale.

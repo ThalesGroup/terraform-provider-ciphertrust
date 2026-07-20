@@ -53,20 +53,12 @@ Read-Only:
 
 Read-Only:
 
-- `aws_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_key_rotation_params--aws_params))
+- `aws_retain_alias` (Boolean) AWS: whether to retain the key alias during rotation. Null when not applicable.
 - `cloud_name` (String)
 - `expiration` (String)
 - `expire_in` (String)
+- `rotate_material` (Boolean) AWS: whether to rotate the key material. Null when not applicable.
 - `rotation_after` (String)
-
-<a id="nestedatt--scheduler--cckm_key_rotation_params--aws_params"></a>
-### Nested Schema for `scheduler.cckm_key_rotation_params.aws_params`
-
-Read-Only:
-
-- `retain_alias` (Boolean)
-- `rotate_material` (Boolean)
-
 
 
 <a id="nestedatt--scheduler--cckm_synchronization_params"></a>

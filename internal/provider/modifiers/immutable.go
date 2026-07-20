@@ -76,10 +76,8 @@ func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodif
 	if req.State.Raw.IsNull() {
 		return
 	}
-	// Allow plan values that are null or unknown (e.g., Optional field removed from config
-	// with no default, or value not yet known). The framework will resolve these; do not
-	// block them here.
-	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+	// Unknown plan value: comes from another resource's output, not a user change.
+	if req.PlanValue.IsUnknown() {
 		return
 	}
 	// No change — allow.
@@ -119,11 +117,9 @@ func (m immutableBoolModifier) PlanModifyBool(_ context.Context, req planmodifie
 	if req.State.Raw.IsNull() {
 		return
 	}
-	// When an Optional+Computed bool is omitted from config, the framework sets
-	// the plan value to Unknown before UseStateForUnknown resolves it. Allow
-	// null/unknown plan values so that only an explicit user-supplied change fires
-	// the immutability error.
-	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+	// Unknown plan value: comes from another resource's output, not yet known at plan
+	// time. This is not a user-initiated change away from the existing value.
+	if req.PlanValue.IsUnknown() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {

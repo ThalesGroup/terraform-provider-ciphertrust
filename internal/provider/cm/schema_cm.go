@@ -894,8 +894,8 @@ type UpdateJobConfigParamsJSON struct {
 	RunAt                     string                         `json:"run_at"`
 	RunOn                     string                         `json:"run_on"`
 	Disabled                  bool                           `json:"disabled"`
-	StartDate                 time.Time                      `json:"start_date"`
-	EndDate                   time.Time                      `json:"end_date"`
+	StartDate                 *string                        `json:"start_date,omitempty"`
+	EndDate                   *string                        `json:"end_date,omitempty"`
 	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
 	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params,omitempty"`
 	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
@@ -986,8 +986,8 @@ type CreateJobConfigParamsListJSON struct {
 	RunAt           string          `json:"run_at"`
 	RunOn           string          `json:"run_on"`
 	Disabled        bool            `json:"disabled"`
-	StartDate       time.Time       `json:"start_date"`
-	EndDate         time.Time       `json:"end_date"`
+	StartDate       string          `json:"start_date"`
+	EndDate         string          `json:"end_date"`
 	JobConfigParams json.RawMessage `json:"job_config_params"`
 }
 
@@ -1221,17 +1221,13 @@ type CCKMKeyRotationParamsTFSDK struct {
 	RotationAfter  types.String `tfsdk:"rotation_after"`
 }
 
-type CCKMAwsKeyRotationParamsDatasourceTFSDK struct {
-	RetainAlias    types.Bool `tfsdk:"retain_alias"`
-	RotateMaterial types.Bool `tfsdk:"rotate_material"`
-}
-
 type CCKMKeyRotationParamsDatasourceTFSDK struct {
-	AwsParams     CCKMAwsKeyRotationParamsDatasourceTFSDK `tfsdk:"aws_params"`
-	CloudName     types.String                            `tfsdk:"cloud_name"`
-	Expiration    types.String                            `tfsdk:"expiration"`
-	ExpireIn      types.String                            `tfsdk:"expire_in"`
-	RotationAfter types.String                            `tfsdk:"rotation_after"`
+	AWSRetainAlias types.Bool   `tfsdk:"aws_retain_alias"`
+	RotateMaterial types.Bool   `tfsdk:"rotate_material"`
+	CloudName      types.String `tfsdk:"cloud_name"`
+	Expiration     types.String `tfsdk:"expiration"`
+	ExpireIn       types.String `tfsdk:"expire_in"`
+	RotationAfter  types.String `tfsdk:"rotation_after"`
 }
 
 type CCKMSynchronizationParamsTFSDK struct {
