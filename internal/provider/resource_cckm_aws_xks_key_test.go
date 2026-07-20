@@ -175,7 +175,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 			},
 			{
 				Config:      invalidUpdateConfigStr,
-				ExpectError: regexp.MustCompile(`unlinked HYOK`),
+				ExpectError: regexp.MustCompile(`unlinked key`),
 			},
 		},
 	})

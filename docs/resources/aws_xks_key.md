@@ -195,7 +195,7 @@ Read-Only:
 Required:
 
 - `job_config_id` (String) ID of the scheduler configuration job.
-- `key_source` (String) Key source for rotation. Options: 'ciphertrust', 'local'.
+- `key_source` (String) Key source for rotation. Options: 'local'.
 
 Optional:
 

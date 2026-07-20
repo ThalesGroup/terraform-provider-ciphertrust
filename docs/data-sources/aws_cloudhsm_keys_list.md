@@ -50,7 +50,6 @@ Read-Only:
 
 - `aws_custom_key_store_id` (String) Custom keystore ID in AWS.
 - `aws_param` (Attributes) AWS key parameters returned by the API. (see [below for nested schema](#nestedatt--keys--aws_param))
-- `blocked` (Boolean) True if the key is blocked for any data plane operation.
 - `cloud_name` (String) AWS cloud.
 - `created_at` (String) Date the key was created.
 - `custom_key_store_id` (String) Custom keystore ID in AWS.
