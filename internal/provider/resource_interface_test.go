@@ -340,3 +340,78 @@ resource "ciphertrust_interface" "test" {
 		},
 	})
 }
+
+// Test_CM_Interface_Port_Immutable verifies that changing the port attribute
+// of ciphertrust_interface triggers a plan-time validation error because the port is immutable.
+func Test_CM_Interface_Port_Immutable(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9088) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9088
+  interface_type = "nae"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "port", "9088"),
+				),
+			},
+			{
+				// Changing the port must emit a plan-time diagnostic error and fail.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9089
+  interface_type = "nae"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_Clear_Optional_Fields asserts that clearing a previously
+// set optional field properly resets its state on the server.
+func Test_CM_Interface_Clear_Optional_Fields(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9090) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port               = 9090
+  interface_type     = "nae"
+  allow_unregistered = true
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "allow_unregistered", "true"),
+				),
+			},
+			{
+				// Removing allow_unregistered from configuration should clear it from state and reset it on the server.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9090
+  interface_type = "nae"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "allow_unregistered"),
+				),
+			},
+		},
+	})
+}
+

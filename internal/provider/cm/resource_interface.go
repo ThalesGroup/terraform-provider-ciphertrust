@@ -57,7 +57,10 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
-				Description: "The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.",
+				Description: "(Immutable) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"allow_unregistered": schema.BoolAttribute{
 				Optional:    true,
@@ -862,7 +865,6 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Update]["+id+"]")
 	var plan CMInterfaceTFSDK
 	var state CMInterfaceTFSDK
-	var payload CMInterfaceJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -876,35 +878,75 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if plan.AllowUnregistered.ValueBool() != types.BoolNull().ValueBool() {
-		payload.AllowUnregistered = plan.AllowUnregistered.ValueBool()
+	payload := make(map[string]interface{})
+
+	// Scalar Optional fields: transition from non-Null in state to Null in plan -> explicit reset
+	// Otherwise, if not Null in plan -> set in payload
+
+	// allow_unregistered (Boolean)
+	if !plan.AllowUnregistered.IsNull() && !plan.AllowUnregistered.IsUnknown() {
+		payload["allow_unregistered"] = plan.AllowUnregistered.ValueBool()
+	} else if !state.AllowUnregistered.IsNull() {
+		payload["allow_unregistered"] = false // Reset to default/false
 	}
-	if plan.AutogenCAId.ValueString() != "" && plan.AutogenCAId.ValueString() != types.StringNull().ValueString() {
-		payload.AutogenCAId = plan.AutogenCAId.ValueString()
+
+	// auto_gen_ca_id (String)
+	if !plan.AutogenCAId.IsNull() && !plan.AutogenCAId.IsUnknown() {
+		payload["auto_gen_ca_id"] = plan.AutogenCAId.ValueString()
+	} else if !state.AutogenCAId.IsNull() {
+		payload["auto_gen_ca_id"] = "" // Reset/empty
 	}
-	if plan.AutogenDaysBeforeExpiry.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.AutogenDaysBeforeExpiry = plan.AutogenDaysBeforeExpiry.ValueInt64()
+
+	// auto_gen_days_before_expiry (Int64)
+	if !plan.AutogenDaysBeforeExpiry.IsNull() && !plan.AutogenDaysBeforeExpiry.IsUnknown() {
+		payload["auto_gen_days_before_expiry"] = plan.AutogenDaysBeforeExpiry.ValueInt64()
+	} else if !state.AutogenDaysBeforeExpiry.IsNull() {
+		payload["auto_gen_days_before_expiry"] = 0 // Reset/empty
 	}
-	if plan.AutoRegistration.ValueBool() != types.BoolNull().ValueBool() {
-		payload.AutoRegistration = plan.AutoRegistration.ValueBool()
+
+	// auto_registration (Boolean)
+	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
+		payload["auto_registration"] = plan.AutoRegistration.ValueBool()
+	} else if !state.AutoRegistration.IsNull() {
+		payload["auto_registration"] = false // Reset/empty
 	}
-	if plan.CertUserField.ValueString() != "" && plan.CertUserField.ValueString() != types.StringNull().ValueString() {
-		payload.CertUserField = plan.CertUserField.ValueString()
+
+	// cert_user_field (String)
+	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
+		payload["cert_user_field"] = plan.CertUserField.ValueString()
+	} else if !state.CertUserField.IsNull() {
+		payload["cert_user_field"] = "" // Reset/empty
 	}
-	if plan.CustomUIDSize.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.CustomUIDSize = plan.CustomUIDSize.ValueInt64()
+
+	// custom_uid_size (Int64)
+	if !plan.CustomUIDSize.IsNull() && !plan.CustomUIDSize.IsUnknown() {
+		payload["custom_uid_size"] = plan.CustomUIDSize.ValueInt64()
+	} else if !state.CustomUIDSize.IsNull() {
+		payload["custom_uid_size"] = 0 // Reset/empty
 	}
-	if plan.CustomUIDv2.ValueBool() != types.BoolNull().ValueBool() {
-		payload.CustomUIDv2 = plan.CustomUIDv2.ValueBool()
+
+	// custom_uid_v2 (Boolean)
+	if !plan.CustomUIDv2.IsNull() && !plan.CustomUIDv2.IsUnknown() {
+		payload["custom_uid_v2"] = plan.CustomUIDv2.ValueBool()
+	} else if !state.CustomUIDv2.IsNull() {
+		payload["custom_uid_v2"] = false // Reset/empty
 	}
-	if plan.DefaultConnection.ValueString() != "" && plan.DefaultConnection.ValueString() != types.StringNull().ValueString() {
-		payload.DefaultConnection = plan.DefaultConnection.ValueString()
+
+	// default_connection (String)
+	if !plan.DefaultConnection.IsNull() && !plan.DefaultConnection.IsUnknown() {
+		payload["default_connection"] = plan.DefaultConnection.ValueString()
+	} else if !state.DefaultConnection.IsNull() {
+		payload["default_connection"] = "" // Reset/empty
 	}
-	if plan.KMIPEnableHardDelete.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.KMIPEnableHardDelete = plan.KMIPEnableHardDelete.ValueInt64()
+
+	// kmip_enable_hard_delete (Int64)
+	if !plan.KMIPEnableHardDelete.IsNull() && !plan.KMIPEnableHardDelete.IsUnknown() {
+		payload["kmip_enable_hard_delete"] = plan.KMIPEnableHardDelete.ValueInt64()
+	} else if !state.KMIPEnableHardDelete.IsNull() {
+		payload["kmip_enable_hard_delete"] = 0 // Reset/empty
 	}
-	if !reflect.DeepEqual((*CMInterfaceLocalAutogenAttrTFSDK)(nil), plan.LocalAutogenAttributes) {
-		tflog.Debug(ctx, "local_auto_gen_attributes should not be empty at this point")
+
+	if plan.LocalAutogenAttributes != nil {
 		var attributes CMInterfaceLocalAutogenAttrJSON
 		if plan.LocalAutogenAttributes.CN.ValueString() != "" && plan.LocalAutogenAttributes.CN.ValueString() != types.StringNull().ValueString() {
 			attributes.CN = plan.LocalAutogenAttributes.CN.ValueString()
@@ -944,40 +986,57 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			attributes.UID = plan.LocalAutogenAttributes.UID.ValueString()
 		}
 
-		payload.LocalAutogenAttributes = &attributes
+		payload["local_auto_gen_attributes"] = &attributes
+	} else if state.LocalAutogenAttributes != nil {
+		payload["local_auto_gen_attributes"] = nil
 	}
 
 	if plan.MaximumTLSVersion.ValueString() != "" && plan.MaximumTLSVersion.ValueString() != types.StringNull().ValueString() {
-		payload.MaximumTLSVersion = plan.MaximumTLSVersion.ValueString()
+		payload["maximum_tls_version"] = plan.MaximumTLSVersion.ValueString()
+	} else if !state.MaximumTLSVersion.IsNull() {
+		payload["maximum_tls_version"] = ""
 	}
-	var metadata CMInterfaceMetadataJSON
-	var metadataNAE CMInterfaceMetadataNAEJSON
-	if !reflect.DeepEqual((*CMInterfaceMetadataTFSDK)(nil), plan.Meta) {
-		tflog.Debug(ctx, "Metadata should not be empty at this point")
-		if !reflect.DeepEqual((*CMInterfaceMetadataNAETFSDK)(nil), plan.Meta.NAE) {
+
+	if plan.Meta != nil {
+		var metadata CMInterfaceMetadataJSON
+		var metadataNAE CMInterfaceMetadataNAEJSON
+		if plan.Meta.NAE != nil {
 			if plan.Meta.NAE.MaskSystemGroups.ValueBool() != types.BoolNull().ValueBool() {
 				metadataNAE.MaskSystemGroups = plan.Meta.NAE.MaskSystemGroups.ValueBool()
 				metadata.NAE = metadataNAE
 			}
 		}
-		payload.Meta = &metadata
-	}
-	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
-		payload.MinimumTLSVersion = plan.MinimumTLSVersion.ValueString()
-	}
-	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
-		payload.Mode = plan.Mode.ValueString()
-	}
-	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
-		payload.NetworkInterface = plan.NetworkInterface.ValueString()
-	}
-	// Port cannot be changed after creation — CM returns 409 when port is included in a PATCH body.
-	// Omit port from the update payload entirely.
-	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
-		payload.RegToken = plan.RegToken.ValueString()
+		payload["meta"] = &metadata
+	} else if state.Meta != nil {
+		payload["meta"] = nil
 	}
 
-	if len(plan.TLSCiphers) > 0 {
+	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
+		payload["minimum_tls_version"] = plan.MinimumTLSVersion.ValueString()
+	} else if !state.MinimumTLSVersion.IsNull() {
+		payload["minimum_tls_version"] = ""
+	}
+
+	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
+		payload["mode"] = plan.Mode.ValueString()
+	}
+
+	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
+		payload["network_interface"] = plan.NetworkInterface.ValueString()
+	}
+
+	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
+		payload["registration_token"] = plan.RegToken.ValueString()
+	}
+
+	// tls_ciphers: Null vs Empty vs Populated collection distinction
+	if plan.TLSCiphers == nil {
+		// Unset (Null): do not include in PATCH to avoid drift and preserve server defaults.
+	} else if len(plan.TLSCiphers) == 0 {
+		// Explicitly Empty: send empty array [] in PATCH to reset to server defaults.
+		payload["tls_ciphers"] = []TLSCiphersJSON{}
+	} else {
+		// Populated: translate and include in PATCH payload
 		var ciphers []TLSCiphersJSON
 		for _, cipherInput := range plan.TLSCiphers {
 			var cipher TLSCiphersJSON
@@ -989,11 +1048,17 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			}
 			ciphers = append(ciphers, cipher)
 		}
-		payload.TLSCiphers = ciphers
+		payload["tls_ciphers"] = ciphers
 	}
 
-	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
-		tflog.Debug(ctx, "Trusted CAs should not be empty at this point")
+	// trusted_cas: Null vs Empty vs Populated block distinction
+	if plan.TrustedCAs == nil {
+		// Unset (Null): do not include in PATCH
+	} else if reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
+		// Explicitly Empty: send null / clear Cas
+		payload["trusted_cas"] = nil
+	} else {
+		// Populated: translate and include in PATCH payload
 		var trustedCAsUpd CMInterfacTrustedCAsJSON
 		if len(plan.TrustedCAs.External) > 0 {
 			var externalCAs []string
@@ -1001,6 +1066,8 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 				externalCAs = append(externalCAs, str.ValueString())
 			}
 			trustedCAsUpd.External = externalCAs
+		} else {
+			trustedCAsUpd.External = []string{}
 		}
 		if len(plan.TrustedCAs.Local) > 0 {
 			var localCAs []string
@@ -1008,8 +1075,10 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 				localCAs = append(localCAs, str.ValueString())
 			}
 			trustedCAsUpd.Local = localCAs
+		} else {
+			trustedCAsUpd.Local = []string{}
 		}
-		payload.TrustedCAs = &trustedCAsUpd
+		payload["trusted_cas"] = &trustedCAsUpd
 	}
 
 	payloadJSON, err := json.Marshal(payload)

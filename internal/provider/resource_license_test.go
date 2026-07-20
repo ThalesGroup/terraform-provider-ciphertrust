@@ -184,3 +184,40 @@ resource "ciphertrust_license" "test" {
 		},
 	})
 }
+
+// Test_CM_License_Deterministic_Match verifies that the license resource
+// is resolved correctly and deterministically using its exact license string match.
+func Test_CM_License_Deterministic_Match(t *testing.T) {
+	RequireCM(t)
+
+	licenseStr := os.Getenv("CM_LICENSE_STRING")
+	if licenseStr == "" {
+		t.Skip("CM_LICENSE_STRING not set — skipping license matching acceptance test")
+	}
+
+	t.Setenv("TF_VAR_test_license", licenseStr)
+
+	config := providerConfig + `
+variable "test_license" {
+  type = string
+}
+
+resource "ciphertrust_license" "test" {
+  license = var.test_license
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "hash"),
+				),
+			},
+		},
+	})
+}
+
