@@ -1,14 +1,24 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package provider
 
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
+	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 func Test_CM_ResourceCMPrometheus(t *testing.T) {
@@ -226,3 +236,63 @@ func Test_CM_AccCMPrometheus_DriftDetection(t *testing.T) {
 		},
 	})
 }
+
+// Test_Unit_PrometheusRead_ResilientToEmptyResponse mock-tests that our updated Read()
+// method returns a robust diagnostic error instead of silently mapping empty JSON to enabled = false.
+func Test_Unit_PrometheusRead_ResilientToEmptyResponse(t *testing.T) {
+	// 1. Set up a local mock server returning empty JSON `{}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	// 2. Initialize the standard Client configured to target the mock server
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+	}
+
+	// 3. Invoke the resource's Read method manually in a simulated framework call
+	ctx := context.Background()
+	res := cm.NewResourceCMPrometheus()
+
+	client.Log = hclog.NewNullLogger()
+	
+	// Set up a mock Configure request
+	confResp := &tfresource.ConfigureResponse{}
+	res.(tfresource.ResourceWithConfigure).Configure(ctx, tfresource.ConfigureRequest{
+		ProviderData: client,
+	}, confResp)
+	
+	if confResp.Diagnostics.HasError() {
+		t.Fatalf("Unexpected configuration error: %v", confResp.Diagnostics.Errors())
+	}
+
+	var schemaResp tfresource.SchemaResponse
+	res.Schema(ctx, tfresource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	stateType := schemaResp.Schema.Type().TerraformType(ctx)
+	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
+		"enabled": tftypes.NewValue(tftypes.Bool, true),
+		"token":   tftypes.NewValue(tftypes.String, "fake-token"),
+	})
+
+	// 4. Call Read with mock state
+	readResp := &tfresource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}
+	res.Read(ctx, tfresource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}, readResp)
+
+	// 5. Assert that an error diagnostic was successfully raised instead of silent failure
+	if !readResp.Diagnostics.HasError() {
+		t.Error("Expected error diagnostic regarding empty 'enabled' key, but got none")
+	}
+}
+
