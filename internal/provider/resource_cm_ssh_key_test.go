@@ -303,3 +303,48 @@ resource "ciphertrust_cm_ssh_key" "test" {
 		},
 	})
 }
+
+// Test_CM_SSHKey_Idempotency verifies that deleting a key from Terraform state
+// and then re-applying the config safely adopts the key rather than crashing/failing.
+func Test_CM_SSHKey_Idempotency(t *testing.T) {
+	RequireCM(t)
+	pubKey := os.Getenv("TF_ACC_SSH_PUBLIC_KEY")
+	if pubKey == "" {
+		pubKey = os.Getenv("CM_TEST_SSH_PUBLIC_KEY")
+	}
+	if pubKey == "" {
+		t.Skip("TF_ACC_SSH_PUBLIC_KEY or CM_TEST_SSH_PUBLIC_KEY not set — skipping Test_CM_SSHKey_Idempotency")
+	}
+
+	cfg := bootstrapProviderConfig() + fmt.Sprintf(`
+resource "ciphertrust_cm_ssh_key" "test" {
+  key = %q
+}
+`, pubKey)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+					func(s *terraform.State) error {
+						// Simulate state loss by deleting the resource from Terraform state
+						delete(s.RootModule().Resources, "ciphertrust_cm_ssh_key.test")
+						return nil
+					},
+				),
+			},
+			{
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "name"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_ssh_key.test", "fingerprint"),
+				),
+			},
+		},
+	})
+}

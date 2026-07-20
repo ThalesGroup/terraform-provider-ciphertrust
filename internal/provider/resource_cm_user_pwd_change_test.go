@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 // generateComplexPassword returns a random password that satisfies typical CM
@@ -376,6 +377,71 @@ resource "ciphertrust_cm_user_password_change" "test" {
 				Config:             cfg,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_UserPwdChange_Idempotency verifies that simulating state loss on a password change
+// resource and re-running apply correctly adopts state by checking verification credentials,
+// without failing or locking out any administrative account.
+func Test_CM_UserPwdChange_Idempotency(t *testing.T) {
+	RequireCM(t)
+
+	// Dynamically generate secure compliant passwords using the helper
+	initialPassword := generateComplexPassword()
+	changedPassword := generateComplexPassword()
+
+	// Programmatically set them as HCL environment variables (sensitive)
+	t.Setenv("TF_VAR_cm_test_initial_password", initialPassword)
+	t.Setenv("TF_VAR_cm_test_changed_password", changedPassword)
+
+	cfg := bootstrapProviderConfig() + `
+variable "cm_test_initial_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "cm_test_changed_password" {
+  type      = string
+  sensitive = true
+}
+
+# 1. Create a dynamic test-only user resource so administrative accounts are untouched
+resource "ciphertrust_user" "test_user" {
+  username = "acc-test-idempotency-user"
+  password = var.cm_test_initial_password
+  email    = "temp-idempotency@example.com"
+}
+
+# 2. Safely perform password change on the test-only user
+resource "ciphertrust_cm_user_password_change" "pwd_change" {
+  username     = ciphertrust_user.test_user.username
+  password     = var.cm_test_initial_password
+  new_password = var.cm_test_changed_password
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.pwd_change", "id"),
+					func(s *terraform.State) error {
+						// Simulate state loss on the password change resource
+						delete(s.RootModule().Resources, "ciphertrust_cm_user_password_change.pwd_change")
+						return nil
+					},
+				),
+			},
+			{
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.pwd_change", "id"),
+				),
 			},
 		},
 	})

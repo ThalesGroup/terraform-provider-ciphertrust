@@ -2,6 +2,8 @@ package cm
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -68,15 +71,35 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"key_size": schema.Int64Attribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"curve": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
+				},
 			},
 			"username": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
+				},
 			},
 			"public_key_encoding": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					modifiers.ImmutableString(),
+				},
 			},
 			"fingerprint": schema.StringAttribute{
 				Computed: true,
@@ -131,12 +154,77 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 
 	resourceID, err := r.client.PostDataBootstrap(ctx, id, common.URL_SSH_KEY, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error creating SSH Key on CipherTrust Manager: ",
-			"Could not create SSH Key, unexpected error: "+err.Error(),
-		)
-		return
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "duplicate") {
+			tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Duplicate detected, attempting exact-match fingerprint recovery")
+
+			// Compute fingerprint of the planned key
+			targetFingerprint, fpErr := computeSSHFingerprint(plan.Key.ValueString())
+			if fpErr != nil {
+				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Failed to compute fingerprint: "+fpErr.Error())
+				resp.Diagnostics.AddError(
+					"Fingerprint Calculation Error",
+					"An SSH key conflict was detected, but the planned key fingerprint could not be computed: "+fpErr.Error(),
+				)
+				return
+			}
+
+			// Query existing keys to check if any matches the computed fingerprint
+			keysJSON, listErr := r.client.GetByIdBootstrap(ctx, id, "", common.URL_SSH_KEY)
+			if listErr != nil {
+				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Failed to list existing keys: "+listErr.Error())
+				resp.Diagnostics.AddError(
+					"Duplicate Recovery Failed",
+					"An SSH key conflict was detected, but existing keys could not be listed for comparison: "+listErr.Error(),
+				)
+				return
+			}
+
+			var foundMatch bool
+			var matchedID string
+
+			// Handle "resources" array or direct array
+			var keyRecords []gjson.Result
+			if gjson.Get(keysJSON, "resources").Exists() {
+				keyRecords = gjson.Get(keysJSON, "resources").Array()
+			} else {
+				parsed := gjson.Parse(keysJSON)
+				if parsed.IsArray() {
+					keyRecords = parsed.Array()
+				} else {
+					keyRecords = []gjson.Result{parsed}
+				}
+			}
+
+			for _, keyRecord := range keyRecords {
+				fp := keyRecord.Get("fingerprint").String()
+				if fp == targetFingerprint {
+					matchedID = keyRecord.Get("id").String()
+					foundMatch = true
+					break
+				}
+			}
+
+			if foundMatch && matchedID != "" {
+				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Exact match found! Adopting key ID: "+matchedID)
+				resourceID = matchedID
+			} else {
+				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] No exact fingerprint match found among existing keys")
+				resp.Diagnostics.AddError(
+					"Duplicate SSH Key Conflict",
+					"An SSH key with the same name or metadata already exists on CipherTrust Manager, but has a different fingerprint. "+
+						"Please choose a different key, or manually reconcile/import the existing resource.",
+				)
+				return
+			}
+		} else {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error creating SSH Key on CipherTrust Manager: ",
+				"Could not create SSH Key, unexpected error: "+err.Error(),
+			)
+			return
+		}
 	}
 
 	// Fetch the created resource to hydrate all Computed fields so that the
@@ -159,6 +247,28 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 	plan.Fingerprint = types.StringValue(gjson.Get(fullResponse, "fingerprint").String())
 	plan.CreatedAt = types.StringValue(gjson.Get(fullResponse, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(fullResponse, "updatedAt").String())
+
+	// Unconditionally hydrate optional+computed fields in Create
+	if r := gjson.Get(fullResponse, "size"); r.Exists() {
+		plan.KeySize = types.Int64Value(r.Int())
+	} else {
+		plan.KeySize = types.Int64Null()
+	}
+	if r := gjson.Get(fullResponse, "curve"); r.Exists() {
+		plan.Curve = types.StringValue(r.String())
+	} else {
+		plan.Curve = types.StringNull()
+	}
+	if r := gjson.Get(fullResponse, "username"); r.Exists() {
+		plan.Username = types.StringValue(r.String())
+	} else {
+		plan.Username = types.StringNull()
+	}
+	if r := gjson.Get(fullResponse, "public_key_encoding"); r.Exists() {
+		plan.PublicKeyEncoding = types.StringValue(r.String())
+	} else {
+		plan.PublicKeyEncoding = types.StringNull()
+	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -203,34 +313,26 @@ func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, r
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	// Optional+Computed and Optional fields — guard on !state.X.IsNull()
-	if !state.KeySize.IsNull() {
-		if r := gjson.Get(response, "size"); r.Exists() {
-			state.KeySize = types.Int64Value(r.Int())
-		} else {
-			state.KeySize = types.Int64Null()
-		}
+	// Unconditionally hydrate optional+computed fields in Read to match Create
+	if r := gjson.Get(response, "size"); r.Exists() {
+		state.KeySize = types.Int64Value(r.Int())
+	} else {
+		state.KeySize = types.Int64Null()
 	}
-	if !state.Curve.IsNull() {
-		if r := gjson.Get(response, "curve"); r.Exists() {
-			state.Curve = types.StringValue(r.String())
-		} else {
-			state.Curve = types.StringNull()
-		}
+	if r := gjson.Get(response, "curve"); r.Exists() {
+		state.Curve = types.StringValue(r.String())
+	} else {
+		state.Curve = types.StringNull()
 	}
-	if !state.Username.IsNull() {
-		if r := gjson.Get(response, "username"); r.Exists() {
-			state.Username = types.StringValue(r.String())
-		} else {
-			state.Username = types.StringNull()
-		}
+	if r := gjson.Get(response, "username"); r.Exists() {
+		state.Username = types.StringValue(r.String())
+	} else {
+		state.Username = types.StringNull()
 	}
-	if !state.PublicKeyEncoding.IsNull() {
-		if r := gjson.Get(response, "public_key_encoding"); r.Exists() {
-			state.PublicKeyEncoding = types.StringValue(r.String())
-		} else {
-			state.PublicKeyEncoding = types.StringNull()
-		}
+	if r := gjson.Get(response, "public_key_encoding"); r.Exists() {
+		state.PublicKeyEncoding = types.StringValue(r.String())
+	} else {
+		state.PublicKeyEncoding = types.StringNull()
 	}
 
 	// state.Key is write-only — CM never returns SSH key material in GET responses.
@@ -282,4 +384,23 @@ func (d *resourceCMSSHKey) Configure(_ context.Context, req resource.ConfigureRe
 	}
 
 	d.client = client
+}
+
+func computeSSHFingerprint(pubKeyStr string) (string, error) {
+	parts := strings.Fields(strings.TrimSpace(pubKeyStr))
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid SSH public key format")
+	}
+
+	keyBytes, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64 key material: %v", err)
+	}
+
+	hasher := sha256.New()
+	hasher.Write(keyBytes)
+	hash := hasher.Sum(nil)
+
+	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
+	return "SHA256:" + b64Hash, nil
 }
