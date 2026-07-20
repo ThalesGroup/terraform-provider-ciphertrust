@@ -29,7 +29,7 @@ func NewResourceCMSSHKey() resource.Resource {
 }
 
 type resourceCMSSHKey struct {
-	client *common.CMClientBootstrap
+	client common.CMClient
 }
 
 func (r *resourceCMSSHKey) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -39,7 +39,7 @@ func (r *resourceCMSSHKey) Metadata(_ context.Context, req resource.MetadataRequ
 // Schema defines the schema for the resource.
 func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Adds an SSH public key to the CipherTrust Manager appliance during initial bootstrap (provider `bootstrap = \"yes\"`). **Bootstrap mode is only available on CipherTrust Manager — this resource is implicitly unsupported on CDSPaaS.**",
+		Description: "Adds an SSH public key to the CipherTrust Manager appliance. Supported in both initial bootstrap (provider `bootstrap = \"yes\"`) and standard credentials-based (provider `bootstrap = \"no\"`) modes. **Bootstrap mode is only available on CipherTrust Manager — this resource is implicitly unsupported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -49,7 +49,7 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"key": schema.StringAttribute{
 				Required:    true,
-				Description: "(Immutable) SSH public key to add to the CipherTrust Manager appliance during initial bootstrap.",
+				Description: "(Immutable) SSH public key to add to the CipherTrust Manager appliance.",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -271,11 +271,11 @@ func (d *resourceCMSSHKey) Configure(_ context.Context, req resource.ConfigureRe
 		return
 	}
 
-	client, ok := req.ProviderData.(*common.CMClientBootstrap)
+	client, ok := req.ProviderData.(common.CMClient)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Error in fetching client from provider",
-			fmt.Sprintf("Expected *provider.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected common.CMClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return

@@ -370,3 +370,63 @@ func (c *CMClientBootstrap) GetByIdBootstrap(ctx context.Context, uuid string, i
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
 	return string(body), nil
 }
+
+func (c *Client) PostDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostDataBootstrap]["+uuid+"]")
+	reader := bytes.NewBuffer(data)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	ret := gjson.Get(string(body), id).String()
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostDataBootstrap]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	return ret, nil
+}
+
+func (c *Client) PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
+	reader := bytes.NewBuffer(data)
+	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PatchDataBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PatchDataBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	ret := string(body)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
+	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	return ret, nil
+}
+
+func (c *Client) GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
+		return "", err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
+	return string(body), nil
+}
+

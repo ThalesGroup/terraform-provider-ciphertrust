@@ -105,6 +105,14 @@ type CMClientBootstrap struct {
 	Log hclog.Logger
 }
 
+// CMClient defines the interface for clients supporting bootstrap and non-bootstrap operations.
+type CMClient interface {
+	PostDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error)
+	PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error)
+	GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error)
+}
+
+
 // AuthStruct
 type AuthStruct struct {
 	Username          string `json:"username"`

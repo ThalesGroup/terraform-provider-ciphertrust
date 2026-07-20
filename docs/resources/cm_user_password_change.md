@@ -3,7 +3,7 @@
 page_title: "ciphertrust_cm_user_password_change Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Updates a user's password on CipherTrust Manager. Supports both bootstrap (provider `bootstrap = "yes"`) and standard credentials-based (provider `bootstrap = "no"`) modes.
 ---
 
 # ciphertrust_cm_user_password_change (Resource)
