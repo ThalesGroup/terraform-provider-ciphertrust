@@ -65,12 +65,9 @@ output "interface_id" {
 
 ### Required
 
-- `port` (Number) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.
-
-### Optional
-
-- `allow_unregistered` (Boolean) If true, this flag enables interfaces to allow unregistered clients. only supported in NAE interface.
-- `auto_gen_ca_id` (String) Auto-generate a new server certificate on server startup using the identifier (URI) of a Local CA resource if the current server certificate is issued by a different Local CA. This is especially useful when a new node joins the cluster. In this case, the existing data of the joining node is overwritten by the data in the cluster. A new server certificate is generated on the joining node using the existing Local CA of the cluster. Auto-generation of the server certificate can be disabled by setting auto_gen_ca_id to an empty string ("") to allow full control over the server certificate.
+- `port` (Number) **(Immutable)** The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use. Any change to this field will trigger recreation (Destroy and Recreate).
+- `allow_unregistered` (Boolean) If true, this flag enables interfaces to allow unregistered clients. only supported in NAE interface. Note: Clearing this field in configuration does not automatically reset it on the appliance due to API-level limits.
+- `auto_gen_ca_id` (String) Auto-generate a new server certificate on server startup using the identifier (URI) of a Local CA resource if the current server certificate is issued by a different Local CA. This is especially useful when a new node joins the cluster. In this case, the existing data of the joining node is overwritten by the data in the cluster. A new server certificate is generated on the joining node using the existing Local CA of the cluster. Auto-generation of the server certificate can be disabled by setting auto_gen_ca_id to an empty string ("") to allow full control over the server certificate. Note: Clearing this field in configuration does not automatically reset it on the appliance due to API-level limits.
 - `auto_gen_days_before_expiry` (Number) Number of days before the server certificate expiry. When specified number of days are left in the expiry of the server certificate, the server certificate gets auto-generated and is made available as Upcoming Server Certificate on the interface.
 - `auto_registration` (Boolean) Set auto registration to allow auto registration of kmip and nae clients.
 - `cert_user_field` (String) Specifies how the user name is extracted from the client certificate. Allowed values are: CN, SN, E, E_ND, UID and OU. Refer to the top level discussion of the Interfaces section for more details.

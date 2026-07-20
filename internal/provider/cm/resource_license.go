@@ -124,22 +124,20 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-// getLicenseIDs retrieves all license IDs from the list endpoint
-func (r *resourceCMLicense) getLicenseIDs(ctx context.Context, id string) (map[string]bool, error) {
+// findLicenseIDByString retrieves all licenses and finds the ID of the license with the matching license string
+func (r *resourceCMLicense) findLicenseIDByString(ctx context.Context, id, licenseStr string) (string, error) {
 	response, err := r.client.GetAll(ctx, id, common.URL_LICENSE)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	licenseIDs := make(map[string]bool)
 	licenses := gjson.Parse(response).Array()
 	for _, license := range licenses {
-		licenseID := license.Get("id").String()
-		if licenseID != "" {
-			licenseIDs[licenseID] = true
+		if license.Get("license").String() == licenseStr {
+			return license.Get("id").String(), nil
 		}
 	}
-	return licenseIDs, nil
+	return "", nil
 }
 
 // Create creates the resource and sets the initial Terraform state.
@@ -156,18 +154,6 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	// Get list of existing license IDs before creating new license
-	existingLicenseIDs, err := r.getLicenseIDs(ctx, id)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error listing licenses before create: ",
-			"Could not list licenses, unexpected error: "+err.Error(),
-		)
-		return
-	}
-	tflog.Debug(ctx, fmt.Sprintf("[resource_license.go -> Create] Found %d existing licenses before create", len(existingLicenseIDs)))
 
 	payload.License = plan.License.ValueString()
 	if plan.BindType.ValueString() != "" && plan.BindType.ValueString() != types.StringNull().ValueString() {
@@ -199,10 +185,10 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	if responseID != "" {
 		plan.ID = types.StringValue(responseID)
 	} else {
-		// ID not in response, determine it by comparing license lists
-		tflog.Debug(ctx, "[resource_license.go -> Create] ID not in response, determining by comparing license lists")
+		// ID not in response, determine it by finding matching license string
+		tflog.Debug(ctx, "[resource_license.go -> Create] ID not in response, determining by finding matching license string")
 
-		newLicenseIDs, err := r.getLicenseIDs(ctx, id)
+		newLicenseID, err := r.findLicenseIDByString(ctx, id, plan.License.ValueString())
 		if err != nil {
 			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
 			resp.Diagnostics.AddError(
@@ -211,21 +197,11 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 			)
 			return
 		}
-		tflog.Debug(ctx, fmt.Sprintf("[resource_license.go -> Create] Found %d licenses after create", len(newLicenseIDs)))
-
-		// Find the new license ID by comparing before and after lists
-		var newLicenseID string
-		for licenseID := range newLicenseIDs {
-			if !existingLicenseIDs[licenseID] {
-				newLicenseID = licenseID
-				break
-			}
-		}
 
 		if newLicenseID == "" {
 			resp.Diagnostics.AddError(
 				"Error determining license ID: ",
-				"Could not determine the ID of the newly created license",
+				"Could not find the newly created license with the matching license string",
 			)
 			return
 		}
