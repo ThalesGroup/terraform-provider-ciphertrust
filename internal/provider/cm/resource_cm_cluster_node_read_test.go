@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/go-hclog"
@@ -125,5 +126,165 @@ func Test_CM_ClusterNodeRead_PublicAddressDrift(t *testing.T) {
 	if got := final.PublicAddress.ValueString(); got != newPublicAddress {
 		t.Errorf("public_address drift not detected: got %q, want %q (stale value %q should have been overwritten)",
 			got, newPublicAddress, oldPublicAddress)
+	}
+}
+
+// newClusterNodeReadTestResource builds a resourceCMClusterNode against two independent
+// fake servers — nodeServer stands in for the joining node itself (self-reported
+// status.code), memberHandler controls the cluster member's GET api/v1/nodes/{id}
+// response (the authoritative membership signal) — and runs Read(). Used by the
+// removal-detection tests below. Mirrors the two-server split documented on
+// Test_CM_ClusterNodeRead_PublicAddressDrift: Read() genuinely talks to two distinct
+// clients (nodeClient via credentials.address, r.client the resource's own client).
+func newClusterNodeReadTestResource(t *testing.T, selfNodeID, statusCode, statusDesc string, memberHandler http.HandlerFunc) *resource.ReadResponse {
+	t.Helper()
+	nodeID := selfNodeID
+	// stateNodeID is what the prior Terraform state records; Read() reports whatever
+	// the joining node self-reports (possibly a blanked-out nodeID), independent of it.
+	const stateNodeID = "n1"
+
+	nodeMux := http.NewServeMux()
+	nodeMux.HandleFunc("/api/v1/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"jwt":"fake-node-token","refresh_token":"fake-refresh"}`)
+	})
+	nodeMux.HandleFunc("/api/v1/cluster", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"nodeID":%q,"nodeCount":1,"status":{"code":%q,"description":%q}}`, nodeID, statusCode, statusDesc)
+	})
+	nodeServer := httptest.NewServer(nodeMux)
+	t.Cleanup(nodeServer.Close)
+
+	memberMux := http.NewServeMux()
+	memberMux.HandleFunc("/api/v1/nodes/"+nodeID, memberHandler)
+	memberServer := httptest.NewServer(memberMux)
+	t.Cleanup(memberServer.Close)
+
+	client := &common.Client{
+		CipherTrustURL: memberServer.URL,
+		HTTPClient:     memberServer.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCMClusterNode{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	credentialsType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"address":       tftypes.String,
+			"username":      tftypes.String,
+			"password":      tftypes.String,
+			"domain":        tftypes.String,
+			"auth_domain":   tftypes.String,
+			"no_ssl_verify": tftypes.Bool,
+		},
+	}
+
+	stateType := schemaResp.Schema.Type().TerraformType(ctx)
+	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
+		"id":                 tftypes.NewValue(tftypes.String, stateNodeID),
+		"host":               tftypes.NewValue(tftypes.String, "joining-node.example.com"),
+		"port":               tftypes.NewValue(tftypes.Number, 5432),
+		"public_address":     tftypes.NewValue(tftypes.String, "10.171.30.25"),
+		"member_host":        tftypes.NewValue(tftypes.String, nil),
+		"member_port":        tftypes.NewValue(tftypes.Number, 5432),
+		"node_id":            tftypes.NewValue(tftypes.String, stateNodeID),
+		"node_count":         tftypes.NewValue(tftypes.Number, 3),
+		"status_code":        tftypes.NewValue(tftypes.String, "r"),
+		"status_description": tftypes.NewValue(tftypes.String, "ready"),
+		"credentials": tftypes.NewValue(credentialsType, map[string]tftypes.Value{
+			"address":       tftypes.NewValue(tftypes.String, nodeServer.URL),
+			"username":      tftypes.NewValue(tftypes.String, "admin"),
+			"password":      tftypes.NewValue(tftypes.String, "password"),
+			"domain":        tftypes.NewValue(tftypes.String, ""),
+			"auth_domain":   tftypes.NewValue(tftypes.String, ""),
+			"no_ssl_verify": tftypes.NewValue(tftypes.Bool, true),
+		}),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}
+
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Read(): %v", resp.Diagnostics)
+	}
+	return resp
+}
+
+// Test_CM_ClusterNodeRead_RemovedNodeRemovesResource proves that Read() now detects an
+// out-of-band node removal via the cluster member's own node list (GET /nodes/{id}
+// erroring, e.g. 404/500 — confirmed live against a real CM: an out-of-band-removed
+// node's ID returns HTTP 500 from the member, same as a never-existed ID) and calls
+// RemoveResource. Deliberately gives the joining node itself a "down" self-report —
+// confirmed live that a removed node settles at status.code="d", NOT a distinct
+// removed/removing code — to prove detection does not depend on that self-report.
+func Test_CM_ClusterNodeRead_RemovedNodeRemovesResource(t *testing.T) {
+	orig := memberCheckInterval
+	memberCheckInterval = time.Millisecond
+	t.Cleanup(func() { memberCheckInterval = orig })
+
+	resp := newClusterNodeReadTestResource(t, "n1", nodeStatusDown, "down", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, `{"code":14,"codeDesc":"NCERRInternalServerError: unexpected error"}`)
+	})
+	if !resp.State.Raw.IsNull() {
+		t.Fatalf("expected Read() to remove the resource when the cluster member no longer lists this node, but state is still set: %#v", resp.State.Raw)
+	}
+}
+
+// Test_CM_ClusterNodeRead_EmptyNodeIDRemovesResource proves that Read() detects a node
+// that has fully settled after out-of-band removal — confirmed live that such a node
+// resets to the exact same blank nodeID/"none" status a never-clustered node reports —
+// and removes it directly, without depending on the member-check call. This matters
+// because GetById with an empty id resolves to ".../nodes/" (the list endpoint), which
+// succeeds and would otherwise silently defeat the member-check (this was caught live:
+// the first version of this fix fell through to hydrating state from the list response).
+func Test_CM_ClusterNodeRead_EmptyNodeIDRemovesResource(t *testing.T) {
+	resp := newClusterNodeReadTestResource(t, "", "none", "not clustered", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("member should not be queried when the joining node reports an empty nodeID")
+	})
+	if !resp.State.Raw.IsNull() {
+		t.Fatalf("expected Read() to remove the resource for an empty self-reported nodeID, but state is still set: %#v", resp.State.Raw)
+	}
+}
+
+// Test_CM_ClusterNodeRead_StillMemberKeepsResource proves the fix does NOT treat a node's
+// own transient "down" status.code as removal by itself: as long as the cluster member's
+// node list still recognizes this node, Read() must keep hydrating state as today. "down"/
+// "killed" are also the codes a node reports during its normal transient reboot right
+// after joining (see nodeIsJoining/Create), or an ordinary OS reboot well after joining;
+// getting this wrong would turn a brief reboot into a false recreate, which for this
+// resource means a real multi-minute cluster rejoin.
+func Test_CM_ClusterNodeRead_StillMemberKeepsResource(t *testing.T) {
+	const newPublicAddress = "10.171.97.99"
+	resp := newClusterNodeReadTestResource(t, "n1", nodeStatusDown, "down", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"nodeID":"n1","publicAddress":%q}`, newPublicAddress)
+	})
+	if resp.State.Raw.IsNull() {
+		t.Fatalf("Read() removed the resource even though the cluster member still lists this node; a transient status.code=%q must not trigger removal", nodeStatusDown)
+	}
+
+	var final CMAddClusterNodeTFSDK
+	diags := resp.State.Get(context.Background(), &final)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics reading back final state: %v", diags)
+	}
+	if got := final.StatusCode.ValueString(); got != nodeStatusDown {
+		t.Errorf("status_code not hydrated: got %q, want %q", got, nodeStatusDown)
+	}
+	if got := final.PublicAddress.ValueString(); got != newPublicAddress {
+		t.Errorf("public_address not hydrated: got %q, want %q", got, newPublicAddress)
 	}
 }

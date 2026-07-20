@@ -54,6 +54,18 @@ var (
 	// clusterJoinMu ensures only one node joins or leaves the cluster at a time.
 	// Parallel joins/removals can break Raft consensus.
 	clusterJoinMu sync.Mutex
+
+	// memberCheckRetries/memberCheckInterval bound how many times Read() re-checks
+	// the cluster member's node list before concluding a node is no longer a member
+	// (see Read below). Vars (not consts) so tests can shorten memberCheckInterval.
+	memberCheckRetries  = 3
+	memberCheckInterval = 10 * time.Second
+
+	// createClientMaxRetries/createClientRetryInterval bound how many times Create()
+	// retries building the joining node's HTTPS client on auth failure (see Create
+	// below). Vars (not consts) so tests can shorten createClientRetryInterval.
+	createClientMaxRetries    = 180 // up to 30 minutes at 10s intervals, matching Read()
+	createClientRetryInterval = 10 * time.Second
 )
 
 func NewResourceCMClusterNode() resource.Resource {
@@ -98,7 +110,10 @@ func (r *resourceCMClusterNode) Schema(_ context.Context, _ resource.SchemaReque
 			},
 			"credentials": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Credentials for the new node. If omitted, the provider's configured credentials are used.",
+				Description: "(Immutable) Credentials for the new node. If omitted, the provider's configured credentials are used.",
+				PlanModifiers: []planmodifier.Object{
+					modifiers.ImmutableObject(),
+				},
 				Attributes: map[string]schema.Attribute{
 					"address": schema.StringAttribute{
 						Required:    true,
@@ -246,7 +261,21 @@ func (r *resourceCMClusterNode) Create(ctx context.Context, req resource.CreateR
 	// CSR exchange; certificate verification is not applicable until after the
 	// node has been issued a cluster-trusted cert.
 	nodeTLS := common.TLSOptions{InsecureSkipVerify: true}
-	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, nodeTLS, 180)
+	// The joining node's auth service can be briefly unavailable here too — e.g. it
+	// was recently removed from a prior cluster membership and is still settling, or
+	// it rebooted for patching — so retry client creation the same way Read() already
+	// does for this exact reason, rather than failing outright on the first auth blip.
+	var nodeClient *common.Client
+	for attempt := 1; attempt <= createClientMaxRetries; attempt++ {
+		nodeClient, err = common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, nodeTLS, 180)
+		if err == nil {
+			break
+		}
+		tflog.Info(ctx, fmt.Sprintf("[resource_cm_cluster_node.go -> Create] attempt %d/%d: NewClient failed: %s", attempt, createClientMaxRetries, err))
+		if attempt < createClientMaxRetries {
+			time.Sleep(createClientRetryInterval)
+		}
+	}
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError("Unable to create HTTPS client for the joining node.", err.Error())
@@ -566,16 +595,55 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	nodeID := gjson.Get(response, "nodeID").String()
+	statusCode := gjson.Get(response, "status.code").String()
+
+	// A node that has fully settled after out-of-band removal resets to the same
+	// blank nodeID/"none" status a never-clustered node reports (confirmed live).
+	// There is nothing to look up on the member in that case — and GetById with an
+	// empty id resolves to the list endpoint (".../nodes/"), which succeeds and would
+	// otherwise defeat the member-check below — so handle it directly here.
+	if nodeID == "" {
+		tflog.Debug(ctx, common.ERR_METHOD_END+"node has no nodeID (status.code="+statusCode+"); removing from state [resource_cm_cluster_node.go -> Read]["+id+"]")
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	// Confirm this node is still a recognized cluster member using the existing
+	// cluster member's own view (r.client), NOT the joining node's self-reported
+	// status. Confirmed live against an out-of-band removal: the removed node's own
+	// GET /cluster settles at status.code="d" ("down"), nodeCount=1 — indistinguishable
+	// from the normal transient restart a node takes right after joining, or an
+	// ordinary OS reboot of a still-clustered node (see nodeIsJoining/Create above).
+	// So status.code alone cannot signal "permanently removed" vs. "will recover".
+	// The cluster member's node list instead reflects actual raft membership: a
+	// rebooting-but-still-a-member node stays listed, while a genuinely removed node
+	// disappears from it (confirmed live: GET /nodes/{id} for a removed ID errors).
+	// A few retries rule out a one-off transient failure of this specific call
+	// before concluding the node is actually gone.
+	var nodeInfo string
+	var memberErr error
+	for attempt := 1; attempt <= memberCheckRetries; attempt++ {
+		nodeInfo, memberErr = r.client.GetById(ctx, id, nodeID, common.URL_NODES)
+		if memberErr == nil {
+			break
+		}
+		if attempt < memberCheckRetries {
+			time.Sleep(memberCheckInterval)
+		}
+	}
+	if memberErr != nil {
+		tflog.Debug(ctx, common.ERR_METHOD_END+"node no longer recognized as a cluster member after "+
+			fmt.Sprintf("%d", memberCheckRetries)+" attempts ("+memberErr.Error()+"); removing from state [resource_cm_cluster_node.go -> Read]["+id+"]")
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	state.ID = types.StringValue(nodeID)
 	state.NodeId = types.StringValue(nodeID)
 	state.NodeCount = types.Int64Value(gjson.Get(response, "nodeCount").Int())
-	state.StatusCode = types.StringValue(gjson.Get(response, "status.code").String())
+	state.StatusCode = types.StringValue(statusCode)
 	state.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
-
-	if nodeInfo, nerr := r.client.GetById(ctx, id, nodeID, common.URL_NODES); nerr == nil {
-		state.PublicAddress = types.StringValue(gjson.Get(nodeInfo, "publicAddress").String())
-	}
-	// else: leave state.PublicAddress unchanged; a transient fetch failure shouldn't fail Read.
+	state.PublicAddress = types.StringValue(gjson.Get(nodeInfo, "publicAddress").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, &state)
@@ -731,16 +799,22 @@ func (r *resourceCMClusterNode) Delete(ctx context.Context, req resource.DeleteR
 		tflog.Debug(ctx, "[resource_cm_cluster_node.go -> Delete]["+id+"] node ID unknown, skipping cluster member removal")
 	}
 
-	// Step 2: Delete the cluster configuration from the removed node itself.
+	// Step 2: Delete the cluster configuration from the removed node itself. This is
+	// best-effort cleanup of the removed node's own leftover config: the node is already
+	// out of the cluster as of step 1, which is the change that actually matters to the
+	// remaining cluster members. The node can legitimately be unreachable here (already
+	// powered off, network partitioned, or removed out-of-band ahead of this Delete), so
+	// a failure/timeout on this call must not abort the rest of destroy.
 	output, err := nodeClient.DeleteByURL(ctx, id, common.URL_CLUSTER_INFO)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Delete]["+id+"]["+output+"]")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Delete]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error deleting cluster config from removed node",
-			"Node was removed from the cluster but its local cluster config could not be cleared: "+err.Error(),
+		resp.Diagnostics.AddWarning(
+			"Could not clear cluster config on removed node",
+			"Node "+nodeHost+" was removed from the cluster but its own local cluster config could not be cleared "+
+				"(it may already be unreachable): "+err.Error(),
 		)
-		return
+	} else {
+		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Delete]["+id+"]["+output+"]")
 	}
 
 	// Step 3: Poll the cluster member until it reflects the removal (nodeCount decremented, status=r).

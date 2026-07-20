@@ -12,6 +12,14 @@ import (
 // TestCipherTrust_ClusterNode_ImmutableFields verifies that host, port, member_host, and
 // member_port are immutable on ciphertrust_cluster_node. Requires a real two-node CM cluster.
 func Test_CM_CipherTrust_ClusterNode_ImmutableFields(t *testing.T) {
+	t.Skip("skipped: this test assumes a cluster already exists (CM_CLUSTER_MEMBER_HOST " +
+		"must already be a cluster member) — the opposite precondition from " +
+		"Test_CM_ResourceCMCluster's subtests, which all assume a clean/unclustered start. " +
+		"If both point at the same shared instances, there's no ordering that satisfies " +
+		"both. It also has no explicit destroy step, relying entirely on resource.Test's " +
+		"implicit final cleanup. Re-enable once it either runs against genuinely separate " +
+		"infrastructure, or is folded into Test_CM_ResourceCMCluster's ordered subtests " +
+		"using a cluster they've already built, with an explicit destroy step added.")
 	RequireCM(t)
 	if os.Getenv("CM_CLUSTER_NODE_HOST") == "" {
 		t.Skip("CM_CLUSTER_NODE_HOST not set — skipping cluster_node immutability test (requires real two-node cluster)")
