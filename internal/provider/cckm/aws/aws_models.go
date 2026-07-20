@@ -272,6 +272,12 @@ type XKSKeyCommonAWSParamsJSON struct {
 type LinkXKSKeyAWSParamsJSON struct {
 	AWSParams                      XKSKeyCommonAWSParamsJSON `json:"aws_param"`
 	BypassPolicyLockoutSafetyCheck *bool                     `json:"BypassPolicyLockoutSafetyCheck"`
+	KeyUsers                       *[]string                 `json:"key_users,omitempty"`
+	KeyAdmins                      *[]string                 `json:"key_admins,omitempty"`
+	KeyUsersRoles                  *[]string                 `json:"key_users_roles,omitempty"`
+	KeyAdminsRoles                 *[]string                 `json:"key_admins_roles,omitempty"`
+	ExternalAccounts               *[]string                 `json:"external_accounts,omitempty"`
+	PolicyTemplate                 *string                   `json:"policytemplate,omitempty"`
 }
 
 type XKSKeyLocalHostedInputParamsJSON struct {

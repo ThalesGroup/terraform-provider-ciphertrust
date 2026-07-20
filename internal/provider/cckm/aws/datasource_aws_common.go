@@ -468,10 +468,6 @@ func awsKeyStoreListItemAttributes() map[string]schema.Attribute {
 		Computed:    true,
 		Description: "True if the key is linked with AWS.",
 	}
-	attrs["blocked"] = schema.BoolAttribute{
-		Computed:    true,
-		Description: "True if the key is blocked for any data plane operation.",
-	}
 	attrs["aws_custom_key_store_id"] = schema.StringAttribute{
 		Computed:    true,
 		Description: "Custom keystore ID in AWS.",
@@ -486,8 +482,13 @@ func awsKeyStoreListItemAttributes() map[string]schema.Attribute {
 
 // awsXKSKeyListItemAttributes returns the Computed-only schema attributes for each item
 // in the aws_xks_key list data source.
+// blocked is XKS-only: CloudHSM keys can never be blocked.
 func awsXKSKeyListItemAttributes() map[string]schema.Attribute {
 	attrs := awsKeyStoreListItemAttributes()
+	attrs["blocked"] = schema.BoolAttribute{
+		Computed:    true,
+		Description: "True if the key is blocked for any data plane operation.",
+	}
 	attrs["aws_xks_key_id"] = schema.StringAttribute{
 		Computed:    true,
 		Description: "XKS key ID in AWS.",

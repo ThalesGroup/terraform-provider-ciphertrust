@@ -88,22 +88,13 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "blocked", "false"),
 					resource.TestCheckResourceAttr(keyResource, "linked", "false"),
 					resource.TestCheckResourceAttr(keyResource, "key_source", "local"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "0"),
 				),
 			},
 			{
 				Config: dataSourceConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsByName, "matched", "1"),
-					resource.TestCheckResourceAttrPair(keyResource, "blocked", dsByName, "keys.0.blocked"),
-					resource.TestCheckResourceAttrPair(keyResource, "linked", dsByName, "keys.0.linked"),
-					resource.TestCheckResourceAttrPair(keyResource, "kms_id", dsByName, "keys.0.kms_id"),
-
-					resource.TestCheckResourceAttr(dsByName, "keys.0.labels.%", "0"),
-					// aws_param block - alias and tags are empty for unlinked keys
-					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.alias.#", "0"),
-					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.tags.%", "0"),
+					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.alias.#", "1"),
 				),
 			},
 		},

@@ -258,7 +258,7 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 			enable_key = true
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
-				key_source    = "ciphertrust"
+				key_source    = "local"
 			}
 			key_policy = {
 				key_admins       = ["%s"]
@@ -345,7 +345,7 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
@@ -400,7 +400,7 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
 					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "ciphertrust"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),

@@ -78,7 +78,7 @@ resource "ciphertrust_aws_key" "aws_multiregion_key" {
   enable_rotation = {
     disable_encrypt = false
     job_config_id   = ciphertrust_scheduler.scheduled_rotation.id
-    key_source      = "ciphertrust"
+    key_source      = "local"
   }
 }
 
@@ -187,7 +187,7 @@ Read-Only:
 Required:
 
 - `job_config_id` (String) ID of the scheduler configuration job.
-- `key_source` (String) Key source for rotation. Options: 'ciphertrust', 'local'.
+- `key_source` (String) Key source for rotation. Options: 'local'.
 
 Optional:
 

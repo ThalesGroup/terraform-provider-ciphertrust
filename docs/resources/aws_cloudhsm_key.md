@@ -115,7 +115,6 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 
 ### Read-Only
 
-- `blocked` (Boolean) Parameter to indicate if AWS CloudHSM key is blocked for any data plane operation.
 - `cloud_name` (String) AWS cloud.
 - `created_at` (String) Date the key was created.
 - `external_accounts` (Set of String) Other AWS accounts that have access to this key.
@@ -181,7 +180,7 @@ Read-Only:
 Required:
 
 - `job_config_id` (String) ID of the scheduler configuration job.
-- `key_source` (String) Key source for rotation. Options: 'ciphertrust', 'local'.
+- `key_source` (String) Key source for rotation. Options: 'local'.
 
 Optional:
 

@@ -284,6 +284,8 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	localHostedParamsJSON := r.getLocalHostedParams(&plan)
 	if localHostedParamsJSON != nil {
 		payload.XKSKeyLocalHostedInputParamsJSON = *localHostedParamsJSON
+		// Block later
+		payload.XKSKeyLocalHostedInputParamsJSON.Blocked = false
 	}
 	keyPolicy := getKeyPolicyParams(ctx, plan.KeyPolicy, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -330,14 +332,6 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 
 	keyID := gjson.Get(response, "id").String()
 
-	if localHostedParamsJSON != nil && localHostedParamsJSON.Blocked {
-		var blockDiags diag.Diagnostics
-		r.blockUnblockXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &blockDiags)
-		for _, d := range blockDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
 	// The following updates are only valid for linked keys
 
 	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
@@ -363,6 +357,14 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 		var diags diag.Diagnostics
 		disableKey(ctx, id, r.client, keyID, &diags)
 		for _, d := range diags {
+			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
+		}
+	}
+
+	if localHostedParamsJSON != nil && localHostedParamsJSON.Blocked {
+		var blockDiags diag.Diagnostics
+		r.blockXKSKey(ctx, id, keyID, &blockDiags)
+		for _, d := range blockDiags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 		}
 	}
@@ -419,9 +421,9 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 }
 
-// Update applies plan changes to an AWS XKS key. All plan changes are passed through to CCKM
-// unconditionally; CCKM will return an error for any operation that is not supported on an unlinked key.
-// Returns an error if the key or key store is not reachable.
+// Update applies plan changes to an AWS XKS key. Returns an error if the key or key store is not reachable.
+// Attributes that require a linked key (key_policy, enable_rotation,
+// enable_key = false, >1 alias, tags) are rejected at plan time by ModifyPlan when the key stays unlinked.
 func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Update]["+id+"]")
@@ -470,14 +472,19 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	var localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON
 	if plan.LocalHostParams != nil {
-		localHostedParamsJSON := r.getLocalHostedParams(&plan)
-		r.blockUnblockXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
+		localHostedParamsJSON = r.getLocalHostedParams(&plan)
+
+		// Unblock first so that subsequent operations on the key are not blocked.
+		if !localHostedParamsJSON.Blocked && gjson.Get(response, "blocked").Bool() {
+			r.unblockXKSKey(ctx, id, keyID, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
 		}
 
-		r.linkUnlinkXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
+		r.linkXKSKey(ctx, id, &plan, response, localHostedParamsJSON, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -507,18 +514,9 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if plan.KeyPolicy != nil || state.KeyPolicy != nil {
 		planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
 		stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-		var policyDiags diag.Diagnostics
-		updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
-		for _, d := range policyDiags {
-			if d.Severity() == diag.SeverityError {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			} else {
-				resp.Diagnostics.Append(d)
-			}
-		}
-		// Re-fetch to reflect any policy change in state.
-		if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
-			response = updated
+		updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
 	}
 
@@ -579,6 +577,14 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 
 	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && keyEnabled && !plan.EnableKey.ValueBool() {
 		disableKey(ctx, id, r.client, keyID, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	// Block last so the key is unblocked for as long as possible during the update.
+	if localHostedParamsJSON != nil && localHostedParamsJSON.Blocked && !gjson.Get(response, "blocked").Bool() {
+		r.blockXKSKey(ctx, id, keyID, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -751,6 +757,45 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
+	// On update, block attributes that require a linked key when the key is staying unlinked.
+	// If plan.Linked is true the key is being linked in this same update, so the attributes are valid.
+	if plan.LocalHostParams != nil && state.LocalHostParams != nil &&
+		!state.LocalHostParams.Linked.ValueBool() && !plan.LocalHostParams.Linked.ValueBool() {
+		var invalid []string
+
+		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+			if xksP != nil {
+				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+					invalid = append(invalid, "aws_param.alias (more than one alias)")
+				}
+				if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
+					len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
+					invalid = append(invalid, "aws_param.tags")
+				}
+			}
+		}
+		if plan.KeyPolicy != nil {
+			invalid = append(invalid, "key_policy")
+		}
+		if plan.EnableRotation != nil {
+			invalid = append(invalid, "enable_rotation")
+		}
+		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+			invalid = append(invalid, "enable_key = false")
+		}
+
+		if len(invalid) > 0 {
+			resp.Diagnostics.AddError(
+				"Invalid configuration for an unlinked key",
+				"The following attributes cannot be set when local_hosted_params.linked = false: "+
+					strings.Join(invalid, ", ")+". "+
+					"\nSet local_hosted_params.linked = true, or remove these attributes.",
+			)
+			return
+		}
+	}
+
 	var changed []string
 
 	if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() &&
@@ -797,6 +842,7 @@ func (r *resourceAWSXKSKey) ImportState(ctx context.Context, req resource.Import
 // source_key_id (local_key_id), and source_key_tier (key_source) can be detected.
 func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, state *AWSXKSKeyTFSDK, diags *diag.Diagnostics) {
 	setKeyStoreResourceCommonTopLevel(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, diags)
+	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	if diags.HasError() {
 		return
 	}
@@ -849,38 +895,40 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 	state.LocalHostParams.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
 }
 
-// blockUnblockXKSKey blocks or unblocks an AWS XKS key if the planned blocked state differs from current state.
-func (r *resourceAWSXKSKey) blockUnblockXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
-	keyID := plan.ID.ValueString()
-	planBlocked := localHostedParamsJSON.Blocked
-	keyBlocked := gjson.Get(keyJSON, "blocked").Bool()
-	if keyBlocked != planBlocked {
-		if planBlocked {
-			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/block")
-			if err != nil {
-				msg := "Error blocking AWS XKS key."
-				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				diags.AddError(details, "")
-				tflog.Error(ctx, details)
-			} else {
-				tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> blockUnblockXKSKey] key blocked successfully. key_id: %s", keyID))
-			}
-		} else {
-			_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/unblock")
-			if err != nil {
-				msg := "Error unblocking AWS XKS key."
-				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				diags.AddError(details, "")
-				tflog.Error(ctx, details)
-			} else {
-				tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> blockUnblockXKSKey] key unblocked successfully. key_id: %s", keyID))
-			}
-		}
+// unblockXKSKey unblocks an AWS XKS key.
+func (r *resourceAWSXKSKey) unblockXKSKey(ctx context.Context, id string, keyID string, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> unblockXKSKey]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> unblockXKSKey]["+id+"]")
+	_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/unblock")
+	if err != nil {
+		msg := "Error unblocking AWS XKS key."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		diags.AddError(details, "")
+		tflog.Error(ctx, details)
+	} else {
+		tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> unblockXKSKey] key unblocked successfully. key_id: %s", keyID))
 	}
 }
 
-// linkUnlinkXKSKey links an AWS XKS key with AWS if the planned linked state differs from current; unlink is not supported.
-func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
+// blockXKSKey blocks an AWS XKS key.
+func (r *resourceAWSXKSKey) blockXKSKey(ctx context.Context, id string, keyID string, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> blockXKSKey]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> blockXKSKey]["+id+"]")
+	_, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/block")
+	if err != nil {
+		msg := "Error blocking AWS XKS key."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		diags.AddError(details, "")
+		tflog.Error(ctx, details)
+	} else {
+		tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> blockXKSKey] key blocked successfully. key_id: %s", keyID))
+	}
+}
+
+// linkXKSKey links an AWS XKS key with AWS if the planned linked state differs from current; unlink is not supported.
+func (r *resourceAWSXKSKey) linkXKSKey(ctx context.Context, id string, plan *AWSXKSKeyTFSDK, keyJSON string, localHostedParamsJSON *XKSKeyLocalHostedInputParamsJSON, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> linkXKSKey]["+id+"]")
+	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_xks_key.go -> linkXKSKey]["+id+"]")
 	keyID := gjson.Get(keyJSON, "id").String()
 	planLinked := localHostedParamsJSON.LinkedState
 	keyLinked := gjson.Get(keyJSON, "linked_state").Bool()
@@ -904,6 +952,19 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 			if plan.BypassPolicyLockoutSafetyCheck.ValueBool() != types.BoolNull().ValueBool() {
 				payload.BypassPolicyLockoutSafetyCheck = plan.BypassPolicyLockoutSafetyCheck.ValueBoolPointer()
 			}
+			// Populate key policy fields (admins, users, external accounts, policy template)
+			// from plan.KeyPolicy. getKeyStoreKeyAWSParams already copies Policy into
+			// payload.AWSParams.Policy, so we only need the remaining top-level fields here.
+			kp := getKeyPolicyParams(ctx, plan.KeyPolicy, diags)
+			if diags.HasError() {
+				return
+			}
+			payload.KeyAdmins = kp.KeyAdmins
+			payload.KeyAdminsRoles = kp.KeyAdminsRoles
+			payload.KeyUsers = kp.KeyUsers
+			payload.KeyUsersRoles = kp.KeyUsersRoles
+			payload.ExternalAccounts = kp.ExternalAccounts
+			payload.PolicyTemplate = kp.PolicyTemplate
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
 				msg := "Error linking AWS XKS key, invalid data input."
@@ -920,7 +981,7 @@ func (r *resourceAWSXKSKey) linkUnlinkXKSKey(ctx context.Context, id string, pla
 				diags.AddError(details, "")
 				return
 			}
-			tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> linkUnlinkXKSKey] key linked successfully. key_id: %s", keyID))
+			tflog.Info(ctx, fmt.Sprintf("[resource_aws_xks_key.go -> linkXKSKey] key linked successfully. key_id: %s", keyID))
 		} else {
 			msg := "Changing an AWS XKS key resource from linked to unlinked state is not supported."
 			diags.AddError(msg, "")

@@ -64,7 +64,6 @@ func setKeyStoreResourceCommonTopLevel(ctx context.Context, response string, sta
 	state.RotatedTo = types.StringValue(gjson.Get(response, "rotated_to").String())
 	state.SyncedAt = types.StringValue(gjson.Get(response, "synced_at").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
-	state.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	state.CustomKeyStoreID = types.StringValue(gjson.Get(response, "custom_key_store_id").String())
 	state.KeySourceContainerID = types.StringValue(gjson.Get(response, "key_source_container_id").String())
 	state.KeySourceContainerName = types.StringValue(gjson.Get(response, "key_source_container_name").String())

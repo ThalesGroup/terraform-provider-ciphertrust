@@ -616,6 +616,17 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	}
 	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][response:"+redactAWSResponse(response)+"]")
 
+	// Unlinking is not supported once a key store has been linked to AWS.
+	// Catch this early to avoid a confusing "inconsistent result after apply" error.
+	if !plan.LinkedState.ValueBool() && gjson.Get(response, "local_hosted_params.linked_state").Bool() {
+		resp.Diagnostics.AddError(
+			"Cannot unlink an AWS custom key store",
+			"Once a custom key store has been linked to AWS, it cannot be unlinked. "+
+				"Remove the linked_state = false setting or set linked_state = true to match the current state.",
+		)
+		return
+	}
+
 	var awsParamJSON AWSParamJSON
 	var planAWSParamTFSDK AWSCustomKeyStoreParamTFSDK
 	if !plan.AWSParams.IsNull() && !plan.AWSParams.IsUnknown() {
