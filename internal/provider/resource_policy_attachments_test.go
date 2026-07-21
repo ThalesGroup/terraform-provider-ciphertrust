@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"testing"
 	"time"
 
@@ -166,8 +165,8 @@ resource "ciphertrust_policy_attachments" "test" {
   depends_on = [ciphertrust_policies.test]
 }
 `, policyName, policyName),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -227,9 +226,9 @@ resource "ciphertrust_policy_attachments" "test" {
 			},
 			// Changing principal_selector must be rejected at plan time by ImmutableMap().
 			{
-				Config:      updatedConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				Config:             updatedConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -290,9 +289,9 @@ resource "ciphertrust_policy_attachments" "test" {
 			},
 			// Changing policy must produce an immutable error at plan time.
 			{
-				Config:      changedPolicyConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				Config:             changedPolicyConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -349,9 +348,9 @@ resource "ciphertrust_policy_attachments" "test" {
 				),
 			},
 			{
-				Config:      changedPolicyConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Attribute is immutable`),
+				Config:             changedPolicyConfig,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -394,9 +393,9 @@ resource "ciphertrust_policy_attachments" "test" {
 				),
 			},
 			{
-				Config:      step2Config,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				Config:             step2Config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -439,9 +438,9 @@ resource "ciphertrust_policy_attachments" "test_actions" {
 				),
 			},
 			{
-				Config:      step2Config,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				Config:             step2Config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -542,6 +541,84 @@ resource "ciphertrust_policy_attachments" "oob" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccPolicyAttachment_RequiresReplace verifies that changing any immutable field on
+// ciphertrust_policy_attachments cleanly triggers a replacement plan (-/+) instead of failing.
+func Test_CM_AccPolicyAttachment_RequiresReplace(t *testing.T) {
+	RequireCM(t)
+	policyName1 := fmt.Sprintf("tf-replace-policy1-%d", time.Now().Unix())
+	policyName2 := fmt.Sprintf("tf-replace-policy2-%d", time.Now().Unix())
+
+	config1 := fmt.Sprintf(`
+resource "ciphertrust_policies" "p1" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policies" "p2" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "attachment" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.p1, ciphertrust_policies.p2]
+}
+`, policyName1, policyName2, policyName1)
+
+	config2 := fmt.Sprintf(`
+resource "ciphertrust_policies" "p1" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policies" "p2" {
+  name    = %q
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+}
+
+resource "ciphertrust_policy_attachments" "attachment" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+  depends_on = [ciphertrust_policies.p1, ciphertrust_policies.p2]
+}
+`, policyName1, policyName2, policyName2)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + config1,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.attachment", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.attachment", "policy", policyName1),
+				),
+			},
+			{
+				Config: providerConfig + config2,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.attachment", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.attachment", "policy", policyName2),
+				),
 			},
 		},
 	})

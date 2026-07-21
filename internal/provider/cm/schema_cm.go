@@ -639,32 +639,36 @@ type TLSCiphersJSON struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+// CMInterfaceJSON is the JSON payload for CM interface create/update API calls.
+// Meta, TrustedCAs, LocalAutogenAttributes, and Certificate are pointer types so that
+// encoding/json omitempty correctly suppresses them when nil — non-pointer structs are
+// never omitted by omitempty even when zero-valued (TFIN-429).
 type CMInterfaceJSON struct {
-	ID                      string                          `json:"id,omitempty"`
-	Port                    int64                           `json:"port"`
-	AllowUnregistered       bool                            `json:"allow_unregistered,omitempty"`
-	AutogenCAId             string                          `json:"auto_gen_ca_id,omitempty"`
-	AutogenDaysBeforeExpiry int64                           `json:"auto_gen_days_before_expiry,omitempty"`
-	AutoRegistration        bool                            `json:"auto_registration,omitempty"`
-	CertUserField           string                          `json:"cert_user_field,omitempty"`
-	CustomUIDSize           int64                           `json:"custom_uid_size,omitempty"`
-	CustomUIDv2             bool                            `json:"custom_uid_v2,omitempty"`
-	DefaultConnection       string                          `json:"default_connection,omitempty"`
-	InterfaceType           string                          `json:"interface_type,omitempty"`
-	KMIPEnableHardDelete    int64                           `json:"kmip_enable_hard_delete,omitempty"`
-	MaximumTLSVersion       string                          `json:"maximum_tls_version,omitempty"`
-	Meta                    *CMInterfaceMetadataJSON        `json:"meta,omitempty"`
-	MinimumTLSVersion       string                          `json:"minimum_tls_version,omitempty"`
-	Mode                    string                          `json:"mode,omitempty"`
-	Name                    string                          `json:"name,omitempty"`
-	NetworkInterface        string                          `json:"network_interface,omitempty"`
-	RegToken                string                          `json:"registration_token,omitempty"`
-	TrustedCAs              *CMInterfacTrustedCAsJSON       `json:"trusted_cas,omitempty"`
-	Certificate             *CMInterfacCertificateJSON      `json:"certificate,omitempty"`
+	ID                      string                           `json:"id,omitempty"`
+	Port                    int64                            `json:"port"`
+	AllowUnregistered       bool                             `json:"allow_unregistered,omitempty"`
+	AutogenCAId             string                           `json:"auto_gen_ca_id,omitempty"`
+	AutogenDaysBeforeExpiry int64                            `json:"auto_gen_days_before_expiry,omitempty"`
+	AutoRegistration        bool                             `json:"auto_registration,omitempty"`
+	CertUserField           string                           `json:"cert_user_field,omitempty"`
+	CustomUIDSize           int64                            `json:"custom_uid_size,omitempty"`
+	CustomUIDv2             bool                             `json:"custom_uid_v2,omitempty"`
+	DefaultConnection       string                           `json:"default_connection,omitempty"`
+	InterfaceType           string                           `json:"interface_type,omitempty"`
+	KMIPEnableHardDelete    int64                            `json:"kmip_enable_hard_delete,omitempty"`
+	MaximumTLSVersion       string                           `json:"maximum_tls_version,omitempty"`
+	Meta                    *CMInterfaceMetadataJSON         `json:"meta,omitempty"`
+	MinimumTLSVersion       string                           `json:"minimum_tls_version,omitempty"`
+	Mode                    string                           `json:"mode,omitempty"`
+	Name                    string                           `json:"name,omitempty"`
+	NetworkInterface        string                           `json:"network_interface,omitempty"`
+	RegToken                string                           `json:"registration_token,omitempty"`
+	TrustedCAs              *CMInterfacTrustedCAsJSON        `json:"trusted_cas,omitempty"`
+	Certificate             *CMInterfacCertificateJSON       `json:"certificate,omitempty"`
 	LocalAutogenAttributes  *CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
-	TLSCiphers              []TLSCiphersJSON                `json:"tls_ciphers,omitempty"`
-	CreatedAt               string                          `json:"createdAt,omitempty"`
-	UpdatedAt               string                          `json:"updatedAt,omitempty"`
+	TLSCiphers              []TLSCiphersJSON                 `json:"tls_ciphers,omitempty"`
+	CreatedAt               string                           `json:"createdAt,omitempty"`
+	UpdatedAt               string                           `json:"updatedAt,omitempty"`
 }
 
 type CMLicenseTFSDK struct {
@@ -805,6 +809,7 @@ type CMTrialLicenseTFSDK struct {
 	Description   types.String `tfsdk:"description"`
 	ActivatedAt   types.String `tfsdk:"activated_at"`
 	DeactivatedAt types.String `tfsdk:"deactivated_at"`
+	LicenseType   types.String `tfsdk:"license_type"`
 }
 
 type CMTrialLicenseJSON struct {
@@ -992,6 +997,7 @@ type CreateJobConfigParamsListJSON struct {
 }
 
 type CMPropertyTFSDK struct {
+	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
 	Value       types.String `tfsdk:"value"`
 	Description types.String `tfsdk:"description"`
@@ -1080,18 +1086,19 @@ type CMSyslogTFSDK struct {
 }
 
 type CMSyslogJSON struct {
-	ID            string `json:"id"`
-	Host          string `json:"host"`
-	Transport     string `json:"transport"`
-	CACert        string `json:"caCert,omitempty"`
-	MessageFormat string `json:"messageFormat,omitempty"`
-	Port          int64  `json:"port,omitempty"`
-	Account       string `json:"account"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
+	ID            string  `json:"id"`
+	Host          string  `json:"host"`
+	Transport     string  `json:"transport"`
+	CACert        *string `json:"caCert,omitempty"`
+	MessageFormat *string `json:"messageFormat,omitempty"`
+	Port          int64   `json:"port,omitempty"`
+	Account       string  `json:"account"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
 }
 
 type CMProxyTFSDK struct {
+	ID          types.String   `tfsdk:"id"`
 	Certificate types.String   `tfsdk:"certificate"`
 	HTTPProxy   types.String   `tfsdk:"http_proxy"`
 	HTTPSProxy  types.String   `tfsdk:"https_proxy"`
@@ -1099,10 +1106,10 @@ type CMProxyTFSDK struct {
 }
 
 type CMProxyJSON struct {
-	Certificate string   `json:"certificate"`
-	HTTPProxy   string   `json:"http_proxy"`
-	HTTPSProxy  string   `json:"https_proxy"`
-	NoProxy     []string `json:"no_proxy"`
+	Certificate *string  `json:"certificate,omitempty"`
+	HTTPProxy   *string  `json:"http_proxy,omitempty"`
+	HTTPSProxy  *string  `json:"https_proxy,omitempty"`
+	NoProxy     []string `json:"no_proxy,omitempty"`
 }
 
 type CMPasswordPolicyTFSDK struct {
@@ -1121,17 +1128,17 @@ type CMPasswordPolicyTFSDK struct {
 }
 
 type CMPasswordPolicyJSON struct {
-	Name                          string  `json:"policy_name"`
-	FailedLoginsLockoutThresholds []int64 `json:"failed_logins_lockout_thresholds"`
-	InclusiveMaxTotalLength       int64   `json:"inclusive_max_total_length"`
-	InclusiveMinDigits            int64   `json:"inclusive_min_digits"`
-	InclusiveMinLowerCase         int64   `json:"inclusive_min_lower_case"`
-	InclusiveMinOther             int64   `json:"inclusive_min_other"`
-	InclusiveMinTotalLength       int64   `json:"inclusive_min_total_length"`
-	InclusiveMinUpperCase         int64   `json:"inclusive_min_upper_case"`
-	PasswordChangeMinDays         int64   `json:"password_change_min_days"`
-	PasswordHistoryThreshold      int64   `json:"password_history_threshold"`
-	PasswordLifetime              int64   `json:"password_lifetime"`
+	Name                          string   `json:"policy_name,omitempty"`
+	FailedLoginsLockoutThresholds []int64  `json:"failed_logins_lockout_thresholds,omitempty"`
+	InclusiveMaxTotalLength       *int64   `json:"inclusive_max_total_length,omitempty"`
+	InclusiveMinDigits            *int64   `json:"inclusive_min_digits,omitempty"`
+	InclusiveMinLowerCase         *int64   `json:"inclusive_min_lower_case,omitempty"`
+	InclusiveMinOther             *int64   `json:"inclusive_min_other,omitempty"`
+	InclusiveMinTotalLength       *int64   `json:"inclusive_min_total_length,omitempty"`
+	InclusiveMinUpperCase         *int64   `json:"inclusive_min_upper_case,omitempty"`
+	PasswordChangeMinDays         *int64   `json:"password_change_min_days,omitempty"`
+	PasswordHistoryThreshold      *int64   `json:"password_history_threshold,omitempty"`
+	PasswordLifetime              *int64   `json:"password_lifetime,omitempty"`
 }
 
 type CMLogForwardersESOrLokiParamsTFSDK struct {

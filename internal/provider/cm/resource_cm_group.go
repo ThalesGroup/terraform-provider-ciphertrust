@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -5,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
@@ -52,16 +56,20 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"app_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Application-specific metadata associated with the group. Stored as compacted JSON string.",
 			},
 			"client_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Client-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
 			},
 			"description": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Human-readable description of the group.",
 			},
 			"user_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "User-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
 			},
 			"user_ids": schema.SetAttribute{
 				Optional:    true,
@@ -183,6 +191,10 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
+	priorAppMetadata := state.AppMetadata
+	priorClientMetadata := state.ClientMetadata
+	priorUserMetadata := state.UserMetadata
+
 	resourceID := state.ID.ValueString()
 
 	response, err := r.client.GetById(ctx, id, resourceID, common.URL_GROUP)
@@ -210,22 +222,49 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	if v := gjson.Get(response, "app_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		// Normalize to compact JSON so whitespace differences between CM and
-		// CDSPaaS responses don't surface as phantom drift in subsequent plans.
-		compacted := compactJSONString(v.Raw)
-		state.AppMetadata = types.StringValue(compacted)
+		apiJSON := v.Raw
+		if !priorAppMetadata.IsNull() && !priorAppMetadata.IsUnknown() {
+			priorVal := priorAppMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.AppMetadata = types.StringValue(priorVal)
+			} else {
+				state.AppMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.AppMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.AppMetadata = types.StringNull()
 	}
 
 	if v := gjson.Get(response, "client_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		state.ClientMetadata = types.StringValue(v.Raw)
+		apiJSON := v.Raw
+		if !priorClientMetadata.IsNull() && !priorClientMetadata.IsUnknown() {
+			priorVal := priorClientMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.ClientMetadata = types.StringValue(priorVal)
+			} else {
+				state.ClientMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.ClientMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.ClientMetadata = types.StringNull()
 	}
 
 	if v := gjson.Get(response, "user_metadata"); v.Exists() && v.Type != gjson.Null && v.Raw != "{}" {
-		state.UserMetadata = types.StringValue(v.Raw)
+		apiJSON := v.Raw
+		if !priorUserMetadata.IsNull() && !priorUserMetadata.IsUnknown() {
+			priorVal := priorUserMetadata.ValueString()
+			if semanticallyEqualJSON(apiJSON, priorVal) {
+				state.UserMetadata = types.StringValue(priorVal)
+			} else {
+				state.UserMetadata = types.StringValue(compactJSONString(apiJSON))
+			}
+		} else {
+			state.UserMetadata = types.StringValue(compactJSONString(apiJSON))
+		}
 	} else {
 		state.UserMetadata = types.StringNull()
 	}
@@ -374,6 +413,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 					"Error Removing User from CipherTrust Group",
 					fmt.Sprintf("Could not remove user %q from group %q: %s", uid, plan.Name.ValueString(), err.Error()),
 				)
+				if actualMembers, errRead := r.listGroupMembers(ctx, id, plan.Name.ValueString()); errRead == nil {
+					plan.UserIDs = stringSliceToSet(actualMembers)
+				}
+				_ = resp.State.Set(ctx, plan)
 				return
 			}
 		}
@@ -383,6 +426,10 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 					"Error Adding User to CipherTrust Group",
 					fmt.Sprintf("Could not add user %q to group %q: %s", uid, plan.Name.ValueString(), err.Error()),
 				)
+				if actualMembers, errRead := r.listGroupMembers(ctx, id, plan.Name.ValueString()); errRead == nil {
+					plan.UserIDs = stringSliceToSet(actualMembers)
+				}
+				_ = resp.State.Set(ctx, plan)
 				return
 			}
 		}
@@ -509,24 +556,38 @@ func (r *resourceCMGroup) removeUserFromGroup(ctx context.Context, uuid, groupNa
 
 // listGroupMembers returns the user IDs currently in groupName.
 // CipherTrust's user list endpoint (GET /usermgmt/users) supports filtering
-// by group via ?groups=<name>. limit=-1 returns all results in one page so
-// groups larger than the default page size don't have their tail dropped.
+// by group via ?groups=<name>. Handles pagination in skip/limit chunks.
 func (r *resourceCMGroup) listGroupMembers(ctx context.Context, uuid, groupName string) ([]string, error) {
-	filters := url.Values{}
-	filters.Set("groups", groupName)
-	filters.Set("skip", "0")
-	filters.Set("limit", "-1")
-	body, err := r.client.ListWithFilters(ctx, uuid, common.URL_USER_MANAGEMENT, filters)
-	if err != nil {
-		return nil, err
-	}
 	ids := []string{}
-	gjson.Get(body, "resources.#.user_id").ForEach(func(_, value gjson.Result) bool {
-		if v := value.String(); v != "" {
-			ids = append(ids, v)
+	skip := 0
+	limit := 100
+	for {
+		filters := url.Values{}
+		filters.Set("groups", groupName)
+		filters.Set("skip", fmt.Sprintf("%d", skip))
+		filters.Set("limit", fmt.Sprintf("%d", limit))
+
+		body, err := r.client.ListWithFilters(ctx, uuid, common.URL_USER_MANAGEMENT, filters)
+		if err != nil {
+			return nil, err
 		}
-		return true
-	})
+
+		resources := gjson.Get(body, "resources").Array()
+		if len(resources) == 0 {
+			break
+		}
+
+		for _, res := range resources {
+			if v := res.Get("user_id").String(); v != "" {
+				ids = append(ids, v)
+			}
+		}
+
+		if len(resources) < limit {
+			break
+		}
+		skip += limit
+	}
 	return ids, nil
 }
 
@@ -575,4 +636,17 @@ func diffStringSlices(current, desired []string) (toAdd, toRemove []string) {
 		}
 	}
 	return toAdd, toRemove
+}
+
+// semanticallyEqualJSON unmarshals both strings and returns true if they are
+// semantically equivalent JSON objects.
+func semanticallyEqualJSON(s1, s2 string) bool {
+	var j1, j2 interface{}
+	if err := json.Unmarshal([]byte(s1), &j1); err != nil {
+		return false
+	}
+	if err := json.Unmarshal([]byte(s2), &j2); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(j1, j2)
 }

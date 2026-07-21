@@ -10,6 +10,9 @@ description: |-
 
 Manages a CipherTrust Manager user password policy (failed-login lockout thresholds, password complexity rules, password lifetime, and password history). **Only available on CipherTrust Manager — not supported on CDSPaaS, where password policy is managed by the platform.**
 
+> [!NOTE]
+> Optional password security attributes that are omitted from your Terraform configuration are completely omitted from the API payloads sent to CipherTrust Manager. This allows CipherTrust Manager's default security rules (or pre-configured values) to apply cleanly, preventing accidental overrides to `0` or disabling of security checks.
+
 ## Example Usage
 
 ```terraform

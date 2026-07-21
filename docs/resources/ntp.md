@@ -49,6 +49,13 @@ resource "ciphertrust_ntp" "ntp_server_1" {
   host = "time1.google.com"
 }
 
+# Authenticated NTP server example
+resource "ciphertrust_ntp" "auth_ntp" {
+  host     = "time2.google.com"
+  key      = "my-secret-symmetric-key"
+  key_type = "SHA-256"
+}
+
 # Output the unique ID of the created NTP resource
 output "ntp_server_host" {
 	value = ciphertrust_ntp.ntp_server_1.host
@@ -64,8 +71,8 @@ output "ntp_server_host" {
 
 ### Optional
 
-- `key` (String) Symmetric key value to be used for authenticated NTP servers. Changing this value forces replacement of the NTP resource.
-- `key_type` (String) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing this value forces replacement of the NTP resource.
+- `key` (String, Sensitive) Symmetric key value to be used for authenticated NTP servers. Changing or removing this value forces replacement of the NTP resource.
+- `key_type` (String) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing or removing this value forces replacement of the NTP resource.
 
 ### Read-Only
 

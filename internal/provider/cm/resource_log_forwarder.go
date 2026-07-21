@@ -51,6 +51,9 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "connection id of log-forwarder connection (elasticsearch, loki, syslog).",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -98,11 +101,11 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"loki_params": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Information which is used to create a Key using HKDF.",
+				Description: "Optional attributes specifying extra configuration fields specific to Loki.",
 				Attributes: map[string]schema.Attribute{
 					"labels": schema.SingleNestedAttribute{
 						Optional:    true,
-						Description: "Information which is used to create a Key using HKDF.",
+						Description: "Optional attributes specifying labels specific to Loki.",
 						Attributes: map[string]schema.Attribute{
 							"activity_kmip": schema.StringAttribute{
 								Optional:    true,
@@ -126,11 +129,11 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"syslog_params": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Information which is used to create a Key using HKDF.",
+				Description: "Optional attributes specifying log forwarding flags specific to Syslog.",
 				Attributes: map[string]schema.Attribute{
 					"forward_logs": schema.SingleNestedAttribute{
 						Optional:    true,
-						Description: "Information which is used to create a Key using HKDF.",
+						Description: "Flags specifying which logs should be forwarded to Syslog.",
 						Attributes: map[string]schema.Attribute{
 							"activity_kmip": schema.BoolAttribute{
 								Optional:    true,
@@ -432,7 +435,7 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	var plan CMLogForwardersTFSDK
-	var payload CMLogForwardersJSON
+	payload := make(map[string]interface{})
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -440,76 +443,82 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	var esParamIndices CMLogForwardersESOrLokiParamsJSON
-	var esParams CMLogForwardersESJSON
 	if !reflect.DeepEqual((*CMLogForwardersESTFSDK)(nil), plan.ElasticsearchParams) {
 		tflog.Debug(ctx, "ElasticsearchParams should not be empty at this point")
+		esParams := make(map[string]interface{})
+		esParamIndices := make(map[string]interface{})
 		if plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != "" && plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
-			esParamIndices.ActivityKMIP = plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString()
+			esParamIndices["activity_kmip"] = plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString()
 		}
 		if plan.ElasticsearchParams.Indices.ActivityNAE.ValueString() != "" && plan.ElasticsearchParams.Indices.ActivityNAE.ValueString() != types.StringNull().ValueString() {
-			esParamIndices.ActivityNAE = plan.ElasticsearchParams.Indices.ActivityNAE.ValueString()
+			esParamIndices["activity_nae"] = plan.ElasticsearchParams.Indices.ActivityNAE.ValueString()
 		}
 		if plan.ElasticsearchParams.Indices.ClientAuditRecords.ValueString() != "" && plan.ElasticsearchParams.Indices.ClientAuditRecords.ValueString() != types.StringNull().ValueString() {
-			esParamIndices.ClientAuditRecords = plan.ElasticsearchParams.Indices.ClientAuditRecords.ValueString()
+			esParamIndices["client_audit_records"] = plan.ElasticsearchParams.Indices.ClientAuditRecords.ValueString()
 		}
 		if plan.ElasticsearchParams.Indices.ServerAuditRecords.ValueString() != "" && plan.ElasticsearchParams.Indices.ServerAuditRecords.ValueString() != types.StringNull().ValueString() {
-			esParamIndices.ServerAuditRecords = plan.ElasticsearchParams.Indices.ServerAuditRecords.ValueString()
+			esParamIndices["server_audit_records"] = plan.ElasticsearchParams.Indices.ServerAuditRecords.ValueString()
 		}
-		esParams.Indices = &esParamIndices
-		payload.ElasticsearchParams = &esParams
+		if len(esParamIndices) > 0 {
+			esParams["indices"] = esParamIndices
+			payload["elasticsearch_params"] = esParams
+		}
 	}
 
-	var lokiParamLabels CMLogForwardersESOrLokiParamsJSON
-	var lokiParams CMLogForwardersLokiJSON
 	if !reflect.DeepEqual((*CMLogForwardersLokiTFSDK)(nil), plan.LokiParams) {
 		tflog.Debug(ctx, "LokiParams should not be empty at this point")
+		lokiParams := make(map[string]interface{})
+		lokiParamLabels := make(map[string]interface{})
 		if plan.LokiParams.Labels.ActivityKMIP.ValueString() != "" && plan.LokiParams.Labels.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
-			lokiParamLabels.ActivityKMIP = plan.LokiParams.Labels.ActivityKMIP.ValueString()
+			lokiParamLabels["activity_kmip"] = plan.LokiParams.Labels.ActivityKMIP.ValueString()
 		}
 		if plan.LokiParams.Labels.ActivityNAE.ValueString() != "" && plan.LokiParams.Labels.ActivityNAE.ValueString() != types.StringNull().ValueString() {
-			lokiParamLabels.ActivityNAE = plan.LokiParams.Labels.ActivityNAE.ValueString()
+			lokiParamLabels["activity_nae"] = plan.LokiParams.Labels.ActivityNAE.ValueString()
 		}
 		if plan.LokiParams.Labels.ClientAuditRecords.ValueString() != "" && plan.LokiParams.Labels.ClientAuditRecords.ValueString() != types.StringNull().ValueString() {
-			lokiParamLabels.ClientAuditRecords = plan.LokiParams.Labels.ClientAuditRecords.ValueString()
+			lokiParamLabels["client_audit_records"] = plan.LokiParams.Labels.ClientAuditRecords.ValueString()
 		}
 		if plan.LokiParams.Labels.ServerAuditRecords.ValueString() != "" && plan.LokiParams.Labels.ServerAuditRecords.ValueString() != types.StringNull().ValueString() {
-			lokiParamLabels.ServerAuditRecords = plan.LokiParams.Labels.ServerAuditRecords.ValueString()
+			lokiParamLabels["server_audit_records"] = plan.LokiParams.Labels.ServerAuditRecords.ValueString()
 		}
-		lokiParams.Labels = &lokiParamLabels
-		payload.LokiParams = &lokiParams
+		if len(lokiParamLabels) > 0 {
+			lokiParams["labels"] = lokiParamLabels
+			payload["loki_params"] = lokiParams
+		}
 	}
 
-	var syslogParamLabels CMLogForwardersSyslogParamsJSON
-	var syslogParams CMLogForwardersSyslogJSON
 	if !reflect.DeepEqual((*CMLogForwardersSyslogTFSDK)(nil), plan.SyslogParams) {
 		tflog.Debug(ctx, "SyslogParams should not be empty at this point")
+		syslogParams := make(map[string]interface{})
+		syslogParamLabels := make(map[string]interface{})
 		if plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool() != types.BoolNull().ValueBool() {
-			syslogParamLabels.ActivityKMIP = plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool()
+			syslogParamLabels["activity_kmip"] = plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool()
 		}
 		if plan.SyslogParams.SyslogParams.ActivityNAE.ValueBool() != types.BoolNull().ValueBool() {
-			syslogParamLabels.ActivityNAE = plan.SyslogParams.SyslogParams.ActivityNAE.ValueBool()
+			syslogParamLabels["activity_nae"] = plan.SyslogParams.SyslogParams.ActivityNAE.ValueBool()
 		}
 		if plan.SyslogParams.SyslogParams.ClientAuditRecords.ValueBool() != types.BoolNull().ValueBool() {
-			syslogParamLabels.ClientAuditRecords = plan.SyslogParams.SyslogParams.ClientAuditRecords.ValueBool()
+			syslogParamLabels["client_audit_records"] = plan.SyslogParams.SyslogParams.ClientAuditRecords.ValueBool()
 		}
 		if plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool() != types.BoolNull().ValueBool() {
-			syslogParamLabels.ServerAuditRecords = plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool()
+			syslogParamLabels["server_audit_records"] = plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool()
 		}
-		syslogParams.SyslogParams = &syslogParamLabels
-		payload.SyslogParams = &syslogParams
+		if len(syslogParamLabels) > 0 {
+			syslogParams["syslog_params"] = syslogParamLabels
+			payload["syslog_params"] = syslogParams
+		}
 	}
 
 	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
-		payload.Name = plan.Name.ValueString()
+		payload["name"] = plan.Name.ValueString()
 	}
 	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
-		payload.ConnectionID = plan.ConnectionID.ValueString()
+		payload["connection_id"] = plan.ConnectionID.ValueString()
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Create]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Log Forwarder Updation",
 			err.Error(),
@@ -523,7 +532,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		common.URL_CM_LOG_FORWARDS+"/"+plan.ID.ValueString(),
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Update]["+id+"]")
+		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Update]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error updating Log Forwarder on CipherTrust Manager: ",
 			"Could not update Log Forwarder, unexpected error: "+err.Error(),

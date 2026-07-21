@@ -406,3 +406,43 @@ resource "ciphertrust_policies" "test" {
 		},
 	})
 }
+
+// Test_CM_AccPolicy_ClearCollections verifies that clearing resources, actions, or conditions
+// triggers a 3-way transition to send an explicit empty array to CipherTrust Manager.
+func Test_CM_AccPolicy_ClearCollections(t *testing.T) {
+	RequireCM(t)
+	policyName := "TFTestPolicyClear-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "clear_test" {
+    name      = %q
+    resources = ["kylo:*:vault:keys:test"]
+    allow     = true
+    effect    = "allow"
+}
+`, policyName),
+				Check: checkStep(t, "clear: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.clear_test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.0", "kylo:*:vault:keys:test"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "clear_test" {
+    name   = %q
+    allow  = true
+    effect = "allow"
+}
+`, policyName),
+				Check: checkStep(t, "clear: update",
+					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "0"),
+				),
+			},
+		},
+	})
+}

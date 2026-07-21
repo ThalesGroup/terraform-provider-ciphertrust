@@ -546,3 +546,43 @@ resource "ciphertrust_log_forwarder" "basic" {
 }
 `, connID, name)
 }
+
+// Test_CM_AccCMLogForwarder_ImmutableConnectionID verifies that changing the connection_id
+// on an existing log forwarder schedules resource replacement (recreation).
+func Test_CM_AccCMLogForwarder_ImmutableConnectionID(t *testing.T) {
+	RequireCM(t)
+	connID1 := requireLogForwarderConnID(t)
+	connID2 := "00000000-0000-0000-0000-000000000000" // Use a dummy UUID for the replacement step
+	rName := "tf-lf-replace-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test_lf" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID1, rName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test_lf", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test_lf", "connection_id", connID1),
+				),
+			},
+			{
+				// Changing connection_id (ImmutableString) must trigger resource replacement (PlanNotEmpty)
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test_lf" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID2, rName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}

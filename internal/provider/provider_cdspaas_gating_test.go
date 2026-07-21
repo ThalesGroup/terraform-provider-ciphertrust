@@ -229,7 +229,7 @@ func Test_CM_PlanTimeGating_AllCMOnlyResourcesFailOnCDSPaaS(t *testing.T) {
 		{
 			name:    "property",
 			typeID:  "ciphertrust_property",
-			hclBody: func() string { return `` },
+			hclBody: func() string { return `name = "dummy"` },
 		},
 		{
 			name:   "scp_connection",

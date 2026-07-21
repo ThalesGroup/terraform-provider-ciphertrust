@@ -78,6 +78,9 @@ func proxyCleanup(t *testing.T) {
 
 func Test_CM_Proxy_DriftDetection(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent breaking live CM")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 
 	resource.Test(t, resource.TestCase{
@@ -118,6 +121,9 @@ func Test_CM_Proxy_DriftDetection(t *testing.T) {
 
 func Test_CM_Proxy_NoImmutableFields(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent breaking live CM")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 
 	resource.Test(t, resource.TestCase{
@@ -147,6 +153,9 @@ resource "ciphertrust_proxy" "test" {
 
 func Test_CM_Proxy_Idempotency(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent breaking live CM")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 
 	config := testAccProxyConfig("http://10.0.0.1:3128")

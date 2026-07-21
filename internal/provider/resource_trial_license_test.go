@@ -118,3 +118,32 @@ resource "ciphertrust_trial_license" "test" {
 		},
 	})
 }
+
+// Test_CM_TrialLicense_WithType verifies that deploying with a valid license_type
+// attribute succeeds and matches the available trial license correctly.
+func Test_CM_TrialLicense_WithType(t *testing.T) {
+	RequireCM(t)
+	cfg := providerConfig + `
+resource "ciphertrust_trial_license" "test" {
+    license_type = "Trial"
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_trial_license.test", "license_type", "Trial"),
+					resource.TestCheckResourceAttrSet("ciphertrust_trial_license.test", "name"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

@@ -87,6 +87,13 @@ func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequ
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"license_type": schema.StringAttribute{
+				Optional:    true,
+				Description: "The name, type, or substring identifier of the trial license to activate (e.g. 'CCKM', 'CTE', 'KMIP'). Required if multiple trial licenses exist on the CipherTrust Manager appliance.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
 		},
 	}
 }
@@ -126,15 +133,73 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 		return
 	}
 
+	var selectedLicense *CMTrialLicenseJSON
+
+	if len(licenses) == 0 {
+		resp.Diagnostics.AddError(
+			"No Trial Licenses Found",
+			"No trial licenses are available on this CipherTrust Manager appliance.",
+		)
+		return
+	}
+
+	licenseType := plan.LicenseType.ValueString()
+
 	if len(licenses) == 1 {
 		license := licenses[0]
-		plan.ID = types.StringValue(license.ID)
-		plan.Name = types.StringValue(license.Name)
-		plan.Status = types.StringValue(license.Status)
-		plan.Description = types.StringValue(license.Description)
-		plan.ActivatedAt = types.StringValue(license.ActivatedAt)
-		plan.DeactivatedAt = types.StringValue(license.DeactivatedAt)
+		if licenseType != "" && licenseType != types.StringNull().ValueString() {
+			// If user specified a type, make sure it matches (case-insensitive substring match on name or description)
+			if !strings.Contains(strings.ToLower(license.Name), strings.ToLower(licenseType)) &&
+				!strings.Contains(strings.ToLower(license.Description), strings.ToLower(licenseType)) {
+				resp.Diagnostics.AddError(
+					"Trial License Type Mismatch",
+					fmt.Sprintf("The only available trial license is '%s' (%s), which does not match your configured license_type: '%s'.", license.Name, license.Description, licenseType),
+				)
+				return
+			}
+		}
+		selectedLicense = &license
+	} else {
+		// len(licenses) > 1
+		if licenseType == "" || licenseType == types.StringNull().ValueString() {
+			resp.Diagnostics.AddError(
+				"Multiple Trial Licenses Found",
+				"Multiple trial licenses exist on this CipherTrust Manager appliance. You must explicitly configure the 'license_type' attribute to deterministically specify which license to activate.",
+			)
+			return
+		}
+
+		// Find the matching license
+		for _, lic := range licenses {
+			if strings.Contains(strings.ToLower(lic.Name), strings.ToLower(licenseType)) ||
+				strings.Contains(strings.ToLower(lic.Description), strings.ToLower(licenseType)) {
+				if selectedLicense != nil {
+					resp.Diagnostics.AddError(
+						"Ambiguous Trial License Selection",
+						fmt.Sprintf("Multiple trial licenses match your configured license_type '%s' (matches: '%s' and '%s'). Please specify a more precise license_type.", licenseType, selectedLicense.Name, lic.Name),
+					)
+					return
+				}
+				copied := lic
+				selectedLicense = &copied
+			}
+		}
+
+		if selectedLicense == nil {
+			resp.Diagnostics.AddError(
+				"No Matching Trial License Found",
+				fmt.Sprintf("No trial licenses match your configured license_type: '%s'. Available licenses on appliance: %s", licenseType, getLicenseNames(licenses)),
+			)
+			return
+		}
 	}
+
+	plan.ID = types.StringValue(selectedLicense.ID)
+	plan.Name = types.StringValue(selectedLicense.Name)
+	plan.Status = types.StringValue(selectedLicense.Status)
+	plan.Description = types.StringValue(selectedLicense.Description)
+	plan.ActivatedAt = types.StringValue(selectedLicense.ActivatedAt)
+	plan.DeactivatedAt = types.StringValue(selectedLicense.DeactivatedAt)
 
 	if plan.Status.ValueString() == "available" || plan.Status.ValueString() == "deactivated" {
 		//Trial License is available and can be activated
@@ -199,6 +264,17 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
+	// Desired State Model: if the license is not active (deactivated or available),
+	// treat it as missing out-of-band so that Terraform plans a recreation/reactivation.
+	if state.Status.ValueString() != "activated" {
+		resp.Diagnostics.AddWarning(
+			"Trial License Deactivated Out-Of-Band",
+			fmt.Sprintf("The Trial License '%s' has status '%s' on CipherTrust Manager. Removing from state to trigger re-activation.", state.Name.ValueString(), state.Status.ValueString()),
+		)
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Read]["+id+"]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -232,6 +308,12 @@ func (r *resourceCMTrialLicense) Delete(ctx context.Context, req resource.Delete
 	response, err := r.client.PostDataV2(ctx, state.ID.ValueString(), URLDeactivateLicense, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Delete]["+state.ID.ValueString()+"]["+response+"]")
 	if err != nil {
+		// Gracefully handle case where it is already deactivated/expired
+		errStr := err.Error()
+		if strings.Contains(errStr, "status: 400") || strings.Contains(errStr, "status: 404") || strings.Contains(strings.ToLower(errStr), "not activated") || strings.Contains(strings.ToLower(errStr), "already deactivated") {
+			tflog.Warn(ctx, fmt.Sprintf("Ignored error during Trial License deactivation (resource may already be deactivated/expired): %v", err))
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deactivating CipherTrust Trial License",
 			"Could not deactivate trial license, unexpected error: "+err.Error(),
@@ -276,4 +358,12 @@ func (r *resourceCMTrialLicense) readTrialLicenseFromAPI(ctx context.Context, li
 	state.DeactivatedAt = types.StringValue(gjson.Get(response, "deactivated_at").String())
 
 	return nil
+}
+
+func getLicenseNames(licenses []CMTrialLicenseJSON) string {
+	names := []string{}
+	for _, l := range licenses {
+		names = append(names, fmt.Sprintf("'%s'", l.Name))
+	}
+	return strings.Join(names, ", ")
 }

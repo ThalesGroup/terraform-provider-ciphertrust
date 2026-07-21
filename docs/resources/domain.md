@@ -79,9 +79,9 @@ output "domain_id" {
 
 - `allow_user_management` (Boolean) (Immutable) To allow user creation and management in the domain, set it to true. The default value is false.
 - `hsm_connection_id` (String) The ID of the HSM connection. Required for HSM-anchored domains.
-- `hsm_kek_label` (String) Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label.
+- `hsm_kek_label` (String) Optional name field for the domain KEK for an HSM-anchored domain. If not provided, a random UUID is assigned for KEK label. Computed to prevent plan-time drift.
 - `meta_data` (Map of String) Optional end-user or service data stored with the domain. Should be JSON-serializable.
-- `parent_ca_id` (String) (Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied.
+- `parent_ca_id` (String) (Immutable) This optional parameter is the ID or URI of the parent domain's CA. This CA is used for signing the default CA of a newly created sub-domain. The oldest CA in the parent domain is used if this value is not supplied. Computed to prevent plan-time drift.
 
 ### Read-Only
 

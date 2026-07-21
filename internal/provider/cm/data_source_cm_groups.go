@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -74,23 +77,61 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 		filters.Set(k, v.(types.String).ValueString())
 	}
 
-	rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read groups from CM",
-			err.Error(),
-		)
-		return
-	}
+	var groups []CMGroupJSON
 
-	jsonStr := gjson.Get(rawBody, "resources").String()
+	if filters.Get("skip") != "" || filters.Get("limit") != "" {
+		rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Unable to read groups from CM",
+				err.Error(),
+			)
+			return
+		}
+		jsonStr := gjson.Get(rawBody, "resources").String()
+		if err := json.Unmarshal([]byte(jsonStr), &groups); err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
+			return
+		}
+	} else {
+		skip := 0
+		limit := 100
+		for {
+			filters.Set("skip", fmt.Sprintf("%d", skip))
+			filters.Set("limit", fmt.Sprintf("%d", limit))
 
-	groups := []CMGroupJSON{}
-	if err := json.Unmarshal([]byte(jsonStr), &groups); err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
-		return
+			rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
+			if err != nil {
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read paginated]["+id+"]")
+				resp.Diagnostics.AddError(
+					"Unable to read groups from CM",
+					err.Error(),
+				)
+				return
+			}
+
+			resources := gjson.Get(rawBody, "resources").Array()
+			if len(resources) == 0 {
+				break
+			}
+
+			var pageGroups []CMGroupJSON
+			jsonStr := gjson.Get(rawBody, "resources").String()
+			if err := json.Unmarshal([]byte(jsonStr), &pageGroups); err != nil {
+				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read paginated unmarshal]["+id+"]")
+				resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
+				return
+			}
+
+			groups = append(groups, pageGroups...)
+
+			if len(resources) < limit {
+				break
+			}
+			skip += limit
+		}
 	}
 
 	for _, group := range groups {
