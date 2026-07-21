@@ -225,3 +225,32 @@ resource "ciphertrust_syslog" "test" {
 		},
 	})
 }
+
+// Test_CM_Syslog_ValueNullNoDrift verifies that when ca_cert is unconfigured (null),
+// the state is guarded and no perpetual plan diff is generated.
+func Test_CM_Syslog_ValueNullNoDrift(t *testing.T) {
+	RequireCM(t)
+	cfg := providerConfig + `
+resource "ciphertrust_syslog" "test" {
+    host      = "syslog-null-test.example.com"
+    transport = "udp"
+}
+`
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_syslog.test", "ca_cert"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
