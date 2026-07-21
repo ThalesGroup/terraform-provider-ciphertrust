@@ -120,8 +120,64 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	response, err := r.client.PatchDataBootstrap(ctx, id, common.URL_CHANGE_USER_PWD, payloadJSON)
+	_, err = r.client.PatchDataBootstrap(ctx, id, common.URL_CHANGE_USER_PWD, payloadJSON)
 	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "authentication failed") || strings.Contains(errStr, "invalid credentials") || strings.Contains(errStr, "401") {
+			tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Password change failed with auth error, verifying if password has already been changed")
+			if c, ok := r.client.(*common.Client); ok {
+				// Shallow copy the client and update password with planned new_password
+				verifyClient := *c
+				verifyClient.AuthData.Password = plan.NewPassword.ValueString()
+
+				// Attempt login verification with new credentials
+				_, verifyErr := verifyClient.SignIn(ctx, id)
+				if verifyErr == nil {
+					tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Verification login with new password succeeded! Reconstructing state.")
+
+					// Query existing users list to fetch the target user_id
+					usersJSON, listErr := verifyClient.GetByIdBootstrap(ctx, id, "", common.URL_USER_MANAGEMENT)
+					if listErr == nil {
+						var userRecords []gjson.Result
+						if gjson.Get(usersJSON, "resources").Exists() {
+							userRecords = gjson.Get(usersJSON, "resources").Array()
+						} else {
+							parsed := gjson.Parse(usersJSON)
+							if parsed.IsArray() {
+								userRecords = parsed.Array()
+							} else {
+								userRecords = []gjson.Result{parsed}
+							}
+						}
+
+						var foundUser bool
+						var targetUserID string
+						for _, userRec := range userRecords {
+							uName := userRec.Get("username").String()
+							if strings.EqualFold(uName, plan.Username.ValueString()) {
+								targetUserID = userRec.Get("user_id").String()
+								if targetUserID == "" {
+									targetUserID = userRec.Get("id").String()
+								}
+								foundUser = true
+								break
+							}
+						}
+
+						if foundUser && targetUserID != "" {
+							tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Successfully found user_id: "+targetUserID+". Reconstructing state.")
+							plan.ID = types.StringValue(targetUserID)
+							diags = resp.State.Set(ctx, plan)
+							resp.Diagnostics.Append(diags...)
+							return
+						}
+					}
+				} else {
+					tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Verification login with new password failed: "+verifyErr.Error())
+				}
+			}
+		}
+
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_pwd_change.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
 			"Error changing user password on CipherTrust Manager: ",
@@ -130,10 +186,41 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create Output]["+response+"]")
+	// Fetch the actual user_id from the user list endpoint since the successful
+	// password change PATCH response (HTTP 204 No Content) has an empty body.
+	usersJSON, listErr := r.client.GetByIdBootstrap(ctx, id, "", common.URL_USER_MANAGEMENT)
+	var targetUserID string
+	if listErr == nil {
+		var userRecords []gjson.Result
+		if gjson.Get(usersJSON, "resources").Exists() {
+			userRecords = gjson.Get(usersJSON, "resources").Array()
+		} else {
+			parsed := gjson.Parse(usersJSON)
+			if parsed.IsArray() {
+				userRecords = parsed.Array()
+			} else {
+				userRecords = []gjson.Result{parsed}
+			}
+		}
 
-	// Store the server-assigned user_id so Read() can perform 404 detection.
-	plan.ID = types.StringValue(gjson.Get(response, "user_id").String())
+		for _, userRec := range userRecords {
+			uName := userRec.Get("username").String()
+			if strings.EqualFold(uName, plan.Username.ValueString()) {
+				targetUserID = userRec.Get("user_id").String()
+				if targetUserID == "" {
+					targetUserID = userRec.Get("id").String()
+				}
+				break
+			}
+		}
+	}
+
+	if targetUserID == "" {
+		// Fallback to generating a unique UUID so the resource ID is never empty or null.
+		targetUserID = uuid.New().String()
+	}
+
+	plan.ID = types.StringValue(targetUserID)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
