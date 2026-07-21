@@ -82,8 +82,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Attributes:  xksKeyAwsParamSchemaAttributes(),
 			},
 			"enable_key": schema.BoolAttribute{
-				Optional:    true,
-				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.",
+				Optional: true,
+				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. " +
+					"Cannot be set to false at creation time; disable the key via update after it is created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
@@ -247,13 +248,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 }
 
 // Create creates a new AWS XKS key in CipherTrust Manager and sets Terraform state.
-// After the key is successfully created, the following post-creation operations are attempted but only
-// produce warnings (not errors) on failure, ensuring the key is always saved to state:
-//   - Adding additional aliases beyond the first  -  only applied when the key is linked (linked_state = true);
-//     unlinked keys do not support alias management via AWS
-//   - Registering the key with a CipherTrust Manager scheduled rotation job (enable_rotation block)
-//   - Disabling the key if enable_key = false  -  only applied when the key is linked
-//   - Refreshing final state from the API after all post-creation operations
+// blocked and linked are sent directly in the create payload (the API supports both at creation time).
+// Post-create operations such as adding extra aliases, enabling rotation, disabling the key, and
+// adding tags must be applied via update after the key is created.
 func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_xks_key.go -> Create]["+id+"]")
@@ -284,8 +281,6 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	localHostedParamsJSON := r.getLocalHostedParams(&plan)
 	if localHostedParamsJSON != nil {
 		payload.XKSKeyLocalHostedInputParamsJSON = *localHostedParamsJSON
-		// Block later
-		payload.XKSKeyLocalHostedInputParamsJSON.Blocked = false
 	}
 	keyPolicy := getKeyPolicyParams(ctx, plan.KeyPolicy, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -331,43 +326,6 @@ func (r *resourceAWSXKSKey) Create(ctx context.Context, req resource.CreateReque
 	// Do not return error after this
 
 	keyID := gjson.Get(response, "id").String()
-
-	// The following updates are only valid for linked keys
-
-	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-			var diags diag.Diagnostics
-			addAliases(ctx, r.client, id, keyID, planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &diags)
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
-		}
-	}
-
-	if plan.EnableRotation != nil {
-		var diags diag.Diagnostics
-		enableKeyRotationJob(ctx, id, r.client, keyID, plan.EnableRotation, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		disableKey(ctx, id, r.client, keyID, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	if localHostedParamsJSON != nil && localHostedParamsJSON.Blocked {
-		var blockDiags diag.Diagnostics
-		r.blockXKSKey(ctx, id, keyID, &blockDiags)
-		for _, d := range blockDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
 
 	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
@@ -711,46 +669,54 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	// On create (no prior state), validate that the config is compatible with an unlinked key.
+	// On create (no prior state), validate the configuration.
 	if req.State.Raw.IsNull() {
-		if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() {
-			var invalid []string
+		// These attributes require separate post-create API calls and cannot be applied at creation time.
+		// They must be set via update after the key is created.
+		var createInvalid []string
+		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+			if xksP != nil {
+				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+					createInvalid = append(createInvalid, "aws_param.alias (only one alias may be set at creation; add more via update)")
+				}
+			}
+		}
+		if plan.EnableRotation != nil {
+			createInvalid = append(createInvalid, "enable_rotation (cannot be set at creation; configure via update)")
+		}
+		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+			createInvalid = append(createInvalid, "enable_key = false (cannot be set at creation; disable via update)")
+		}
+		if len(createInvalid) > 0 {
+			resp.Diagnostics.AddError(
+				"Invalid attribute at creation time",
+				"The following attributes cannot be set when creating an XKS key: "+
+					strings.Join(createInvalid, "; ")+".",
+			)
+		}
 
-			// More than one alias and tags cannot be used with an unlinked key.
+		// aws_param.tags and key_policy are only valid when linked = true at creation time;
+		// the API only applies them to the AWS-side key when the key is linked.
+		if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() {
+			var unlinkedInvalid []string
 			if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 				xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 				if xksP != nil {
-					if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-						invalid = append(invalid, "aws_param.alias (more than one alias)")
-					}
 					if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
 						len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
-						invalid = append(invalid, "aws_param.tags")
+						unlinkedInvalid = append(unlinkedInvalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
 					}
 				}
 			}
-
-			// key_policy cannot be set on an unlinked key.
 			if plan.KeyPolicy != nil {
-				invalid = append(invalid, "key_policy")
+				unlinkedInvalid = append(unlinkedInvalid, "key_policy (only valid when local_hosted_params.linked = true)")
 			}
-
-			// Rotation cannot be enabled on an unlinked key.
-			if plan.EnableRotation != nil {
-				invalid = append(invalid, "enable_rotation")
-			}
-
-			// Disabling the key requires the key to be linked.
-			if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-				invalid = append(invalid, "enable_key = false")
-			}
-
-			if len(invalid) > 0 {
+			if len(unlinkedInvalid) > 0 {
 				resp.Diagnostics.AddError(
 					"Invalid configuration for an unlinked key",
 					"The following attributes cannot be set when local_hosted_params.linked = false: "+
-						strings.Join(invalid, ", ")+". "+
-						"\nSet local_hosted_params.linked = true, or remove these attributes.",
+						strings.Join(unlinkedInvalid, "; ")+".",
 				)
 			}
 		}

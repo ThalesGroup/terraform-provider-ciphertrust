@@ -12,10 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
-	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 const (
@@ -140,37 +137,23 @@ func applyCDSPAAS(config string) string {
 	return config
 }
 
-// TestCckmAWSKeyNative tests creating native keys and update functionality
+// TestCckmAWSKeyNative tests creating native keys and update functionality.
+// The test exercises a plain create followed by a series of updates that toggle
+// auto-rotation, the rotation scheduler, aliases, key enable/disable, tags, and
+// key policy. Post-create-only attributes (auto_rotate, enable_rotation, >1 alias)
+// are NOT present in the initial create config; they are added in the first update.
 func TestCckmAWSKeyNative(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 
+	// createKeyConfig is a minimal create: 1 alias, no auto_rotate, no enable_rotation.
+	// Post-create attributes are applied in the first update (addPostCreateConfig).
 	createKeyConfig := `
-		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params = {
-				cloud_name = "aws"
-			}
-			end_date = "2050-03-07T14:24:00Z"
-			name       = "%s"
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
 		resource "ciphertrust_aws_key" "native_key" {
 			aws_param = {
-				alias                    = [local.alias, "%s", "%s"]
-				auto_rotation_period_in_days = 256
+				alias                    = [local.alias]
 				customer_master_key_spec = "SYMMETRIC_DEFAULT"
 				description              = "create description"
 				key_usage                = "ENCRYPT_DECRYPT"
@@ -179,27 +162,53 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					TagKey2 = "TagValue2"
 				}
 			}
-			auto_rotate  = true
-			enable_key   = true
+			enable_key = true
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	// addPostCreateConfig is the first update: adds 2 more aliases, enables auto-rotation,
+	// and attaches a rotation scheduler. These are the attributes that cannot be set at create.
+	addPostCreateConfig := `
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias                        = [local.alias, "%s", "%s"]
+				auto_rotation_period_in_days = 256
+				customer_master_key_spec     = "SYMMETRIC_DEFAULT"
+				description                  = "create description"
+				key_usage                    = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
+			auto_rotate = true
+			enable_key  = true
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
 				key_source    = "local"
 			}
-			key_policy = {
-				key_admins  = ["%s"]
-				key_users   = ["%s"]
-				key_admins_roles  = ["%s"]
-				key_users_roles   = ["%s"]
-			}
-			kms_id       = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
 		}`
+
 	updateKeyConfig := `
 		resource "ciphertrust_scheduler" "scheduler" {
 			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
-			end_date = "2050-03-07T14:24:00Z"
+			end_date   = "2050-03-07T14:24:00Z"
 			name       = "%s"
 			operation  = "cckm_key_rotation"
 			run_at     = "0 9 * * sat"
@@ -210,7 +219,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
-			end_date = "2050-03-07T14:24:00Z"
+			end_date   = "2050-03-07T14:24:00Z"
 			name       = "%s"
 			operation  = "cckm_key_rotation"
 			run_at     = "0 9 * * sat"
@@ -219,11 +228,11 @@ func TestCckmAWSKeyNative(t *testing.T) {
 		}
 		resource "ciphertrust_aws_key" "native_key" {
 			aws_param = {
-				alias                    = [local.alias]
+				alias                        = [local.alias]
 				auto_rotation_period_in_days = 128
-				customer_master_key_spec = "SYMMETRIC_DEFAULT"
-				description              = "update description"
-				key_usage                = "ENCRYPT_DECRYPT"
+				customer_master_key_spec     = "SYMMETRIC_DEFAULT"
+				description                  = "update description"
+				key_usage                    = "ENCRYPT_DECRYPT"
 				tags = {
 					TagKey3 = "TagValue3"
 					TagKey1 = "TagValue1"
@@ -231,7 +240,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 				}
 			}
 			auto_rotate = true
-			enable_key   = false
+			enable_key  = false
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler_two.id
 				key_source    = "local"
@@ -241,8 +250,8 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					%s
 				EOT
 			}
-			kms_id    = ciphertrust_aws_kms.kms.id
-			region    = ciphertrust_aws_kms.kms.regions[0]
+			kms_id                     = ciphertrust_aws_kms.kms.id
+			region                     = ciphertrust_aws_kms.kms.regions[0]
 			schedule_for_deletion_days = 13
 		}`
 	updateKeyConfig2 := `
@@ -259,39 +268,40 @@ func TestCckmAWSKeyNative(t *testing.T) {
 		}
 		resource "ciphertrust_aws_key" "native_key" {
 			aws_param = {
-				alias        = [local.alias]
+				alias                    = [local.alias]
 				customer_master_key_spec = "SYMMETRIC_DEFAULT"
-				description  = "create description"
-				key_usage    = "ENCRYPT_DECRYPT"
+				description              = "create description"
+				key_usage                = "ENCRYPT_DECRYPT"
 				tags = {
 					TagKey1 = "TagValue1"
 					TagKey2 = "TagValue2"
 				}
 			}
-			auto_rotate  = false
-			enable_key   = true
+			auto_rotate = false
+			enable_key  = true
 			key_policy = {
 				policy_template = ciphertrust_aws_policy_template.policy_template.id
 			}
-			kms_id       = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
+			kms_id                     = ciphertrust_aws_kms.kms.id
+			region                     = ciphertrust_aws_kms.kms.regions[0]
 			schedule_for_deletion_days = 20
 		}`
 	updateKeyConfig3 := `
 		resource "ciphertrust_aws_key" "native_key" {
 			aws_param = {
-				alias        = [local.alias]
+				alias                    = [local.alias]
 				customer_master_key_spec = "%s"
-				description  = "create description"
-				key_usage    = "ENCRYPT_DECRYPT"
-				tags         = {}
+				description              = "create description"
+				key_usage                = "ENCRYPT_DECRYPT"
+				tags                     = {}
 			}
-			auto_rotate  = false
-			enable_key   = false
-			kms_id       = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
+			auto_rotate                = false
+			enable_key                 = false
+			kms_id                     = ciphertrust_aws_kms.kms.id
+			region                     = ciphertrust_aws_kms.kms.regions[0]
 			schedule_for_deletion_days = 8
 		}`
+
 	aliasList := []string{
 		awsKeyNamePrefix + uuid.New().String(),
 		awsKeyNamePrefix + uuid.New().String(),
@@ -301,13 +311,13 @@ func TestCckmAWSKeyNative(t *testing.T) {
 	schedulerTwoName := "tf-" + uuid.NewString()[:8]
 	policyTemplateName := "tf-" + uuid.NewString()[:8]
 	schedulerTwoResource := "ciphertrust_scheduler.scheduler_two"
-	//policyTemplateResource := "ciphertrust_aws_policy_template.policy_template"
 
 	createKeyRotationPeriodInDays := "256"
 	updateKeyRotationPeriodInDays := "128"
 
-	createKeyConfigStr := fmt.Sprintf(createKeyConfig, schedulerOneName, aliasList[0], aliasList[1], awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	createKeyConfigStr = applyCDSPAAS(createKeyConfigStr)
+	createKeyConfigStr := createKeyConfig
+	addPostCreateConfigStr := fmt.Sprintf(addPostCreateConfig, schedulerOneName, aliasList[0], aliasList[1])
+	addPostCreateConfigStr = applyCDSPAAS(addPostCreateConfigStr)
 	updateKeyConfigStr := fmt.Sprintf(updateKeyConfig, schedulerOneName, schedulerTwoName, awsKeyPolicy)
 	updateKeyConfigStr = applyCDSPAAS(updateKeyConfigStr)
 	updateKeyConfigStr2 := fmt.Sprintf(updateKeyConfig2, policyTemplateName)
@@ -318,36 +328,27 @@ func TestCckmAWSKeyNative(t *testing.T) {
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			// Step 1: plain create - minimal config, no post-create attributes.
 			{
 				Config: awsConnectionResource + createKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", createKeyRotationPeriodInDays),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 				),
 			},
+			// Step 2: import state verify.
 			{
 				ResourceName:            keyResource,
 				ImportState:             true,
@@ -355,6 +356,28 @@ func TestCckmAWSKeyNative(t *testing.T) {
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
 				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
 			},
+			// Step 3: first update - add 2 more aliases, enable auto-rotation, attach scheduler.
+			{
+				Config: awsConnectionResource + addPostCreateConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.auto_rotation_period_in_days", createKeyRotationPeriodInDays),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_usage", "ENCRYPT_DECRYPT"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+				),
+			},
+			// Step 4: second update - change scheduler, reduce to 1 alias, disable key, change policy.
 			{
 				Config: awsConnectionResource + updateKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
@@ -374,23 +397,15 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey3", "TagValue3"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "13"),
 				),
 			},
+			// Step 5: third update - re-apply addPostCreateConfig (re-enable, 3 aliases, scheduler 1).
 			{
-				Config: awsConnectionResource + createKeyConfigStr,
+				Config: awsConnectionResource + addPostCreateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
@@ -404,10 +419,10 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "13"),
 				),
 			},
+			// Step 6: fourth update - remove rotation scheduler, disable auto_rotate, policy template.
 			{
 				Config: awsConnectionResource + updateKeyConfigStr2,
 				Check: resource.ComposeTestCheckFunc(
@@ -419,11 +434,9 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "20"),
-					//resource.TestCheckResourceAttrPair(keyResource, "tags.cckm_policy_template_id", policyTemplateResource, "id"),
-					// policy not always updated in time
-					// testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
 				),
 			},
+			// Step 7: fifth update - clear tags, disable key.
 			{
 				Config: awsConnectionResource + updateKeyConfig3Str,
 				Check: resource.ComposeTestCheckFunc(
@@ -436,8 +449,8 @@ func TestCckmAWSKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
 				),
 			},
+			// Step 8: verify ModifyPlan fires an error when customer_master_key_spec is changed.
 			{
-				// Verify ModifyPlan fires an error when customer_master_key_spec is changed.
 				Config:      awsConnectionResource + modifyPlanConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
@@ -446,27 +459,37 @@ func TestCckmAWSKeyNative(t *testing.T) {
 	})
 }
 
-// Sarah this test seeems superflous
-func TestCckmAWSKeyNativeImport(t *testing.T) {
+// TestCckmAWSKeyNativeCreateRejections verifies that ModifyPlan rejects each of the four
+// attributes that cannot be set during key creation: multiple aliases, auto_rotate=true,
+// enable_rotation, and enable_key=false. Each step is plan-only; no infrastructure is created.
+func TestCckmAWSKeyNativeCreateRejections(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 
-	createKeyConfig := `
+	multipleAliasesConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias = [local.alias, "tf-aws-second-alias"]
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	autoRotateConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
+			auto_rotate = true
+			kms_id      = ciphertrust_aws_kms.kms.id
+			region      = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	enableRotationConfig := `
 		resource "ciphertrust_scheduler" "scheduler" {
 			cckm_key_rotation_params = {
 				cloud_name = "aws"
 			}
-			end_date = "2050-03-07T14:24:00Z"
+			end_date   = "2050-03-07T14:24:00Z"
 			name       = "%s"
 			operation  = "cckm_key_rotation"
 			run_at     = "0 9 * * sat"
@@ -474,9 +497,66 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_aws_key" "native_key" {
+			enable_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "local"
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	disabledKeyConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
+			enable_key = false
+			kms_id     = ciphertrust_aws_kms.kms.id
+			region     = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	schedulerName := "tf-" + uuid.NewString()[:8]
+	enableRotationConfigStr := fmt.Sprintf(enableRotationConfig, schedulerName)
+	enableRotationConfigStr = applyCDSPAAS(enableRotationConfigStr)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      awsConnectionResource + multipleAliasesConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Additional aliases cannot be set during key creation`),
+			},
+			{
+				Config:      awsConnectionResource + autoRotateConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Auto-rotation cannot be enabled during key creation`),
+			},
+			{
+				Config:      awsConnectionResource + enableRotationConfigStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Rotation scheduler cannot be configured during key creation`),
+			},
+			{
+				Config:      awsConnectionResource + disabledKeyConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Key cannot be disabled during key creation`),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyNativeImport verifies that a key created and updated with minimal
+// config can be successfully imported.
+func TestCckmAWSKeyNativeImport(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	// Step 1: minimal create (no post-create attributes).
+	createKeyConfig := `
+		resource "ciphertrust_aws_key" "native_key" {
 			aws_param = {
-				alias                    = [local.alias, "%s", "%s"]
-				auto_rotation_period_in_days = 256
+				alias                    = [local.alias]
 				customer_master_key_spec = "SYMMETRIC_DEFAULT"
 				description              = "create description"
 				key_usage                = "ENCRYPT_DECRYPT"
@@ -485,17 +565,42 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 					TagKey2 = "TagValue2"
 				}
 			}
-			auto_rotate  = true
-			enable_key   = true
+			enable_key = true
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}`
+
+	// Step 2: first update - adds 2 more aliases, auto-rotation, and scheduler.
+	// This is the config that will be in place when ImportState runs.
+	fullKeyConfig := `
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
+		resource "ciphertrust_aws_key" "native_key" {
+			aws_param = {
+				alias                        = [local.alias, "%s", "%s"]
+				auto_rotation_period_in_days = 256
+				customer_master_key_spec     = "SYMMETRIC_DEFAULT"
+				description                  = "create description"
+				key_usage                    = "ENCRYPT_DECRYPT"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
+			auto_rotate = true
+			enable_key  = true
 			enable_rotation = {
 				job_config_id = ciphertrust_scheduler.scheduler.id
 				key_source    = "local"
-			}
-			key_policy = {
-				key_admins       = ["%s"]
-				key_users        = ["%s"]
-				key_admins_roles = ["%s"]
-				key_users_roles  = ["%s"]
 			}
 			kms_id = ciphertrust_aws_kms.kms.id
 			region = ciphertrust_aws_kms.kms.regions[0]
@@ -507,30 +612,31 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 	}
 	keyResource := "ciphertrust_aws_key.native_key"
 	schedulerOneName := "tf-" + uuid.NewString()[:8]
-	createKeyConfigStr := fmt.Sprintf(createKeyConfig, schedulerOneName, aliasList[0], aliasList[1], awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	createKeyConfigStr = applyCDSPAAS(createKeyConfigStr)
+	createKeyConfigStr := createKeyConfig
+	fullKeyConfigStr := fmt.Sprintf(fullKeyConfig, schedulerOneName, aliasList[0], aliasList[1])
+	fullKeyConfigStr = applyCDSPAAS(fullKeyConfigStr)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			// Step 1: plain create.
 			{
-				// Verify the created resource state before import so that the subsequent
-				// ImportStateVerify comparison checks against known-correct values,
-				// not just whatever Read() happened to return unchecked.
 				Config: awsConnectionResource + createKeyConfigStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+				),
+			},
+			// Step 2: update to full configuration - add aliases, auto-rotation, scheduler.
+			{
+				Config: awsConnectionResource + fullKeyConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
 					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "3"),
@@ -545,15 +651,164 @@ func TestCckmAWSKeyNativeImport(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
 				),
 			},
+			// Step 3: import state verify.
 			{
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
 				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyPolicyUpdates verifies switching a key between the structured
+// key_admins/key_users policy form and the raw policy JSON form, and back again.
+// Requires AWS_KEY_USERS (2 comma-separated user suffixes) and AWS_KEY_ROLES
+// (2 comma-separated role suffixes) to be set.
+func TestCckmAWSKeyPolicyUpdates(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	awsKeyUsers := getAwsUsers()
+	if len(awsKeyUsers) != 2 {
+		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 users")
+	}
+	awsKeyRoles := getAwsRoles()
+	if len(awsKeyRoles) != 2 {
+		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 roles")
+	}
+
+	// structuredPolicyConfig uses the key_admins / key_users / key_admins_roles /
+	// key_users_roles fields to build the KMS key policy. The key is multi-region
+	// and a replica (no key_policy) is created in regions[1] to verify that
+	// policy updates on the primary do not affect replication.
+	structuredPolicyConfig := `
+		resource "ciphertrust_aws_key" "policy_key" {
+			aws_param = {
+				alias        = [local.alias]
+				multi_region = true
+			}
+			key_policy = {
+				key_admins       = ["%s"]
+				key_users        = ["%s"]
+				key_admins_roles = ["%s"]
+				key_users_roles  = ["%s"]
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}
+		resource "ciphertrust_aws_key" "replica_key" {
+			depends_on = [ciphertrust_aws_key.policy_key]
+			aws_param = {
+				alias = ["%s"]
+			}
+			region = ciphertrust_aws_kms.kms.regions[1]
+			replicate_key = {
+				key_id = ciphertrust_aws_key.policy_key.id
+			}
+		}`
+
+	// rawPolicyConfig replaces the structured fields with an inline raw JSON policy.
+	rawPolicyConfig := `
+		resource "ciphertrust_aws_key" "policy_key" {
+			aws_param = {
+				alias        = [local.alias]
+				multi_region = true
+			}
+			key_policy = {
+				policy = <<-EOT
+					%s
+				EOT
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}
+		resource "ciphertrust_aws_key" "replica_key" {
+			aws_param = {
+				alias = ["%s"]
+			}
+			region = ciphertrust_aws_kms.kms.regions[1]
+			replicate_key = {
+				key_id = ciphertrust_aws_key.policy_key.id
+			}
+		}`
+
+	keyResource := "ciphertrust_aws_key.policy_key"
+	replicaResource := "ciphertrust_aws_key.replica_key"
+	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
+
+	step1Config := fmt.Sprintf(structuredPolicyConfig,
+		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1], replicaAlias)
+	step2Config := fmt.Sprintf(rawPolicyConfig, awsKeyPolicy, replicaAlias)
+	step3Config := fmt.Sprintf(structuredPolicyConfig,
+		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1], replicaAlias)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with structured key_admins/key_users policy.
+			{
+				Config: awsConnectionResource + step1Config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
+					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
+					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replicaResource, "aws_param.policy"),
+				),
+			},
+			// Step 2: update to raw JSON policy - users/roles should no longer appear.
+			{
+				Config: awsConnectionResource + step2Config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "0"),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+				),
+			},
+			// Step 3: update back to structured key_admins/key_users policy.
+			{
+				Config: awsConnectionResource + step3Config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
+					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
+					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
+					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+				),
 			},
 		},
 	})
@@ -577,72 +832,16 @@ func getResourceAttr(resourceName, attrName string) resource.ImportStateIdFunc {
 	}
 }
 
-// TestCckmAWSNativeKeyMinimalConfig verifies that a resource configuration
-// containing only the minimal required attributes is accepted and applied
-// without error.
-func TestCckmAWSNativeKeyMinimalConfig(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	nativeKeyConfig := `
-		resource "ciphertrust_aws_key" "native_key" {
-			aws_param = {
-				alias        = [local.alias]
-			}
-			kms_id       = ciphertrust_aws_kms.kms.id
-			region       = ciphertrust_aws_kms.kms.regions[0]
-		}
-		resource "ciphertrust_aws_policy_template" "policy_template" {
-            kms_id = ciphertrust_aws_kms.kms.id
-			name   = "%s"
-			policy = <<-EOT
-				%s
-			EOT
-		}
-		resource "ciphertrust_groups" "acl_group" {
-			name = "%s"
-		}
-		resource "ciphertrust_aws_acl" "acl" {
-			kms_id  = ciphertrust_aws_kms.kms.id
-			group   = ciphertrust_groups.acl_group.id
-			actions = ["view"]
-		}
-`
-
-	keyConfigStr := fmt.Sprintf(nativeKeyConfig, "tf-"+uuid.NewString()[:8], defaultPolicy, "tf-"+uuid.NewString()[:8])
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + keyConfigStr,
-			},
-			{
-				RefreshState: true,
-			},
-		},
-	})
-}
-
 // TestCckmAWSKeyMultiRegionNative creates a key and a replica and makes the replica primary
 func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 	createConfig := `
 			resource "ciphertrust_aws_key" "multi_region_key" {
 				aws_param = {
-					alias                    = ["%s", "%s"]
+					alias                    = ["%s"]
 					customer_master_key_spec = "RSA_2048"
 					key_usage                = "SIGN_VERIFY"
 					multi_region             = true
@@ -664,12 +863,6 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 					tags = {
 						RegionOneTagKey = "RegionOneTagValue"
 					}
-				}
-				key_policy = {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
 				}
 				region = ciphertrust_aws_kms.kms.regions[1]
 				replicate_key = {
@@ -700,12 +893,6 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 						RegionOneTagKey = "RegionOneTagValue"
 					}
 				}
-				key_policy = {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
-				}
 				region         = ciphertrust_aws_kms.kms.regions[1]
 				replicate_key = {
 					key_id = ciphertrust_aws_key.multi_region_key.id
@@ -716,10 +903,8 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
 	keyResource := "ciphertrust_aws_key.multi_region_key"
 	replicaResource1 := "ciphertrust_aws_key.replica"
-	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias)
+	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -729,7 +914,7 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
@@ -738,14 +923,10 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
 
 					resource.TestCheckResourceAttrSet(replicaResource1, "id"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource1, "key_users_roles.#", "0"),
 					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.replica_keys.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.0", replicaAlias),
@@ -757,12 +938,6 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 					// Sometimes - this is true
 					//resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
 				),
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						replicaResource1,
-						tfjsonpath.New("aws_param").AtMapKey("policy"),
-						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
-				},
 			},
 			{
 				// Update state before import as primary region has changed. The Check
@@ -771,7 +946,7 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 				Config: createResources,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
@@ -829,18 +1004,10 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 	createConfig := `
 			resource "ciphertrust_aws_key" "primary_key" {
 				aws_param = {
-					alias                    = ["%s", "%s"]
+					alias                    = ["%s"]
 					customer_master_key_spec = "RSA_2048"
 					key_usage                = "SIGN_VERIFY"
 					multi_region             = true
@@ -862,12 +1029,6 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					tags = {
 						RegionOneTagKey = "RegionOneTagValue"
 					}
-				}
-				key_policy = {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
 				}
 				region = ciphertrust_aws_kms.kms.regions[1]
 				replicate_key = {
@@ -898,12 +1059,6 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 						RegionOneTagKey = "RegionOneTagValue"
 					}
 				}
-				key_policy = {
-					key_admins        = ["%s"]
-					key_users         = ["%s"]
-					key_admins_roles  = ["%s"]
-					key_users_roles   = ["%s"]
-				}
 				region         = ciphertrust_aws_kms.kms.regions[1]
 				replicate_key = {
 					key_id = ciphertrust_aws_key.primary_key.id
@@ -914,10 +1069,8 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
 	keyResource := "ciphertrust_aws_key.primary_key"
 	replicaResource := "ciphertrust_aws_key.replica"
-	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
-	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB,
-		replicaAlias, awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
+	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias)
+	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -926,7 +1079,7 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				Config: createResources,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
@@ -934,14 +1087,10 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
 
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
-					resource.TestCheckResourceAttr(replicaResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(replicaResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource, "key_users.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.#", "0"),
+					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.#", "0"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.0", replicaAlias),
@@ -952,12 +1101,6 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 				),
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						replicaResource,
-						tfjsonpath.New("aws_param").AtMapKey("policy"),
-						knownvalue.StringRegexp(regexp.MustCompile(awsKeyUsers[0]))),
-				},
 			},
 			{
 				// Update state before import as primary region has changed. The Check
@@ -966,7 +1109,7 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				Config: createResources,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),

@@ -13,6 +13,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+var (
+	awsKeySpecs = []string{"SYMMETRIC_DEFAULT",
+		"RSA_2048", "RSA_3072", "RSA_4096",
+		"ECC_NIST_P256", "ECC_NIST_P384", "ECC_NIST_P521", "ECC_SECG_P256K1",
+		"HMAC_224", "HMAC_256", "HMAC_384", "HMAC_512"}
+)
+
 type AWSCustomKeyStoreParamTFSDK struct {
 	CloudHSMClusterID              types.String `tfsdk:"cloud_hsm_cluster_id"`
 	ConnectionState                types.String `tfsdk:"connection_state"`
@@ -920,6 +927,22 @@ func nativeKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 // require customer-supplied key material.
 func byokAwsParamSchemaAttributes() map[string]schema.Attribute {
 	attrs := commonAwsParamSchemaAttributes()
+	attrs["alias"] = schema.SetAttribute{
+		Optional:    true,
+		Computed:    true,
+		ElementType: types.StringType,
+		Description: "(Updatable) Alias(es) of the key. At most one alias may be set at creation time. " +
+			"Additional aliases can be added via update after the key has been created. " +
+			"To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.",
+		Validators: []validator.Set{
+			setvalidator.ValueStringsAre(
+				stringvalidator.RegexMatches(
+					regexp.MustCompile(`^[a-zA-Z0-9/_-]+$`),
+					"must only contain alphanumeric characters, forward slashes, underscores, and dashes",
+				),
+			),
+		},
+	}
 	attrs["valid_to"] = schema.StringAttribute{
 		Optional:    true,
 		Computed:    true,
@@ -989,7 +1012,7 @@ func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 func enableRotationSchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "(Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive.",
+		Description: "(Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created.",
 		Attributes: map[string]schema.Attribute{
 			"job_config_id": schema.StringAttribute{
 				Required:    true,

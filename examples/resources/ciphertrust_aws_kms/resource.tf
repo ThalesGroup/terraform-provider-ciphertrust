@@ -1,31 +1,29 @@
 # This resource is dependent on a ciphertrust_aws_connection resource
 resource "ciphertrust_aws_connection" "aws_connection" {
-  name = "aws_connection_name"
+  name = "name"
 }
 
-# Define a kms resource without using the ciphertrust_aws_account_details data-source and assign it to the connection
-resource "ciphertrust_aws_kms" "kms" {
-  account_id     = "aws-account-id"
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions        = ["aws-region", "aws-region"]
-}
-
-# Define a kms resource using the ciphertrust_aws_account_details data-source and assign it to the connection
+# Define a KMS resource using the ciphertrust_aws_account_details data-source
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
 }
 
-resource "ciphertrust_aws_kms" "kms_with_details" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions = [data.ciphertrust_aws_account_details.account_details.regions[0],
-  data.ciphertrust_aws_account_details.account_details.regions[1]]
+# Create a KMS resource
+resource "ciphertrust_aws_kms" "kms" {
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = "name"
+  regions = [
+    data.ciphertrust_aws_account_details.account_details.regions[0],
+    data.ciphertrust_aws_account_details.account_details.regions[1],
+  ]
 }
 
-# Define an AWS key
-resource "ciphertrust_aws_key" "aws_key" {
-  kms_id = ciphertrust_aws_kms.kms.id
-  region = ciphertrust_aws_kms.kms.regions[0]
+# Archive an existing KMS by setting archive = true via update.
+resource "ciphertrust_aws_kms" "kms" {
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = "name"
+  regions       = [data.ciphertrust_aws_account_details.account_details.regions[0]]
+  archive       = true
 }

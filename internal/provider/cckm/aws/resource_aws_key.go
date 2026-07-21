@@ -27,31 +27,17 @@ import (
 )
 
 var (
-	_           resource.Resource                = &resourceAWSKey{}
-	_           resource.ResourceWithConfigure   = &resourceAWSKey{}
-	_           resource.ResourceWithImportState = &resourceAWSKey{}
-	_           resource.ResourceWithModifyPlan  = &resourceAWSKey{}
-	awsKeySpecs                                  = []string{"SYMMETRIC_DEFAULT",
-		"RSA_2048",
-		"RSA_3072",
-		"RSA_4096",
-		"ECC_NIST_P256",
-		"ECC_NIST_P384",
-		"ECC_NIST_P521",
-		"ECC_SECG_P256K1",
-		"HMAC_224",
-		"HMAC_256",
-		"HMAC_384",
-		"HMAC_512"}
+	_ resource.Resource                = &resourceAWSKey{}
+	_ resource.ResourceWithConfigure   = &resourceAWSKey{}
+	_ resource.ResourceWithImportState = &resourceAWSKey{}
+	_ resource.ResourceWithModifyPlan  = &resourceAWSKey{}
 )
 
 const (
 	policyTemplateTagKey                 = "cckm_policy_template_id"
-	longAwsKeyOpSleep                    = 20
 	shortAwsKeyOpSleep                   = 5
 	awsValidToRegEx                      = `^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$`
 	awsValidToFormatMsg                  = "must conform to the following example 2027-07-03T14:24:00Z"
-	refreshTokenSeconds                  = 200
 	autoRotationWaitSeconds              = 180
 	updatePrimaryRegionWaitSeconds       = 180
 	enableDisableAutoRotationWaitSeconds = 180
@@ -107,13 +93,13 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"auto_rotate": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "(Updatable) Enable AWS autorotation of the key. Auto-Rotation only is only applicable to native symmetric keys.",
+				Description: "(Updatable) Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.",
 				Default:     booldefault.StaticBool(false),
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false during key creation; configure via update after the key has been created.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
@@ -287,15 +273,10 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 	}
 }
 
-// Create creates a new AWS key - via native creation or replication -
-// and sets Terraform state. After the key itself is successfully created, the following post-creation
-// operations are attempted but only produce warnings (not errors) on failure, ensuring the key is
-// always saved to state regardless of any subsequent partial failure:
-//   - Adding additional aliases beyond the first (the first alias is set during key creation)
-//   - Enabling or disabling AWS autorotation (enable_auto_rotate / auto_rotation_period_in_days)
-//   - Registering the key with a CipherTrust Manager scheduled rotation job (enable_rotation block)
-//   - Disabling the key if enable_key = false
-//   - Refreshing final state from the API after all post-creation operations
+// Create creates a new AWS key - via native creation or replication - and sets Terraform state.
+// Only the first alias in aws_param.alias is applied during creation; all other post-create
+// configuration (additional aliases, auto-rotation, rotation scheduler, enable_key) must be
+// applied in a subsequent update. ModifyPlan rejects those attributes at plan time if set during create.
 func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Create]["+id+"]")
@@ -344,35 +325,6 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 
 	// Don't return errors after this
 
-	if planParam := nativeKeyAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics); planParam != nil && len(planParam.Alias.Elements()) > 1 {
-		var diags diag.Diagnostics
-		addAliases(ctx, r.client, id, plan.ID.ValueString(), planParam.Alias, response, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if plan.AutoRotate.ValueBool() {
-		var diags diag.Diagnostics
-		r.enableDisableAutoRotation(ctx, id, &plan, response, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if plan.EnableRotation != nil {
-		var diags diag.Diagnostics
-		enableKeyRotationJob(ctx, id, r.client, plan.ID.ValueString(), plan.EnableRotation, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		keyID := gjson.Get(response, "id").String()
-		disableKey(ctx, id, r.client, keyID, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
 	keyID := plan.ID.ValueString()
 	var err error
 	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
@@ -650,13 +602,53 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	tflog.Debug(ctx, "[resource_aws_key.go -> Delete][response:"+redactAWSResponse(response))
 }
 
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
+// ModifyPlan runs on every plan. During create it rejects attributes that require post-create
+// operations. During update it rejects changes to immutable attributes.
 func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// Destroy: nothing to validate.
+	if req.Plan.Raw.IsNull() {
 		return
 	}
+
+	// Create: reject attributes that cannot be applied until after the key exists.
+	if req.State.Raw.IsNull() {
+		var plan AWSKeyTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		planParam := nativeKeyAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if planParam != nil && len(planParam.Alias.Elements()) > 1 {
+			resp.Diagnostics.AddError(
+				"Additional aliases cannot be set during key creation",
+				"Create the key first, then run terraform apply again to add more aliases.",
+			)
+		}
+		if !plan.AutoRotate.IsNull() && !plan.AutoRotate.IsUnknown() && plan.AutoRotate.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Auto-rotation cannot be enabled during key creation",
+				"Create the key first, then run terraform apply again to enable auto-rotation.",
+			)
+		}
+		if plan.EnableRotation != nil {
+			resp.Diagnostics.AddError(
+				"Rotation scheduler cannot be configured during key creation",
+				"Create the key first, then run terraform apply again to configure the scheduler.",
+			)
+		}
+		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Key cannot be disabled during key creation",
+				"Create the key first, then run terraform apply again to disable the key.",
+			)
+		}
+		return
+	}
+
+	// Update: reject changes to immutable attributes.
 	var plan, state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
