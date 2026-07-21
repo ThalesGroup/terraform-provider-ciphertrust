@@ -458,21 +458,18 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// Hydrate start_date/end_date from the GET response.
-	// If the user did not set the field (null in plan), keep it null in state.
-	// If the user set it to "" (explicit clear on create), CM omits it — reflect as "".
+	// State-guarded hydration: only hydrate start_date/end_date when plan (config) is
+	// non-null. When config omits the field (null), leave state null — the no-op semantic.
 	if !plan.StartDate.IsNull() {
 		if r := gjson.Get(response, "start_date"); r.Exists() {
 			plan.StartDate = types.StringValue(r.String())
-		} else {
-			plan.StartDate = types.StringValue("")
 		}
+		// else: plan.StartDate stays as the config value (e.g. "" for an explicit clear
+		// that wasn't sent on Create)
 	}
 	if !plan.EndDate.IsNull() {
 		if r := gjson.Get(response, "end_date"); r.Exists() {
 			plan.EndDate = types.StringValue(r.String())
-		} else {
-			plan.EndDate = types.StringValue("")
 		}
 	}
 
@@ -512,11 +509,10 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// State-guarded hydration for start_date/end_date (not handled by getParamsFromResponse).
-	// state.StartDate/EndDate still hold the prior-state values here because
-	// getParamsFromResponse does not touch these fields.
-	// Rule: if null in prior state (user never configured), leave null to avoid drift.
-	// Otherwise hydrate from CM; if CM omits the field, write "" (explicit-clear state).
+	// State-guarded hydration: skip when state is null (user never set the field).
+	// This prevents drift for users who never configured start_date/end_date.
+	// When state is non-null (user set or cleared the field), hydrate from CM;
+	// if CM omits the field (cleared), write "" to reflect the cleared state.
 	if !state.StartDate.IsNull() {
 		if r := gjson.Get(response, "start_date"); r.Exists() {
 			state.StartDate = types.StringValue(r.String())
@@ -637,10 +633,8 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// Hydrate start_date/end_date from the PATCH response (not handled by getParamsFromResponse).
-	// plan.StartDate/EndDate still hold the incoming plan values here.
-	// Null-is-no-op: if null in plan (user not managing), keep null in state.
-	// Otherwise hydrate from CM; if CM omits the field, write "" (explicit-clear state).
+	// State-guarded hydration from PATCH response: only hydrate when plan is non-null.
+	// When config omits the field (null), state stays null — preserves the no-op semantic.
 	if !plan.StartDate.IsNull() {
 		if r := gjson.Get(response, "start_date"); r.Exists() {
 			plan.StartDate = types.StringValue(r.String())
@@ -898,9 +892,8 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	plan.Disabled = types.BoolValue(gjson.Get(response, "disabled").Bool())
 	plan.Description = types.StringValue(gjson.Get(response, "description").String())
 	plan.RunOn = types.StringValue(gjson.Get(response, "run_on").String())
-	// start_date and end_date are intentionally NOT hydrated here.
-	// Each call site (Create, Read, Update) applies its own null-guarded hydration
-	// so that the correct prior-state or plan variable drives the null check.
+	// start_date and end_date are hydrated unconditionally at each call site
+	// (Create, Read, Update) after this function returns.
 
 	// Derive the operation from the API response (source of truth) so that
 	// Read correctly hydrates params even when plan.Operation is unset or stale.
