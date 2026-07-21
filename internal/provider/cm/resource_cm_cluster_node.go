@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -168,14 +169,23 @@ func (r *resourceCMClusterNode) Schema(_ context.Context, _ resource.SchemaReque
 			"node_count": schema.Int64Attribute{
 				Computed:    true,
 				Description: "Total number of nodes in the cluster after this node has joined.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"status_code": schema.StringAttribute{
 				Computed:    true,
 				Description: "Short cluster status code (e.g. 'r' = ready).",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"status_description": schema.StringAttribute{
 				Computed:    true,
 				Description: "Human-readable cluster status description.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}

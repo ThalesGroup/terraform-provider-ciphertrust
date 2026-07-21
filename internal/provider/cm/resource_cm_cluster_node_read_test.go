@@ -11,9 +11,79 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
+
+// Test_CM_ClusterNodeSchema_ComputedFieldsUseStateForUnknown guards against the same
+// bug fixed on ciphertrust_cluster's raft_status: a Computed attribute with no
+// UseStateForUnknown() can get marked unknown on a plan where anything else on the
+// resource differs, producing a spurious diff unrelated to the field itself.
+// node_count/status_code/status_description lacked it; id and node_id already had it.
+func Test_CM_ClusterNodeSchema_ComputedFieldsUseStateForUnknown(t *testing.T) {
+	r := &resourceCMClusterNode{}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	t.Run("node_count", func(t *testing.T) {
+		attr, ok := schemaResp.Schema.Attributes["node_count"].(schema.Int64Attribute)
+		if !ok {
+			t.Fatalf("node_count is not a schema.Int64Attribute")
+		}
+		if len(attr.PlanModifiers) == 0 {
+			t.Fatal("node_count has no plan modifiers — an unconfigured Computed-only " +
+				"attribute will be marked unknown on every plan, causing a perpetual " +
+				"non-empty refresh plan even when nothing changed")
+		}
+		req := planmodifier.Int64Request{
+			StateValue:  types.Int64Value(2),
+			PlanValue:   types.Int64Unknown(),
+			ConfigValue: types.Int64Null(),
+		}
+		var resp planmodifier.Int64Response
+		resp.PlanValue = req.PlanValue
+		attr.PlanModifiers[0].PlanModifyInt64(ctx, req, &resp)
+		if !resp.PlanValue.Equal(types.Int64Value(2)) {
+			t.Errorf("expected plan modifier to carry forward the known state value 2 "+
+				"into the unknown plan value, got %v", resp.PlanValue)
+		}
+	})
+
+	for _, name := range []string{"status_code", "status_description"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			attr, ok := schemaResp.Schema.Attributes[name].(schema.StringAttribute)
+			if !ok {
+				t.Fatalf("%s is not a schema.StringAttribute", name)
+			}
+			if len(attr.PlanModifiers) == 0 {
+				t.Fatalf("%s has no plan modifiers — an unconfigured Computed-only "+
+					"attribute will be marked unknown on every plan, causing a perpetual "+
+					"non-empty refresh plan even when nothing changed", name)
+			}
+			req := planmodifier.StringRequest{
+				StateValue:  types.StringValue("r"),
+				PlanValue:   types.StringUnknown(),
+				ConfigValue: types.StringNull(),
+			}
+			var resp planmodifier.StringResponse
+			resp.PlanValue = req.PlanValue
+			attr.PlanModifiers[0].PlanModifyString(ctx, req, &resp)
+			if !resp.PlanValue.Equal(types.StringValue("r")) {
+				t.Errorf("expected plan modifier to carry forward the known state value "+
+					"\"r\" into the unknown plan value, got %v", resp.PlanValue)
+			}
+		})
+	}
+}
 
 // Test_CM_ClusterNodeRead_PublicAddressDrift is an end-to-end unit test proving that
 // Read() now surfaces public_address drift. Before the fix, Read() only talked to the
