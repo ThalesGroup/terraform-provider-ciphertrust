@@ -28,6 +28,12 @@ type dataSourcePrometheus struct {
 	client *common.Client
 }
 
+type dataSourcePrometheusModel struct {
+	ID      types.String `tfsdk:"id"`
+	Token   types.String `tfsdk:"token"`
+	Enabled types.Bool   `tfsdk:"enabled"`
+}
+
 func (d *dataSourcePrometheus) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_cm_prometheus_status"
 }
@@ -35,6 +41,9 @@ func (d *dataSourcePrometheus) Metadata(_ context.Context, req datasource.Metada
 func (d *dataSourcePrometheus) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
 			"token": schema.StringAttribute{
 				Computed:  true,
 				Sensitive: true,
@@ -57,9 +66,18 @@ func (d *dataSourcePrometheus) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	state := &CMPrometheusMetricsConfigTFSDK{
+	tokenVal := gjson.Get(response, "token").String()
+	var token types.String
+	if tokenVal == "" {
+		token = types.StringNull()
+	} else {
+		token = types.StringValue(tokenVal)
+	}
+
+	state := &dataSourcePrometheusModel{
+		ID:      types.StringValue("prometheus-status"),
 		Enabled: types.BoolValue(gjson.Get(response, "enabled").Bool()),
-		Token:   types.StringValue(gjson.Get(response, "token").String()),
+		Token:   token,
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_prometheus.go -> Read]["+id+"]")

@@ -30,7 +30,10 @@ type dataSourceCertificateAuthorities struct {
 }
 
 type certificateAuthoritiesDataSourceModel struct {
+	ID      types.String                             `tfsdk:"id"`
 	Filters types.Map                                `tfsdk:"filters"`
+	Limit   types.Int64                              `tfsdk:"limit"`
+	Skip    types.Int64                              `tfsdk:"skip"`
 	CAs     []CMCertificateAuthoritiesListModelTFSDK `tfsdk:"cas"`
 }
 
@@ -41,6 +44,9 @@ func (d *dataSourceCertificateAuthorities) Metadata(_ context.Context, req datas
 func (d *dataSourceCertificateAuthorities) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
 			"cas": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -76,6 +82,12 @@ func (d *dataSourceCertificateAuthorities) Schema(_ context.Context, _ datasourc
 				ElementType: types.StringType,
 				Optional:    true,
 			},
+			"limit": schema.Int64Attribute{
+				Optional: true,
+			},
+			"skip": schema.Int64Attribute{
+				Optional: true,
+			},
 		},
 	}
 }
@@ -87,12 +99,23 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 	req.Config.Get(ctx, &state)
 	var kvs []string
 
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, url.QueryEscape(v.(types.String).ValueString()))
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, url.QueryEscape(v.(types.String).ValueString()))
+			kvs = append(kvs, kv)
+		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_LOCAL_CA+"/?"+strings.Join(kvs, "")+"skip=0&limit=10")
+	limitVal := int64(1000)
+	if !state.Limit.IsNull() && !state.Limit.IsUnknown() {
+		limitVal = state.Limit.ValueInt64()
+	}
+	skipVal := int64(0)
+	if !state.Skip.IsNull() && !state.Skip.IsUnknown() {
+		skipVal = state.Skip.ValueInt64()
+	}
+
+	jsonStr, err := d.client.GetAll(ctx, id, fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_LOCAL_CA, strings.Join(kvs, ""), skipVal, limitVal))
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_certificate_authorities.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -114,6 +137,7 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 		return
 	}
 
+	state.CAs = []CMCertificateAuthoritiesListModelTFSDK{}
 	for _, ca := range cas {
 		caState := CMCertificateAuthoritiesListModelTFSDK{
 			ID:           types.StringValue(ca.ID),
@@ -128,6 +152,8 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 
 		state.CAs = append(state.CAs, caState)
 	}
+
+	state.ID = types.StringValue("local-ca-list")
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_certificate_authorities.go -> Read]["+id+"]")
 	diags := resp.State.Set(ctx, &state)
