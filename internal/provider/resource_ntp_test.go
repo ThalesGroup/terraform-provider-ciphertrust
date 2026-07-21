@@ -342,3 +342,77 @@ resource "ciphertrust_ntp" "test" {
 		},
 	})
 }
+
+// Test_CM_AccCMNTP_KeyNullTransitionForcesReplacement verifies that transitioning
+// key or key_type to null successfully schedules resource replacement (Option A).
+func Test_CM_AccCMNTP_KeyNullTransitionForcesReplacement(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time9.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time9.google.com"
+  key      = "secretkey123456"
+  key_type = "SHA-256"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time9.google.com"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "key", "secretkey123456"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "key_type", "SHA-256"),
+				),
+			},
+			{
+				// Transitioning key and key_type to null must schedule a replacement.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host     = "time9.google.com"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMNTP_DefaultKeyTypeNoDrift verifies that omitting key_type
+// keeps it as null in state, avoiding perpetual drift and recreation plan.
+func Test_CM_AccCMNTP_DefaultKeyTypeNoDrift(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { ntpSweep("time10.google.com") },
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time10.google.com"
+  key  = "secretkey123456"
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "host", "time10.google.com"),
+					resource.TestCheckResourceAttr("ciphertrust_ntp.test", "key", "secretkey123456"),
+					resource.TestCheckNoResourceAttr("ciphertrust_ntp.test", "key_type"),
+				),
+			},
+			{
+				// No change, no plan drift should be detected.
+				Config: providerConfig + `
+resource "ciphertrust_ntp" "test" {
+  host = "time10.google.com"
+  key  = "secretkey123456"
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

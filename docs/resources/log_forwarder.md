@@ -65,6 +65,36 @@ resource "ciphertrust_log_forwarder" "log_forwarder_1" {
     }
 }
 
+# Loki Log Forwarder Example
+resource "ciphertrust_log_forwarder" "loki_forwarder" {
+    connection_id = "loki-connection-uuid"
+    name          = "loki_test"
+    type          = "loki"
+    loki_params = {
+        labels = {
+            activity_kmip        = "jobs=activity_kmip"
+            activity_nae         = "jobs=activity_nae"
+            server_audit_records = "jobs=server_audit_records"
+            client_audit_records = "jobs=client_audit_records"
+        }
+    }
+}
+
+# Syslog Log Forwarder Example
+resource "ciphertrust_log_forwarder" "syslog_forwarder" {
+    connection_id = "syslog-connection-uuid"
+    name          = "syslog_test"
+    type          = "syslog"
+    syslog_params = {
+        forward_logs = {
+            activity_kmip        = true
+            activity_nae         = true
+            server_audit_records = true
+            client_audit_records = true
+        }
+    }
+}
+
 # Output the unique ID of the created log forwarder
 output "log_forwarder_id" {
     value = ciphertrust_log_forwarder.log_forwarder_1.id
@@ -76,15 +106,15 @@ output "log_forwarder_id" {
 
 ### Required
 
-- `connection_id` (String) connection id of log-forwarder connection (elasticsearch, loki, syslog).
+- `connection_id` (String) (Immutable) connection id of log-forwarder connection (elasticsearch, loki, syslog).
 - `name` (String) Unique name of the Log Forwarder.
 - `type` (String) (Immutable) Type of the log forwarder. Allowed values: elasticsearch, loki, syslog.
 
 ### Optional
 
 - `elasticsearch_params` (Attributes) Optional attributes specifying extra configuration fields specific to Elasticsearch (see [below for nested schema](#nestedatt--elasticsearch_params))
-- `loki_params` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--loki_params))
-- `syslog_params` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--syslog_params))
+- `loki_params` (Attributes) Optional attributes specifying extra configuration fields specific to Loki. (see [below for nested schema](#nestedatt--loki_params))
+- `syslog_params` (Attributes) Optional attributes specifying log forwarding flags specific to Syslog. (see [below for nested schema](#nestedatt--syslog_params))
 
 ### Read-Only
 
@@ -117,7 +147,7 @@ Optional:
 
 Optional:
 
-- `labels` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--loki_params--labels))
+- `labels` (Attributes) Optional attributes specifying labels specific to Loki. (see [below for nested schema](#nestedatt--loki_params--labels))
 
 <a id="nestedatt--loki_params--labels"></a>
 ### Nested Schema for `loki_params.labels`
@@ -136,7 +166,7 @@ Optional:
 
 Optional:
 
-- `forward_logs` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--syslog_params--forward_logs))
+- `forward_logs` (Attributes) Flags specifying which logs should be forwarded to Syslog. (see [below for nested schema](#nestedatt--syslog_params--forward_logs))
 
 <a id="nestedatt--syslog_params--forward_logs"></a>
 ### Nested Schema for `syslog_params.forward_logs`
