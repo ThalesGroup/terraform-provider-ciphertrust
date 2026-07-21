@@ -7,7 +7,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"strings"
-	"time"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -15,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -119,17 +119,6 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 						"cckm_key_rotation_params": schema.SingleNestedAttribute{
 							Computed: true,
 							Attributes: map[string]schema.Attribute{
-								"aws_params": schema.SingleNestedAttribute{
-									Computed: true,
-									Attributes: map[string]schema.Attribute{
-										"retain_alias": schema.BoolAttribute{
-											Computed: true,
-										},
-										"rotate_material": schema.BoolAttribute{
-											Computed: true,
-										},
-									},
-								},
 								"cloud_name": schema.StringAttribute{
 									Computed: true,
 								},
@@ -140,6 +129,12 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 									Computed: true,
 								},
 								"rotation_after": schema.StringAttribute{
+									Computed: true,
+								},
+								"aws_retain_alias": schema.BoolAttribute{
+									Computed: true,
+								},
+								"rotate_material": schema.BoolAttribute{
 									Computed: true,
 								},
 							},
@@ -204,51 +199,60 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	schedulerJobConfigs := []CreateJobConfigParamsListJSON{}
+	gjson.Parse(jsonStr).ForEach(func(_, item gjson.Result) bool {
+		jobJSON := item.Raw
 
-	err = json.Unmarshal([]byte(jsonStr), &schedulerJobConfigs)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read scheduler job configs from CM",
-			err.Error(),
-		)
-		return
-	}
+		var startDate, endDate types.String
+		if r := gjson.Get(jobJSON, "start_date"); r.Exists() {
+			startDate = types.StringValue(r.String())
+		} else {
+			startDate = types.StringNull()
+		}
+		if r := gjson.Get(jobJSON, "end_date"); r.Exists() {
+			endDate = types.StringValue(r.String())
+		} else {
+			endDate = types.StringNull()
+		}
 
-	for _, jobs := range schedulerJobConfigs {
 		schedulerJobs := JobConfigParamsTFSDK{
 			CreateJobConfigParamsTFSDKCommon: CreateJobConfigParamsTFSDKCommon{
-				ID:          types.StringValue(jobs.ID),
-				URI:         types.StringValue(jobs.URI),
-				Account:     types.StringValue(jobs.Account),
-				Application: types.StringValue(jobs.Application),
-				DevAccount:  types.StringValue(jobs.DevAccount),
-				CreatedAt:   types.StringValue(jobs.CreatedAt),
-				UpdatedAt:   types.StringValue(jobs.UpdatedAt),
-				Name:        types.StringValue(jobs.Name),
-				Description: types.StringValue(jobs.Description),
-				Operation:   types.StringValue(jobs.Operation),
-				RunAt:       types.StringValue(jobs.RunAt),
-				RunOn:       types.StringValue(jobs.RunOn),
-				Disabled:    types.BoolValue(jobs.Disabled),
-				StartDate:   types.StringValue(jobs.StartDate.Format(time.RFC3339)),
-				EndDate:     types.StringValue(jobs.EndDate.Format(time.RFC3339)),
+				ID:          types.StringValue(gjson.Get(jobJSON, "id").String()),
+				URI:         types.StringValue(gjson.Get(jobJSON, "uri").String()),
+				Account:     types.StringValue(gjson.Get(jobJSON, "account").String()),
+				Application: types.StringValue(gjson.Get(jobJSON, "application").String()),
+				DevAccount:  types.StringValue(gjson.Get(jobJSON, "devAccount").String()),
+				CreatedAt:   types.StringValue(gjson.Get(jobJSON, "createdAt").String()),
+				UpdatedAt:   types.StringValue(gjson.Get(jobJSON, "updatedAt").String()),
+				Name:        types.StringValue(gjson.Get(jobJSON, "name").String()),
+				Description: types.StringValue(gjson.Get(jobJSON, "description").String()),
+				Operation:   types.StringValue(gjson.Get(jobJSON, "operation").String()),
+				RunAt:       types.StringValue(gjson.Get(jobJSON, "run_at").String()),
+				RunOn:       types.StringValue(gjson.Get(jobJSON, "run_on").String()),
+				Disabled:    types.BoolValue(gjson.Get(jobJSON, "disabled").Bool()),
+				StartDate:   startDate,
+				EndDate:     endDate,
 			},
 		}
 
-		switch jobs.Operation {
+		operation := gjson.Get(jobJSON, "operation").String()
+		jobConfigParamsRaw := json.RawMessage("{}")
+		if r := gjson.Get(jobJSON, "job_config_params"); r.Exists() {
+			jobConfigParamsRaw = json.RawMessage(r.Raw)
+		}
+
+		switch operation {
 		case "database_backup":
-			getDataBaseBackupParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getDataBaseBackupParams(ctx, id, &schedulerJobs, jobConfigParamsRaw, &resp.Diagnostics)
 		case "cckm_key_rotation":
-			getCCKMKeyRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMKeyRotationParams(ctx, id, &schedulerJobs, jobConfigParamsRaw, &resp.Diagnostics)
 		case "cckm_synchronization":
-			getCCKMSynchronizationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMSynchronizationParams(ctx, id, &schedulerJobs, jobConfigParamsRaw, &resp.Diagnostics)
 		case "cckm_xks_credential_rotation":
-			getCCKMCredentialRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMCredentialRotationParams(ctx, id, &schedulerJobs, jobConfigParamsRaw, &resp.Diagnostics)
 		}
 		state.Scheduler = append(state.Scheduler, schedulerJobs)
-	}
+		return true
+	})
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Read]["+id+"]")
 	diags := resp.State.Set(ctx, &state)
@@ -334,31 +338,38 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 }
 
 func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
-	var cckmKeyRotationParams CCKMKeyRotationParamsJSON
-	err := json.Unmarshal(jobConfigParams, &cckmKeyRotationParams)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
-		diags.AddError(
-			"Unable to read scheduler cckm key rotation params",
-			err.Error(),
-		)
-		return
+	paramsJSON := string(jobConfigParams)
+	keyRotationParams := &CCKMKeyRotationParamsDatasourceTFSDK{}
+
+	if r := gjson.Get(paramsJSON, "cloud_name"); r.Exists() {
+		keyRotationParams.CloudName = types.StringValue(r.String())
+	} else {
+		keyRotationParams.CloudName = types.StringNull()
 	}
-	keyRotationParams := &CCKMKeyRotationParamsDatasourceTFSDK{
-		CloudName: types.StringValue(cckmKeyRotationParams.CloudName),
-		AwsParams: CCKMAwsKeyRotationParamsDatasourceTFSDK{
-			RetainAlias:    types.BoolValue(cckmKeyRotationParams.RetainAlias),
-			RotateMaterial: types.BoolValue(cckmKeyRotationParams.RotateMaterial),
-		},
+	if r := gjson.Get(paramsJSON, "expiration"); r.Exists() {
+		keyRotationParams.Expiration = types.StringValue(r.String())
+	} else {
+		keyRotationParams.Expiration = types.StringNull()
 	}
-	if cckmKeyRotationParams.Expiration != nil {
-		keyRotationParams.Expiration = types.StringValue(*cckmKeyRotationParams.Expiration)
+	if r := gjson.Get(paramsJSON, "expire_in"); r.Exists() {
+		keyRotationParams.ExpireIn = types.StringValue(r.String())
+	} else {
+		keyRotationParams.ExpireIn = types.StringNull()
 	}
-	if cckmKeyRotationParams.ExpireIn != nil {
-		keyRotationParams.ExpireIn = types.StringValue(*cckmKeyRotationParams.ExpireIn)
+	if r := gjson.Get(paramsJSON, "rotation_after"); r.Exists() {
+		keyRotationParams.RotationAfter = types.StringValue(r.String())
+	} else {
+		keyRotationParams.RotationAfter = types.StringNull()
 	}
-	if cckmKeyRotationParams.RotationAfter != nil {
-		keyRotationParams.RotationAfter = types.StringValue(*cckmKeyRotationParams.RotationAfter)
+	if r := gjson.Get(paramsJSON, "aws_param.retain_alias"); r.Exists() {
+		keyRotationParams.AWSRetainAlias = types.BoolValue(r.Bool())
+	} else {
+		keyRotationParams.AWSRetainAlias = types.BoolNull()
+	}
+	if r := gjson.Get(paramsJSON, "aws_param.rotate_material"); r.Exists() {
+		keyRotationParams.RotateMaterial = types.BoolValue(r.Bool())
+	} else {
+		keyRotationParams.RotateMaterial = types.BoolNull()
 	}
 	schedulerJobs.CCKMKeyRotationParams = keyRotationParams
 }

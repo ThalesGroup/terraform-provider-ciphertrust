@@ -64,8 +64,8 @@ output "ntp_server_host" {
 
 ### Optional
 
-- `key` (String) Symmetric key value to be used for authenticated NTP servers. Changing this value forces replacement of the NTP resource.
-- `key_type` (String) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing this value forces replacement of the NTP resource.
+- `key` (String) (Immutable) NTP authentication key value. Cannot be changed after creation.
+- `key_type` (String) (Immutable) NTP authentication key type (e.g. SHA-256). Cannot be changed after creation.
 
 ### Read-Only
 
