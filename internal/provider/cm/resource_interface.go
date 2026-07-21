@@ -730,9 +730,21 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 	// Nested: trusted_cas — only hydrate when user configured it (state non-nil).
 	if state.TrustedCAs != nil {
 		if tcResult := gjson.Get(response, "trusted_cas"); tcResult.Exists() && tcResult.Type != gjson.Null {
+			extResult := gjson.Get(response, "trusted_cas.external")
 			var ext []types.String
-			for _, v := range gjson.Get(response, "trusted_cas.external").Array() {
-				ext = append(ext, types.StringValue(v.String()))
+			if extResult.Exists() && extResult.IsArray() {
+				for _, v := range extResult.Array() {
+					ext = append(ext, types.StringValue(v.String()))
+				}
+			} else {
+				// CM omits 'external' key when the list is empty (confirmed live: GET nae_all_9851
+				// returned trusted_cas with only 'local' key). 'external' is Required within
+				// trusted_cas — preserve prior state value to prevent perpetual drift.
+				if state.TrustedCAs.External != nil {
+					ext = state.TrustedCAs.External
+				} else {
+					ext = []types.String{}
+				}
 			}
 			var loc []types.String
 			for _, v := range gjson.Get(response, "trusted_cas.local").Array() {
@@ -824,7 +836,14 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			if r := gjson.Get(response, "local_auto_gen_attributes.uid"); r.Exists() && r.String() != "" {
 				laga.UID = types.StringValue(r.String())
 			} else {
-				laga.UID = types.StringNull()
+				// CM never returns 'uid' in GET responses (confirmed live: nae_all_9852 GET omitted it).
+				// Preserve the configured value from prior state to prevent perpetual drift.
+				// state.LocalAutogenAttributes is non-nil here (guarded by outer if block at line 752).
+				if !state.LocalAutogenAttributes.UID.IsNull() {
+					laga.UID = state.LocalAutogenAttributes.UID
+				} else {
+					laga.UID = types.StringNull()
+				}
 			}
 			state.LocalAutogenAttributes = &laga
 		} else {
@@ -905,10 +924,13 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	// auto_registration (Boolean)
+	// Only send the explicit false when state had true — avoids a no-op false when
+	// state was already false or null (CM interprets absent key as "preserve").
 	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
 		payload["auto_registration"] = plan.AutoRegistration.ValueBool()
-	} else if !state.AutoRegistration.IsNull() {
-		payload["auto_registration"] = false // Reset/empty
+	} else if !state.AutoRegistration.IsNull() && state.AutoRegistration.ValueBool() {
+		// User removed auto_registration from config; prior state was true — clear in CM.
+		payload["auto_registration"] = false
 	}
 
 	// cert_user_field (String)
@@ -1025,7 +1047,10 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload["network_interface"] = plan.NetworkInterface.ValueString()
 	}
 
-	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
+	// registration_token: only include in payload when set in the plan.
+	// When absent from plan (user removed from config), the key is omitted so CM preserves
+	// its existing value. TF state reflects null (matching config) — no drift.
+	if !plan.RegToken.IsNull() && !plan.RegToken.IsUnknown() {
 		payload["registration_token"] = plan.RegToken.ValueString()
 	}
 
@@ -1081,6 +1106,18 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload["trusted_cas"] = &trustedCAsUpd
 	}
 
+	// certificate: only include in payload when the plan has the block.
+	// When absent from plan (user removed from config), the key is omitted so CM preserves
+	// its existing certificate. TF state reflects nil (matching config) — no drift.
+	if plan.Certificate != nil {
+		payload["certificate"] = &CMInterfacCertificateJSON{
+			CertChain: plan.Certificate.CertChain.ValueString(),
+			Generate:  plan.Certificate.Generate.ValueBool(),
+			Format:    plan.Certificate.Format.ValueString(),
+			Password:  plan.Certificate.Password.ValueString(),
+		}
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+id+"]")
@@ -1108,14 +1145,6 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// Preserve Optional+Computed name from prior state when user has not set it.
 	if plan.Name.IsNull() || plan.Name.IsUnknown() {
 		plan.Name = state.Name
-	}
-	// certificate — write-only; preserve from prior state.
-	if plan.Certificate == nil {
-		plan.Certificate = state.Certificate
-	}
-	// registration_token — write-only; preserve from prior state.
-	if plan.RegToken.IsNull() {
-		plan.RegToken = state.RegToken
 	}
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Update]["+id+"]")
