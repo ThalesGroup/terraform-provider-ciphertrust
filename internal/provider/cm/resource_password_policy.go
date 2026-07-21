@@ -127,38 +127,49 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 		passwordPolicyName = "global"
 	}
 
-	var thresholds []int64
-	for _, int := range plan.FailedLoginsLockoutThresholds {
-		thresholds = append(thresholds, int.ValueInt64())
+	if plan.FailedLoginsLockoutThresholds != nil {
+		var thresholds []int64
+		for _, int := range plan.FailedLoginsLockoutThresholds {
+			thresholds = append(thresholds, int.ValueInt64())
+		}
+		payload.FailedLoginsLockoutThresholds = thresholds
 	}
-	payload.FailedLoginsLockoutThresholds = thresholds
 
-	if plan.InclusiveMaxTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMaxTotalLength = plan.InclusiveMaxTotalLength.ValueInt64()
+	if !plan.InclusiveMaxTotalLength.IsNull() && !plan.InclusiveMaxTotalLength.IsUnknown() {
+		v := plan.InclusiveMaxTotalLength.ValueInt64()
+		payload.InclusiveMaxTotalLength = &v
 	}
-	if plan.InclusiveMinDigits.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinDigits = plan.InclusiveMinDigits.ValueInt64()
+	if !plan.InclusiveMinDigits.IsNull() && !plan.InclusiveMinDigits.IsUnknown() {
+		v := plan.InclusiveMinDigits.ValueInt64()
+		payload.InclusiveMinDigits = &v
 	}
-	if plan.InclusiveMinLowerCase.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinLowerCase = plan.InclusiveMinLowerCase.ValueInt64()
+	if !plan.InclusiveMinLowerCase.IsNull() && !plan.InclusiveMinLowerCase.IsUnknown() {
+		v := plan.InclusiveMinLowerCase.ValueInt64()
+		payload.InclusiveMinLowerCase = &v
 	}
-	if plan.InclusiveMinOther.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinOther = plan.InclusiveMinOther.ValueInt64()
+	if !plan.InclusiveMinOther.IsNull() && !plan.InclusiveMinOther.IsUnknown() {
+		v := plan.InclusiveMinOther.ValueInt64()
+		payload.InclusiveMinOther = &v
 	}
-	if plan.InclusiveMinTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinTotalLength = plan.InclusiveMinTotalLength.ValueInt64()
+	if !plan.InclusiveMinTotalLength.IsNull() && !plan.InclusiveMinTotalLength.IsUnknown() {
+		v := plan.InclusiveMinTotalLength.ValueInt64()
+		payload.InclusiveMinTotalLength = &v
 	}
-	if plan.InclusiveMinUpperCase.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinUpperCase = plan.InclusiveMinUpperCase.ValueInt64()
+	if !plan.InclusiveMinUpperCase.IsNull() && !plan.InclusiveMinUpperCase.IsUnknown() {
+		v := plan.InclusiveMinUpperCase.ValueInt64()
+		payload.InclusiveMinUpperCase = &v
 	}
-	if plan.PasswordChangeMinDays.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordChangeMinDays = plan.PasswordChangeMinDays.ValueInt64()
+	if !plan.PasswordChangeMinDays.IsNull() && !plan.PasswordChangeMinDays.IsUnknown() {
+		v := plan.PasswordChangeMinDays.ValueInt64()
+		payload.PasswordChangeMinDays = &v
 	}
-	if plan.PasswordHistoryThreshold.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordHistoryThreshold = plan.PasswordHistoryThreshold.ValueInt64()
+	if !plan.PasswordHistoryThreshold.IsNull() && !plan.PasswordHistoryThreshold.IsUnknown() {
+		v := plan.PasswordHistoryThreshold.ValueInt64()
+		payload.PasswordHistoryThreshold = &v
 	}
-	if plan.PasswordLifetime.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordLifetime = plan.PasswordLifetime.ValueInt64()
+	if !plan.PasswordLifetime.IsNull() && !plan.PasswordLifetime.IsUnknown() {
+		v := plan.PasswordLifetime.ValueInt64()
+		payload.PasswordLifetime = &v
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -216,6 +227,7 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 					"Error creating User's password policy on CipherTrust Manager: ",
 					"Could not create User's password policy, unexpected error: "+errCreate.Error(),
 				)
+				return
 			} else {
 				response = responseCreate
 			}
@@ -463,38 +475,49 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		passwordPolicyName = "global"
 	}
 
-	var thresholds []int64
-	for _, int := range plan.FailedLoginsLockoutThresholds {
-		thresholds = append(thresholds, int.ValueInt64())
+	if plan.FailedLoginsLockoutThresholds != nil {
+		var thresholds []int64
+		for _, int := range plan.FailedLoginsLockoutThresholds {
+			thresholds = append(thresholds, int.ValueInt64())
+		}
+		payload.FailedLoginsLockoutThresholds = thresholds
 	}
-	payload.FailedLoginsLockoutThresholds = thresholds
 
-	if plan.InclusiveMaxTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMaxTotalLength = plan.InclusiveMaxTotalLength.ValueInt64()
+	if !plan.InclusiveMaxTotalLength.IsNull() && !plan.InclusiveMaxTotalLength.IsUnknown() {
+		v := plan.InclusiveMaxTotalLength.ValueInt64()
+		payload.InclusiveMaxTotalLength = &v
 	}
-	if plan.InclusiveMinDigits.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinDigits = plan.InclusiveMinDigits.ValueInt64()
+	if !plan.InclusiveMinDigits.IsNull() && !plan.InclusiveMinDigits.IsUnknown() {
+		v := plan.InclusiveMinDigits.ValueInt64()
+		payload.InclusiveMinDigits = &v
 	}
-	if plan.InclusiveMinLowerCase.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinLowerCase = plan.InclusiveMinLowerCase.ValueInt64()
+	if !plan.InclusiveMinLowerCase.IsNull() && !plan.InclusiveMinLowerCase.IsUnknown() {
+		v := plan.InclusiveMinLowerCase.ValueInt64()
+		payload.InclusiveMinLowerCase = &v
 	}
-	if plan.InclusiveMinOther.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinOther = plan.InclusiveMinOther.ValueInt64()
+	if !plan.InclusiveMinOther.IsNull() && !plan.InclusiveMinOther.IsUnknown() {
+		v := plan.InclusiveMinOther.ValueInt64()
+		payload.InclusiveMinOther = &v
 	}
-	if plan.InclusiveMinTotalLength.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinTotalLength = plan.InclusiveMinTotalLength.ValueInt64()
+	if !plan.InclusiveMinTotalLength.IsNull() && !plan.InclusiveMinTotalLength.IsUnknown() {
+		v := plan.InclusiveMinTotalLength.ValueInt64()
+		payload.InclusiveMinTotalLength = &v
 	}
-	if plan.InclusiveMinUpperCase.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.InclusiveMinUpperCase = plan.InclusiveMinUpperCase.ValueInt64()
+	if !plan.InclusiveMinUpperCase.IsNull() && !plan.InclusiveMinUpperCase.IsUnknown() {
+		v := plan.InclusiveMinUpperCase.ValueInt64()
+		payload.InclusiveMinUpperCase = &v
 	}
-	if plan.PasswordChangeMinDays.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordChangeMinDays = plan.PasswordChangeMinDays.ValueInt64()
+	if !plan.PasswordChangeMinDays.IsNull() && !plan.PasswordChangeMinDays.IsUnknown() {
+		v := plan.PasswordChangeMinDays.ValueInt64()
+		payload.PasswordChangeMinDays = &v
 	}
-	if plan.PasswordHistoryThreshold.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordHistoryThreshold = plan.PasswordHistoryThreshold.ValueInt64()
+	if !plan.PasswordHistoryThreshold.IsNull() && !plan.PasswordHistoryThreshold.IsUnknown() {
+		v := plan.PasswordHistoryThreshold.ValueInt64()
+		payload.PasswordHistoryThreshold = &v
 	}
-	if plan.PasswordLifetime.ValueInt64() != types.Int64Null().ValueInt64() {
-		payload.PasswordLifetime = plan.PasswordLifetime.ValueInt64()
+	if !plan.PasswordLifetime.IsNull() && !plan.PasswordLifetime.IsUnknown() {
+		v := plan.PasswordLifetime.ValueInt64()
+		payload.PasswordLifetime = &v
 	}
 
 	payloadJSON, err := json.Marshal(payload)

@@ -10,10 +10,11 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -57,7 +58,7 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 			"policy": schema.StringAttribute{
 				Required: true,
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Description: "(Immutable) The ID for the policy to be attached. Changing this forces a new resource.",
 			},
@@ -66,14 +67,14 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				Required:    true,
 				Description: "(Immutable) Selects which principals to apply the policy to. This can also be done using the conditions set while creating a policy.",
 				PlanModifiers: []planmodifier.Map{
-					modifiers.ImmutableMap(),
+					mapplanmodifier.RequiresReplace(),
 				},
 			},
 			"jurisdiction": schema.StringAttribute{
 				Optional:    true,
 				Description: "(Immutable) Jurisdiction to which the policy applies.",
 				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"actions": schema.ListAttribute{
@@ -82,7 +83,7 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
 				ElementType: types.StringType,
 				PlanModifiers: []planmodifier.List{
-					modifiers.ImmutableList(),
+					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"resources": schema.ListAttribute{
@@ -91,7 +92,7 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				Description: "(Immutable) Resources is a list of URI strings, which must be in URI format.",
 				ElementType: types.StringType,
 				PlanModifiers: []planmodifier.List{
-					modifiers.ImmutableList(),
+					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"uri": schema.StringAttribute{
