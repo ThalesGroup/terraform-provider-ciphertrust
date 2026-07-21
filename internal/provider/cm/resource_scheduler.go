@@ -121,10 +121,6 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"start_date": schema.StringAttribute{
 				Optional: true,
-				Computed: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 				Description: "Start date/time for the scheduler job. Use empty string (\"\") to clear a " +
 					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
 					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
@@ -141,10 +137,6 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"end_date": schema.StringAttribute{
 				Optional: true,
-				Computed: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 				Description: "End date/time for the scheduler job. Use empty string (\"\") to clear a " +
 					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
 					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
@@ -466,6 +458,24 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// Hydrate start_date/end_date from the GET response.
+	// If the user did not set the field (null in plan), keep it null in state.
+	// If the user set it to "" (explicit clear on create), CM omits it — reflect as "".
+	if !plan.StartDate.IsNull() {
+		if r := gjson.Get(response, "start_date"); r.Exists() {
+			plan.StartDate = types.StringValue(r.String())
+		} else {
+			plan.StartDate = types.StringValue("")
+		}
+	}
+	if !plan.EndDate.IsNull() {
+		if r := gjson.Get(response, "end_date"); r.Exists() {
+			plan.EndDate = types.StringValue(r.String())
+		} else {
+			plan.EndDate = types.StringValue("")
+		}
+	}
+
 	tflog.Debug(ctx, "[resource_scheduler.go -> Create Output]["+response+"]")
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Create]["+id+"]")
@@ -498,22 +508,28 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError("Read Error", "Error fetching scheduler job configs : "+err.Error())
 		return
 	}
-	// Capture prior state values before getParamsFromResponse overwrites them.
-	prevStartDate := state.StartDate
-	prevEndDate := state.EndDate
 	getParamsFromResponse(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// State-guarded hydration: if the user never set start_date (null in state),
-	// leave it null to avoid drift. If they set it, getParamsFromResponse already
-	// wrote the CM value (or "" when CM omits the cleared field). When state was ""
-	// (explicit clear), getParamsFromResponse wrote "" — that's correct.
-	if prevStartDate.IsNull() {
-		state.StartDate = types.StringNull()
+	// State-guarded hydration for start_date/end_date (not handled by getParamsFromResponse).
+	// state.StartDate/EndDate still hold the prior-state values here because
+	// getParamsFromResponse does not touch these fields.
+	// Rule: if null in prior state (user never configured), leave null to avoid drift.
+	// Otherwise hydrate from CM; if CM omits the field, write "" (explicit-clear state).
+	if !state.StartDate.IsNull() {
+		if r := gjson.Get(response, "start_date"); r.Exists() {
+			state.StartDate = types.StringValue(r.String())
+		} else {
+			state.StartDate = types.StringValue("")
+		}
 	}
-	if prevEndDate.IsNull() {
-		state.EndDate = types.StringNull()
+	if !state.EndDate.IsNull() {
+		if r := gjson.Get(response, "end_date"); r.Exists() {
+			state.EndDate = types.StringValue(r.String())
+		} else {
+			state.EndDate = types.StringValue("")
+		}
 	}
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Operation = types.StringValue(gjson.Get(response, "operation").String())
@@ -596,12 +612,6 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		payload.EndDate = &s
 	}
 
-	// Capture plan date values before getParamsFromResponse may overwrite them.
-	// Used below to restore null when the user is not managing these fields,
-	// even if CM echoes back an existing value in the PATCH response.
-	planStartDate := plan.StartDate
-	planEndDate := plan.EndDate
-
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
@@ -627,13 +637,23 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// Null-is-no-op for date fields: if the user did not set start_date/end_date
-	// in this update, restore null so that state does not drift to "" on the next plan.
-	if planStartDate.IsNull() {
-		plan.StartDate = types.StringNull()
+	// Hydrate start_date/end_date from the PATCH response (not handled by getParamsFromResponse).
+	// plan.StartDate/EndDate still hold the incoming plan values here.
+	// Null-is-no-op: if null in plan (user not managing), keep null in state.
+	// Otherwise hydrate from CM; if CM omits the field, write "" (explicit-clear state).
+	if !plan.StartDate.IsNull() {
+		if r := gjson.Get(response, "start_date"); r.Exists() {
+			plan.StartDate = types.StringValue(r.String())
+		} else {
+			plan.StartDate = types.StringValue("")
+		}
 	}
-	if planEndDate.IsNull() {
-		plan.EndDate = types.StringNull()
+	if !plan.EndDate.IsNull() {
+		if r := gjson.Get(response, "end_date"); r.Exists() {
+			plan.EndDate = types.StringValue(r.String())
+		} else {
+			plan.EndDate = types.StringValue("")
+		}
 	}
 
 	tflog.Debug(ctx, "[resource_scheduler.go -> Update Output]["+response+"]")
@@ -878,22 +898,9 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	plan.Disabled = types.BoolValue(gjson.Get(response, "disabled").Bool())
 	plan.Description = types.StringValue(gjson.Get(response, "description").String())
 	plan.RunOn = types.StringValue(gjson.Get(response, "run_on").String())
-	// start_date / end_date: preserve null when the API omits them and the current
-	// plan value is null (meaning the user has never configured them). This prevents
-	// writing "" to state for fields that were never managed, avoiding perpetual drift
-	// on subsequent plans where the user omits these Optional-only attributes.
-	if r := gjson.Get(response, "start_date"); r.Exists() {
-		plan.StartDate = types.StringValue(r.String())
-	} else if !plan.StartDate.IsNull() {
-		// Was previously set (or explicitly cleared); CM omits the field → write "" to
-		// reflect the explicit-clear state.
-		plan.StartDate = types.StringValue("")
-	}
-	if r := gjson.Get(response, "end_date"); r.Exists() {
-		plan.EndDate = types.StringValue(r.String())
-	} else if !plan.EndDate.IsNull() {
-		plan.EndDate = types.StringValue("")
-	}
+	// start_date and end_date are intentionally NOT hydrated here.
+	// Each call site (Create, Read, Update) applies its own null-guarded hydration
+	// so that the correct prior-state or plan variable drives the null check.
 
 	// Derive the operation from the API response (source of truth) so that
 	// Read correctly hydrates params even when plan.Operation is unset or stale.

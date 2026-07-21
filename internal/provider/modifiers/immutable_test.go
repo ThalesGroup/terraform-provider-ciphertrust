@@ -10,9 +10,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Test_CM_ImmutableStringNullPlan documents that ImmutableString() already
-// correctly rejects a null plan value on an existing resource (no regression
-// introduced by the TFIN-425 fix, which only touched Bool and Int64).
+// Test_CM_ImmutableStringNullPlan verifies that ImmutableString() rejects a null plan
+// value on an existing resource. PlanModifyString has no IsNull guard on PlanValue —
+// a null transition (user removes the attribute from config) is treated as an immutable
+// violation, the same as changing the value to something different.
 func Test_CM_ImmutableStringNullPlan(t *testing.T) {
 	mod := modifiers.ImmutableString()
 	req := planmodifier.StringRequest{
