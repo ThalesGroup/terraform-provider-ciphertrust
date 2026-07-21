@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -372,6 +373,284 @@ resource "ciphertrust_interface" "test" {
 `,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("Attribute is immutable"),
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_TrustedCasExternalEmptySliceConverges verifies that trusted_cas.external=[]
+// does not cause a perpetual plan diff after apply (TFIN-426a regression check).
+func Test_CM_Interface_TrustedCasExternalEmptySliceConverges(t *testing.T) {
+	RequireCM(t)
+
+	// Discover a real local CA ID — CM requires at least one CA in the trusted_cas block.
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	resp, err := client.GetAll(context.Background(), uuid.New().String(), "api/v1/ca/local-cas")
+	if err != nil || gjson.Get(resp, "resources.0.id").String() == "" {
+		t.Skip("no local CAs available on this CM — skipping trusted_cas test")
+	}
+	localCAID := gjson.Get(resp, "resources.0.id").String()
+
+	trustedCAsConfig := fmt.Sprintf(`
+  trusted_cas = {
+    external = []
+    local    = [%q]
+  }`, localCAID)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: baseline NAE interface with no trusted_cas block.
+				PreConfig: func() { interfaceSweep(9870) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9870
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "baseline apply succeeded",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "interface_type", "nae"),
+				),
+			},
+			{
+				// Step 2: add trusted_cas with external = [] and a real local CA.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = 9870
+  interface_type = "nae"
+%s
+}`, trustedCAsConfig),
+				Check: checkStep(t, "trusted_cas applied",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "trusted_cas.external.#", "0"),
+				),
+			},
+			{
+				// Step 3: identical config — must reach "No changes" (TFIN-426a regression check).
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = 9870
+  interface_type = "nae"
+%s
+}`, trustedCAsConfig),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_LocalAutoGenUIDConverges verifies that local_auto_gen_attributes.uid
+// is preserved in state across Read() calls (TFIN-426b regression check).
+//
+// CM does not return 'uid' in GET responses, so the provider must preserve the configured
+// value from prior state. Before the fix, Read() cleared uid to null on every refresh,
+// causing a perpetual diff. After the fix, uid survives repeated Read() calls.
+//
+// Note: CM overrides other local_auto_gen_attributes fields (cn, dns_names, etc.) with
+// auto-generated values, so ExpectNonEmptyPlan for those fields is expected. The specific
+// regression being tested is that uid does NOT appear in that diff.
+func Test_CM_Interface_LocalAutoGenUIDConverges(t *testing.T) {
+	RequireCM(t)
+
+	uid := "tfin426-uid-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Apply with uid in local_auto_gen_attributes.
+				// CM may override cn/dns_names/email_addresses with auto-generated defaults, so a
+				// non-empty plan is expected for those fields. The Check verifies uid IS preserved
+				// in state after apply+Read() (the key regression for TFIN-426b).
+				PreConfig: func() { interfaceSweep(9871) },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = 9871
+  interface_type = "nae"
+  local_auto_gen_attributes = {
+    cn              = "test.local"
+    dns_names       = ["test.local"]
+    email_addresses = ["test@example.com"]
+    ip_addresses    = ["10.0.0.1"]
+    uid             = %q
+  }
+}`, uid),
+				Check: checkStep(t, "uid applied and preserved in state",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
+				),
+				// CM overrides other local_auto_gen_attributes fields with auto-generated values.
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Step 2: Refresh from CM. uid must still be in state (TFIN-426b regression).
+				// Before the fix: state.uid would be null here (Read() cleared it).
+				// After the fix: state.uid = "tfin426-uid-xxx" (preserved from prior state).
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true, // Other local_auto_gen_attributes fields still differ
+				Check: resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_CertificateClearDoesNotCrash verifies that removing the certificate block
+// from config succeeds without a provider inconsistency error (TFIN-427 regression check).
+func Test_CM_Interface_CertificateClearDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: baseline NAE interface with no certificate block.
+				PreConfig: func() { interfaceSweep(9872) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9872
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "baseline apply succeeded",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "interface_type", "nae"),
+				),
+			},
+			{
+				// Step 2: add a certificate block (generate=false, empty chain — minimal block).
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9872
+  interface_type = "nae"
+  certificate = {
+    certificate_chain = ""
+    generate          = false
+    format            = "PEM"
+    password          = ""
+  }
+}`,
+				Check: checkStep(t, "certificate block applied",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "certificate.format", "PEM"),
+				),
+			},
+			{
+				// Step 3: remove certificate block — must succeed without "Provider produced
+				// inconsistent result" error (TFIN-427 regression check).
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9872
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "certificate cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "certificate.certificate_chain"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_AutoRegistrationClearDoesNotCrash verifies that Update() correctly sends
+// explicit clearing values for boolean fields (TFIN-427 regression check).
+//
+// CM requires a CM-generated registration_token when auto_registration=true, which is not
+// available in this test environment. This test exercises the same Update() clearing code path
+// using allow_unregistered (a boolean that can be set/cleared without tokens) to verify that
+// Update() sends explicit false when the user removes a previously-set boolean field.
+func Test_CM_Interface_AutoRegistrationClearDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with allow_unregistered=true.
+				PreConfig: func() { interfaceSweep(9873) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port               = 9873
+  interface_type     = "nae"
+  allow_unregistered = true
+}`,
+				Check: checkStep(t, "allow_unregistered set",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "allow_unregistered", "true"),
+				),
+			},
+			{
+				// Step 2: Remove allow_unregistered from config. Update() must send explicit
+				// false to CM so the value is cleared rather than preserved (TFIN-427 pattern).
+				// After clear: allow_unregistered is null in state; plan shows no diff.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9873
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "allow_unregistered cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "allow_unregistered"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_KmipInterfaceTypeCreate verifies that a kmip interface can be created
+// without an HTTP 400 from a spurious empty meta object (TFIN-429 regression check).
+func Test_CM_Interface_KmipInterfaceTypeCreate(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: kmip interface — must not receive HTTP 400 from spurious empty meta.
+				PreConfig: func() { interfaceSweep(9874) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9874
+  interface_type = "kmip"
+}`,
+				Check: checkStep(t, "kmip created",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "interface_type", "kmip"),
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "meta.nae.mask_system_groups"),
+				),
+			},
+			{
+				// Step 2: identical config — must reach "No changes."
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_NaeWithMetaRoundTrips verifies that NAE interfaces with a meta block
+// round-trip correctly after the pointer-type change (TFIN-429 pointer regression check).
+func Test_CM_Interface_NaeWithMetaRoundTrips(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: NAE interface with meta block — verifies meta pointer-type path works.
+				PreConfig: func() { interfaceSweep(9875) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9875
+  interface_type = "nae"
+  meta = {
+    nae = {
+      mask_system_groups = true
+    }
+  }
+}`,
+				Check: checkStep(t, "meta applied",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "meta.nae.mask_system_groups", "true"),
+				),
+			},
+			{
+				// Step 2: identical config — must reach "No changes."
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

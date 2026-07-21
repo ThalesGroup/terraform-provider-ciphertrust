@@ -639,32 +639,36 @@ type TLSCiphersJSON struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+// CMInterfaceJSON is the JSON payload for CM interface create/update API calls.
+// Meta, TrustedCAs, LocalAutogenAttributes, and Certificate are pointer types so that
+// encoding/json omitempty correctly suppresses them when nil — non-pointer structs are
+// never omitted by omitempty even when zero-valued (TFIN-429).
 type CMInterfaceJSON struct {
-	ID                      string                          `json:"id,omitempty"`
-	Port                    int64                           `json:"port"`
-	AllowUnregistered       bool                            `json:"allow_unregistered,omitempty"`
-	AutogenCAId             string                          `json:"auto_gen_ca_id,omitempty"`
-	AutogenDaysBeforeExpiry int64                           `json:"auto_gen_days_before_expiry,omitempty"`
-	AutoRegistration        bool                            `json:"auto_registration,omitempty"`
-	CertUserField           string                          `json:"cert_user_field,omitempty"`
-	CustomUIDSize           int64                           `json:"custom_uid_size,omitempty"`
-	CustomUIDv2             bool                            `json:"custom_uid_v2,omitempty"`
-	DefaultConnection       string                          `json:"default_connection,omitempty"`
-	InterfaceType           string                          `json:"interface_type,omitempty"`
-	KMIPEnableHardDelete    int64                           `json:"kmip_enable_hard_delete,omitempty"`
-	MaximumTLSVersion       string                          `json:"maximum_tls_version,omitempty"`
-	Meta                    *CMInterfaceMetadataJSON        `json:"meta,omitempty"`
-	MinimumTLSVersion       string                          `json:"minimum_tls_version,omitempty"`
-	Mode                    string                          `json:"mode,omitempty"`
-	Name                    string                          `json:"name,omitempty"`
-	NetworkInterface        string                          `json:"network_interface,omitempty"`
-	RegToken                string                          `json:"registration_token,omitempty"`
-	TrustedCAs              *CMInterfacTrustedCAsJSON       `json:"trusted_cas,omitempty"`
-	Certificate             *CMInterfacCertificateJSON      `json:"certificate,omitempty"`
+	ID                      string                           `json:"id,omitempty"`
+	Port                    int64                            `json:"port"`
+	AllowUnregistered       bool                             `json:"allow_unregistered,omitempty"`
+	AutogenCAId             string                           `json:"auto_gen_ca_id,omitempty"`
+	AutogenDaysBeforeExpiry int64                            `json:"auto_gen_days_before_expiry,omitempty"`
+	AutoRegistration        bool                             `json:"auto_registration,omitempty"`
+	CertUserField           string                           `json:"cert_user_field,omitempty"`
+	CustomUIDSize           int64                            `json:"custom_uid_size,omitempty"`
+	CustomUIDv2             bool                             `json:"custom_uid_v2,omitempty"`
+	DefaultConnection       string                           `json:"default_connection,omitempty"`
+	InterfaceType           string                           `json:"interface_type,omitempty"`
+	KMIPEnableHardDelete    int64                            `json:"kmip_enable_hard_delete,omitempty"`
+	MaximumTLSVersion       string                           `json:"maximum_tls_version,omitempty"`
+	Meta                    *CMInterfaceMetadataJSON         `json:"meta,omitempty"`
+	MinimumTLSVersion       string                           `json:"minimum_tls_version,omitempty"`
+	Mode                    string                           `json:"mode,omitempty"`
+	Name                    string                           `json:"name,omitempty"`
+	NetworkInterface        string                           `json:"network_interface,omitempty"`
+	RegToken                string                           `json:"registration_token,omitempty"`
+	TrustedCAs              *CMInterfacTrustedCAsJSON        `json:"trusted_cas,omitempty"`
+	Certificate             *CMInterfacCertificateJSON       `json:"certificate,omitempty"`
 	LocalAutogenAttributes  *CMInterfaceLocalAutogenAttrJSON `json:"local_auto_gen_attributes,omitempty"`
-	TLSCiphers              []TLSCiphersJSON                `json:"tls_ciphers,omitempty"`
-	CreatedAt               string                          `json:"createdAt,omitempty"`
-	UpdatedAt               string                          `json:"updatedAt,omitempty"`
+	TLSCiphers              []TLSCiphersJSON                 `json:"tls_ciphers,omitempty"`
+	CreatedAt               string                           `json:"createdAt,omitempty"`
+	UpdatedAt               string                           `json:"updatedAt,omitempty"`
 }
 
 type CMLicenseTFSDK struct {

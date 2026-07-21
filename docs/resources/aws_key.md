@@ -78,7 +78,7 @@ resource "ciphertrust_aws_key" "aws_multiregion_key" {
   enable_rotation = {
     disable_encrypt = false
     job_config_id   = ciphertrust_scheduler.scheduled_rotation.id
-    key_source      = "local"
+    key_source      = "ciphertrust"
   }
 }
 
