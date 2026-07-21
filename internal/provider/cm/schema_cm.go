@@ -809,6 +809,7 @@ type CMTrialLicenseTFSDK struct {
 	Description   types.String `tfsdk:"description"`
 	ActivatedAt   types.String `tfsdk:"activated_at"`
 	DeactivatedAt types.String `tfsdk:"deactivated_at"`
+	LicenseType   types.String `tfsdk:"license_type"`
 }
 
 type CMTrialLicenseJSON struct {
@@ -1084,15 +1085,15 @@ type CMSyslogTFSDK struct {
 }
 
 type CMSyslogJSON struct {
-	ID            string `json:"id"`
-	Host          string `json:"host"`
-	Transport     string `json:"transport"`
-	CACert        string `json:"caCert,omitempty"`
-	MessageFormat string `json:"messageFormat,omitempty"`
-	Port          int64  `json:"port,omitempty"`
-	Account       string `json:"account"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
+	ID            string  `json:"id"`
+	Host          string  `json:"host"`
+	Transport     string  `json:"transport"`
+	CACert        *string `json:"caCert,omitempty"`
+	MessageFormat *string `json:"messageFormat,omitempty"`
+	Port          int64   `json:"port,omitempty"`
+	Account       string  `json:"account"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
 }
 
 type CMProxyTFSDK struct {

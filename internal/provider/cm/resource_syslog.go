@@ -127,11 +127,13 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	payload.Transport = plan.Transport.ValueString()
 
 	if plan.CACert.ValueString() != "" && plan.CACert.ValueString() != types.StringNull().ValueString() {
-		payload.CACert = plan.CACert.ValueString()
+		caCertVal := plan.CACert.ValueString()
+		payload.CACert = &caCertVal
 	}
 
 	if plan.MessageFormat.ValueString() != "" && plan.MessageFormat.ValueString() != types.StringNull().ValueString() {
-		payload.MessageFormat = plan.MessageFormat.ValueString()
+		mfVal := plan.MessageFormat.ValueString()
+		payload.MessageFormat = &mfVal
 	}
 
 	if plan.Port.ValueInt64() != types.Int64Unknown().ValueInt64() {
@@ -212,8 +214,14 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
-		state.CACert = types.StringValue(caCert.String())
+	// State-Guarded Hydration: only hydrate ca_cert if it was actively configured in the HCL,
+	// to avoid perpetual plan diffs and infinite apply loops when it is omitted in configuration.
+	if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
+		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+			state.CACert = types.StringValue(caCert.String())
+		} else {
+			state.CACert = types.StringNull()
+		}
 	} else {
 		state.CACert = types.StringNull()
 	}
@@ -265,12 +273,24 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 
 	payload.Transport = plan.Transport.ValueString()
 
-	if plan.CACert.ValueString() != "" && plan.CACert.ValueString() != types.StringNull().ValueString() {
-		payload.CACert = plan.CACert.ValueString()
+	// 3-Way State-Transition Comparison for ca_cert:
+	if !plan.CACert.IsNull() && !plan.CACert.IsUnknown() {
+		caCertVal := plan.CACert.ValueString()
+		payload.CACert = &caCertVal
+	} else if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
+		// Transitioning from set to null: send an explicit empty string pointer to clear it on CM
+		emptyStr := ""
+		payload.CACert = &emptyStr
 	}
 
-	if plan.MessageFormat.ValueString() != "" && plan.MessageFormat.ValueString() != types.StringNull().ValueString() {
-		payload.MessageFormat = plan.MessageFormat.ValueString()
+	// 3-Way State-Transition Comparison for message_format:
+	if !plan.MessageFormat.IsNull() && !plan.MessageFormat.IsUnknown() {
+		mfVal := plan.MessageFormat.ValueString()
+		payload.MessageFormat = &mfVal
+	} else if !state.MessageFormat.IsNull() && !state.MessageFormat.IsUnknown() {
+		// Transitioning from set to null: send an explicit empty string pointer to clear/reset it on CM
+		emptyStr := ""
+		payload.MessageFormat = &emptyStr
 	}
 
 	payloadJSON, err := json.Marshal(payload)
