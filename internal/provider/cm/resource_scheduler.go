@@ -446,21 +446,13 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// null-is-no-op: only hydrate start_date/end_date from response when user configured them.
-	// When user omits the field (Unknown for a new Computed+Optional attribute), set to null
-	// so Terraform sees a known value after apply rather than an error.
-	if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() {
-		if r := gjson.Get(response, "start_date"); r.Exists() {
-			plan.StartDate = types.StringValue(r.String())
-		}
-		// else: CM cleared it (e.g. "" was sent) — keep plan value to reflect user intent
+	if r := gjson.Get(response, "start_date"); r.Exists() {
+		plan.StartDate = types.StringValue(r.String())
 	} else {
 		plan.StartDate = types.StringNull()
 	}
-	if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() {
-		if r := gjson.Get(response, "end_date"); r.Exists() {
-			plan.EndDate = types.StringValue(r.String())
-		}
+	if r := gjson.Get(response, "end_date"); r.Exists() {
+		plan.EndDate = types.StringValue(r.String())
 	} else {
 		plan.EndDate = types.StringNull()
 	}
@@ -501,20 +493,15 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// null-is-no-op: only overwrite start_date/end_date in state when user previously configured them
-	if !state.StartDate.IsNull() {
-		if r := gjson.Get(response, "start_date"); r.Exists() {
-			state.StartDate = types.StringValue(r.String())
-		} else {
-			state.StartDate = types.StringNull()
-		}
+	if r := gjson.Get(response, "start_date"); r.Exists() {
+		state.StartDate = types.StringValue(r.String())
+	} else {
+		state.StartDate = types.StringNull()
 	}
-	if !state.EndDate.IsNull() {
-		if r := gjson.Get(response, "end_date"); r.Exists() {
-			state.EndDate = types.StringValue(r.String())
-		} else {
-			state.EndDate = types.StringNull()
-		}
+	if r := gjson.Get(response, "end_date"); r.Exists() {
+		state.EndDate = types.StringValue(r.String())
+	} else {
+		state.EndDate = types.StringNull()
 	}
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Operation = types.StringValue(gjson.Get(response, "operation").String())

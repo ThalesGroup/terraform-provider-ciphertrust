@@ -80,8 +80,8 @@ func Test_CM_CckmSchedulersRotationDataSource(t *testing.T) {
 						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.expiration", expiration),
 						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.rotation_after", "6d"),
 						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.expire_in", expireIn),
-						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.aws_params.rotate_material", rotateMaterialExpectedValue),
-						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.aws_params.retain_alias", "true"),
+						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.rotate_material", rotateMaterialExpectedValue),
+						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_rotation_params.aws_retain_alias", "true"),
 						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.run_at", "0 9 * * fri"),
 
 						// No-filter datasource: verify at least both created schedulers are returned

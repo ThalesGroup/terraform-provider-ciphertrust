@@ -199,7 +199,7 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	gjson.Parse(jsonStr).ForEach(func(_, item gjson.Result) bool {
+	gjson.Get(jsonStr, "resources").ForEach(func(_, item gjson.Result) bool {
 		jobJSON := item.Raw
 
 		var startDate, endDate types.String
