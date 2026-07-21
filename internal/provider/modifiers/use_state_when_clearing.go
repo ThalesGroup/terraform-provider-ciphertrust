@@ -105,3 +105,57 @@ func (m useStateWhenClearingMapModifier) PlanModifyMap(_ context.Context, req pl
 	)
 	resp.PlanValue = req.StateValue
 }
+
+// UseStateForNullOrUnknownString returns a String plan modifier that substitutes the
+// prior state value when the planned value is null or unknown.
+func UseStateForNullOrUnknownString() planmodifier.String {
+	return useStateForNullOrUnknownStringModifier{}
+}
+
+type useStateForNullOrUnknownStringModifier struct{}
+
+func (m useStateForNullOrUnknownStringModifier) Description(_ context.Context) string {
+	return "Preserves the prior state value when the planned value is null or unknown."
+}
+
+func (m useStateForNullOrUnknownStringModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m useStateForNullOrUnknownStringModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Brand-new resource — no prior state, nothing to preserve.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	// If the planned value is Null or Unknown, copy the state value to the plan.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		resp.PlanValue = req.StateValue
+	}
+}
+
+// UseStateForNullOrUnknownBool returns a Bool plan modifier that substitutes the
+// prior state value when the planned value is null or unknown.
+func UseStateForNullOrUnknownBool() planmodifier.Bool {
+	return useStateForNullOrUnknownBoolModifier{}
+}
+
+type useStateForNullOrUnknownBoolModifier struct{}
+
+func (m useStateForNullOrUnknownBoolModifier) Description(_ context.Context) string {
+	return "Preserves the prior state value when the planned value is null or unknown."
+}
+
+func (m useStateForNullOrUnknownBoolModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m useStateForNullOrUnknownBoolModifier) PlanModifyBool(_ context.Context, req planmodifier.BoolRequest, resp *planmodifier.BoolResponse) {
+	// Brand-new resource — no prior state, nothing to preserve.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	// If the planned value is Null or Unknown, copy the state value to the plan.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		resp.PlanValue = req.StateValue
+	}
+}
