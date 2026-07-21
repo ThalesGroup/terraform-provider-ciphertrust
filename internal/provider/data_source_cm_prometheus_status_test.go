@@ -35,8 +35,6 @@ func Test_CM_DataSourceCMPrometheusStatus_TokenSensitive(t *testing.T) {
 	})
 }
 
-// Test_CM_PrometheusStatus_ReadAccuracy verifies the data source correctly reflects
-// enabled=true and a non-empty token after the resource enables Prometheus.
 func Test_CM_PrometheusStatus_ReadAccuracy(t *testing.T) {
 	RequireCM(t)
 
@@ -53,6 +51,7 @@ data "ciphertrust_cm_prometheus_status" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "ReadAccuracy",
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_prometheus_status.test", "id", "prometheus-status"),
 					resource.TestCheckResourceAttr("data.ciphertrust_cm_prometheus_status.test", "enabled", "true"),
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_prometheus_status.test", "token"),
 				),
@@ -120,6 +119,31 @@ data "ciphertrust_cm_prometheus_status" "test" {
 					resource.TestCheckResourceAttr("data.ciphertrust_cm_prometheus_status.test", "enabled", "false"),
 					// CM retains the token even when Prometheus is disabled; the data source reflects
 					// the live CM value unconditionally. We verify the attribute is set (not absent).
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_prometheus_status.test", "token"),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_DataSourceCMPrometheusStatus_ValueAccuracy(t *testing.T) {
+	RequireCM(t)
+
+	cfg := providerConfig + `
+resource "ciphertrust_cm_prometheus" "test" { enabled = true }
+data "ciphertrust_cm_prometheus_status" "test" {
+  depends_on = [ciphertrust_cm_prometheus.test]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "ValueAccuracy",
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_prometheus_status.test", "id", "prometheus-status"),
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_prometheus_status.test", "enabled", "true"),
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_prometheus_status.test", "token"),
 				),
 			},

@@ -22,6 +22,7 @@ func Test_CM_LocalCAList_ReadAccuracy(t *testing.T) {
 data "ciphertrust_cm_local_ca_list" "test" {}
 `,
 				Check: checkStep(t, "ReadAccuracy",
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "id", "local-ca-list"),
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_local_ca_list.test", "cas.0.id"),
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_local_ca_list.test", "cas.0.name"),
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_local_ca_list.test", "cas.0.state"),
@@ -82,6 +83,29 @@ data "ciphertrust_cm_local_ca_list" "test" {
 				Check: checkStep(t, "FilterByName",
 					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "cas.#", "1"),
 					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "cas.0.name", caName),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_LocalCAList_Pagination(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+data "ciphertrust_cm_local_ca_list" "test" {
+  limit = 2
+  skip  = 0
+}
+`,
+				Check: checkStep(t, "Pagination",
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "id", "local-ca-list"),
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "limit", "2"),
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_local_ca_list.test", "skip", "0"),
 				),
 			},
 		},
