@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -22,6 +23,7 @@ var (
 	_ resource.Resource                   = &resourceCMProperty{}
 	_ resource.ResourceWithConfigure      = &resourceCMProperty{}
 	_ resource.ResourceWithValidateConfig = &resourceCMProperty{}
+	_ resource.ResourceWithImportState    = &resourceCMProperty{}
 )
 
 func NewResourceCMProperty() resource.Resource {
@@ -45,8 +47,15 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		Description: "Manages a CipherTrust Manager system property. **Only available on CipherTrust Manager — not supported on CDSPaaS, where system properties are managed by the platform.**",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Unique identifier for the system property.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"name": schema.StringAttribute{
-				Optional: true,
+				Required:    true,
 				Description: "Name of the system property. Immutable after creation.",
 				PlanModifiers: []planmodifier.String{
 					NameImmutableModifier{},
@@ -123,6 +132,7 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	// Update plan with computed values from API response; preserve user-provided name and value
+	plan.ID = plan.Name
 	plan.Description = types.StringValue(gjson.Get(readResponse, "description").String())
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
@@ -167,11 +177,16 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
-	vr := gjson.Get(response, "value")
-	if vr.Exists() {
-		state.Value = types.StringValue(vr.String())
-	} else {
+	state.ID = state.Name
+	if state.Value.IsNull() || state.Value.IsUnknown() {
 		state.Value = types.StringNull()
+	} else {
+		vr := gjson.Get(response, "value")
+		if vr.Exists() {
+			state.Value = types.StringValue(vr.String())
+		} else {
+			state.Value = types.StringNull()
+		}
 	}
 	state.Description = types.StringValue(gjson.Get(response, "description").String())
 
@@ -231,6 +246,7 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// Update plan with computed values from API response; preserve user-provided name and value
+	plan.ID = plan.Name
 	plan.Description = types.StringValue(gjson.Get(readResponse, "description").String())
 
 	diags = resp.State.Set(ctx, plan)
@@ -292,4 +308,8 @@ func (d *resourceCMProperty) Configure(_ context.Context, req resource.Configure
 	}
 
 	d.client = client
+}
+
+func (r *resourceCMProperty) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
 }
