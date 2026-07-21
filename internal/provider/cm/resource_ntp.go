@@ -65,13 +65,14 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"key": schema.StringAttribute{
 				Optional:    true,
-				Description: "Symmetric key value to be used for authenticated NTP servers. Changing this value forces replacement of the NTP resource.",
+				Sensitive:   true,
+				Description: "Symmetric key value to be used for authenticated NTP servers. Changing or removing this value forces replacement of the NTP resource.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"key_type": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"MD5",
@@ -80,9 +81,9 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"SHA-384",
 						"SHA-512"}...),
 				},
-				Description: "Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing this value forces replacement of the NTP resource.",
+				Description: "Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing or removing this value forces replacement of the NTP resource.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplaceIfConfigured(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 		},
@@ -155,12 +156,22 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	// API does not return id, use host as the identifier
 	plan.ID = types.StringValue(plan.Host.ValueString())
-	// key and key_type are only returned by API if user provided them
-	if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
-		plan.Key = types.StringValue(keyVal.String())
+	// key and key_type are only returned by API if user provided them.
+	// If the user's plan had them as null, do NOT set them in state, to prevent inconsistent plan errors.
+	if !plan.Key.IsNull() && !plan.Key.IsUnknown() {
+		if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
+			plan.Key = types.StringValue(keyVal.String())
+		}
+	} else {
+		plan.Key = types.StringNull()
 	}
-	if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
-		plan.KeyType = types.StringValue(keyTypeVal.String())
+
+	if !plan.KeyType.IsNull() && !plan.KeyType.IsUnknown() {
+		if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
+			plan.KeyType = types.StringValue(keyTypeVal.String())
+		}
+	} else {
+		plan.KeyType = types.StringNull()
 	}
 
 	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
@@ -186,12 +197,23 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	// List all NTP servers and find the one matching our host.
-	listResponse, err := r.client.GetAll(ctx, id, common.URL_NTP)
+	// List all NTP servers and find the one matching our host, retrying if the NTP daemon is temporarily busy.
+	var listResponse string
+	var err error
+	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
+		if attempt > 0 {
+			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Read] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
+			time.Sleep(ntpRetryDelay)
+		}
+		listResponse, err = r.client.GetAll(ctx, id, common.URL_NTP)
+		if err == nil || !strings.Contains(err.Error(), ntpDaemonError) {
+			break
+		}
+	}
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
-			"Error reading CM NTP on CipherTrust Manager: ",
+			"Error reading CM NTP on CipherTrust Manager",
 			"Could not list NTP servers, unexpected error: "+err.Error(),
 		)
 		return
@@ -220,14 +242,22 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.Host = types.StringValue(entry.Get("host").String())
 	// API does not return id, use host as the identifier
 	state.ID = types.StringValue(state.Host.ValueString())
-	// key and key_type are only returned by API if user provided them
-	if keyVal := entry.Get("key"); keyVal.Exists() && keyVal.String() != "" {
-		state.Key = types.StringValue(keyVal.String())
+
+	// key and key_type are only returned by API if user provided them.
+	// If the user did not configure them (null/unknown), keep them as null.
+	// If they are configured, and API returns empty (write-only), preserve the prior state value.
+	if !state.Key.IsNull() && !state.Key.IsUnknown() {
+		if keyVal := entry.Get("key"); keyVal.Exists() && keyVal.String() != "" {
+			state.Key = types.StringValue(keyVal.String())
+		}
 	} else {
 		state.Key = types.StringNull()
 	}
-	if keyTypeVal := entry.Get("key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
-		state.KeyType = types.StringValue(keyTypeVal.String())
+
+	if !state.KeyType.IsNull() && !state.KeyType.IsUnknown() {
+		if keyTypeVal := entry.Get("key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
+			state.KeyType = types.StringValue(keyTypeVal.String())
+		}
 	} else {
 		state.KeyType = types.StringNull()
 	}
