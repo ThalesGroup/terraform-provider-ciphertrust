@@ -498,7 +498,11 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 
 	var payload CMPolicyJSON
 
-	if len(plan.Actions) > 0 {
+	if len(plan.Actions) == 0 {
+		if len(state.Actions) > 0 {
+			payload.Actions = []string{} // Explicitly clear on CM
+		}
+	} else {
 		var actions []string
 		for _, str := range plan.Actions {
 			actions = append(actions, str.ValueString())
@@ -511,7 +515,11 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 		payload.Allow = &v
 	}
 
-	if len(plan.Conditions) > 0 {
+	if len(plan.Conditions) == 0 {
+		if len(state.Conditions) > 0 {
+			payload.Conditions = []CMPolicyConditionJSON{} // Explicitly clear on CM
+		}
+	} else {
 		var conditions []CMPolicyConditionJSON
 		for _, condition := range plan.Conditions {
 			var conditionJSON CMPolicyConditionJSON
@@ -550,7 +558,11 @@ func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateReques
 		payload.Name = &v
 	}
 
-	if len(plan.Resources) > 0 {
+	if len(plan.Resources) == 0 {
+		if len(state.Resources) > 0 {
+			payload.Resources = []string{} // Explicitly clear on CM
+		}
+	} else {
 		var resources []string
 		for _, str := range plan.Resources {
 			resources = append(resources, str.ValueString())

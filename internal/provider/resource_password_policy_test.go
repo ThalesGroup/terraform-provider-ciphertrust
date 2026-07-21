@@ -449,3 +449,28 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
 		},
 	})
 }
+
+// Test_CM_AccPasswordPolicy_PartialOmission verifies that optional fields omitted from HCL config
+// do not overwrite server settings to 0 on the CipherTrust Manager.
+func Test_CM_AccPasswordPolicy_PartialOmission(t *testing.T) {
+	RequireCM(t)
+	policyName := "TFTestPwdOmission-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "omission_test" {
+    policy_name                = %q
+    inclusive_min_total_length = 14
+}
+`, policyName),
+				Check: checkStep(t, "omission-test: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.omission_test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.omission_test", "inclusive_min_total_length", "14"),
+				),
+			},
+		},
+	})
+}
