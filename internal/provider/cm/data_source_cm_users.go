@@ -30,7 +30,10 @@ type dataSourceUsers struct {
 }
 
 type usersDataSourceModel struct {
+	ID      types.String  `tfsdk:"id"`
 	Filters types.Map     `tfsdk:"filters"`
+	Limit   types.Int64   `tfsdk:"limit"`
+	Skip    types.Int64   `tfsdk:"skip"`
 	User    []CMUserTFSDK `tfsdk:"users"`
 }
 
@@ -41,9 +44,21 @@ func (d *dataSourceUsers) Metadata(_ context.Context, req datasource.MetadataReq
 func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "The stable computed ID of this data source.",
+			},
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Limit the number of returned users (default: 1000).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of users to skip (default: 0).",
 			},
 			"users": schema.ListNestedAttribute{
 				Computed: true,
@@ -96,16 +111,31 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_users.go -> Read]["+id+"]")
 	var state usersDataSourceModel
 	req.Config.Get(ctx, &state)
+
+	state.ID = types.StringValue("users-list")
+	state.User = []CMUserTFSDK{}
+
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
+	}
+
+	limitVal := int64(1000)
+	if !state.Limit.IsNull() && !state.Limit.IsUnknown() {
+		limitVal = state.Limit.ValueInt64()
+	}
+	skipVal := int64(0)
+	if !state.Skip.IsNull() && !state.Skip.IsUnknown() {
+		skipVal = state.Skip.ValueInt64()
 	}
 
 	jsonStr, err := d.client.GetAll(
 		ctx,
 		id,
-		common.URL_USER_MANAGEMENT+"/?"+strings.Join(kvs, "")+"skip=0&limit=10")
+		fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_USER_MANAGEMENT, strings.Join(kvs, ""), skipVal, limitVal))
 
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_users.go -> Read]["+id+"]")
