@@ -151,6 +151,80 @@ func Test_CM_ClusterRead_PublicAddressDrift(t *testing.T) {
 	}
 }
 
+// Test_CM_ClusterRead_EmptyPublicAddressBecomesNull proves that Read() maps CM's ""
+// (returned by GET /nodes/{nodeID} when no public_address was ever configured) to a
+// null state value, not StringValue(""). public_address is Optional (not Computed), so
+// an unconfigured attribute always plans as null; setting state to "" instead of null
+// permanently disagrees with that null and produces a spurious "0 visible diffs but 1
+// to change" plan on every single refresh — confirmed live via CI on
+// Test_CM_ResourceCMCluster/Lifecycle Step 1, which never sets public_address at all.
+func Test_CM_ClusterRead_EmptyPublicAddressBecomesNull(t *testing.T) {
+	const nodeID = "b693357"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/cluster/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"nodeID":%q,"nodeCount":1,"status":{"code":"r","description":"ready"},"raftStatus":"up"}`, nodeID)
+	})
+	mux.HandleFunc("/api/v1/nodes/"+nodeID, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":%q,"publicAddress":""}`, nodeID)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCMCluster{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	stateType := schemaResp.Schema.Type().TerraformType(ctx)
+	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
+		"id":                 tftypes.NewValue(tftypes.String, nodeID),
+		"local_node_host":    tftypes.NewValue(tftypes.String, "cm1.example.com"),
+		"local_node_port":    tftypes.NewValue(tftypes.Number, 5432),
+		"public_address":     tftypes.NewValue(tftypes.String, nil),
+		"node_id":            tftypes.NewValue(tftypes.String, nodeID),
+		"node_count":         tftypes.NewValue(tftypes.Number, 1),
+		"status_code":        tftypes.NewValue(tftypes.String, "r"),
+		"status_description": tftypes.NewValue(tftypes.String, "ready"),
+		"raft_status":        tftypes.NewValue(tftypes.String, "up"),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawState},
+	}
+
+	r.Read(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Read(): %v", resp.Diagnostics)
+	}
+
+	var final CMClusterTFSDK
+	diags := resp.State.Get(ctx, &final)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics reading back final state: %v", diags)
+	}
+
+	if !final.PublicAddress.IsNull() {
+		t.Errorf("expected public_address to be null when CM returns \"\", got %q", final.PublicAddress.ValueString())
+	}
+}
+
 // Test_CM_ClusterDelete_TimeoutButActuallyDeletedSucceeds proves that Delete() no longer
 // surfaces a hard error when DELETE /cluster itself errors (e.g. times out) but the node
 // has actually become unclustered. Confirmed live: deleting a node's own cluster config

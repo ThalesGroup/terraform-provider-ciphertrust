@@ -237,7 +237,15 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	// A transient fetch failure here shouldn't fail the whole Read, so leave the prior
 	// state value in place rather than erroring.
 	if nodeInfo, nerr := r.client.GetById(ctx, id, nodeID, common.URL_NODES); nerr == nil {
-		state.PublicAddress = types.StringValue(gjson.Get(nodeInfo, "publicAddress").String())
+		// CM returns "" (not an omitted field) when no public_address was ever
+		// configured. public_address is Optional (not Computed), so an unconfigured
+		// attribute plans as null, not "" — mapping "" to StringValue("") here would
+		// permanently disagree with that null and show a spurious diff on every plan.
+		if publicAddress := gjson.Get(nodeInfo, "publicAddress").String(); publicAddress != "" {
+			state.PublicAddress = types.StringValue(publicAddress)
+		} else {
+			state.PublicAddress = types.StringNull()
+		}
 	}
 
 	diags = resp.State.Set(ctx, &state)
