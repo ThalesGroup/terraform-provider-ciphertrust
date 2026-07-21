@@ -167,13 +167,6 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-	if len(plan.Metadata.Elements()) != 0 {
-		metadata := make(map[string]string, len(plan.Metadata.Elements()))
-		resp.Diagnostics.Append(plan.Metadata.ElementsAs(ctx, &metadata, false)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 		payload.Metadata = stringsToRawJSON(metadata)
 	}
 
