@@ -121,6 +121,10 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"start_date": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "Start date/time for the scheduler job. Use empty string (\"\") to clear a " +
 					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
 					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
@@ -137,6 +141,10 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"end_date": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "End date/time for the scheduler job. Use empty string (\"\") to clear a " +
 					"previously set value; provide a timestamp conforming to YYYY-MM-DDTHH:MM:SSZ " +
 					"(e.g., 2021-03-07T00:00:00Z) to set a value. Omitting this attribute (null) " +
