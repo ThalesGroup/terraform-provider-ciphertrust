@@ -997,6 +997,7 @@ type CreateJobConfigParamsListJSON struct {
 }
 
 type CMPropertyTFSDK struct {
+	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
 	Value       types.String `tfsdk:"value"`
 	Description types.String `tfsdk:"description"`
@@ -1097,6 +1098,7 @@ type CMSyslogJSON struct {
 }
 
 type CMProxyTFSDK struct {
+	ID          types.String   `tfsdk:"id"`
 	Certificate types.String   `tfsdk:"certificate"`
 	HTTPProxy   types.String   `tfsdk:"http_proxy"`
 	HTTPSProxy  types.String   `tfsdk:"https_proxy"`
@@ -1104,10 +1106,10 @@ type CMProxyTFSDK struct {
 }
 
 type CMProxyJSON struct {
-	Certificate string   `json:"certificate"`
-	HTTPProxy   string   `json:"http_proxy"`
-	HTTPSProxy  string   `json:"https_proxy"`
-	NoProxy     []string `json:"no_proxy"`
+	Certificate *string  `json:"certificate,omitempty"`
+	HTTPProxy   *string  `json:"http_proxy,omitempty"`
+	HTTPSProxy  *string  `json:"https_proxy,omitempty"`
+	NoProxy     []string `json:"no_proxy,omitempty"`
 }
 
 type CMPasswordPolicyTFSDK struct {

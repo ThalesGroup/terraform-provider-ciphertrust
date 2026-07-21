@@ -10,6 +10,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -20,6 +21,7 @@ var (
 	_ resource.Resource                   = &resourceCMProxy{}
 	_ resource.ResourceWithConfigure      = &resourceCMProxy{}
 	_ resource.ResourceWithValidateConfig = &resourceCMProxy{}
+	_ resource.ResourceWithImportState    = &resourceCMProxy{}
 )
 
 func NewResourceCMProxy() resource.Resource {
@@ -43,6 +45,10 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 	resp.Schema = schema.Schema{
 		Description: "Configures outbound HTTP/HTTPS proxy settings (with optional CA certificate and no_proxy bypass list) for the CipherTrust Manager appliance. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:    true,
+				Description: "Unique identifier for the proxy configuration.",
+			},
 			"certificate": schema.StringAttribute{
 				Optional:    true,
 				Description: "CA certificate to trust for proxy.",
@@ -82,15 +88,18 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	if plan.Certificate.ValueString() != "" && plan.Certificate.ValueString() != types.StringNull().ValueString() {
-		payload.Certificate = plan.Certificate.ValueString()
+		certVal := plan.Certificate.ValueString()
+		payload.Certificate = &certVal
 	}
 
 	if plan.HTTPProxy.ValueString() != "" && plan.HTTPProxy.ValueString() != types.StringNull().ValueString() {
-		payload.HTTPProxy = plan.HTTPProxy.ValueString()
+		httpVal := plan.HTTPProxy.ValueString()
+		payload.HTTPProxy = &httpVal
 	}
 
 	if plan.HTTPSProxy.ValueString() != "" && plan.HTTPSProxy.ValueString() != types.StringNull().ValueString() {
-		payload.HTTPSProxy = plan.HTTPSProxy.ValueString()
+		httpsVal := plan.HTTPSProxy.ValueString()
+		payload.HTTPSProxy = &httpsVal
 	}
 
 	var hosts []string
@@ -125,6 +134,7 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 
 	tflog.Debug(ctx, "[resource_proxy.go -> Create Output]["+response+"]")
 
+	plan.ID = types.StringValue("proxy")
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -162,6 +172,8 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
+	state.ID = types.StringValue("proxy")
+
 	// Handle certificate - convert empty string to null for consistency
 	certFromAPI := gjson.Get(response, "certificate").String()
 	if certFromAPI == "" {
@@ -176,18 +188,36 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
 	if httpProxyFromAPI == "" {
 		state.HTTPProxy = types.StringNull()
-	} else if !containsMaskedPassword(httpProxyFromAPI) {
-		state.HTTPProxy = types.StringValue(httpProxyFromAPI)
+	} else {
+		if !state.HTTPProxy.IsNull() && !state.HTTPProxy.IsUnknown() {
+			maskedState := maskProxyURL(state.HTTPProxy.ValueString())
+			maskedAPI := maskProxyURL(httpProxyFromAPI)
+			if maskedState == maskedAPI {
+				// No host/username/port drift; keep the cleartext state.HTTPProxy
+			} else {
+				state.HTTPProxy = types.StringValue(httpProxyFromAPI)
+			}
+		} else {
+			state.HTTPProxy = types.StringValue(httpProxyFromAPI)
+		}
 	}
-	// If masked (contains xxxxxx), keep the existing state value (don't update)
 
 	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
 	if httpsProxyFromAPI == "" {
 		state.HTTPSProxy = types.StringNull()
-	} else if !containsMaskedPassword(httpsProxyFromAPI) {
-		state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+	} else {
+		if !state.HTTPSProxy.IsNull() && !state.HTTPSProxy.IsUnknown() {
+			maskedState := maskProxyURL(state.HTTPSProxy.ValueString())
+			maskedAPI := maskProxyURL(httpsProxyFromAPI)
+			if maskedState == maskedAPI {
+				// No host/username/port drift; keep the cleartext state.HTTPSProxy
+			} else {
+				state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+			}
+		} else {
+			state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+		}
 	}
-	// If masked (contains xxxxxx), keep the existing state value (don't update)
 
 	hosts := gjson.Get(response, "no_proxy").Array()
 	var noProxies []types.String
@@ -217,23 +247,49 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	if plan.Certificate.ValueString() != "" && plan.Certificate.ValueString() != types.StringNull().ValueString() {
-		payload.Certificate = plan.Certificate.ValueString()
+	var state CMProxyTFSDK
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	if plan.HTTPProxy.ValueString() != "" && plan.HTTPProxy.ValueString() != types.StringNull().ValueString() {
-		payload.HTTPProxy = plan.HTTPProxy.ValueString()
+	emptyStr := ""
+
+	// Certificate transition
+	if !plan.Certificate.IsNull() && !plan.Certificate.IsUnknown() {
+		certVal := plan.Certificate.ValueString()
+		payload.Certificate = &certVal
+	} else if !state.Certificate.IsNull() && !state.Certificate.IsUnknown() {
+		payload.Certificate = &emptyStr
 	}
 
-	if plan.HTTPSProxy.ValueString() != "" && plan.HTTPSProxy.ValueString() != types.StringNull().ValueString() {
-		payload.HTTPSProxy = plan.HTTPSProxy.ValueString()
+	// HTTP Proxy transition
+	if !plan.HTTPProxy.IsNull() && !plan.HTTPProxy.IsUnknown() {
+		httpVal := plan.HTTPProxy.ValueString()
+		payload.HTTPProxy = &httpVal
+	} else if !state.HTTPProxy.IsNull() && !state.HTTPProxy.IsUnknown() {
+		payload.HTTPProxy = &emptyStr
 	}
 
-	var hosts []string
-	for _, str := range plan.NoProxy {
-		hosts = append(hosts, str.ValueString())
+	// HTTPS Proxy transition
+	if !plan.HTTPSProxy.IsNull() && !plan.HTTPSProxy.IsUnknown() {
+		httpsVal := plan.HTTPSProxy.ValueString()
+		payload.HTTPSProxy = &httpsVal
+	} else if !state.HTTPSProxy.IsNull() && !state.HTTPSProxy.IsUnknown() {
+		payload.HTTPSProxy = &emptyStr
 	}
-	payload.NoProxy = hosts
+
+	// No Proxy transition
+	if plan.NoProxy != nil {
+		var hosts []string
+		for _, str := range plan.NoProxy {
+			hosts = append(hosts, str.ValueString())
+		}
+		payload.NoProxy = hosts
+	} else if state.NoProxy != nil {
+		payload.NoProxy = []string{}
+	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -270,16 +326,38 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 
 	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve plan values when masked
 	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
-	if httpProxyFromAPI != "" && !containsMaskedPassword(httpProxyFromAPI) {
-		plan.HTTPProxy = types.StringValue(httpProxyFromAPI)
+	if httpProxyFromAPI == "" {
+		plan.HTTPProxy = types.StringNull()
+	} else {
+		if !plan.HTTPProxy.IsNull() && !plan.HTTPProxy.IsUnknown() {
+			maskedState := maskProxyURL(plan.HTTPProxy.ValueString())
+			maskedAPI := maskProxyURL(httpProxyFromAPI)
+			if maskedState == maskedAPI {
+				// keep plan value
+			} else {
+				plan.HTTPProxy = types.StringValue(httpProxyFromAPI)
+			}
+		} else {
+			plan.HTTPProxy = types.StringValue(httpProxyFromAPI)
+		}
 	}
-	// If masked (contains xxxxxx), keep the plan value (don't overwrite with masked value)
 
 	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
-	if httpsProxyFromAPI != "" && !containsMaskedPassword(httpsProxyFromAPI) {
-		plan.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+	if httpsProxyFromAPI == "" {
+		plan.HTTPSProxy = types.StringNull()
+	} else {
+		if !plan.HTTPSProxy.IsNull() && !plan.HTTPSProxy.IsUnknown() {
+			maskedState := maskProxyURL(plan.HTTPSProxy.ValueString())
+			maskedAPI := maskProxyURL(httpsProxyFromAPI)
+			if maskedState == maskedAPI {
+				// keep plan value
+			} else {
+				plan.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+			}
+		} else {
+			plan.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
+		}
 	}
-	// If masked (contains xxxxxx), keep the plan value (don't overwrite with masked value)
 
 	noProxyHosts := gjson.Get(response, "no_proxy").Array()
 	var noProxies []types.String
@@ -288,6 +366,7 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	plan.NoProxy = noProxies
 
+	plan.ID = types.StringValue("proxy")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -336,14 +415,32 @@ func (d *resourceCMProxy) Configure(_ context.Context, req resource.ConfigureReq
 	d.client = client
 }
 
-// containsMaskedPassword checks if a proxy URL contains a masked password (xxxxxx)
-// The API returns URLs like "user01:xxxxxx@10.171.18.190:8080" when passwords are masked
-func containsMaskedPassword(proxyURL string) bool {
-	// Simple check: if the URL contains "xxxxxx", it's masked
-	for i := 0; i+6 <= len(proxyURL); i++ {
-		if proxyURL[i:i+6] == "xxxxxx" {
-			return true
+func (r *resourceCMProxy) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// maskProxyURL masks passwords inside a proxy URL with xxxxxx for secure drift checking
+func maskProxyURL(u string) string {
+	if u == "" {
+		return ""
+	}
+	scheme := ""
+	rem := u
+	if strings.Contains(u, "://") {
+		parts := strings.SplitN(u, "://", 2)
+		scheme = parts[0] + "://"
+		rem = parts[1]
+	}
+
+	if strings.Contains(rem, "@") {
+		parts := strings.SplitN(rem, "@", 2)
+		creds := parts[0]
+		hostPart := parts[1]
+		if strings.Contains(creds, ":") {
+			credParts := strings.SplitN(creds, ":", 2)
+			user := credParts[0]
+			return scheme + user + ":xxxxxx@" + hostPart
 		}
 	}
-	return false
+	return u
 }
