@@ -29,7 +29,6 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 			name    = "%s"
 			region  = ciphertrust_aws_kms.kms.regions[0]
 			kms_id  = ciphertrust_aws_kms.kms.id
-			linked_state = false
 			local_hosted_params = {
 				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
 				max_credentials = 8
@@ -57,8 +56,6 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 			}
 			local_hosted_params = {
 				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
-				blocked = false
-				linked  = false
 				source_key_id   = ciphertrust_cm_key.cm_aes_key.id
 				source_key_tier = "local"
 			}

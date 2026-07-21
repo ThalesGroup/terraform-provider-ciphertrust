@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -222,7 +223,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "Parameters for a AWS XKS key.",
 				Attributes: map[string]schema.Attribute{
 					"blocked": schema.BoolAttribute{
-						Required:    true,
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "(Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 					},
 					"custom_key_store_id": schema.StringAttribute{
@@ -238,7 +241,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
 					},
 					"linked": schema.BoolAttribute{
-						Required:    true,
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "(Updatable) Parameter to indicate if AWS XKS key is linked with AWS.",
 					},
 				},

@@ -145,11 +145,14 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 
 Required:
 
-- `blocked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
 - `custom_key_store_id` (String) ID of the custom keystore where XKS key is to be created.
-- `linked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is linked with AWS.
 - `source_key_id` (String) ID of the source key for AWS XKS key.
 - `source_key_tier` (String) Source key tier for AWS XKS key. Current option is local. Default is local.
+
+Optional:
+
+- `blocked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
+- `linked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is linked with AWS.
 
 
 <a id="nestedatt--aws_param"></a>
