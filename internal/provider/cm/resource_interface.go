@@ -1052,6 +1052,8 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// its existing value. TF state reflects null (matching config) — no drift.
 	if !plan.RegToken.IsNull() && !plan.RegToken.IsUnknown() {
 		payload["registration_token"] = plan.RegToken.ValueString()
+	} else if !state.RegToken.IsNull() {
+		payload["registration_token"] = ""
 	}
 
 	// tls_ciphers: Null vs Empty vs Populated collection distinction
@@ -1116,6 +1118,8 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			Format:    plan.Certificate.Format.ValueString(),
 			Password:  plan.Certificate.Password.ValueString(),
 		}
+	} else if state.Certificate != nil {
+		payload["certificate"] = nil
 	}
 
 	payloadJSON, err := json.Marshal(payload)

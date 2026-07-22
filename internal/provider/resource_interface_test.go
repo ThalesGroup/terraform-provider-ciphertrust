@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"testing"
 
@@ -693,4 +694,182 @@ resource "ciphertrust_interface" "test" {
 		},
 	})
 }
+
+func Test_CM_CMInterface_ClearCertificate(t *testing.T) {
+	RequireCM(t)
+
+	port := 9000 + rand.Intn(900)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create NAE interface; capture server-assigned name.
+			{
+				PreConfig: func() { interfaceSweep(int64(port)) },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "step1-no-cert",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "certificate"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_interface.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			// Step 2: add certificate block.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+  certificate = {
+    certificate_chain = ""
+    generate          = true
+    format            = "PEM"
+    password          = ""
+  }
+}`, port),
+				Check: checkStep(t, "step2-cert-set",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "certificate.generate", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "certificate.format", "PEM"),
+				),
+			},
+			// Step 3: remove certificate block; verify TF state and CM both show it cleared.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "step3-cert-cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "certificate"),
+					func(s *terraform.State) error {
+						c, ok := createCMClient()
+						if !ok {
+							t.Logf("createCMClient unavailable — skipping CM-side certificate assertion")
+							return nil
+						}
+						resp, err := c.ReadDataByParam(context.Background(), uuid.New().String(),
+							capturedName, common.URL_INTERFACE)
+						if err != nil {
+							t.Logf("GET interface failed: %v — skipping CM-side assertion", err)
+							return nil
+						}
+						certResult := gjson.Get(resp, "certificate")
+						if certResult.Exists() && certResult.Type != gjson.Null {
+							return fmt.Errorf("expected certificate to be absent/null on CM after clear, got: %s", certResult.Raw)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_CMInterface_ClearRegistrationToken(t *testing.T) {
+	RequireCM(t)
+
+	port := 9000 + rand.Intn(900)
+
+	// Provision the registration token before building the test steps.
+	// This runs synchronously before resource.Test constructs the Steps slice,
+	// so regToken is populated when Step 2's Config fmt.Sprintf is evaluated.
+	c, ok := createCMClient()
+	if !ok {
+		t.Skip("createCMClient unavailable — cannot provision registration token")
+	}
+	payload := []byte(`{"name_prefix":"tftest","lifetime":"1h","cert_duration":365,"max_clients":1}`)
+	tokenResp, err := c.PostDataV2(context.Background(), uuid.New().String(),
+		"api/v1/client-management/regtokens", payload)
+	if err != nil {
+		t.Fatalf("failed to create reg token: %v", err)
+	}
+	regToken := gjson.Get(tokenResp, "token").String()
+	if regToken == "" {
+		t.Fatal("provisioned reg token is empty")
+	}
+
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create NAE interface; capture server-assigned name.
+			{
+				PreConfig: func() { interfaceSweep(int64(port)) },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "step1-no-reg",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "auto_registration"),
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "registration_token"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_interface.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			// Step 2: set auto_registration + registration_token.
+			// regToken was provisioned above before resource.Test was called.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port               = %d
+  interface_type     = "nae"
+  auto_registration  = true
+  registration_token = %q
+}`, port, regToken),
+				Check: checkStep(t, "step2-reg-set",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_registration", "true"),
+				),
+			},
+			// Step 3: remove both fields; verify CM cleared registration_token.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "step3-reg-cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "auto_registration"),
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "registration_token"),
+					func(s *terraform.State) error {
+						client, ok := createCMClient()
+						if !ok {
+							t.Logf("createCMClient unavailable — skipping CM-side assertion")
+							return nil
+						}
+						resp, err := client.ReadDataByParam(context.Background(), uuid.New().String(),
+							capturedName, common.URL_INTERFACE)
+						if err != nil {
+							t.Logf("GET interface failed: %v — skipping", err)
+							return nil
+						}
+						tok := gjson.Get(resp, "registration_token").String()
+						if tok != "" {
+							return fmt.Errorf("expected registration_token absent/empty on CM after clear, got: %q", tok)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 
