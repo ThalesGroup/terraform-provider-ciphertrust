@@ -49,6 +49,13 @@ resource "ciphertrust_ntp" "ntp_server_1" {
   host = "time1.google.com"
 }
 
+# Authenticated NTP server example
+resource "ciphertrust_ntp" "auth_ntp" {
+  host     = "time2.google.com"
+  key      = "my-secret-symmetric-key"
+  key_type = "SHA-256"
+}
+
 # Output the unique ID of the created NTP resource
 output "ntp_server_host" {
 	value = ciphertrust_ntp.ntp_server_1.host

@@ -10,6 +10,9 @@ description: |-
 
 Attaches a CipherTrust Manager admin policy to a set of principals (matched by principal_selector), optionally scoped to a jurisdiction. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
+> [!NOTE]
+> Since the CipherTrust Manager API does not support updating existing policy attachments, changing **any** configured attribute (including `policy`, `principal_selector`, `jurisdiction`, `actions`, or `resources`) will cleanly trigger a standard Terraform destroy-and-recreate replacement plan (`-/+`).
+
 ## Example Usage
 
 ```terraform
