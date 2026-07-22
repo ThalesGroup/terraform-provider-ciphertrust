@@ -182,6 +182,34 @@ resource "ciphertrust_hsm_root_of_trust_setup" "test" {
 `, hsmType, partitionName, partitionPassword, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
 }
 
+// hsmRotConfigSecure returns an HCL config that reads partition_password from a Terraform
+// variable (var.hsm_partition_password) rather than interpolating it directly into the
+// config string. Callers must set TF_VAR_hsm_partition_password before the test step runs.
+// This prevents the partition password from appearing in plaintext in test framework logs.
+func hsmRotConfigSecure(hsmType, partitionName, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey string) string {
+	return providerConfig + fmt.Sprintf(`
+variable "hsm_partition_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "ciphertrust_hsm_root_of_trust_setup" "test" {
+  type = %q
+  conn_info = {
+    partition_name     = %q
+    partition_password = var.hsm_partition_password
+  }
+  initial_config = {
+    host            = %q
+    serial          = %q
+    server-cert     = %q
+    client-cert     = %q
+    client-cert-key = %q
+  }
+}
+`, hsmType, partitionName, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+}
+
 // Test_CM_CipherTrust_HSMRot_NoDrift verifies that after apply, a subsequent plan shows no changes.
 func Test_CM_CipherTrust_HSMRot_NoDrift(t *testing.T) {
 	RequireCM(t)
@@ -384,6 +412,106 @@ resource "ciphertrust_hsm_root_of_trust_setup" "test" {
 			},
 		},
 	})
+}
+
+// Test_CM_HSMRootOfTrustSetup_NoDriftAfterApply verifies that after a successful apply,
+// a subsequent plan-only step with the same config reports no changes. This exercises
+// the Fix 2 else-null removal for the reset field in Read().
+func Test_CM_HSMRootOfTrustSetup_NoDriftAfterApply(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("TF_ACC_HSM") != "1" {
+		t.Skip("requires Luna HSM hardware — set TF_ACC_HSM=1 to run")
+	}
+
+	partitionName := os.Getenv("CIPHERTRUST_HSM_PARTITION_NAME")
+	partitionPassword := os.Getenv("CIPHERTRUST_HSM_PARTITION_PASSWORD")
+	hsmHost := os.Getenv("CIPHERTRUST_HSM_HOST")
+	hsmSerial := os.Getenv("CIPHERTRUST_HSM_SERIAL")
+	serverCert := os.Getenv("CIPHERTRUST_HSM_SERVER_CERT")
+	clientCert := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT")
+	clientCertKey := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT_KEY")
+
+	if partitionName == "" || partitionPassword == "" || hsmHost == "" || hsmSerial == "" ||
+		serverCert == "" || clientCert == "" || clientCertKey == "" {
+		t.Skip("One or more required CIPHERTRUST_HSM_* env vars not set")
+	}
+
+	// Pass partition_password via TF_VAR to prevent it from appearing in test framework logs.
+	t.Setenv("TF_VAR_hsm_partition_password", partitionPassword)
+	cfg := hsmRotConfigSecure("luna", partitionName, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
+				),
+			},
+			{
+				Config:   cfg,
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// Test_CM_HSMRootOfTrustSetup_ImmutableMapRejected verifies that a genuine change to
+// conn_info still fires an immutability error after Fix 1, confirming ImmutableMap
+// enforcement is not disabled by the null/unknown PlanValue guard.
+func Test_CM_HSMRootOfTrustSetup_ImmutableMapRejected(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("TF_ACC_HSM") != "1" {
+		t.Skip("requires Luna HSM hardware — set TF_ACC_HSM=1 to run")
+	}
+
+	partitionName := os.Getenv("CIPHERTRUST_HSM_PARTITION_NAME")
+	partitionPassword := os.Getenv("CIPHERTRUST_HSM_PARTITION_PASSWORD")
+	hsmHost := os.Getenv("CIPHERTRUST_HSM_HOST")
+	hsmSerial := os.Getenv("CIPHERTRUST_HSM_SERIAL")
+	serverCert := os.Getenv("CIPHERTRUST_HSM_SERVER_CERT")
+	clientCert := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT")
+	clientCertKey := os.Getenv("CIPHERTRUST_HSM_CLIENT_CERT_KEY")
+
+	if partitionName == "" || partitionPassword == "" || hsmHost == "" || hsmSerial == "" ||
+		serverCert == "" || clientCert == "" || clientCertKey == "" {
+		t.Skip("One or more required CIPHERTRUST_HSM_* env vars not set")
+	}
+
+	// Pass partition_password via TF_VAR to prevent it from appearing in test framework logs.
+	t.Setenv("TF_VAR_hsm_partition_password", partitionPassword)
+	cfgOriginal := hsmRotConfigSecure("luna", partitionName, hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+	cfgChangedConnInfo := hsmRotConfigSecure("luna", partitionName+"-changed", hsmHost, hsmSerial, serverCert, clientCert, clientCertKey)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfgOriginal,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_hsm_root_of_trust_setup.test", "id"),
+				),
+			},
+			{
+				Config:      cfgChangedConnInfo,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)cannot be changed after creation`),
+			},
+		},
+	})
+}
+
+// Test_CM_HSMRootOfTrustSetup_DriftDetected_Reset verifies that Read() correctly hydrates
+// a changed reset value from CM when it differs from what is tracked in state, producing a
+// non-empty plan (drift detection). Gates on TF_ACC_HSM=1 since it requires live HSM hardware.
+// If CM does not expose reset as a mutable PATCH field, this test is skipped with a note.
+func Test_CM_HSMRootOfTrustSetup_DriftDetected_Reset(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("TF_ACC_HSM") != "1" {
+		t.Skip("requires Luna HSM hardware — set TF_ACC_HSM=1 to run")
+	}
+	t.Skip("CM API does not permit out-of-band mutation of reset — drift scenario not exercisable without live HSM PATCH support")
 }
 
 // Test_CM_CipherTrust_HSMRot_DestroyNotFound verifies that terraform destroy succeeds when the

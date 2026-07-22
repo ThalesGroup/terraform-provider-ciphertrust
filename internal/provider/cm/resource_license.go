@@ -287,9 +287,11 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	if !state.BindType.IsNull() {
 		if r := gjson.Get(response, "bind_type"); r.Exists() && r.String() != "" {
 			state.BindType = types.StringValue(r.String())
-		} else {
-			state.BindType = types.StringNull()
 		}
+		// When CM omits 'bind_type' from the GET response, leave state.BindType unchanged.
+		// Preserving the tracked value from Create prevents ImmutableString from
+		// comparing null-StateValue vs non-null config-PlanValue and reporting the
+		// Go zero-value "" as "old" — the root cause of TFIN-432 on this resource.
 	}
 	// Computed-only — unconditional hydration.
 	state.Hash = types.StringValue(gjson.Get(response, "hash").String())
