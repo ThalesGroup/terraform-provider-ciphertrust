@@ -141,9 +141,11 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 	var state AzureConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
 	}
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AZURE_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
@@ -195,6 +197,8 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 			ExternalCertificateUsed:  types.BoolValue(azure.ExternalCertificateUsed),
 			KeyVaultDNSSuffix:        types.StringValue(azure.KeyVaultDNSSuffix),
 			ManagementURL:            types.StringValue(azure.ManagementURL),
+			CertDuration:             types.Int64Value(azure.CertDuration),
+			IsCertificateUsed:        types.BoolValue(azure.IsCertificateUsed),
 			Products: func() types.List {
 				var productValues []attr.Value
 				for _, product := range azure.Products {
@@ -208,47 +212,29 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 		}
 
 		if azure.Labels != nil {
-			// Create the map to store attr.Value
 			labelsMap := make(map[string]attr.Value)
 			for key, value := range azure.Labels {
-				// Ensure value is a string and handle if it's not
-				if strVal, ok := value.(string); ok {
-					labelsMap[key] = types.StringValue(strVal) // types.String is an attr.Value
-				} else {
-					// If not a string, set a default or skip the key-value pair
-					labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
-				}
+				labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 			}
-			// Set labels as a MapValue
-			azureConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, labelsMap)
+			resp.Diagnostics.Append(mapDiags...)
+			azureConn.Labels = mapVal
 		} else {
-			// If Labels are missing, assign an empty map
-			labelsMap := make(map[string]attr.Value)
-			azureConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			azureConn.Labels = types.MapNull(types.StringType)
 		}
 
 		if azure.Meta != nil {
-			// Create the map to store attr.Value for Meta
 			metaMap := make(map[string]attr.Value)
-			for key, value := range azure.Meta.(map[string]interface{}) {
-				// Convert each value in meta to the corresponding attr.Value
-				switch v := value.(type) {
-				case string:
-					metaMap[key] = types.StringValue(v)
-				case int64:
-					metaMap[key] = types.Int64Value(v)
-				case bool:
-					metaMap[key] = types.BoolValue(v)
-				default:
-					// For unknown types, convert them to a string representation
-					metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
+			if m, ok := azure.Meta.(map[string]interface{}); ok {
+				for key, value := range m {
+					metaMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 				}
 			}
-			azureConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, metaMap)
+			resp.Diagnostics.Append(mapDiags...)
+			azureConn.Meta = mapVal
 		} else {
-			// If Meta is missing, assign an empty map
-			metaMap := make(map[string]attr.Value)
-			azureConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			azureConn.Meta = types.MapNull(types.StringType)
 		}
 
 		state.Azure = append(state.Azure, azureConn)

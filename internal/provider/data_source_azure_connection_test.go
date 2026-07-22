@@ -63,3 +63,45 @@ data "ciphertrust_azure_connection_list" "azure_connection_details" {
 		},
 	})
 }
+
+func Test_CM_CiphertrustAzureConnectionDataSource_NoFiltersAndAttributes(t *testing.T) {
+	name := "test-azure-attr-" + uuid.New().String()[:8]
+
+	azureConnectionConfig := fmt.Sprintf(`
+resource "ciphertrust_azure_connection" "azure_connection" {
+  name          = %q
+  products      = ["cckm"]
+  client_secret = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  cloud_name    = "AzureCloud"
+  client_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
+  tenant_id     = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  description   = "azure attribute testing"
+  labels = {
+    "environment" = "testing"
+  }
+}
+
+data "ciphertrust_azure_connection_list" "azure_list_nofilters" {
+  depends_on = [ciphertrust_azure_connection.azure_connection]
+}
+`, name)
+
+	datasourceName := "data.ciphertrust_azure_connection_list.azure_list_nofilters"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + azureConnectionConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_azure_connection.azure_connection", "id"),
+					resource.TestCheckResourceAttrSet(datasourceName, "azure.0.id"),
+					// Verify that cert_duration is mapped to a valid value (0 since it is client secret based, but non-null)
+					resource.TestCheckResourceAttr(datasourceName, "azure.0.cert_duration", "0"),
+					// Verify that is_certificate_used maps correctly to false
+					resource.TestCheckResourceAttr(datasourceName, "azure.0.is_certificate_used", "false"),
+				),
+			},
+		},
+	})
+}

@@ -124,9 +124,11 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 	var state OCIConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
 	}
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_OCI_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
@@ -182,22 +184,17 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 
 		if oci.Meta != nil {
-			// Create the map to store attr.Value for Meta
 			metaMap := make(map[string]attr.Value)
-			for key, value := range oci.Meta.(map[string]interface{}) {
-				// The meta schema is map(string), so all values must be stored as strings.
-				switch v := value.(type) {
-				case string:
-					metaMap[key] = types.StringValue(v)
-				default:
-					metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
+			if m, ok := oci.Meta.(map[string]interface{}); ok {
+				for key, value := range m {
+					metaMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 				}
 			}
-			ociConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, metaMap)
+			resp.Diagnostics.Append(mapDiags...)
+			ociConn.Meta = mapVal
 		} else {
-			// If Meta is missing, assign an empty map
-			metaMap := make(map[string]attr.Value)
-			ociConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			ociConn.Meta = types.MapNull(types.StringType)
 		}
 		state.Oci = append(state.Oci, ociConn)
 	}

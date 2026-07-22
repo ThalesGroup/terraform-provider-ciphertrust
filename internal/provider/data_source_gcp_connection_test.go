@@ -67,3 +67,46 @@ data "ciphertrust_gcp_connection_list" "gcp_connection_details" {
 		},
 	})
 }
+
+func Test_CM_GCPConnectionDataSource_NoFilters(t *testing.T) {
+	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
+	if gcpKeyFile == "" {
+		t.Skip("Failed to set GCP connection variables")
+	}
+
+	name := "test-gcp-nofilter-" + uuid.New().String()[:8]
+
+	gcpConnectionConfig := fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "gcp_connection" {
+  name        = %q
+  products    = ["cckm"]
+  key_file    = <<-EOT
+    %s
+  EOT
+  cloud_name  = "gcp"
+  description = "connection description"
+  labels = {
+    "environment" = "nofilter"
+  }
+}
+
+data "ciphertrust_gcp_connection_list" "gcp_list_nofilters" {
+  depends_on = [ciphertrust_gcp_connection.gcp_connection]
+}
+`, name, gcpKeyFile)
+
+	datasourceName := "data.ciphertrust_gcp_connection_list.gcp_list_nofilters"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + gcpConnectionConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_gcp_connection.gcp_connection", "id"),
+					resource.TestCheckResourceAttrSet(datasourceName, "gcp.0.id"),
+				),
+			},
+		},
+	})
+}
