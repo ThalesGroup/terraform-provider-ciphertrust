@@ -211,7 +211,7 @@ Read-Only:
 - `message_format` (String) Format of the message on the Syslog server.
 - `name` (String) Name of the Syslog server.
 - `port` (Number) Port for syslog server. Valid values are 1 to 65535.
-- `private_key` (String) Client certificate for syslog application provided by the client. for example: -----BEGIN RSA PRIVATE KEY-----
+- `private_key` (String, Sensitive) Client certificate for syslog application provided by the client. for example: -----BEGIN RSA PRIVATE KEY-----
 <key content>
 -----END RSA PRIVATE KEY-----
 - `protocol` (String) Protocol of the Syslog server, TCP, UDP and TLS.

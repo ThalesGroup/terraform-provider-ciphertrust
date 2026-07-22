@@ -492,7 +492,8 @@ func (r *resourceCTEProfile) Schema(_ context.Context, _ resource.SchemaRequest,
 									Description: "Port for syslog server. Valid values are 1 to 65535.",
 								},
 								"private_key": schema.StringAttribute{
-									Optional: true,
+									Optional:  true,
+									Sensitive: true,
 
 									Description: "Client certificate for syslog application provided by the client. for example: -----BEGIN RSA PRIVATE KEY-----\n<key content>\n-----END RSA PRIVATE KEY-----",
 								},
