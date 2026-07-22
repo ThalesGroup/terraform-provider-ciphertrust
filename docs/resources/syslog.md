@@ -66,8 +66,8 @@ output "syslog_connection_value" {
 ### Optional
 
 - `ca_cert` (String) The trusted CA cert in PEM format. Only used in TLS transport mode
-- `message_format` (String) The log message format for new log messages: rfc5424 (default) plain_message cef leef.
-- `port` (Number) (Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls
+- `message_format` (String) The log message format for new log messages: rfc5424 (default) plain_message cef leef. Known limitation: once set, this cannot be cleared back to unset by removing it from config — CM's update API has no reset signal, so the last-applied value persists. To reset to the CM default, destroy and recreate the resource.
+- `port` (Number) (Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls. Known limitation: once set, this cannot be cleared back to unset by removing it from config; to reset to the CM default, destroy and recreate the resource.
 
 ### Read-Only
 
