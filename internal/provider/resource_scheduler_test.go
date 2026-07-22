@@ -1,13 +1,17 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"testing"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func Test_CM_ResourceScheduler(t *testing.T) {
@@ -331,6 +335,154 @@ data "ciphertrust_scheduler_list" "all" {
 `, uniqueName),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("data.ciphertrust_scheduler_list.all", "id"),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceCCKMRotationEmptyStringFields(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceCCKMRotationEmptyStringFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expire_in", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.rotation_after", ""),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceStartEndDateEmptyStringFields(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceStartEndDateEmptyStringFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-dates-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test_dates" {
+  name      = %q
+  operation = "database_backup"
+  run_at    = "0 1 * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs_dates" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test_dates]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs_dates", "scheduler.0.start_date", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs_dates", "scheduler.0.end_date", ""),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceCCKMRotationDrift(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceCCKMRotationDrift: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-drift-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", ""),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_scheduler.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Fatal("CM client unavailable")
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"cckm_key_rotation_params": map[string]interface{}{
+							"expiration": "7d",
+						},
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = client.UpdateDataV2(context.Background(), capturedID, common.URL_CM_SCHEDULER, payload)
+					if err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", "7d"),
 				),
 			},
 		},

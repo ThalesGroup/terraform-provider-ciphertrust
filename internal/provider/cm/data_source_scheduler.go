@@ -230,13 +230,13 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 					if jobs.StartDate != nil {
 						return types.StringValue(*jobs.StartDate)
 					}
-					return types.StringNull()
+					return types.StringValue("")
 				}(),
 				EndDate: func() types.String {
 					if jobs.EndDate != nil {
 						return types.StringValue(*jobs.EndDate)
 					}
-					return types.StringNull()
+					return types.StringValue("")
 				}(),
 			},
 		}
@@ -356,17 +356,17 @@ func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *Job
 	if cckmKeyRotationParams.Expiration != nil {
 		keyRotationParams.Expiration = types.StringValue(*cckmKeyRotationParams.Expiration)
 	} else {
-		keyRotationParams.Expiration = types.StringNull()
+		keyRotationParams.Expiration = types.StringValue("")
 	}
 	if cckmKeyRotationParams.ExpireIn != nil {
 		keyRotationParams.ExpireIn = types.StringValue(*cckmKeyRotationParams.ExpireIn)
 	} else {
-		keyRotationParams.ExpireIn = types.StringNull()
+		keyRotationParams.ExpireIn = types.StringValue("")
 	}
 	if cckmKeyRotationParams.RotationAfter != nil {
 		keyRotationParams.RotationAfter = types.StringValue(*cckmKeyRotationParams.RotationAfter)
 	} else {
-		keyRotationParams.RotationAfter = types.StringNull()
+		keyRotationParams.RotationAfter = types.StringValue("")
 	}
 	schedulerJobs.CCKMKeyRotationParams = keyRotationParams
 }
