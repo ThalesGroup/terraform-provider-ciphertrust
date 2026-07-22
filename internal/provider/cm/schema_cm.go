@@ -833,14 +833,14 @@ type HSMSetupTFSDK struct {
 }
 
 type HSMSetupJSON struct {
-	ID            string                 `json:"id"`
+	ID            string                 `json:"id,omitempty"`
 	Type          string                 `json:"type"`
 	ConnInfo      string                 `json:"connInfo"`
-	InitialConfig map[string]interface{} `json:"initialConfig"`
-	Reset         bool                   `json:"reset"`
-	Delay         int64                  `json:"delay"`
-	SubType       string                 `json:"sub_type"`
-	Config        map[string]interface{} `json:"config"`
+	InitialConfig map[string]interface{} `json:"initialConfig,omitempty"`
+	Reset         bool                   `json:"reset,omitempty"`
+	Delay         int64                  `json:"delay,omitempty"`
+	SubType       string                 `json:"sub_type,omitempty"`
+	Config        map[string]interface{} `json:"config,omitempty"`
 }
 
 type CMPrometheusMetricsConfigTFSDK struct {
