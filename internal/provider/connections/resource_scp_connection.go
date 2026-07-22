@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package connections
 
 import (
@@ -125,6 +128,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Required:      true,
 				Description:   "(Immutable) Unique connection name.",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"path_to": schema.StringAttribute{
 				Required:    true,
@@ -172,6 +178,7 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"password": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Password for SCP/SFTP server.",
 			},
 			"port": schema.Int64Attribute{
@@ -326,17 +333,21 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		payload.Description = plan.Description.ValueString()
 	}
 
-	scpLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		scpLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		scpLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			scpLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = scpLabelsPayload
 	}
-	payload.Labels = scpLabelsPayload
 
-	scpMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		scpMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		scpMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			scpMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = scpMetadataPayload
 	}
-	payload.Meta = scpMetadataPayload
 
 	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
 		payload.Password = plan.Password.ValueString()
@@ -472,17 +483,21 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		payload.Description = plan.Description.ValueString()
 	}
 
-	scpLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		scpLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		scpLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			scpLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = scpLabelsPayload
 	}
-	payload.Labels = scpLabelsPayload
 
-	scpMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		scpMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		scpMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			scpMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = scpMetadataPayload
 	}
-	payload.Meta = scpMetadataPayload
 
 	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
 		payload.Password = plan.Password.ValueString()
@@ -548,6 +563,10 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_SCP_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "SCP connection already deleted out-of-band on CM")
+			return
+		}
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust SCP Connection",

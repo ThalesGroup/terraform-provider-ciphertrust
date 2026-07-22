@@ -88,7 +88,7 @@ resource "ciphertrust_hsm_root_of_trust_setup" "cm_hsm_rot_setup" {
 
 ### Required
 
-- `conn_info` (Map of String) (Immutable) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.
+- `conn_info` (Map of String, Sensitive) (Immutable) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.
 
 For Luna Network HSM (including TCT) and Luna PCIe, the required attributes are:
 
@@ -110,7 +110,7 @@ Luna Network/PCIe HSM (including TCT) example:
 ### Optional
 
 - `delay` (Number) (Immutable) Delay in seconds before reset, defaults to 5 seconds.
-- `initial_config` (Map of String) (Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.
+- `initial_config` (Map of String, Sensitive) (Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.
 
 For Luna Network HSM (including TCT) the required attributes are:
 - "host"

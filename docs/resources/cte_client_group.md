@@ -129,7 +129,7 @@ output "cte_client_group_id" {
 - `inherit_attributes` (Boolean) Whether the client should inherit attributes from the ClientGroup.
 - `ldt_designated_primary_set` (String) ID of the Designated Primary Set.
 - `op_type` (String) Operation specifying weather to remove or add the provided client list to the GroupComm Service being updated.
-- `password` (String) User supplied password if password_creation_method is MANUAL. The password MUST be minimum 8 characters and MUST contain one alphabet, one number, and one of the !@#$%^&*(){}[] special characters.
+- `password` (String, Sensitive) User supplied password if password_creation_method is MANUAL. The password MUST be minimum 8 characters and MUST contain one alphabet, one number, and one of the !@#$%^&*(){}[] special characters.
 - `password_creation_method` (String) Password creation method, GENERATE or MANUAL.
 - `paused` (Boolean) Suspend/resume the rekey operation on an LDT GuardPoint. Set the value to true to pause (suspend) the rekey. Set the value to false to resume rekey.
 - `profile_id` (String) ID of the client group profile that is used to schedule custom configuration for logger, logging, and Quality of Service (QoS).

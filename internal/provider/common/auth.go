@@ -26,7 +26,7 @@ func (c *Client) SignIn(ctx context.Context, uuid string) (*AuthResponse, error)
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, URL_SIGNIN), strings.NewReader(string(rb)))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, URL_SIGNIN), strings.NewReader(string(rb)))
 
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [auth.go -> SignIn]["+uuid+"]")

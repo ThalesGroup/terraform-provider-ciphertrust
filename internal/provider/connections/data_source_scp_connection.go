@@ -117,9 +117,11 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 	var state ScpConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
 	}
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCP_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
@@ -179,47 +181,29 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 
 		if scp.Labels != nil {
-			// Create the map to store attr.Value
 			labelsMap := make(map[string]attr.Value)
 			for key, value := range scp.Labels {
-				// Ensure value is a string and handle if it's not
-				if strVal, ok := value.(string); ok {
-					labelsMap[key] = types.StringValue(strVal) // types.String is an attr.Value
-				} else {
-					// If not a string, set a default or skip the key-value pair
-					labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
-				}
+				labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 			}
-			// Set labels as a MapValue
-			scpConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, labelsMap)
+			resp.Diagnostics.Append(mapDiags...)
+			scpConn.Labels = mapVal
 		} else {
-			// If Labels are missing, assign an empty map
-			labelsMap := make(map[string]attr.Value)
-			scpConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			scpConn.Labels = types.MapNull(types.StringType)
 		}
 
 		if scp.Meta != nil {
-			// Create the map to store attr.Value for Meta
 			metaMap := make(map[string]attr.Value)
-			for key, value := range scp.Meta.(map[string]interface{}) {
-				// Convert each value in meta to the corresponding attr.Value
-				switch v := value.(type) {
-				case string:
-					metaMap[key] = types.StringValue(v)
-				case int64:
-					metaMap[key] = types.Int64Value(v)
-				case bool:
-					metaMap[key] = types.BoolValue(v)
-				default:
-					// For unknown types, convert them to a string representation
-					metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
+			if m, ok := scp.Meta.(map[string]interface{}); ok {
+				for key, value := range m {
+					metaMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 				}
 			}
-			scpConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, metaMap)
+			resp.Diagnostics.Append(mapDiags...)
+			scpConn.Meta = mapVal
 		} else {
-			// If Meta is missing, assign an empty map
-			metaMap := make(map[string]attr.Value)
-			scpConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			scpConn.Meta = types.MapNull(types.StringType)
 		}
 
 		state.Scp = append(state.Scp, scpConn)

@@ -5,7 +5,6 @@ package cm
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 
@@ -833,14 +832,14 @@ type HSMSetupTFSDK struct {
 }
 
 type HSMSetupJSON struct {
-	ID            string                 `json:"id"`
+	ID            string                 `json:"id,omitempty"`
 	Type          string                 `json:"type"`
 	ConnInfo      string                 `json:"connInfo"`
-	InitialConfig map[string]interface{} `json:"initialConfig"`
-	Reset         bool                   `json:"reset"`
-	Delay         int64                  `json:"delay"`
-	SubType       string                 `json:"sub_type"`
-	Config        map[string]interface{} `json:"config"`
+	InitialConfig map[string]interface{} `json:"initialConfig,omitempty"`
+	Reset         bool                   `json:"reset,omitempty"`
+	Delay         int64                  `json:"delay,omitempty"`
+	SubType       string                 `json:"sub_type,omitempty"`
+	Config        map[string]interface{} `json:"config,omitempty"`
 }
 
 type CMPrometheusMetricsConfigTFSDK struct {
@@ -884,8 +883,8 @@ type CreateJobConfigParamsJSON struct {
 	RunAt                          string                              `json:"run_at"`
 	RunOn                          string                              `json:"run_on"`
 	Disabled                       bool                                `json:"disabled"`
-	StartDate                      time.Time                           `json:"start_date"`
-	EndDate                        time.Time                           `json:"end_date"`
+	StartDate                      *string                             `json:"start_date,omitempty"`
+	EndDate                        *string                             `json:"end_date,omitempty"`
 	DatabaseBackupParams           *DatabaseBackupParamsJSON           `json:"database_backup_params"`
 	CCKMKeyRotationParams          *CCKMKeyRotationParamsJSON          `json:"cckm_key_rotation_params"`
 	CCKMSynchronizationParams      *CCKMSynchronizationParamsJSON      `json:"cckm_synchronization_params"`
@@ -899,8 +898,8 @@ type UpdateJobConfigParamsJSON struct {
 	RunAt                     string                         `json:"run_at"`
 	RunOn                     string                         `json:"run_on"`
 	Disabled                  bool                           `json:"disabled"`
-	StartDate                 time.Time                      `json:"start_date"`
-	EndDate                   time.Time                      `json:"end_date"`
+	StartDate                 *string                        `json:"start_date,omitempty"`
+	EndDate                   *string                        `json:"end_date,omitempty"`
 	DatabaseBackupParams      *DatabaseBackupParamsJSON      `json:"database_backup_params"`
 	CCKMRotationParams        *CCKMKeyRotationParamsJSON     `json:"cckm_key_rotation_params,omitempty"`
 	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
@@ -991,8 +990,8 @@ type CreateJobConfigParamsListJSON struct {
 	RunAt           string          `json:"run_at"`
 	RunOn           string          `json:"run_on"`
 	Disabled        bool            `json:"disabled"`
-	StartDate       time.Time       `json:"start_date"`
-	EndDate         time.Time       `json:"end_date"`
+	StartDate       *string         `json:"start_date,omitempty"`
+	EndDate         *string         `json:"end_date,omitempty"`
 	JobConfigParams json.RawMessage `json:"job_config_params"`
 }
 
@@ -1207,16 +1206,16 @@ type CMLogForwardersSyslogJSON struct {
 }
 
 type CMLogForwardersJSON struct {
-	ID                  string                     `json:"id"`
+	ID                  string                     `json:"id,omitempty"`
 	ConnectionID        string                     `json:"connection_id"`
 	Name                string                     `json:"name"`
 	Type                string                     `json:"type"`
-	ElasticsearchParams *CMLogForwardersESJSON     `json:"elasticsearch_params"`
-	LokiParams          *CMLogForwardersLokiJSON   `json:"loki_params"`
-	SyslogParams        *CMLogForwardersSyslogJSON `json:"syslog_params"`
-	Account             string                     `json:"account"`
-	CreatedAt           string                     `json:"createdAt"`
-	UpdatedAt           string                     `json:"updatedAt"`
+	ElasticsearchParams *CMLogForwardersESJSON     `json:"elasticsearch_params,omitempty"`
+	LokiParams          *CMLogForwardersLokiJSON   `json:"loki_params,omitempty"`
+	SyslogParams        *CMLogForwardersSyslogJSON `json:"syslog_params,omitempty"`
+	Account             string                     `json:"account,omitempty"`
+	CreatedAt           string                     `json:"createdAt,omitempty"`
+	UpdatedAt           string                     `json:"updatedAt,omitempty"`
 }
 
 type CCKMKeyRotationParamsTFSDK struct {
@@ -1228,17 +1227,13 @@ type CCKMKeyRotationParamsTFSDK struct {
 	RotationAfter  types.String `tfsdk:"rotation_after"`
 }
 
-type CCKMAwsKeyRotationParamsDatasourceTFSDK struct {
-	RetainAlias    types.Bool `tfsdk:"retain_alias"`
-	RotateMaterial types.Bool `tfsdk:"rotate_material"`
-}
-
 type CCKMKeyRotationParamsDatasourceTFSDK struct {
-	AwsParams     CCKMAwsKeyRotationParamsDatasourceTFSDK `tfsdk:"aws_params"`
-	CloudName     types.String                            `tfsdk:"cloud_name"`
-	Expiration    types.String                            `tfsdk:"expiration"`
-	ExpireIn      types.String                            `tfsdk:"expire_in"`
-	RotationAfter types.String                            `tfsdk:"rotation_after"`
+	AwsRetainAlias types.Bool   `tfsdk:"aws_retain_alias"`
+	RotateMaterial types.Bool   `tfsdk:"rotate_material"`
+	CloudName      types.String `tfsdk:"cloud_name"`
+	Expiration     types.String `tfsdk:"expiration"`
+	ExpireIn       types.String `tfsdk:"expire_in"`
+	RotationAfter  types.String `tfsdk:"rotation_after"`
 }
 
 type CCKMSynchronizationParamsTFSDK struct {

@@ -40,6 +40,11 @@ func (m immutableStringModifier) PlanModifyString(_ context.Context, req planmod
 	if req.State.Raw.IsNull() {
 		return
 	}
+	// Guard against null or unknown PlanValue — covers framework-internal null-plan
+	// phases and any future scenario where Read() nullifies state before a plan.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}
@@ -194,6 +199,11 @@ func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
 func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
 	// Brand-new resource: no prior resource state — allow any value.
 	if req.State.Raw.IsNull() {
+		return
+	}
+	// Guard against null or unknown PlanValue — covers framework-internal null-plan
+	// phases and any future scenario where Read() nullifies state before a plan.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
 		return
 	}
 	if req.PlanValue.Equal(req.StateValue) {

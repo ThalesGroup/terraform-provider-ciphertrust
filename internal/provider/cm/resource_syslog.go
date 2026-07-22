@@ -11,6 +11,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -62,13 +63,23 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"transport": schema.StringAttribute{
 				Required:    true,
 				Description: "udp, tcp or tls",
+				Validators: []validator.String{
+					stringvalidator.OneOf("udp", "tcp", "tls"),
+				},
 			},
 			"ca_cert": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode",
 			},
 			"message_format": schema.StringAttribute{
@@ -77,7 +88,7 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef.",
+				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef. Known limitation: once set, this cannot be cleared back to unset by removing it from config — CM's update API has no reset signal, so the last-applied value persists. To reset to the CM default, destroy and recreate the resource.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("rfc5424", "plain_message", "cef", "leef"),
 				},
@@ -89,7 +100,10 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 					int64planmodifier.UseStateForUnknown(),
 					modifiers.ImmutableInt64(),
 				},
-				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls. Known limitation: once set, this cannot be cleared back to unset by removing it from config; to reset to the CM default, destroy and recreate the resource.",
+				Validators: []validator.Int64{
+					int64validator.Between(1, 65535),
+				},
 			},
 			"account": schema.StringAttribute{
 				Computed: true,
@@ -171,6 +185,18 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	// framework's post-Create consistency check (every Computed attribute must resolve
 	// to a known value) is satisfied even when the user never set them.
 	hydrateSyslogOptionalFields(&plan, response)
+	if plan.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the planned/configured value if known, otherwise set to null.
+		if plan.CACert.IsUnknown() {
+			plan.CACert = types.StringNull()
+		}
+	} else {
+		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+			plan.CACert = types.StringValue(caCert.String())
+		} else {
+			plan.CACert = types.StringNull()
+		}
+	}
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
 
@@ -214,16 +240,18 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	// State-Guarded Hydration: only hydrate ca_cert if it was actively configured in the HCL,
-	// to avoid perpetual plan diffs and infinite apply loops when it is omitted in configuration.
-	if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
-		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
-			state.CACert = types.StringValue(caCert.String())
+	if state.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the existing state value (config value) to prevent spurious diffs.
+	} else {
+		if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
+			if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+				state.CACert = types.StringValue(caCert.String())
+			} else {
+				state.CACert = types.StringNull()
+			}
 		} else {
 			state.CACert = types.StringNull()
 		}
-	} else {
-		state.CACert = types.StringNull()
 	}
 	// Always hydrate message_format and port from the API response so that
 	// out-of-band changes made directly via the CM API are surfaced during
@@ -319,15 +347,19 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	plan.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	if !plan.CACert.IsNull() {
+	hydrateSyslogOptionalFields(&plan, response)
+	if plan.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the planned/configured value if known, otherwise set to null.
+		if plan.CACert.IsUnknown() {
+			plan.CACert = types.StringNull()
+		}
+	} else {
 		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
 			plan.CACert = types.StringValue(caCert.String())
+		} else {
+			plan.CACert = types.StringNull()
 		}
 	}
-	// message_format and port are Optional+Computed: hydrate unconditionally, matching
-	// Create() and Read(), so the framework's post-Update consistency check is satisfied
-	// even when the user never set them.
-	hydrateSyslogOptionalFields(&plan, response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

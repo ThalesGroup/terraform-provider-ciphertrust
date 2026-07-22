@@ -10,6 +10,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -76,14 +77,16 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Description: "Whether to bypass the key policy lockout safety check.",
 			},
 			"aws_param": schema.SingleNestedAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "AWS key parameters. Alias, description, and tags are updatable for linked keys; all other fields are computed.",
-				Attributes:  cloudHSMKeyAwsParamSchemaAttributes(),
+				Optional: true,
+				Computed: true,
+				Description: "AWS key parameters. At creation, only the first alias in 'alias' is applied; " +
+					"additional aliases require update after the key has been created. " +
+					"Description and tags are also updatable; all other fields are computed.",
+				Attributes: cloudHSMKeyAwsParamSchemaAttributes(),
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.",
+				Description: "(Updatable) Enable or disable the key. Cannot be set to false at creation time; disable via update after the key has been created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
@@ -210,15 +213,39 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Computed:    true,
 				Description: "Parameter to indicate if AWS CloudHSM key is linked with AWS.",
 			},
-			"key_policy":      keyStoreKeyPolicySchemaAttribute(),
-			"enable_rotation": enableRotationSchemaAttribute(),
+			"key_policy": keyStoreKeyPolicySchemaAttribute(),
+			"enable_rotation": schema.SingleNestedAttribute{
+				Optional: true,
+				Description: "(Updatable) Register the key with a CipherTrust Manager scheduled rotation job. " +
+					"The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. " +
+					"Cannot be configured during key creation; configure via update after the key has been created.",
+				Attributes: map[string]schema.Attribute{
+					"job_config_id": schema.StringAttribute{
+						Required:    true,
+						Description: "ID of the scheduler configuration job.",
+					},
+					"key_source": schema.StringAttribute{
+						Required:    true,
+						Description: "Key source for rotation. Options: 'local'.",
+						Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+					},
+					"disable_encrypt": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Disable encryption on the old key after rotation.",
+					},
+					"disable_encrypt_on_all_accounts": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Disable encryption on the old key for all accounts after rotation.",
+					},
+				},
+			},
 		},
 	}
 }
 
 // Create creates a new AWS CloudHSM key in a custom key store via CipherTrust Manager and sets Terraform state.
-// After the key is successfully created, the following post-creation operations are attempted but only
-// produce warnings (not errors) on failure, ensuring the key is always saved to state:
+// The key is always saved to state before returning, even if the final read-back fails (a warning is
+// emitted instead of an error so the key ID is preserved for subsequent operations and destroy).
 func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
@@ -291,31 +318,6 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	// Do not return error after this
 
 	keyID := gjson.Get(response, "id").String()
-
-	if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-		planP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-		if planP != nil && len(planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-			var diags diag.Diagnostics
-			addAliases(ctx, r.client, id, keyID, planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &diags)
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
-		}
-	}
-	if plan.EnableRotation != nil {
-		var diags diag.Diagnostics
-		enableKeyRotationJob(ctx, id, r.client, keyID, plan.EnableRotation, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		disableKey(ctx, id, r.client, keyID, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
 
 	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
@@ -587,20 +589,53 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Delete][response:"+redactAWSResponse(response)+"]")
 }
 
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
+// ModifyPlan enforces two categories of plan-time constraint:
+//  1. On create (no prior state): rejects attributes that cannot be configured until after
+//     the key has been created (e.g. additional aliases, rotation scheduler, disable).
+//  2. On update (prior state exists): rejects changes to immutable attributes that cannot be
+//     modified after creation.
 func (r *resourceAWSCloudHSMKey) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// Skip destroy operations.
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 
 	var plan, state AWSCloudHSMKeyTFSDK
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if !req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	}
 
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// On create (no prior state), reject attributes that require the key to be linked.
+	if req.State.Raw.IsNull() {
+		var invalid []string
+
+		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
+			cloudHSMP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+			if cloudHSMP != nil && len(cloudHSMP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+				invalid = append(invalid, "aws_param.alias (more than one alias)")
+			}
+		}
+		if plan.EnableRotation != nil {
+			invalid = append(invalid, "enable_rotation")
+		}
+		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
+			invalid = append(invalid, "enable_key = false")
+		}
+
+		if len(invalid) > 0 {
+			resp.Diagnostics.AddError(
+				"Invalid configuration for a new CloudHSM key",
+				"The following attributes cannot be set at creation time: "+
+					strings.Join(invalid, ", ")+". "+
+					"\nConfigure these via update after the key has been created.",
+			)
+		}
 		return
 	}
 

@@ -2,9 +2,12 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -651,6 +654,177 @@ resource "ciphertrust_interface" "test" {
 				// Step 2: identical config — must reach "No changes."
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_CMInterface_ClearCertificate verifies the full clear lifecycle for the certificate block:
+// create without certificate → add certificate → remove certificate block →
+// TF state shows certificate absent and apply succeeds without inconsistency error (TFIN-427).
+func Test_CM_CMInterface_ClearCertificate(t *testing.T) {
+	RequireCM(t)
+	port := 9876 + rand.New(rand.NewSource(time.Now().UnixNano())).Intn(100)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: baseline NAE interface with no certificate block.
+				PreConfig: func() { interfaceSweep(int64(port)) },
+				Config: fmt.Sprintf(providerConfig+`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "create-no-cert",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "certificate"),
+				),
+			},
+			{
+				// Step 2: add certificate block with generate=true, format="PEM".
+				Config: fmt.Sprintf(providerConfig+`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+  certificate = {
+    certificate_chain = ""
+    generate          = true
+    format            = "PEM"
+    password          = ""
+  }
+}`, port),
+				Check: checkStep(t, "add-cert",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "certificate.generate", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "certificate.format", "PEM"),
+				),
+			},
+			{
+				// Step 3: remove certificate block entirely — must succeed without
+				// "Provider produced inconsistent result" error (TFIN-427 fix).
+				Config: fmt.Sprintf(providerConfig+`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: checkStep(t, "clear-cert",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "certificate"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_CMInterface_ClearRegistrationToken verifies the full clear lifecycle for
+// auto_registration + registration_token: create interface → provision a real CM reg token →
+// set auto_registration=true + registration_token → remove both → verify TF state shows both
+// absent and CM-side GET confirms registration_token is cleared (TFIN-427).
+func Test_CM_CMInterface_ClearRegistrationToken(t *testing.T) {
+	RequireCM(t)
+
+	// capturedName holds the CM-assigned interface name from Step 1 for CM-side assertion in Step 3.
+	var capturedName string
+
+	c, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable — skipping registration token pre-provisioning")
+	}
+
+	// Pre-provision a real CM registration token.
+	// CM rejects freeform strings as registration_token — a real token from the reg-token API is required.
+	regTokenPayload, _ := json.Marshal(map[string]interface{}{
+		"name_prefix":   "test",
+		"lifetime":      "10h",
+		"cert_duration": 730,
+		"max_clients":   100,
+	})
+	regTokenResp, err := c.PostDataV2(context.Background(), uuid.New().String(), common.URL_REG_TOKEN, regTokenPayload)
+	if err != nil {
+		t.Fatalf("Failed to pre-provision registration token: %v", err)
+	}
+	regToken := gjson.Get(regTokenResp, "token").String()
+	if regToken == "" {
+		t.Fatalf("Pre-provisioned registration token is empty — cannot continue")
+	}
+
+	port := 9400 + rand.New(rand.NewSource(time.Now().UnixNano())).Intn(400)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: baseline NAE interface without auto_registration/registration_token.
+				PreConfig: func() { interfaceSweep(int64(port)) },
+				Config: fmt.Sprintf(providerConfig+`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: func(s *terraform.State) error {
+					rs, ok := s.RootModule().Resources["ciphertrust_interface.test"]
+					if !ok {
+						return fmt.Errorf("resource not found in state")
+					}
+					capturedName = rs.Primary.Attributes["name"]
+					if err := resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "registration_token")(s); err != nil {
+						return err
+					}
+					return resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "auto_registration")(s)
+				},
+			},
+			{
+				// Step 2: set auto_registration=true and registration_token.
+				// CM requires a real token when auto_registration=true.
+				// The token is injected via TF_VAR_registration_token so it never appears
+				// in the HCL config string (and therefore never in test framework logs).
+				PreConfig: func() {
+					t.Setenv("TF_VAR_registration_token", regToken)
+				},
+				Config: fmt.Sprintf(providerConfig+`
+variable "registration_token" {}
+resource "ciphertrust_interface" "test" {
+  port               = %d
+  interface_type     = "nae"
+  auto_registration  = true
+  registration_token = var.registration_token
+}`, port),
+				Check: checkStep(t, "add-token",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_registration", "true"),
+				),
+			},
+			{
+				// Step 3: remove both fields — must succeed and CM must reflect the clear (TFIN-427 fix).
+				Config: fmt.Sprintf(providerConfig+`
+resource "ciphertrust_interface" "test" {
+  port           = %d
+  interface_type = "nae"
+}`, port),
+				Check: func(s *terraform.State) error {
+					// Assert TF state shows both fields absent.
+					if err := resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "registration_token")(s); err != nil {
+						return err
+					}
+					if err := resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "auto_registration")(s); err != nil {
+						return err
+					}
+					// CM-side assertion: verify registration_token is actually cleared on CM.
+					if capturedName == "" {
+						t.Logf("capturedName not captured from Step 1 — skipping CM-side assertion")
+						return nil
+					}
+					cmClient, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable in Step 3 Check — skipping CM-side assertion")
+						return nil
+					}
+					resp, err := cmClient.ReadDataByParam(context.Background(), uuid.New().String(), capturedName, common.URL_INTERFACE)
+					if err != nil {
+						return fmt.Errorf("CM-side GET failed: %v", err)
+					}
+					token := gjson.Get(resp, "registration_token").String()
+					if token != "" {
+						return fmt.Errorf("expected registration_token to be absent/empty on CM after clear, got: %q", token)
+					}
+					return nil
+				},
 			},
 		},
 	})

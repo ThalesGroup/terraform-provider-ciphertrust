@@ -100,7 +100,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"archive": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
+				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
 			},
 			"arn": schema.StringAttribute{
 				Computed:    true,
@@ -234,16 +234,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	kmsID := gjson.Get(response, "id").String()
 	plan.ID = types.StringValue(kmsID)
 
-	// Archive immediately after creation if requested.
-	if plan.Archive.ValueBool() {
-		var archiveDiags diag.Diagnostics
-		archiveKMS(ctx, id, r.client, kmsID, &archiveDiags)
-		for _, d := range archiveDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	// Always re-read so state reflects the current server status (including archived state).
+	// Always re-read so state reflects the current server status.
 	response, err = r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
 	if err != nil {
 		msg := "Error reading AWS KMS after create."
@@ -428,11 +419,25 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
+// ModifyPlan enforces create-time restrictions and errors at plan time if any immutable
+// attribute is changed on an existing resource.
 func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// Skip destroy.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// Create-time validations: reject archive = true on a new resource.
+	if req.State.Raw.IsNull() {
+		var plan KMSModelTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if !resp.Diagnostics.HasError() && !plan.Archive.IsNull() && plan.Archive.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Invalid create-time configuration",
+				"\"archive\" cannot be set to true at creation time. "+
+					"Create the KMS first, then set archive = true via update.",
+			)
+		}
 		return
 	}
 
@@ -543,7 +548,7 @@ func (r *resourceCCKMAWSKMS) resolveConnectionByIDOrName(ctx context.Context, re
 }
 
 // archiveKMS archives a KMS registration.
-// Used by resourceCCKMAWSKMS Create and Update.
+// Used by resourceCCKMAWSKMS Update.
 func archiveKMS(ctx context.Context, id string, client *common.Client, kmsID string, diags *diag.Diagnostics) {
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> archiveKMS]["+id+"]")
 	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> archiveKMS]["+id+"]")

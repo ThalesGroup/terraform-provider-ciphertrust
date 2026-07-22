@@ -107,7 +107,7 @@ output "cte_client_id" {
 - `lgcs_access_only` (Boolean) Whether the client can be added to an LDT communication group. If lgcs_access_only is set to false, the client can be added to an LDT communication group. Only available on Windows clients.
 - `max_num_cache_log` (Number) Maximum number of logs to cache.
 - `max_space_cache_log` (Number) Maximum space for the cached logs.
-- `password` (String) Password for the client. Required when password_creation_method is MANUAL.
+- `password` (String, Sensitive) Password for the client. Required when password_creation_method is MANUAL.
 - `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
 - `profile_id` (String) ID of the profile that contains logger, logging, and QOS configuration.
 - `profile_identifier` (String) Identifier of the Client Profile to be associated with the client. If not provided, the default profile will be linked.

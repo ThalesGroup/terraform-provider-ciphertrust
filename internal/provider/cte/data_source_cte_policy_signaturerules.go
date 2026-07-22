@@ -83,7 +83,7 @@ func (d *dataSourceCTEPolicySignatureRule) Read(ctx context.Context, req datasou
 	var state CTEPolicySignatureRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/signaturerules")

@@ -60,44 +60,38 @@ func awsKeyValidTo(daysFromNow int) string {
 	return time.Now().UTC().AddDate(0, 0, daysFromNow).Truncate(24 * time.Hour).Format(time.RFC3339)
 }
 
-// TestCckmAWSByokKeyAESCreateWithSourceKey tests creating an AWS EXTERNAL (BYOK) AES key with
-// all source key parameters (source_key_identifier, source_key_tier, aws_param.valid_to,
-// aws_param.description), updating all updatable attributes, and verifying that immutable
-// attributes cannot be changed after creation. The default customer_master_key_spec is
-// SYMMETRIC_DEFAULT (AES-256), which is set implicitly when no spec is provided.
-func TestCckmAWSByokKeyAESCreateWithSourceKey(t *testing.T) {
+// TestCckmAWSByokKeyAES tests creating an AWS EXTERNAL (BYOK) AES key with
+// source key parameters (source_key_identifier, source_key_tier, aws_param.valid_to,
+// aws_param.description), then exercises all updatable non-policy attributes:
+//   - enable_key: true -> false -> true
+//   - enable_rotation: no scheduler -> scheduler attached -> no scheduler
+//   - aws_param.alias: 1 alias -> 2 aliases -> 1 alias
+//   - aws_param.description, aws_param.tags: changed then restored
+//
+// The default customer_master_key_spec is SYMMETRIC_DEFAULT (AES-256), set implicitly.
+// Key policy cycling is covered separately by TestCckmAWSByokKeyPolicyUpdates.
+func TestCckmAWSByokKeyAES(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 
+	schedulerName := "tf-byok-" + uuid.New().String()[:8]
+	extraAlias := awsKeyNamePrefix + uuid.New().String()
 	validTo := awsKeyValidTo(180) // ~6 months out - within AWS 365-day limit
 
-	// Step 1: create with source_key_identifier, source_key_tier, valid_to, description,
-	// and a structured key policy with admins + users.
+	// Step 1: create with source key params, valid_to, 1 alias, description, tags.
+	// BYOK keys only allow 1 alias at create time; extra aliases are added via update.
+	// No scheduler and no key policy - those are cycled in later steps.
 	createKeyConfig := fmt.Sprintf(`
 		resource "ciphertrust_aws_byok_key" "byok_key" {
 			enable_key            = true
-			key_policy = {
-				key_admins       = ["%s"]
-				key_users        = ["%s"]
-				key_admins_roles = ["%s"]
-				key_users_roles  = ["%s"]
-			}
 			kms_id                = ciphertrust_aws_kms.kms.id
 			region                = ciphertrust_aws_kms.kms.regions[0]
 			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
 			source_key_tier       = "local"
 			aws_param = {
-				alias       = [local.alias, "%s"]
+				alias       = [local.alias]
 				description = "create description"
 				valid_to    = "%s"
 				tags = {
@@ -106,32 +100,64 @@ func TestCckmAWSByokKeyAESCreateWithSourceKey(t *testing.T) {
 				}
 			}
 		}`,
-		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1],
-		awsKeyNamePrefix+uuid.New().String(), validTo,
+		validTo,
 	)
 
-	// Step 3: update - change enable_key, policy (raw JSON), aliases, description, tags.
+	// Step 3: update - disable key, attach scheduler via enable_rotation, add second alias,
+	// change description and tags.
 	updateKeyConfig := fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
 		resource "ciphertrust_aws_byok_key" "byok_key" {
-			enable_key            = false
-			key_policy = {
-				policy = <<-EOT
-					%s
-				EOT
+			enable_key = false
+			enable_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "local"
 			}
 			kms_id                = ciphertrust_aws_kms.kms.id
 			region                = ciphertrust_aws_kms.kms.regions[0]
 			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
 			source_key_tier       = "local"
 			aws_param = {
-				alias       = [local.alias]
+				alias       = [local.alias, "%s"]
 				description = "update description"
 				tags = {
 					TagKey1 = "TagValue1"
 					TagKey3 = "TagValue3"
 				}
 			}
-		}`, awsKeyPolicy)
+		}`,
+		schedulerName, extraAlias,
+	)
+	updateKeyConfig = applyCDSPAAS(updateKeyConfig)
+
+	// Step 4: restore - re-enable key, remove scheduler (enable_rotation absent), drop back
+	// to 1 alias, restore original description/tags.
+	restoreKeyConfig := `
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			enable_key            = true
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier       = "local"
+			aws_param = {
+				alias       = [local.alias]
+				description = "create description"
+				tags = {
+					TagKey1 = "TagValue1"
+					TagKey2 = "TagValue2"
+				}
+			}
+		}`
 
 	// ModifyPlan step: verify that changing customer_master_key_spec is rejected.
 	modifyPlanKeySpecConfig := `
@@ -147,184 +173,6 @@ func TestCckmAWSByokKeyAESCreateWithSourceKey(t *testing.T) {
 		}`
 
 	keyResource := "ciphertrust_aws_byok_key.byok_key"
-	base := awsConnectionResource + cmAesKeyConfig
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				// Step 1: create with all source key params including valid_to + description.
-				Config: base + createKeyConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.origin", "EXTERNAL"),
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
-					// valid_to was supplied as input in aws_param; verify it is returned by the API.
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.valid_to"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
-				),
-			},
-			{
-				// Step 2: import state round-trip.
-				ResourceName:            keyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsByokKey,
-				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
-			},
-			{
-				// Step 3: update - disable key, switch to raw JSON policy, change aliases/tags/description.
-				Config: base + updateKeyConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "update description"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "false"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Disabled"),
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey3", "TagValue3"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
-				),
-			},
-			{
-				// Step 4: verify ModifyPlan rejects a customer_master_key_spec change.
-				Config:      base + modifyPlanKeySpecConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-		},
-	})
-}
-
-// TestCckmAWSByokKeyUpdates verifies that all updatable attributes of a BYOK key can be
-// changed in a single apply, and that a re-apply of the original config restores all values.
-// The test also verifies that a key rotation scheduler can be attached on create, detached
-// on update, and re-attached on a subsequent re-apply.
-func TestCckmAWSByokKeyUpdates(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
-
-	schedulerName := "tf-byok-" + uuid.New().String()[:8]
-	extraAlias := "tf-" + uuid.New().String()
-
-	// createParamsConfig specifies all possible non-MR parameters for a BYOK key,
-	// including a ciphertrust_scheduler linked via enable_rotation.
-	createParamsConfig := fmt.Sprintf(`
-		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params = {
-				cloud_name = "aws"
-			}
-			end_date   = "2050-03-07T14:24:00Z"
-			name       = "%s"
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
-		resource "ciphertrust_aws_byok_key" "byok_key" {
-			enable_key = true
-			enable_rotation = {
-				job_config_id = ciphertrust_scheduler.scheduler.id
-				key_source    = "local"
-			}
-			key_policy = {
-				key_admins       = ["%s"]
-				key_users        = ["%s"]
-				key_admins_roles = ["%s"]
-				key_users_roles  = ["%s"]
-			}
-			kms_id                = ciphertrust_aws_kms.kms.id
-			region                = ciphertrust_aws_kms.kms.regions[0]
-			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier       = "local"
-			schedule_for_deletion_days = 8
-			aws_param = {
-				alias       = [local.alias, "%s"]
-				description = "create description"
-				tags = {
-					TagKey1 = "TagValue1"
-					TagKey2 = "TagValue2"
-				}
-			}
-		}`,
-		schedulerName,
-		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1],
-		extraAlias,
-	)
-	createParamsConfig = applyCDSPAAS(createParamsConfig)
-
-	// updateParamsConfig updates every updatable attribute and removes enable_rotation.
-	updateParamsConfig := fmt.Sprintf(`
-		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params = {
-				cloud_name = "aws"
-			}
-			end_date   = "2050-03-07T14:24:00Z"
-			name       = "%s"
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
-		resource "ciphertrust_aws_byok_key" "byok_key" {
-			enable_key            = false
-			key_policy = {
-				policy = <<-EOT
-					%s
-				EOT
-			}
-			kms_id                = ciphertrust_aws_kms.kms.id
-			region                = ciphertrust_aws_kms.kms.regions[0]
-			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier       = "local"
-			schedule_for_deletion_days = 10
-			aws_param = {
-				alias       = [local.alias]
-				description = "update description"
-				tags = {
-					TagKey1 = "TagValue1"
-					TagKey3 = "TagValue3"
-				}
-			}
-		}`,
-		schedulerName, awsKeyPolicy,
-	)
-	updateParamsConfig = applyCDSPAAS(updateParamsConfig)
-
-	keyResource := "ciphertrust_aws_byok_key.byok_key"
 	schedulerResource := "ciphertrust_scheduler.scheduler"
 	base := awsConnectionResource + cmAesKeyConfig
 
@@ -333,23 +181,12 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Step 1: create with all possible non-MR parameters.
-				Config: base + createParamsConfig,
+				// Step 1: create with source key params, valid_to, 1 alias, description, tags.
+				Config: base + createKeyConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.0", awsPolicyRolePrefix+awsKeyRoles[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.0", awsPolicyRolePrefix+awsKeyRoles[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
-					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
@@ -359,7 +196,7 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttrSet(keyResource, "aws_param.valid_to"),
 				),
 			},
 			{
@@ -371,17 +208,10 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
 			},
 			{
-				// Step 3: update all updatable attributes; remove enable_rotation.
-				Config: base + updateParamsConfig,
+				// Step 3: disable key, attach scheduler, add second alias, change description/tags.
+				Config: base + updateKeyConfig,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "10"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "update description"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "false"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Disabled"),
@@ -389,31 +219,117 @@ func TestCckmAWSByokKeyUpdates(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey3", "TagValue3"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
+					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
+					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
 				),
 			},
 			{
-				// Step 4: re-apply createParamsConfig to verify all values are safely restored.
-				Config: base + createParamsConfig,
+				// Step 4: re-enable, remove scheduler, drop back to 1 alias, restore description/tags.
+				Config: base + restoreKeyConfig,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "key_admins.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_admins.0", awsPolicyUserPrefix+awsKeyUsers[0]),
-					resource.TestCheckResourceAttr(keyResource, "key_users.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "key_users.0", awsPolicyUserPrefix+awsKeyUsers[1]),
-					resource.TestCheckResourceAttr(keyResource, "labels.auto_rotate_key_source", "local"),
-					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "rotation_history.#", "1"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.TagKey2", "TagValue2"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), true),
+					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
 				),
+			},
+			{
+				// Step 5: verify ModifyPlan rejects a customer_master_key_spec change.
+				Config:      base + modifyPlanKeySpecConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+		},
+	})
+}
+
+// TestCckmAWSByokKeyCreateRejections verifies that ModifyPlan rejects each attribute that
+// cannot be set during BYOK key creation: multiple aliases, enable_rotation, and enable_key=false.
+// Each step is plan-only; no infrastructure is created.
+func TestCckmAWSByokKeyCreateRejections(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	schedulerName := "tf-byok-rej-" + uuid.New().String()[:8]
+
+	multipleAliasesConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = "dummy-key-id"
+			source_key_tier       = "local"
+			aws_param = {
+				alias = [local.alias, "%s"]
+			}
+		}`, awsKeyNamePrefix+uuid.New().String())
+
+	enableRotationConfig := fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			enable_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "local"
+			}
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = "dummy-key-id"
+			source_key_tier       = "local"
+			aws_param = {
+				alias = [local.alias]
+			}
+		}`, schedulerName)
+
+	disabledKeyConfig := `
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			enable_key            = false
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = "dummy-key-id"
+			source_key_tier       = "local"
+			aws_param = {
+				alias = [local.alias]
+			}
+		}`
+
+	base := awsConnectionResource + cmAesKeyConfig
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Multiple aliases on create must be rejected.
+				Config:      base + multipleAliasesConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`At most one alias may be set`),
+			},
+			{
+				// enable_rotation on create must be rejected.
+				Config:      base + enableRotationConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`'enable_rotation' cannot be set`),
+			},
+			{
+				// enable_key=false on create must be rejected.
+				Config:      base + disabledKeyConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`'enable_key' cannot be set to false`),
 			},
 		},
 	})
@@ -556,13 +472,13 @@ func TestCckmAWSByokKeyPolicyUpdates(t *testing.T) {
 	})
 }
 
-// TestCckmAWSByokKeyRSACreateWithSourceKey tests creating an AWS EXTERNAL (BYOK) RSA_2048 key
+// TestCckmAWSByokKeyRSA tests creating an AWS EXTERNAL (BYOK) RSA_2048 key
 // with a CipherTrust Manager RSA 2048 source key. RSA BYOK keys differ from AES BYOK keys in
 // that customer_master_key_spec must be set to "RSA_2048" and key_usage must be set explicitly.
 // Unlike AES BYOK keys, RSA BYOK keys do not support rotating key material - only a single
 // import of key material is permitted. The test creates the key, verifies it is Enabled, and
 // performs a basic update of mutable attributes (description, tags, enable_key).
-func TestCckmAWSByokKeyRSACreateWithSourceKey(t *testing.T) {
+func TestCckmAWSByokKeyRSA(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()

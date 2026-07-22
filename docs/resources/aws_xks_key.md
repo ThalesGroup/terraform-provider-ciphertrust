@@ -15,7 +15,7 @@ Use this resource to create and manage AWS XKS keys in CipherTrust Manager.
 ```terraform
 # Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
-  name = "connection-name"
+  name = "name"
 }
 
 # Get the AWS account details
@@ -27,14 +27,14 @@ data "ciphertrust_aws_account_details" "account_details" {
 resource "ciphertrust_aws_kms" "kms" {
   account_id     = data.ciphertrust_aws_account_details.account_details.account_id
   aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "kms-name"
+  name           = "name"
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CipherTrust Manager as key source
 # key should be unexportable, undeletable, symmetric AES 256 key.
-resource "ciphertrust_cm_key" "cm_aes_key" {
-  name         = "aes-key-name"
+resource "ciphertrust_cm_key" "healthcheck_key" {
+  name         = "name"
   algorithm    = "AES"
   usage_mask   = 60
   unexportable = true
@@ -43,16 +43,15 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
   remove_from_state_on_destroy = true
 }
 
-# Define unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity
+# Define an unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity.
+# linked_state is omitted here so the keystore is created unlinked (default). Set linked_state = true to create it linked.
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
-  name                        = "keystore-name"
-  region                      = "us-west-1"
-  kms_id                      = ciphertrust_aws_kms.kms.id
-  linked_state                = false
-  connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
+  name   = "name"
+  region = "region"
+  kms_id = ciphertrust_aws_kms.kms.id
   local_hosted_params = {
     blocked             = false
-    health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
+    health_check_key_id = ciphertrust_cm_key.healthcheck_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
@@ -63,29 +62,31 @@ resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
   }
 }
 
-# Define an unlinked XKS key with CipherTrust Manager as key source in above unlinked external key store
-# Keys can only be linked once the keystore is linked
+# Define a separate AES CipherTrust key to use as the XKS key source.
+# Must have the same specs as the health check key: unexportable, undeletable, symmetric AES 256.
+resource "ciphertrust_cm_key" "xks_source_key" {
+  name                         = "xks-source-key-name"
+  algorithm                    = "AES"
+  usage_mask                   = 60
+  unexportable                 = true
+  undeletable                  = true
+  remove_from_state_on_destroy = true
+}
+
+# Define an unlinked XKS key in the above keystore.
+# blocked and linked are both sent to the API at creation time.
+# To create a linked key, set linked = true (requires the keystore to also be linked).
+# Additional aliases, tags, enable_rotation, and enable_key = false must be set via update after creation.
 resource "ciphertrust_aws_xks_key" "xks_key" {
   local_hosted_params = {
     blocked             = false
     custom_key_store_id = ciphertrust_aws_custom_keystore.custom_keystore.id
     linked              = false
-    source_key_id       = ciphertrust_cm_key.cm_aes_key.id
+    source_key_id       = ciphertrust_cm_key.xks_source_key.id
     source_key_tier     = "local"
   }
   aws_param = {
-    alias = ["key-name"]
-  }
-}
-
-# An example resource for importing an existing xks key
-resource "ciphertrust_aws_xks_key" "imported_xks_key" {
-  local_hosted_params = {
-    blocked             = false
-    custom_key_store_id = "0813e489-6930-4c4f-a9ab-85ff275f9122"
-    linked              = false
-    source_key_id       = "5b0cce40a9434708bfb2510a670dce2d12a0253bda444a109224e519f0df5619"
-    source_key_tier     = "local"
+    alias = ["alias"]
   }
 }
 ```
@@ -101,8 +102,8 @@ resource "ciphertrust_aws_xks_key" "imported_xks_key" {
 
 - `aws_param` (Attributes) AWS key parameters. Alias, description, and tags are updatable for linked keys; all other fields are computed. (see [below for nested schema](#nestedatt--aws_param))
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.
-- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. (see [below for nested schema](#nestedatt--enable_rotation))
+- `enable_key` (Boolean) (Updatable) Enable or disable the key. Only applied when the key is in a linked state. Cannot be set to false at creation time; disable the key via update after it is created.
+- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) (Updatable) Key policy parameters. Only applicable to keys in a linked state. (see [below for nested schema](#nestedatt--key_policy))
 - `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
@@ -144,11 +145,14 @@ resource "ciphertrust_aws_xks_key" "imported_xks_key" {
 
 Required:
 
-- `blocked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
 - `custom_key_store_id` (String) ID of the custom keystore where XKS key is to be created.
-- `linked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is linked with AWS.
 - `source_key_id` (String) ID of the source key for AWS XKS key.
 - `source_key_tier` (String) Source key tier for AWS XKS key. Current option is local. Default is local.
+
+Optional:
+
+- `blocked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
+- `linked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is linked with AWS.
 
 
 <a id="nestedatt--aws_param"></a>

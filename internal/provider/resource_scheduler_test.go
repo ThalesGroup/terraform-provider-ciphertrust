@@ -1,13 +1,17 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
 	"testing"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func Test_CM_ResourceScheduler(t *testing.T) {
@@ -199,3 +203,288 @@ resource "ciphertrust_scheduler" "test_key_rotation" {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+func Test_CM_Scheduler_StartDateEndDateClear(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_Scheduler_StartDateEndDateClear: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "date-clear-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create a scheduler with both start_date and end_date set
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name        = %q
+  operation   = "database_backup"
+  run_on      = "any"
+  run_at      = "0 0 * * *"
+  start_date  = "2026-08-01T00:00:00Z"
+  end_date    = "2026-09-01T00:00:00Z"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`, uniqueName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "name", uniqueName),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "start_date", "2026-08-01T00:00:00Z"),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "end_date", "2026-09-01T00:00:00Z"),
+				),
+			},
+			// Step 2: Clear start_date and end_date by setting them to ""
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name        = %q
+  operation   = "database_backup"
+  run_on      = "any"
+  run_at      = "0 0 * * *"
+  start_date  = ""
+  end_date    = ""
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`, uniqueName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "start_date", ""),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "end_date", ""),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_Scheduler_StartDateEndDateDrift(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_Scheduler_StartDateEndDateDrift: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "drift-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create without start_date or end_date (meaning they are omitted, i.e. null)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name        = %q
+  operation   = "database_backup"
+  run_on      = "any"
+  run_at      = "0 0 * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`, uniqueName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("ciphertrust_scheduler.test", "start_date"),
+					resource.TestCheckNoResourceAttr("ciphertrust_scheduler.test", "end_date"),
+				),
+			},
+			// Step 2: Run a plan to verify NO plan-time drift (dates must remain null in state)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name        = %q
+  operation   = "database_backup"
+  run_on      = "any"
+  run_at      = "0 0 * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`, uniqueName),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerList_DateAndAWSParams(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerList_DateAndAWSParams: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "list-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create scheduler and verify list data source maps flat attributes and handles null dates
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name        = %q
+  operation   = "database_backup"
+  run_on      = "any"
+  run_at      = "0 0 * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+
+data "ciphertrust_scheduler_list" "all" {
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, uniqueName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("data.ciphertrust_scheduler_list.all", "id"),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceCCKMRotationEmptyStringFields(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceCCKMRotationEmptyStringFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expire_in", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.rotation_after", ""),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceStartEndDateEmptyStringFields(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceStartEndDateEmptyStringFields: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-dates-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test_dates" {
+  name      = %q
+  operation = "database_backup"
+  run_at    = "0 1 * * *"
+  database_backup_params = {
+    scope = "system"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs_dates" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test_dates]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs_dates", "scheduler.0.start_date", ""),
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs_dates", "scheduler.0.end_date", ""),
+				),
+			},
+		},
+	})
+}
+
+func Test_CM_SchedulerDataSourceCCKMRotationDrift(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_SchedulerDataSourceCCKMRotationDrift: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tftest-sched-drift-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", ""),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_scheduler.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Fatal("CM client unavailable")
+					}
+					payload, err := json.Marshal(map[string]interface{}{
+						"cckm_key_rotation_params": map[string]interface{}{
+							"expiration": "7d",
+						},
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = client.UpdateDataV2(context.Background(), capturedID, common.URL_SCHEDULER_JOB_CONFIGS, payload)
+					if err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 0 * * *"
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+
+data "ciphertrust_scheduler_list" "jobs" {
+  filters = { name = %q }
+  depends_on = [ciphertrust_scheduler.test]
+}
+`, name, name),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.jobs", "scheduler.0.cckm_key_rotation_params.expiration", "7d"),
+				),
+			},
+		},
+	})
+}

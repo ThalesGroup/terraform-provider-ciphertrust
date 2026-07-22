@@ -345,6 +345,7 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 											},
 											"private_key": schema.StringAttribute{
 												Computed:    true,
+												Sensitive:   true,
 												Description: "Client certificate for syslog application provided by the client. for example: -----BEGIN RSA PRIVATE KEY-----\n<key content>\n-----END RSA PRIVATE KEY-----",
 											},
 											"protocol": schema.StringAttribute{
@@ -421,7 +422,7 @@ func (d *dataSourceCTEProfiles) Read(ctx context.Context, req datasource.ReadReq
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_profiles.go -> Read]["+id+"]")
 	var state CTEProfilesDataSourceModel
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_PROFILE)
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_PROFILE)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_profiles.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

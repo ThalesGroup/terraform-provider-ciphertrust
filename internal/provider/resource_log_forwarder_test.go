@@ -547,6 +547,122 @@ resource "ciphertrust_log_forwarder" "basic" {
 `, connID, name)
 }
 
+// Test_CM_LogForwarder_LokiCreateUpdate verifies that a loki-type log forwarder can be
+// created and updated without CM rejecting the request body (the omitempty fix).
+func Test_CM_LogForwarder_LokiCreateUpdate(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderLokiConnID(t)
+	name := "loki-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "loki"
+  loki_params {
+    labels {
+      activity_kmip = "job=kmip"
+    }
+  }
+}
+`, connID, name),
+				Check: checkStep(t, "loki create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "type", "loki"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", name),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "loki"
+  loki_params {
+    labels {
+      activity_kmip = "job=kmip-updated"
+    }
+  }
+}
+`, connID, name),
+				Check: checkStep(t, "loki update",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_LogForwarder_ESCreate verifies that an elasticsearch-type log forwarder can be
+// created without CM rejecting the request body (the omitempty fix).
+// Requires CIPHERTRUST_LOG_FORWARDER_ES_CONNECTION_ID to be set.
+func Test_CM_LogForwarder_ESCreate(t *testing.T) {
+	RequireCM(t)
+	esConnID := requireLogForwarderESConnID(t)
+	name := "es-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "elasticsearch"
+  elasticsearch_params {
+    indices {
+      activity_kmip = "kmip-index"
+    }
+  }
+}
+`, esConnID, name),
+				Check: checkStep(t, "es create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "type", "elasticsearch"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_LogForwarder_SyslogCreate verifies that a syslog-type log forwarder can be
+// created without CM rejecting the request body (the omitempty fix).
+// Requires CIPHERTRUST_LOG_FORWARDER_CONNECTION_ID to be set.
+func Test_CM_LogForwarder_SyslogCreate(t *testing.T) {
+	RequireCM(t)
+	syslogConnID := requireLogForwarderConnID(t)
+	name := "syslog-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+    }
+  }
+}
+`, syslogConnID, name),
+				Check: checkStep(t, "syslog create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "type", "syslog"),
+				),
+			},
+		},
+	})
+}
+
 // Test_CM_AccCMLogForwarder_ImmutableConnectionID verifies that changing the connection_id
 // on an existing log forwarder schedules resource replacement (recreation).
 func Test_CM_AccCMLogForwarder_ImmutableConnectionID(t *testing.T) {

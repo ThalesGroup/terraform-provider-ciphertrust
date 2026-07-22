@@ -154,19 +154,19 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			"linked_state": schema.BoolAttribute{
 				Computed: true,
 				Optional: true,
-				Default:  booldefault.StaticBool(false),
 				Description: "(Updatable) Indicates whether the custom key store is linked with AWS. " +
-					"Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager). " +
-					"REMOTE and CLOUDHSM key stores cannot be linked via this provider. " +
-					"Default value is false. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. " +
-					"Once linked, it's not possible to unlink a key store. " +
-					"Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked.",
+					"Applicable to a custom key store of type EXTERNAL_KEY_STORE. " +
+					"Defaults to false when not set. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. " +
+					"Once linked, it is not possible to unlink a key store. " +
+					"Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked. " +
+					"For AWS_CLOUDHSM key stores this field is computed; do not set it explicitly.",
 			},
 			"connect_disconnect_keystore": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Validators:  []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
-				Description: "(Updatable) Indicates whether to connect or disconnect the custom key store.",
+				Optional:   true,
+				Computed:   true,
+				Validators: []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
+				Description: "(Updatable) Indicates whether to connect or disconnect the custom key store. " +
+					"Cannot be set at creation time; connect or disconnect via update after the key store is created.",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -319,7 +319,8 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				Optional: true,
 				Description: "(Updatable) Enable the custom key store for scheduled credential rotation job. " +
 					"Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager) that are in a linked state (linked_state = true) " +
-					"and whose connection state is CONNECTED or DISCONNECTED.",
+					"and whose connection state is CONNECTED or DISCONNECTED. " +
+					"Cannot be set at creation time; enable credential rotation via update after the key store is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
@@ -340,15 +341,9 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 }
 
 // Create creates a new AWS custom key store in CipherTrust Manager and sets Terraform state.
-// After the key store is successfully created, the following post-creation operations are attempted
-// but only produce warnings (not errors) on failure, ensuring the key store is always saved to state.
-// Note: linking, blocking, and credential rotation only take effect for LOCAL key stores
-// (XKS proxy hosted on CipherTrust Manager); they are not supported for REMOTE or CLOUDHSM key stores.
-//   - Linking the key store to AWS (linked_state = true)
-//   - Connecting or disconnecting the key store (connect_disconnect_keystore)
-//   - Blocking the key store (local_hosted_params.blocked = true)
-//   - Registering with a scheduled credential rotation job (enable_credential_rotation block)
-//   - Refreshing final state from the API
+// linked_state and local_hosted_params.blocked may be set at creation time.
+// Post-creation operations such as connecting/disconnecting and credential rotation
+// must be applied via update after the key store is created.
 func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
@@ -465,61 +460,6 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 
 	// No error after this
 
-	// Post-creation step 1: Link to AWS if requested.
-	{
-		var linkDiags diag.Diagnostics
-		response = r.linkKeyStore(ctx, id, &plan, &planAWSParamTFSDK, response, &linkDiags)
-		for _, d := range linkDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	// Post-creation step 2: Connect or disconnect.
-	if plan.ConnectDisconnectKeystore.ValueString() != "" &&
-		plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() {
-		var connectDiags diag.Diagnostics
-		response = r.connectDisconnectKeyStore(
-			ctx,
-			id,
-			plan.ConnectDisconnectKeystore.ValueString(),
-			planAWSParamTFSDK.CustomKeystoreType.ValueString(),
-			awsParamJSON.KeyStorePassword,
-			&plan,
-			response,
-			&connectDiags,
-		)
-		for _, d := range connectDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	// Post-creation step 3: Block if requested.
-	if !gjson.Get(response, "local_hosted_params.blocked").Bool() && planLocalHostedParamsTFSDK.Blocked.ValueBool() {
-		var blockDiags diag.Diagnostics
-		blocked, err := r.client.PostNoData(ctx, plan.ID.ValueString(), common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/block")
-		if err != nil {
-			tflog.Warn(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create block]["+plan.ID.ValueString()+"]")
-			blockDiags.AddError(
-				"Error blocking AWS Custom Key Store on CipherTrust Manager: ",
-				"Could not block AWS Custom Key Store, unexpected error: "+err.Error(),
-			)
-		} else {
-			response = blocked
-		}
-		for _, d := range blockDiags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	// Post-creation step 4: Enable credential rotation.
-	if plan.EnableCredentialRotation != nil {
-		var diags diag.Diagnostics
-		r.enableCredentialRotation(ctx, id, &plan, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
 	getResponse, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AWS_XKS)
 	if err != nil {
 		tflog.Warn(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+plan.ID.ValueString()+"]")
@@ -617,8 +557,9 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][response:"+redactAWSResponse(response)+"]")
 
 	// Unlinking is not supported once a key store has been linked to AWS.
+	// Only check when linked_state is explicitly set to false (not null/omitted).
 	// Catch this early to avoid a confusing "inconsistent result after apply" error.
-	if !plan.LinkedState.ValueBool() && gjson.Get(response, "local_hosted_params.linked_state").Bool() {
+	if !plan.LinkedState.IsNull() && !plan.LinkedState.IsUnknown() && !plan.LinkedState.ValueBool() && gjson.Get(response, "local_hosted_params.linked_state").Bool() {
 		resp.Diagnostics.AddError(
 			"Cannot unlink an AWS custom key store",
 			"Once a custom key store has been linked to AWS, it cannot be unlinked. "+
@@ -865,11 +806,59 @@ func (r *resourceAWSCustomKeyStore) Delete(ctx context.Context, req resource.Del
 	}
 }
 
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
+// ModifyPlan validates create-time restrictions and errors at plan time if any immutable attribute
+// is changed on an existing resource.
 func (r *resourceAWSCustomKeyStore) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// Skip destroy operations.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// Create-time validations (no prior state).
+	if req.State.Raw.IsNull() {
+		var plan AWSCustomKeyStoreTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		// Determine the key store type from aws_param (if provided).
+		var planAWSParam AWSCustomKeyStoreParamTFSDK
+		if !plan.AWSParams.IsNull() && !plan.AWSParams.IsUnknown() {
+			resp.Diagnostics.Append(plan.AWSParams.As(ctx, &planAWSParam, basetypes.ObjectAsOptions{})...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		isCloudHSM := planAWSParam.CustomKeystoreType.ValueString() == CustomKeystoreTypeAWSCloudHSM
+
+		// CloudHSM key stores are always linked by AWS; explicitly setting linked_state = false is invalid.
+		if isCloudHSM && !plan.LinkedState.IsNull() && !plan.LinkedState.IsUnknown() && !plan.LinkedState.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Invalid attribute for AWS_CLOUDHSM key store",
+				"AWS_CLOUDHSM key stores are always linked. Do not set linked_state = false for a CloudHSM key store.",
+			)
+		}
+
+		// connect_disconnect_keystore cannot be set at creation time.
+		if plan.ConnectDisconnectKeystore.ValueString() != "" &&
+			plan.ConnectDisconnectKeystore.ValueString() != types.StringNull().ValueString() {
+			resp.Diagnostics.AddError(
+				"Cannot connect or disconnect a key store at creation time",
+				"connect_disconnect_keystore cannot be set at creation time. "+
+					"Create the key store first, then connect or disconnect via update.",
+			)
+		}
+
+		// enable_credential_rotation cannot be set at creation time.
+		if plan.EnableCredentialRotation != nil {
+			resp.Diagnostics.AddError(
+				"Cannot enable credential rotation at creation time",
+				"enable_credential_rotation cannot be set at creation time. "+
+					"Create the key store first, then enable credential rotation via update.",
+			)
+		}
+
 		return
 	}
 

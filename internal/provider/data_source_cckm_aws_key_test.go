@@ -16,7 +16,7 @@ func TestCckmAWSDataSourceKey(t *testing.T) {
 	createKeyConfig := `
 		resource "ciphertrust_aws_key" "aws_key" {
 		  aws_param = {
-		    alias  = [local.alias, "%s"]
+		    alias  = [local.alias]
 		    customer_master_key_spec = "SYMMETRIC_DEFAULT"
 		  }
 		  kms_id = ciphertrust_aws_kms.kms.id
@@ -59,7 +59,7 @@ func TestCckmAWSDataSourceKey(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: awsConnectionResource + fmt.Sprintf(createKeyConfig, alias),
+				Config: awsConnectionResource + createKeyConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "aws_param.arn"),

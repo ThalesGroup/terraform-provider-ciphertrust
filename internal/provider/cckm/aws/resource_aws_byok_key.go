@@ -95,9 +95,10 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 				},
 			},
 			"enable_key": schema.BoolAttribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true.",
+				Optional: true,
+				Computed: true,
+				Description: "(Updatable) Enable or disable the key. Default is true. " +
+					"Cannot be set to false at creation time; disable via update after the key has been created.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
@@ -285,12 +286,8 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 //   - create-key: fallback when source_key_identifier is omitted; creates an EXTERNAL key in
 //     PendingImport state with no material. Use aws_key_material to import material later.
 //
-// After the key itself is successfully created, the following post-creation operations are attempted
-// but only produce warnings (not errors) on failure, ensuring the key is always saved to state:
-//   - Adding additional aliases beyond the first
-//   - Registering the key with a CipherTrust Manager scheduled rotation job (enable_rotation block)
-//   - Disabling the key if enable_key = false
-//   - Refreshing final state from the API after all post-creation operations
+// After the key is created the final state is read from the API. If the read fails a warning is
+// added and the create response is used for state instead.
 func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Create]["+id+"]")
@@ -345,28 +342,6 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 
 	// Don't return errors after this
 
-	if planParam := byokAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics); planParam != nil && len(planParam.Alias.Elements()) > 1 {
-		var diags diag.Diagnostics
-		addAliases(ctx, r.client, id, plan.ID.ValueString(), planParam.Alias, response, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if plan.EnableRotation != nil {
-		var diags diag.Diagnostics
-		enableKeyRotationJob(ctx, id, r.client, plan.ID.ValueString(), plan.EnableRotation, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-	if !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		keyID := gjson.Get(response, "id").String()
-		disableKey(ctx, id, r.client, keyID, &diags)
-		for _, d := range diags {
-			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
 	keyID := plan.ID.ValueString()
 	var err error
 	getResponse, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
@@ -644,8 +619,39 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 		// Destroy - nothing to validate.
 		return
 	}
-	// On create there is nothing additional to validate.
+	// On create, validate attributes that cannot be used at creation time.
 	if req.State.Raw.IsNull() {
+		var createPlan AWSByokKeyTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &createPlan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if createParam := byokAwsParamFromObject(ctx, createPlan.AWSParam, &resp.Diagnostics); createParam != nil {
+			if !createParam.Alias.IsUnknown() && !createParam.Alias.IsNull() && len(createParam.Alias.Elements()) > 1 {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("aws_param").AtName("alias"),
+					"Invalid create-time configuration",
+					"At most one alias may be set when creating an AWS BYOK key. "+
+						"Additional aliases can be added via update after the key has been created.",
+				)
+			}
+		}
+		if createPlan.EnableRotation != nil {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("enable_rotation"),
+				"Invalid create-time configuration",
+				"'enable_rotation' cannot be set when creating an AWS BYOK key. "+
+					"Configure it via update after the key has been created.",
+			)
+		}
+		if !createPlan.EnableKey.IsUnknown() && !createPlan.EnableKey.IsNull() && !createPlan.EnableKey.ValueBool() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("enable_key"),
+				"Invalid create-time configuration",
+				"'enable_key' cannot be set to false when creating an AWS BYOK key. "+
+					"Disable the key via update after it has been created.",
+			)
+		}
 		return
 	}
 	var plan, state AWSByokKeyTFSDK

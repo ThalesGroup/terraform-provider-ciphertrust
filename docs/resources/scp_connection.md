@@ -138,7 +138,7 @@ To remove a key/value pair, pass value null to the particular key
       "key1": null
     }
 - `meta` (Map of String) Optional end-user or service data stored with the connection. Note: once set, this field cannot be cleared back to empty — CM does not honour empty-object PATCH requests for this field.
-- `password` (String) Password for SCP/SFTP server.
+- `password` (String, Sensitive) Password for SCP/SFTP server.
 - `port` (Number) Port where SCP/SFTP service runs on host (usually 22).
 - `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
 

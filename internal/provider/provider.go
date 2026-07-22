@@ -53,6 +53,11 @@ type ciphertrustProvider struct {
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
+
+	// logFileHandle is the *os.File backing the provider-specific log writer.
+	// hclog does not own or close the writer, so we track it here to close it
+	// before opening a new one on repeated Configure calls (e.g. plan + apply).
+	logFileHandle *os.File
 }
 
 type ciphertrustProviderModel struct {
@@ -166,6 +171,29 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 	}
 }
 
+// openProviderLog opens (or, when logLevel is "off", skips opening) the
+// provider log file. It returns the logger, the underlying *os.File (nil when
+// level is "off"), and any error. The caller owns the returned file handle and
+// must close it when no longer needed.
+//
+// The file is always created with mode 0600 so that sensitive API details
+// recorded at debug level are not world-readable on multi-user systems.
+func openProviderLog(logFile, logLevel string) (hclog.Logger, *os.File, error) {
+	if strings.EqualFold(logLevel, "off") {
+		return hclog.NewNullLogger(), nil, nil
+	}
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, nil, err
+	}
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name:   "ciphertrust",
+		Level:  hclog.LevelFromString(logLevel),
+		Output: f,
+	})
+	return logger, f, nil
+}
+
 // Configure prepares a CipherTrust API client for data sources and resources.
 func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
 	id := uuid.New().String()
@@ -206,51 +234,104 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	homeDir, _ := os.UserHomeDir()
 	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
 
-	file, _ := os.Open(configFileName)
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
+	// Validate config file exists, is not a symlink, and has secure permissions
+	if info, err := os.Lstat(configFileName); err == nil {
+		// 1. Symlink validation to prevent symlink redirect attacks
+		if info.Mode()&os.ModeSymlink != 0 {
+			resp.Diagnostics.AddError(
+				"Unsecured Configuration File detected",
+				fmt.Sprintf("The configuration file %q is a symbolic link. Symbolic links are prohibited to prevent symlink attacks.", configFileName),
+			)
+			return
 		}
 
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
+		// 2. Permission validation (Must not be group or world readable/writable/executable, i.e., perm & 0077 != 0)
+		if info.Mode().Perm()&0077 != 0 {
+			resp.Diagnostics.AddError(
+				"Unsecured Configuration File detected",
+				fmt.Sprintf("The configuration file %q has insecure permissions (%04o). It must be restricted to user-only access (e.g., 0600 or 0400) to prevent credentials leakage to other users on the system.", configFileName, info.Mode().Perm()),
+			)
+			return
+		}
 
-		switch key {
-		case "address":
-			address = value
-		case "username":
-			username = value
-		case "password":
-			password = value
-		case "bootstrap":
-			bootstrap = value
-		case "domain":
-			domain = value
-		case "auth_domain":
-			auth_domain = value
-		case "tenant":
-			tenant = value
-		case "no_ssl_verify":
-			no_ssl_verify, _ = strconv.ParseBool(value)
-		case "ca_cert":
-			ca_cert = value
-		case "rest_api_timeout":
-			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "aws_operation_timeout":
-			aws_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "oci_operation_timeout":
-			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "replication_delay_ms":
-			replication_delay_ms, _ = strconv.ParseInt(value, 10, 64)
-		case "log_file":
-			log_file = value
-		case "log_level":
-			log_level = value
+		// Read and parse the secure config file
+		if file, err := os.Open(configFileName); err == nil {
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				line := scanner.Text()
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				var parseErr error
+				switch key {
+				case "address":
+					address = value
+				case "username":
+					username = value
+				case "password":
+					password = value
+				case "bootstrap":
+					bootstrap = value
+				case "domain":
+					domain = value
+				case "auth_domain":
+					auth_domain = value
+				case "tenant":
+					tenant = value
+				case "no_ssl_verify":
+					no_ssl_verify, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "ca_cert":
+					ca_cert = value
+				case "rest_api_timeout":
+					rest_api_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "aws_operation_timeout":
+					aws_operation_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "oci_operation_timeout":
+					oci_operation_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "replication_delay_ms":
+					replication_delay_ms, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "log_file":
+					log_file = value
+				case "log_level":
+					log_level = value
+				}
+			}
 		}
 	}
 
@@ -285,7 +366,14 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 	noSSLVerifyEnvVal, noSSLVerifyEnvExists := os.LookupEnv("NO_SSL_VERIFY")
 	if noSSLVerifyEnvExists {
-		no_ssl_verify, _ = strconv.ParseBool(noSSLVerifyEnvVal)
+		var parseErr error
+		no_ssl_verify, parseErr = strconv.ParseBool(noSSLVerifyEnvVal)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable NO_SSL_VERIFY=%q as boolean: %s", noSSLVerifyEnvVal, parseErr.Error()),
+			)
+		}
 	}
 	caCertEnvVal, caCertEnvExists := os.LookupEnv("CIPHERTRUST_CA_CERT")
 	if caCertEnvExists {
@@ -293,11 +381,29 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 	restAPITimeoutEnvVal, restAPITimeoutEnvExists := os.LookupEnv("REST_API_TIMEOUT")
 	if restAPITimeoutEnvExists {
-		rest_api_timeout, _ = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
+		var parseErr error
+		rest_api_timeout, parseErr = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable REST_API_TIMEOUT=%q as integer: %s", restAPITimeoutEnvVal, parseErr.Error()),
+			)
+		}
 	}
 	replicationDelayEnvVal, replicationDelayEnvExists := os.LookupEnv("CM_REPLICATION_DELAY")
 	if replicationDelayEnvExists {
-		replication_delay_ms, _ = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
+		var parseErr error
+		replication_delay_ms, parseErr = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable CM_REPLICATION_DELAY=%q as integer: %s", replicationDelayEnvVal, parseErr.Error()),
+			)
+		}
+	}
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	// Finally if the provider block has values, make that highest priority
@@ -308,22 +414,25 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		log_level = config.LogLevel.ValueString()
 	}
 
-	// Create the provider-specific logger that writes to a dedicated file,
-	// independent of Terraform's TF_LOG output.
-	logFileHandle, err := os.OpenFile(log_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
+	// Close any file handle left open by a previous Configure call (e.g.
+	// terraform plan followed by terraform apply, or repeated acceptance-test
+	// runs). hclog does not own the writer lifecycle so we must do this here.
+	if p.logFileHandle != nil {
+		_ = p.logFileHandle.Close()
+		p.logFileHandle = nil
+	}
+	providerLogger, logFH, logErr := openProviderLog(log_file, log_level)
+	if logErr != nil {
 		resp.Diagnostics.AddError(
 			"Failed to open provider log file",
-			fmt.Sprintf("Could not open log file %q: %s", log_file, err.Error()),
+			fmt.Sprintf("Could not open log file %q: %s", log_file, logErr.Error()),
 		)
 		return
 	}
-	providerLogger := hclog.New(&hclog.LoggerOptions{
-		Name:   "ciphertrust",
-		Level:  hclog.LevelFromString(log_level),
-		Output: logFileHandle,
-	})
-	providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+	p.logFileHandle = logFH
+	if logFH != nil {
+		providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+	}
 
 	if !config.Address.IsNull() {
 		address = config.Address.ValueString()

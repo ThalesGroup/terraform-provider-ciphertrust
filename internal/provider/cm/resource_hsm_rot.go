@@ -69,6 +69,7 @@ func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequ
 			"conn_info": schema.MapAttribute{
 				ElementType: types.StringType,
 				Required:    true,
+				Sensitive:   true,
 				Description: "(Immutable) Connection information for initial HSM to setup in key-value format. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) and Luna PCIe, the required attributes are:\n\n- \"partition_name\"  \n  The name of the HSM partition to use.\n\n- \"partition_password\"  \n  The password of the initial partition to use. This will be the Crypto Officer role password or challenge secret. Luna documentation describes in detail how to set up a password for an application to access a partition.  \n  If you plan to use multiple Luna HSMs operating in high-availability (HA) mode, all HSMs must have the same password.\n\nLuna Network/PCIe HSM (including TCT) example:  \n\n{\n \"partition_name\": \"kylo-partition\",\n \"partition_password\": \"sOmeP@ssword\"\n}",
 				PlanModifiers: []planmodifier.Map{
 					modifiers.ImmutableMap(),
@@ -77,6 +78,7 @@ func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequ
 			"initial_config": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Sensitive:   true,
 				Description: "(Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.\n\nFor Luna Network HSM (including TCT) the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n  For externally signed server certs (not supported on TCT), append all certificates in the signing chain.\n- \"client-cert\"\n  Client certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"client-cert-key\"\n  Client private key in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n\nFor Luna Network HSM using the STC protocol, the required attributes are:\n- \"host\"\n  IP or hostname\n- \"serial\"\n  Serial number of the partition to use\n- \"server-cert\"\n  Server certificate in PEM format. Line breaks in PEM string must be replaced with \"\\n\".\n- \"stc-par-identity\"\n  STC partition identity encoded as a base64 string without line breaks (base64 -w0 1234567890123.pid)\nNote that this instance's STC client identity (see /system/hsm/clients/stcidentity) must be registered externally prior to invoking this API.\n\nLuna PCIe HSM (including TCT) does not require any attribute. initialConfig shall be omitted.\n\nLuna Network HSM (including TCT) example:\n\n    {\n      \"host\": \"10.10.10.10\",\n      \"serial\": \"1234\",\n      \"server-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert\": \"-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\",\n      \"client-cert-key\": \"-----BEGIN RSA PRIVATE KEY-----\\n...\\n-----END RSA PRIVATE KEY-----\"\n    }\n\nNote: JSON does not allow line-breaks, it needs to be replaced with \\n. Use \"sed -z 's/\\n/\\\\n/g' cert-file.pem\" command to format the certificate.\n",
 				PlanModifiers: []planmodifier.Map{
 					modifiers.ImmutableMap(),
@@ -143,7 +145,15 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 	// Extract conn_info map and convert it into JSON string
 	connInfoMap := make(map[string]interface{})
 	for k, v := range plan.ConnInfo.Elements() {
-		connInfoMap[k] = v.(types.String).ValueString()
+		strVal, ok := v.(types.String)
+		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid conn_info input",
+				fmt.Sprintf("Key %q in conn_info has an invalid or unconfigured string value", k),
+			)
+			return
+		}
+		connInfoMap[k] = strVal.ValueString()
 	}
 
 	connInfoJSON, err := json.Marshal(connInfoMap)
@@ -159,7 +169,15 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 
 	initialConfigPayload := make(map[string]interface{})
 	for k, v := range plan.InitialConfig.Elements() {
-		initialConfigPayload[k] = v.(types.String).ValueString()
+		strVal, ok := v.(types.String)
+		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid initial_config input",
+				fmt.Sprintf("Key %q in initial_config has an invalid or unconfigured string value", k),
+			)
+			return
+		}
+		initialConfigPayload[k] = strVal.ValueString()
 	}
 	payload.InitialConfig = initialConfigPayload
 
@@ -215,6 +233,15 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
+	// Preserve write-only field before the CM GET call.
+	// After HSM setup completes, CM records the operation as done and returns
+	// reset: false in the GET /api/v1/system/hsm/servers/{id} response.
+	// Reading that value back would overwrite state.Reset from true to false,
+	// causing ImmutableBool.PlanModifyBool() to fire 'old: false, new: true'
+	// on every subsequent plan and destroy. Same pattern as priorLicense in
+	// resource_license.go (TFIN-430 fix).
+	priorReset := state.Reset
+
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -264,7 +291,20 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 			)
 			return
 		}
-		m, d := types.MapValueFrom(ctx, types.StringType, connInfoMap)
+
+		// Blend prior state values to preserve write-only credentials (such as partition_password)
+		// which are omitted or masked from the GET response.
+		priorConnInfo := make(map[string]string)
+		for k, v := range state.ConnInfo.Elements() {
+			if strVal, ok := v.(types.String); ok && !strVal.IsNull() && !strVal.IsUnknown() {
+				priorConnInfo[k] = strVal.ValueString()
+			}
+		}
+		for k, v := range connInfoMap {
+			priorConnInfo[k] = v
+		}
+
+		m, d := types.MapValueFrom(ctx, types.StringType, priorConnInfo)
 		resp.Diagnostics.Append(d...)
 		state.ConnInfo = m
 	}
@@ -284,7 +324,19 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 				initialConfigMap[key.String()] = value.String()
 				return true
 			})
-			m, d := types.MapValueFrom(ctx, types.StringType, initialConfigMap)
+
+			// Blend prior state values to preserve write-only keys like client-cert-key
+			priorInitialConfig := make(map[string]string)
+			for k, v := range state.InitialConfig.Elements() {
+				if strVal, ok := v.(types.String); ok && !strVal.IsNull() && !strVal.IsUnknown() {
+					priorInitialConfig[k] = strVal.ValueString()
+				}
+			}
+			for k, v := range initialConfigMap {
+				priorInitialConfig[k] = v
+			}
+
+			m, d := types.MapValueFrom(ctx, types.StringType, priorInitialConfig)
 			resp.Diagnostics.Append(d...)
 			state.InitialConfig = m
 		}
@@ -297,22 +349,13 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	// Optional field: reset
-	if !state.Reset.IsNull() {
-		if r := gjson.Get(response, "reset"); r.Exists() {
-			state.Reset = types.BoolValue(r.Bool())
-		} else {
-			state.Reset = types.BoolNull()
-		}
-	}
-	// else: user never configured reset — preserve null prior state.
+	// Optional field: reset — write-only; restore prior state value (never read from API).
+	state.Reset = priorReset
 
 	// Optional field: delay
 	if !state.Delay.IsNull() {
-		if r := gjson.Get(response, "delay"); r.Exists() {
+		if r := gjson.Get(response, "delay"); r.Exists() && r.Type != gjson.Null {
 			state.Delay = types.Int64Value(r.Int())
-		} else {
-			state.Delay = types.Int64Null()
 		}
 	}
 	// else: user never configured delay — preserve null prior state.

@@ -1047,11 +1047,13 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload["network_interface"] = plan.NetworkInterface.ValueString()
 	}
 
-	// registration_token: only include in payload when set in the plan.
-	// When absent from plan (user removed from config), the key is omitted so CM preserves
-	// its existing value. TF state reflects null (matching config) — no drift.
+	// registration_token: send explicit "" clear when user removes the field and prior state
+	// held a value. CM accepts PATCH {"registration_token": ""} → HTTP 200, subsequent GET
+	// shows key absent (live-confirmed in ticket).
 	if !plan.RegToken.IsNull() && !plan.RegToken.IsUnknown() {
 		payload["registration_token"] = plan.RegToken.ValueString()
+	} else if !state.RegToken.IsNull() {
+		payload["registration_token"] = ""
 	}
 
 	// tls_ciphers: Null vs Empty vs Populated collection distinction
@@ -1106,9 +1108,11 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload["trusted_cas"] = &trustedCAsUpd
 	}
 
-	// certificate: only include in payload when the plan has the block.
-	// When absent from plan (user removed from config), the key is omitted so CM preserves
-	// its existing certificate. TF state reflects nil (matching config) — no drift.
+	// certificate: send explicit null clear when user removes the block and prior state had it.
+	// In Go, map[string]interface{}{"certificate": nil} marshals to {"certificate":null}.
+	// certificate is absent from swagger ConfigurationUpdate AND ConfigurationAdd (undocumented
+	// CM API field); nil-clear follows the same convention used for local_auto_gen_attributes
+	// and meta in this Update().
 	if plan.Certificate != nil {
 		payload["certificate"] = &CMInterfacCertificateJSON{
 			CertChain: plan.Certificate.CertChain.ValueString(),
@@ -1116,6 +1120,8 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 			Format:    plan.Certificate.Format.ValueString(),
 			Password:  plan.Certificate.Password.ValueString(),
 		}
+	} else if state.Certificate != nil {
+		payload["certificate"] = nil
 	}
 
 	payloadJSON, err := json.Marshal(payload)

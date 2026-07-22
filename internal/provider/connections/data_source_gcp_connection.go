@@ -105,9 +105,11 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 	var state GCPConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		for k, v := range state.Filters.Elements() {
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
 	}
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_GCP_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
@@ -163,47 +165,29 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 
 		if gcp.Labels != nil {
-			// Create the map to store attr.Value
 			labelsMap := make(map[string]attr.Value)
 			for key, value := range gcp.Labels {
-				// Ensure value is a string and handle if it's not
-				if strVal, ok := value.(string); ok {
-					labelsMap[key] = types.StringValue(strVal) // types.String is an attr.Value
-				} else {
-					// If not a string, set a default or skip the key-value pair
-					labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
-				}
+				labelsMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 			}
-			// Set labels as a MapValue
-			gcpConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, labelsMap)
+			resp.Diagnostics.Append(mapDiags...)
+			gcpConn.Labels = mapVal
 		} else {
-			// If Labels are missing, assign an empty map
-			labelsMap := make(map[string]attr.Value)
-			gcpConn.Labels, _ = types.MapValue(types.StringType, labelsMap)
+			gcpConn.Labels = types.MapNull(types.StringType)
 		}
 
 		if gcp.Meta != nil {
-			// Create the map to store attr.Value for Meta
 			metaMap := make(map[string]attr.Value)
-			for key, value := range gcp.Meta.(map[string]interface{}) {
-				// Convert each value in meta to the corresponding attr.Value
-				switch v := value.(type) {
-				case string:
-					metaMap[key] = types.StringValue(v)
-				case int64:
-					metaMap[key] = types.Int64Value(v)
-				case bool:
-					metaMap[key] = types.BoolValue(v)
-				default:
-					// For unknown types, convert them to a string representation
-					metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
+			if m, ok := gcp.Meta.(map[string]interface{}); ok {
+				for key, value := range m {
+					metaMap[key] = types.StringValue(fmt.Sprintf("%v", value))
 				}
 			}
-			gcpConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			mapVal, mapDiags := types.MapValue(types.StringType, metaMap)
+			resp.Diagnostics.Append(mapDiags...)
+			gcpConn.Meta = mapVal
 		} else {
-			// If Meta is missing, assign an empty map
-			metaMap := make(map[string]attr.Value)
-			gcpConn.Meta, _ = types.MapValue(types.StringType, metaMap)
+			gcpConn.Meta = types.MapNull(types.StringType)
 		}
 
 		state.Gcp = append(state.Gcp, gcpConn)

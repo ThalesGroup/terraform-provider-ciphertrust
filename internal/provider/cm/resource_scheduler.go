@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -122,23 +121,35 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"start_date": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "Date the job configuration becomes active. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z",
+				Description: "Date/time when the job starts. Format: YYYY-MM-DDTHH:MM:SSZ. Set to \"\" to clear.",
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(schedulerDateRegEx),
-						"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+					stringvalidator.Any(
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(schedulerDateRegEx),
+							"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+						),
+						stringvalidator.OneOf(""),
 					),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"end_date": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "Date the job configuration becomes inactive. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z",
+				Description: "Date/time when the job ends. Format: YYYY-MM-DDTHH:MM:SSZ. Set to \"\" to clear.",
 				Validators: []validator.String{
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(schedulerDateRegEx),
-						"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+					stringvalidator.Any(
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(schedulerDateRegEx),
+							"Must conform to the format: YYYY-MM-DDTHH:MM:SSZ (e.g., 2021-03-07T00:00:00Z).",
+						),
+						stringvalidator.OneOf(""),
 					),
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 
@@ -389,30 +400,14 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
-	if plan.StartDate.ValueString() != "" && plan.StartDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.StartDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Create]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided start_date is not in RFC3339 format ",
-				"Error parsing the start_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.StartDate = parsedTime
+	if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() {
+		v := plan.StartDate.ValueString()
+		payload.StartDate = &v
 	}
 
-	if plan.EndDate.ValueString() != "" && plan.EndDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.EndDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Create]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided end_date is not in RFC3339 format ",
-				"Error parsing the end_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.EndDate = parsedTime
+	if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() {
+		v := plan.EndDate.ValueString()
+		payload.EndDate = &v
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -555,30 +550,14 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	if plan.StartDate.ValueString() != "" && plan.StartDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.StartDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided start_date is not in RFC3339 format ",
-				"Error parsing the start_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.StartDate = parsedTime
+	if !plan.StartDate.IsNull() && !plan.StartDate.Equal(state.StartDate) {
+		v := plan.StartDate.ValueString()
+		payload.StartDate = &v
 	}
 
-	if plan.EndDate.ValueString() != "" && plan.EndDate.ValueString() != types.StringNull().ValueString() {
-		parsedTime, err := time.Parse(time.RFC3339, plan.EndDate.ValueString())
-		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
-			resp.Diagnostics.AddError(
-				"Provided end_date is not in RFC3339 format ",
-				"Error parsing the end_date in RFC3339 format : "+err.Error(),
-			)
-			return
-		}
-		payload.EndDate = parsedTime
+	if !plan.EndDate.IsNull() && !plan.EndDate.Equal(state.EndDate) {
+		v := plan.EndDate.ValueString()
+		payload.EndDate = &v
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -848,8 +827,24 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	plan.Disabled = types.BoolValue(gjson.Get(response, "disabled").Bool())
 	plan.Description = types.StringValue(gjson.Get(response, "description").String())
 	plan.RunOn = types.StringValue(gjson.Get(response, "run_on").String())
-	plan.StartDate = types.StringValue(gjson.Get(response, "start_date").String())
-	plan.EndDate = types.StringValue(gjson.Get(response, "end_date").String())
+	if r := gjson.Get(response, "start_date"); r.Exists() {
+		plan.StartDate = types.StringValue(r.String())
+	} else {
+		if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() && plan.StartDate.ValueString() == "" {
+			plan.StartDate = types.StringValue("")
+		} else {
+			plan.StartDate = types.StringNull()
+		}
+	}
+	if r := gjson.Get(response, "end_date"); r.Exists() {
+		plan.EndDate = types.StringValue(r.String())
+	} else {
+		if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() && plan.EndDate.ValueString() == "" {
+			plan.EndDate = types.StringValue("")
+		} else {
+			plan.EndDate = types.StringNull()
+		}
+	}
 
 	// Derive the operation from the API response (source of truth) so that
 	// Read correctly hydrates params even when plan.Operation is unset or stale.
