@@ -830,12 +830,20 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 	if r := gjson.Get(response, "start_date"); r.Exists() {
 		plan.StartDate = types.StringValue(r.String())
 	} else {
-		plan.StartDate = types.StringNull()
+		if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() && plan.StartDate.ValueString() == "" {
+			plan.StartDate = types.StringValue("")
+		} else {
+			plan.StartDate = types.StringNull()
+		}
 	}
 	if r := gjson.Get(response, "end_date"); r.Exists() {
 		plan.EndDate = types.StringValue(r.String())
 	} else {
-		plan.EndDate = types.StringNull()
+		if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() && plan.EndDate.ValueString() == "" {
+			plan.EndDate = types.StringValue("")
+		} else {
+			plan.EndDate = types.StringNull()
+		}
 	}
 
 	// Derive the operation from the API response (source of truth) so that

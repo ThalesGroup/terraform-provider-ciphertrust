@@ -251,8 +251,8 @@ resource "ciphertrust_scheduler" "test" {
 }
 `, uniqueName),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckNoResourceAttr("ciphertrust_scheduler.test", "start_date"),
-					resource.TestCheckNoResourceAttr("ciphertrust_scheduler.test", "end_date"),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "start_date", ""),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "end_date", ""),
 				),
 			},
 		},
