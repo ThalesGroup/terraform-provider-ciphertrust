@@ -16,7 +16,7 @@ import (
 func (c *Client) DeleteByID(ctx context.Context, method string, uuid string, url string, Body []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> DeleteByID]["+uuid+"]")
 	reader := bytes.NewBuffer(Body)
-	req, err := http.NewRequest(method, url, reader)
+	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
 		return "", err
@@ -36,7 +36,7 @@ func (c *Client) DeleteByID(ctx context.Context, method string, uuid string, url
 
 func (c *Client) DeleteByURL(ctx context.Context, uuid string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> DeleteByURL]["+uuid+"]")
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
 		return "", err
@@ -57,7 +57,7 @@ func (c *Client) DeleteByURL(ctx context.Context, uuid string, endpoint string) 
 func (c *Client) GetAll(ctx context.Context, uuid string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAll][Request ID: "+uuid+
 		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
 		return "", err
@@ -77,7 +77,7 @@ func (c *Client) GetAll(ctx context.Context, uuid string, endpoint string) (stri
 func (c *Client) ListWithFilters(ctx context.Context, uuid string, endpoint string, filters url.Values) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAll][Request ID: "+uuid+
 		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s?%s", c.CipherTrustURL, endpoint, filters.Encode()), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s?%s", c.CipherTrustURL, endpoint, filters.Encode()), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
 		return "", err
@@ -94,7 +94,7 @@ func (c *Client) ListWithFilters(ctx context.Context, uuid string, endpoint stri
 func (c *Client) GetById(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetById][Request ID: "+uuid+
 		"****** URL: "+fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id)+"]")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetById]["+uuid+"]")
 		return "", err
@@ -119,7 +119,7 @@ func (c *Client) ReadDataByParam(ctx context.Context, uuid string, id string, en
 		url = fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id)
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> ReadDataByParam]["+uuid+"]")
 		return "", err
@@ -138,9 +138,9 @@ func (c *Client) ReadDataByParam(ctx context.Context, uuid string, id string, en
 func (c *Client) PostData(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
 	reader := bytes.NewBuffer(data)
-	tflog.Debug(ctx, "*****POST data for*****"+endpoint+"*****"+reader.String()+"*****")
+	tflog.Debug(ctx, fmt.Sprintf("POST request to %s: payload size %d bytes", endpoint, len(data)))
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
 		return "", err
@@ -167,7 +167,7 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 		payload = bytes.NewBuffer(data)
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
 		return "", err
@@ -186,7 +186,7 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 func (c *Client) PostNoData(ctx context.Context, uuid string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
 		return "", err
@@ -211,7 +211,7 @@ func (c *Client) PutData(ctx context.Context, uuid string, endpoint string, data
 		payload = bytes.NewBuffer(data)
 	}
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
+	req, err := http.NewRequestWithContext(ctx, "PUT", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PutData]["+uuid+"]")
 		return "", err
@@ -237,7 +237,7 @@ func (c *Client) UpdateData(ctx context.Context, uuid string, endpoint string, d
 	}
 	//tflog.Debug(ctx, "*****PATCH data for*****"+endpoint+"*****"+string(payload)+"*****")
 
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
 		return "", err
@@ -264,7 +264,7 @@ func (c *Client) UpdateDataV2(ctx context.Context, uuid string, endpoint string,
 		payload = bytes.NewBuffer(data)
 	}
 
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
 		return "", err
@@ -290,7 +290,7 @@ func (c *Client) UpdateDataFullURL(ctx context.Context, uuid string, endpoint st
 	}
 	//tflog.Debug(ctx, "*****PATCH data for*****"+endpoint+"*****"+string(payload)+"*****")
 
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
 		return "", err
@@ -311,9 +311,9 @@ func (c *Client) UpdateDataFullURL(ctx context.Context, uuid string, endpoint st
 func (c *CMClientBootstrap) PostDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostDataBootstrap]["+uuid+"]")
 	reader := bytes.NewBuffer(data)
-	tflog.Debug(ctx, "*****POST data for*****"+endpoint+"*****"+reader.String()+"*****")
+	tflog.Debug(ctx, fmt.Sprintf("POST Bootstrap request to %s: payload size %d bytes", endpoint, len(data)))
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataBootstrap]["+uuid+"]")
 		return "", err
@@ -334,9 +334,9 @@ func (c *CMClientBootstrap) PostDataBootstrap(ctx context.Context, uuid string, 
 func (c *CMClientBootstrap) PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
 	reader := bytes.NewBuffer(data)
-	tflog.Debug(ctx, "*****PATCH data for*****"+endpoint+"*****"+reader.String()+"*****")
+	tflog.Debug(ctx, fmt.Sprintf("PATCH Bootstrap request to %s: payload size %d bytes", endpoint, len(data)))
 
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PatchDataBootstrap]["+uuid+"]")
 		return "", err
@@ -356,7 +356,7 @@ func (c *CMClientBootstrap) PatchDataBootstrap(ctx context.Context, uuid string,
 
 func (c *CMClientBootstrap) GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
 		return "", err
@@ -374,7 +374,7 @@ func (c *CMClientBootstrap) GetByIdBootstrap(ctx context.Context, uuid string, i
 func (c *Client) PostDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostDataBootstrap]["+uuid+"]")
 	reader := bytes.NewBuffer(data)
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataBootstrap]["+uuid+"]")
 		return "", err
@@ -395,7 +395,7 @@ func (c *Client) PostDataBootstrap(ctx context.Context, uuid string, endpoint st
 func (c *Client) PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
 	reader := bytes.NewBuffer(data)
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), reader)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PatchDataBootstrap]["+uuid+"]")
 		return "", err
@@ -415,7 +415,7 @@ func (c *Client) PatchDataBootstrap(ctx context.Context, uuid string, endpoint s
 
 func (c *Client) GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetByIdBootstrap]["+uuid+"]")
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, id), nil)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetByIdBootstrap]["+uuid+"]")
 		return "", err

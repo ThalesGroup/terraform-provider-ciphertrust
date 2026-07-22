@@ -29,12 +29,26 @@ type dataSourceUsers struct {
 	client *common.Client
 }
 
+type CMUserDSModel struct {
+	ID                     types.String `tfsdk:"id"`
+	UserID                 types.String `tfsdk:"user_id"`
+	Name                   types.String `tfsdk:"name"`
+	UserName               types.String `tfsdk:"username"`
+	Nickname               types.String `tfsdk:"nickname"`
+	Email                  types.String `tfsdk:"email"`
+	Password               types.String `tfsdk:"password"`
+	IsDomainUser           types.Bool   `tfsdk:"is_domain_user"`
+	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
+	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
+	Metadata               types.Map    `tfsdk:"user_metadata"`
+}
+
 type usersDataSourceModel struct {
-	ID      types.String  `tfsdk:"id"`
-	Filters types.Map     `tfsdk:"filters"`
-	Limit   types.Int64   `tfsdk:"limit"`
-	Skip    types.Int64   `tfsdk:"skip"`
-	User    []CMUserTFSDK `tfsdk:"users"`
+	ID      types.String    `tfsdk:"id"`
+	Filters types.Map       `tfsdk:"filters"`
+	Limit   types.Int64     `tfsdk:"limit"`
+	Skip    types.Int64     `tfsdk:"skip"`
+	User    []CMUserDSModel `tfsdk:"users"`
 }
 
 func (d *dataSourceUsers) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -83,8 +97,9 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 							Computed: true,
 						},
 						"password": schema.StringAttribute{
-							Computed:  true,
-							Sensitive: true,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "Deprecated. This attribute is always unpopulated (null) to protect sensitive credentials from being stored in state.",
 						},
 						"is_domain_user": schema.BoolAttribute{
 							Computed: true,
@@ -113,7 +128,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 	req.Config.Get(ctx, &state)
 
 	state.ID = types.StringValue("users-list")
-	state.User = []CMUserTFSDK{}
+	state.User = []CMUserDSModel{}
 
 	var kvs []string
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
@@ -164,14 +179,13 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 
 	for _, user := range users {
-		userState := CMUserTFSDK{
+		userState := CMUserDSModel{
 			ID:                     types.StringValue(user.UserID),
 			UserID:                 types.StringValue(user.UserID),
 			Name:                   types.StringValue(user.Name),
 			Email:                  types.StringValue(user.Email),
 			Nickname:               types.StringValue(user.Nickname),
 			UserName:               types.StringValue(user.UserName),
-			Password:               types.StringValue(user.Password),
 			IsDomainUser:           types.BoolValue(user.IsDomainUser),
 			PreventUILogin:         types.BoolValue(user.LoginFlags.PreventUILogin),
 			PasswordChangeRequired: types.BoolValue(user.PasswordChangeRequired),

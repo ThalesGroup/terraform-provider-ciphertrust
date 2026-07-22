@@ -10,7 +10,7 @@ import (
 
 // Test_CM_UsersSchema_PasswordSensitive verifies that the nested password
 // attribute in ciphertrust_cm_users_list schema is marked Sensitive: true
-// so it is redacted from plan/show/state output.
+// and marked as deprecated/unpopulated.
 func Test_CM_UsersSchema_PasswordSensitive(t *testing.T) {
 	var resp datasource.SchemaResponse
 	(&dataSourceUsers{}).Schema(context.Background(), datasource.SchemaRequest{}, &resp)
