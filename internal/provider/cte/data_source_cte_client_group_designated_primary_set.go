@@ -109,7 +109,7 @@ func (d *dataSourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context,
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
 	var state CTEClientGroupDesignatedPrimarySetDataSourceModel
 	req.Config.Get(ctx, &state)
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_CLIENT_GROUP+"/"+state.ClientGroupName.ValueString()+"/dps")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT_GROUP+"/"+state.ClientGroupName.ValueString()+"/dps")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

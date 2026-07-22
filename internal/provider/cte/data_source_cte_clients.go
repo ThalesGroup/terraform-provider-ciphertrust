@@ -178,10 +178,10 @@ func (d *dataSourceCTEClients) Read(ctx context.Context, req datasource.ReadRequ
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
-		common.URL_CTE_CLIENT+"/?"+strings.Join(kvs, "")+"skip=0&limit=10")
+		common.URL_CTE_CLIENT+"/?"+strings.Join(kvs, ""))
 
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_clients.go -> Read]["+id+"]")

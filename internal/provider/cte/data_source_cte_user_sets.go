@@ -105,7 +105,7 @@ func (d *dataSourceCTEUserSets) Read(ctx context.Context, req datasource.ReadReq
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_user_sets.go -> Read]["+id+"]")
 	var state CTEUserSetsDataSourceModel
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_USER_SET)
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_USER_SET)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_user_sets.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

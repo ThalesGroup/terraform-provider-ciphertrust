@@ -130,7 +130,7 @@ func (d *dataSourceCTEClientGroup) Read(ctx context.Context, req datasource.Read
 	var state CTEClientGroupDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_CLIENT_GROUP)
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT_GROUP)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cteclientgroup.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

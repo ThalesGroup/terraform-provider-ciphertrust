@@ -88,7 +88,7 @@ func (d *dataSourceLDTGroupCommSvc) Read(ctx context.Context, req datasource.Rea
 	req.Config.Get(ctx, &state)
 	tflog.Info(ctx, "PrathamMaini =====> "+state.GroupName.ValueString())
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_LDT_GROUP_COMM_SVC+"?name="+state.GroupName.ValueString())
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_LDT_GROUP_COMM_SVC+"?name="+state.GroupName.ValueString())
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_ldtgruoupcomms.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

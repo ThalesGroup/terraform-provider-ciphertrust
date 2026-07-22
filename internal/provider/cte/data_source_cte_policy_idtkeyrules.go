@@ -74,7 +74,7 @@ func (d *dataSourceCTEPolicyIDTKeyRule) Read(ctx context.Context, req datasource
 	req.Config.Get(ctx, &state)
 	tflog.Info(ctx, "AnuragJain =====> "+state.PolicyID.ValueString())
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/idtkeyrules")
