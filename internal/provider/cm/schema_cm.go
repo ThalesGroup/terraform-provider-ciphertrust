@@ -1207,16 +1207,16 @@ type CMLogForwardersSyslogJSON struct {
 }
 
 type CMLogForwardersJSON struct {
-	ID                  string                     `json:"id"`
+	ID                  string                     `json:"id,omitempty"`
 	ConnectionID        string                     `json:"connection_id"`
 	Name                string                     `json:"name"`
 	Type                string                     `json:"type"`
-	ElasticsearchParams *CMLogForwardersESJSON     `json:"elasticsearch_params"`
-	LokiParams          *CMLogForwardersLokiJSON   `json:"loki_params"`
-	SyslogParams        *CMLogForwardersSyslogJSON `json:"syslog_params"`
-	Account             string                     `json:"account"`
-	CreatedAt           string                     `json:"createdAt"`
-	UpdatedAt           string                     `json:"updatedAt"`
+	ElasticsearchParams *CMLogForwardersESJSON     `json:"elasticsearch_params,omitempty"`
+	LokiParams          *CMLogForwardersLokiJSON   `json:"loki_params,omitempty"`
+	SyslogParams        *CMLogForwardersSyslogJSON `json:"syslog_params,omitempty"`
+	Account             string                     `json:"account,omitempty"`
+	CreatedAt           string                     `json:"createdAt,omitempty"`
+	UpdatedAt           string                     `json:"updatedAt,omitempty"`
 }
 
 type CCKMKeyRotationParamsTFSDK struct {

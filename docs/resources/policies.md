@@ -10,9 +10,6 @@ description: |-
 
 Manages a CipherTrust Manager admin policy: an allow/deny rule that authorizes a set of actions (e.g. CreateKey, EncryptWithKey) with optional conditional clauses. **Only available on CipherTrust Manager — not supported on CDSPaaS, where authorization is managed by the platform.**
 
-> [!NOTE]
-> The provider utilizes a **3-Way State-Transition** logic for policy collections (`actions`, `resources`, and `conditions`). If a collection field transitions from a configured non-null state in Terraform to `null` (omitted from HCL), the provider explicitly sends an empty list `[]` to the API to clear that setting on the CipherTrust Manager appliance.
-
 ## Example Usage
 
 ```terraform
