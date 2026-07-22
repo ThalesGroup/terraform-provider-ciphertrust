@@ -33,24 +33,20 @@ var importStateVerifyIgnoreAwsCloudHSMKey = []string{
 }
 
 // TestCckmAWSCloudHSMUnlinkedKey tests creating, updating, and importing unlinked CloudHSM keys.
-// It requires the following environment variables in addition to the common AWS credentials:
-//   - AWS_CLOUDHSM_CLUSTER_ID: the CloudHSM cluster ID to use for the custom key store
-//   - AWS_CLOUDHSM_KEY_STORE_PASSWORD: the CloudHSM key store password
-//   - AWS_CLOUDHSM_TRUST_ANCHOR_CERT: PEM trust anchor certificate for the CloudHSM cluster
 func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
+
+	// Creating a CloudHSM keystore cannot be done in automated CI.
+	t.Skip()
+
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	awsKeyUsers := getAwsUsers()
-	if len(awsKeyUsers) != 2 {
-		t.Skip("AWS_KEY_USERS is not exported or doesn't contain 2 roles")
-	}
-	awsKeyRoles := getAwsRoles()
-	if len(awsKeyRoles) != 2 {
-		t.Skip("AWS_KEY_ROLES is not exported or doesn't contain 2 users")
-	}
 
+	// The following environment variables in addition to the common AWS credentials:
+	//  - AWS_CLOUDHSM_CLUSTER_ID: the CloudHSM cluster ID to use for the custom key store
+	//  - AWS_CLOUDHSM_KEY_STORE_PASSWORD: the CloudHSM key store password
+	//  - AWS_CLOUDHSM_TRUST_ANCHOR_CERT: PEM trust anchor certificate for the CloudHSM cluster
 	cloudHSMClusterID := os.Getenv("AWS_CLOUDHSM_CLUSTER_ID")
 	if cloudHSMClusterID == "" {
 		t.Skip("AWS_CLOUDHSM_CLUSTER_ID is not exported")
@@ -80,19 +76,6 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 	keyStoreName := "tf-cloudhsm-ks-" + uuid.New().String()[:8]
 	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig,
 		keyStoreName, cloudHSMClusterID, keyStorePassword, trustAnchorCert)
-
-	createPolicyTemplateConfig := `
-		resource "ciphertrust_aws_policy_template" "cloudhsm_template" {
-			name             = "%s"
-			kms_id           = ciphertrust_aws_kms.kms.id
-			key_admins       = ["%s"]
-			key_users        = ["%s"]
-			key_admins_roles = ["%s"]
-			key_users_roles  = ["%s"]
-		}`
-	policyTemplateConfigStr := fmt.Sprintf(createPolicyTemplateConfig,
-		"tf-"+uuid.New().String()[:8],
-		awsKeyUsers[0], awsKeyUsers[1], awsKeyRoles[0], awsKeyRoles[1])
 
 	enableRotationName := "tf-cloudhsm-rot-" + uuid.New().String()[:8]
 	enableRotationConfig := `
@@ -128,9 +111,6 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 				job_config_id = ciphertrust_scheduler.cloudhsm_rotation_job.id
 				key_source    = "local"
 			}
-			key_policy = {
-				policy_template = ciphertrust_aws_policy_template.cloudhsm_template.id
-			}
 			schedule_for_deletion_days = 8
 		}`
 
@@ -146,9 +126,6 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 			}
 			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
 			enable_key = false
-			key_policy = {
-				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
-			}
 			schedule_for_deletion_days = 9
 		}
 		resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_max_params" {
@@ -162,9 +139,6 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 			}
 			custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_cloudhsm_keystore.id
 			enable_key = %t
-			key_policy = {
-				policy = ciphertrust_aws_policy_template.cloudhsm_template.policy
-			}
 			schedule_for_deletion_days = 11
 		}`
 
@@ -182,9 +156,6 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 			}
 			custom_key_store_id = "tf-fake-keystore-id"
 			enable_key = false
-			key_policy = {
-				policy_template = ciphertrust_aws_policy_template.cloudhsm_template.id
-			}
 		}`
 
 	aliasList := []string{
@@ -192,13 +163,13 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 		awsKeyNamePrefix + uuid.New().String(),
 	}
 	createKeyConfigStr := fmt.Sprintf(createKeyConfig, aliasList[0], aliasList[1], false)
-	createConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + createKeyConfigStr
+	createConfigStr := createKeyStoreConfigStr + enableRotationConfigStr + createKeyConfigStr
 
-	modifyPlanConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr +
+	modifyPlanConfigStr := createKeyStoreConfigStr + enableRotationConfigStr +
 		fmt.Sprintf(modifyPlanKeyConfig, aliasList[0], aliasList[1])
 
 	updateKeyConfigStr := fmt.Sprintf(updateKeyConfig, true)
-	updateConfigStr := createKeyStoreConfigStr + policyTemplateConfigStr + enableRotationConfigStr + updateKeyConfigStr
+	updateConfigStr := createKeyStoreConfigStr + enableRotationConfigStr + updateKeyConfigStr
 
 	keyResourceMaxParams := "ciphertrust_aws_cloudhsm_key.cloudhsm_key_max_params"
 	keyResourceMinParams := "ciphertrust_aws_cloudhsm_key.cloudhsm_key_min_params"

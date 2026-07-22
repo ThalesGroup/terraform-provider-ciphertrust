@@ -15,12 +15,7 @@ Use this resource to create and manage AWS CloudHSM keys in CipherTrust Manager.
 ```terraform
 # Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
-  name = "aws_connection_name"
-}
-
-# Get the AWS account details
-data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
+  name = "name"
 }
 
 # Define a kms
@@ -28,25 +23,24 @@ resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
   ]
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
+  account_id     = "account-id"
   aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "kms-name"
-  regions        = ["us-west-1"]
+  name           = "name"
+  regions        = ["region"]
 }
 
 # Define a CloudHSM custom keystore
-resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
+resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
   depends_on = [
     ciphertrust_aws_kms.kms,
   ]
-  name                        = "cloudhsm-keystore-demo-1"
-  region                      = "us-west-1"
+  name                        = "name"
+  region                      = "region"
   kms_id                      = ciphertrust_aws_kms.kms.id
-  connect_disconnect_keystore = "CONNECT_KEYSTORE"
   aws_param = {
     custom_key_store_type    = "AWS_CLOUDHSM"
-    cloud_hsm_cluster_id     = "cluster-pxkcyeoqij"
-    key_store_password       = "kmsuser-password"
+    cloud_hsm_cluster_id     = "cluster-id"
+    key_store_password       = "keystore-password"
     trust_anchor_certificate = <<-EOT
                  -----BEGIN CERTIFICATE-----
                  MIIDhzCCAm+gAwIBAgIUHdJu4algAFs22h87meBhd9Qe4eMoDQYJKoZIhvcNAQEL
@@ -74,8 +68,8 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
 }
 
 # Define a policy template using key users and roles
-resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
-  name             = "template-with-users-and-roles-test"
+resource "ciphertrust_aws_policy_template" "policy_template" {
+  name             = "name"
   kms_id           = ciphertrust_aws_kms.kms.id
   key_admins       = ["key-admins"]
   key_admins_roles = ["key-admins-roles"]
@@ -84,15 +78,14 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
 }
 
 # Define a CloudHSM key in the CloudHSM keystore
-resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
-  custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_custom_keystore.id
-  enable_key          = false
+resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key" {
+  custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_keystore.id
   aws_param = {
-    alias       = ["a5_cloudhsm_key_1"]
-    description = "desc for cloudhsm_key_1"
+    alias       = ["alias"]
+    description = "description"
   }
   key_policy = {
-    policy_template = ciphertrust_aws_policy_template.template_with_users_and_roles.id
+    policy_template = ciphertrust_aws_policy_template.policy_template.id
   }
 }
 ```
@@ -106,10 +99,10 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
 
 ### Optional
 
-- `aws_param` (Attributes) AWS key parameters. Alias, description, and tags are updatable for linked keys; all other fields are computed. (see [below for nested schema](#nestedatt--aws_param))
+- `aws_param` (Attributes) AWS key parameters. At creation, only the first alias in 'alias' is applied; additional aliases require update after the key has been created. Description and tags are also updatable; all other fields are computed. (see [below for nested schema](#nestedatt--aws_param))
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Only applied when the key is in a linked state. If not set, the key state is not changed after creation.
-- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. (see [below for nested schema](#nestedatt--enable_rotation))
+- `enable_key` (Boolean) (Updatable) Enable or disable the key. Cannot be set to false at creation time; disable via update after the key has been created.
+- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) (Updatable) Key policy parameters. Only applicable to keys in a linked state. (see [below for nested schema](#nestedatt--key_policy))
 - `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 

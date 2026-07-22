@@ -2,7 +2,6 @@ package provider
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"testing"
 
@@ -10,342 +9,233 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func TestCckmAWSCustomKeyStoreUnlinked(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-
-	createKeyStoreConfig := `
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name         = "%s"
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-			#unexportable = true
-			#undeletable  = true
-			remove_from_state_on_destroy = true
-		}
-		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
-			name    = "%s"
-			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms_id  = ciphertrust_aws_kms.kms.id
-			linked_state = false
-			connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
-			enable_success_audit_event = %t
-			local_hosted_params = {
-				blocked = false
-				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
-				max_credentials = 8
-				source_key_tier = "local"
-			}
-			aws_param = {
-				xks_proxy_uri_endpoint = "%s"
-				#xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-				xks_proxy_connectivity = "VPC_ENDPOINT_SERVICE"
-				custom_key_store_type = "EXTERNAL_KEY_STORE"
-				key_store_password = "%s"
-				xks_proxy_vpc_endpoint_service_name = "%s"
-			}
-		}`
-
-	updateKeyStoreConfig := `
-		resource "ciphertrust_cm_key" "cm_aes_key_new" {
-			name         = "%s"
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-			remove_from_state_on_destroy = true
-		}
-		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_custom_keystore" {
-			name    = "%s"
-			region  = ciphertrust_aws_kms.kms.regions[0]
-			kms_id  = ciphertrust_aws_kms.kms.id
-			linked_state = false
-			enable_success_audit_event = %t
-			local_hosted_params = {
-				blocked = false
-				health_check_key_id = ciphertrust_cm_key.cm_aes_key_new.id
-				max_credentials = %d
-				source_key_tier = "local"
-			}
-			aws_param = {
-				xks_proxy_uri_endpoint = "%s"
-				xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-				key_store_password = "%s"
-				custom_key_store_type = "%s"
-			}
-		}`
-
-	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
-	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
-	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
-	if os.Getenv("CDSPAAS") == "true" {
-		proxyURIEndpoint = "https://xks." + proxyURIEndpoint[len("https://"):]
-	}
-	keyStorePassword := "thequickbrownfox"
-	vpcEndpointServiceName := "testEndpointServiceName"
-	createKeyStoreConfigStr := fmt.Sprintf(createKeyStoreConfig, cmKeyName, keyStoreName, false,
-		proxyURIEndpoint, keyStorePassword, vpcEndpointServiceName)
-
-	newCmKeyName := "tf-cm-key-update-" + uuid.New().String()[:8]
-	newKeyStoreName := "tf-update-custom-key-store" + uuid.New().String()[:8]
-	newProxyURIEndpoint := "https://192.168.8.134"
-	if os.Getenv("CDSPAAS") == "true" {
-		newProxyURIEndpoint = proxyURIEndpoint
-	}
-	newKeyStorePassword := "jumpedoversomething"
-	updateKeyStoreConfigStr := fmt.Sprintf(updateKeyStoreConfig, newCmKeyName, newKeyStoreName,
-		true, 8, newProxyURIEndpoint, newKeyStorePassword, "EXTERNAL_KEY_STORE")
-	modifyPlanConfigStr := fmt.Sprintf(updateKeyStoreConfig, newCmKeyName, newKeyStoreName,
-		true, 8, newProxyURIEndpoint, newKeyStorePassword, "AWS_CLOUDHSM")
-	modifyPlanMaxCredentialsStr := fmt.Sprintf(updateKeyStoreConfig, newCmKeyName, newKeyStoreName,
-		true, 2, newProxyURIEndpoint, newKeyStorePassword, "EXTERNAL_KEY_STORE")
-
-	newCmKeyNameEx2 := "tf-cm-key-update-" + uuid.New().String()[:8]
-	updateKeyStoreConfigStrEx2 := fmt.Sprintf(createKeyStoreConfig, newCmKeyNameEx2, keyStoreName, false,
-		proxyURIEndpoint, keyStorePassword, vpcEndpointServiceName)
-
-	keyStoreResourceName := "ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore"
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: awsConnectionResource + createKeyStoreConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_name"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "false"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "name", keyStoreName),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_uri_endpoint", proxyURIEndpoint),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.key_store_password", "thequickbrownfox"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
-					// The key store is created disconnected; connecting requires a live AWS endpoint and
-					// cannot be exercised in automated tests.
-					resource.TestCheckResourceAttr(keyStoreResourceName, "connect_disconnect_keystore", "DISCONNECT_KEYSTORE"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "labels.%", "0"),
-				),
-			},
-			{
-				ResourceName:      keyStoreResourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
-				ImportStateVerifyIgnore: []string{
-					"aws_param.key_store_password", // write-only; not returned by the API
-					"enable_credential_rotation",   // not surfaced in GET response; cannot round-trip
-					"updated_at",                   // timestamp; may differ between the import Read and the prior-state Read
-				},
-			},
-			{
-				Config: awsConnectionResource + updateKeyStoreConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_name"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "true"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "name", newKeyStoreName),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_uri_endpoint", newProxyURIEndpoint),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.key_store_password", "jumpedoversomething"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_connectivity", "PUBLIC_ENDPOINT"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "local_hosted_params.health_check_key_id"),
-				),
-			},
-			{
-				// Verify ModifyPlan fires an error when aws_param.custom_key_store_type is changed.
-				Config:      awsConnectionResource + modifyPlanConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-			{
-				// Verify ModifyPlan fires an error when local_hosted_params.max_credentials is changed.
-				Config:      awsConnectionResource + modifyPlanMaxCredentialsStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
-			},
-			{
-				Config: awsConnectionResource + updateKeyStoreConfigStrEx2,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_id"),
-					resource.TestCheckResourceAttrSet(keyStoreResourceName, "kms_name"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "enable_success_audit_event", "false"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "name", keyStoreName),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_uri_endpoint", proxyURIEndpoint),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.key_store_password", "thequickbrownfox"),
-					resource.TestCheckResourceAttr(keyStoreResourceName, "aws_param.xks_proxy_connectivity", "VPC_ENDPOINT_SERVICE"),
-				),
-			},
-		},
-	})
-}
-
+// TestCckmAWSCustomKeyStoreCreateUpdate verifies create and update behaviour for
+// a LOCAL (unlinked XKS) custom key store.
+//
+// Steps covered:
+//  1. Create - unblocked, audit disabled.
+//  2. Import state.
+//  3. Update - block and enable audit event.
+//  4. Update - unblock and disable audit event.
+//  5. Create - blocked=true at creation time (new resource name; unlinked key store).
+//  6. Cleanup - remove the blocked key store created in step 5.
+//  7. PlanOnly error - custom_key_store_type is immutable after creation.
+//  8. PlanOnly error - max_credentials is immutable after creation.
+//  9. PlanOnly error - connect_disconnect_keystore cannot be set at creation time.
+//  10. PlanOnly error - enable_credential_rotation cannot be set at creation time.
+//
+// Note: attaching a credential-rotation scheduler (enable_credential_rotation) requires
+// the keystore to be linked to AWS, which is not possible in automated tests.
 func TestCckmAWSCustomKeyStoreCreateUpdate(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
 	}
-	t.Run("OnCreate", func(t *testing.T) {
 
-		// Verifies that a key store can be created with blocked=true and
-		// enable_success_audit_event=true, then both are toggled via update.
-		// Linking, connecting, and credential rotation are not possible in automated
-		// tests; only LOCAL unlinked stores are exercised here.
+	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
+	keyStoreName := "tf-cks-" + uuid.New().String()[:8]
+	keystoreResourceName := "ciphertrust_aws_custom_keystore.keystore"
 
-		cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
-		keyStoreName := "tf-cks-" + uuid.New().String()[:8]
-		keystoreResourceName := "ciphertrust_aws_custom_keystore.keystore"
+	cmKeyResource := fmt.Sprintf(`
+	resource "ciphertrust_cm_key" "cm_key" {
+		name                         = "%s"
+		algorithm                    = "AES"
+		usage_mask                   = local.cm_key_usage_mask
+		remove_from_state_on_destroy = true
+	}`, cmKeyName)
 
-		cmKeyResource := fmt.Sprintf(`
-		resource "ciphertrust_cm_key" "cm_key" {
-			name                         = "%s"
-			algorithm                    = "AES"
-			usage_mask                   = local.cm_key_usage_mask
-			remove_from_state_on_destroy = true
-		}`, cmKeyName)
+	// Base config: unblocked, audit disabled, no aws_param, no scheduler.
+	baseConfig := cmKeyResource + fmt.Sprintf(`
+	resource "ciphertrust_aws_custom_keystore" "keystore" {
+		name                       = "%s"
+		region                     = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                     = ciphertrust_aws_kms.kms.id
+		enable_success_audit_event = false
+		local_hosted_params = {
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 4
+			source_key_tier     = "local"
+		}
+	}`, keyStoreName)
 
-		// Step 1: created blocked with audit event enabled.
-		createConfig := cmKeyResource + fmt.Sprintf(`
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name                       = "%s"
-			region                     = ciphertrust_aws_kms.kms.regions[0]
-			kms_id                     = ciphertrust_aws_kms.kms.id
-			enable_success_audit_event = true
-			local_hosted_params = {
-				blocked             = true
-				health_check_key_id = ciphertrust_cm_key.cm_key.id
-				max_credentials     = 4
-				source_key_tier     = "local"
-			}
-		}`, keyStoreName)
+	// blocked=true, audit=true.
+	blockedConfig := cmKeyResource + fmt.Sprintf(`
+	resource "ciphertrust_aws_custom_keystore" "keystore" {
+		name                       = "%s"
+		region                     = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                     = ciphertrust_aws_kms.kms.id
+		enable_success_audit_event = true
+		local_hosted_params = {
+			blocked             = true
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 4
+			source_key_tier     = "local"
+		}
+	}`, keyStoreName)
 
-		// Step 2: unblocked with audit event disabled.
-		updateConfig := cmKeyResource + fmt.Sprintf(`
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name                       = "%s"
-			region                     = ciphertrust_aws_kms.kms.regions[0]
-			kms_id                     = ciphertrust_aws_kms.kms.id
-			enable_success_audit_event = false
-			local_hosted_params = {
-				blocked             = false
-				health_check_key_id = ciphertrust_cm_key.cm_key.id
-				max_credentials     = 4
-				source_key_tier     = "local"
-			}
-		}`, keyStoreName)
+	// PlanOnly: changing custom_key_store_type on an existing resource - immutable.
+	immutableTypeConfig := cmKeyResource + fmt.Sprintf(`
+	resource "ciphertrust_aws_custom_keystore" "keystore" {
+		name                       = "%s"
+		region                     = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                     = ciphertrust_aws_kms.kms.id
+		enable_success_audit_event = false
+		local_hosted_params = {
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 4
+			source_key_tier     = "local"
+		}
+		aws_param = {
+			custom_key_store_type = "AWS_CLOUDHSM"
+		}
+	}`, keyStoreName)
 
-		resource.Test(t, resource.TestCase{
-			PreCheck:                 func() { cleanupCckmAwsKMS() },
-			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-			Steps: []resource.TestStep{
-				{
-					Config: awsConnectionResource + createConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "true"),
-						resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "true"),
-					),
-				},
-				{
-					Config: awsConnectionResource + updateConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "false"),
-						resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "false"),
-					),
+	// PlanOnly: changing max_credentials on an existing resource - immutable.
+	immutableMaxCredsConfig := cmKeyResource + fmt.Sprintf(`
+	resource "ciphertrust_aws_custom_keystore" "keystore" {
+		name                       = "%s"
+		region                     = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                     = ciphertrust_aws_kms.kms.id
+		enable_success_audit_event = false
+		local_hosted_params = {
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 2
+			source_key_tier     = "local"
+		}
+	}`, keyStoreName)
+
+	// Config: create a second key store with blocked=true at creation time.
+	// Uses a distinct resource name so Terraform plans a fresh create.
+	createBlockedConfig := cmKeyResource + fmt.Sprintf(`
+	resource "ciphertrust_aws_custom_keystore" "keystore" {
+		name                       = "%s"
+		region                     = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                     = ciphertrust_aws_kms.kms.id
+		enable_success_audit_event = false
+		local_hosted_params = {
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 4
+			source_key_tier     = "local"
+		}
+	}
+	resource "ciphertrust_aws_custom_keystore" "keystore_blocked" {
+		name   = "%s-blocked"
+		region = ciphertrust_aws_kms.kms.regions[0]
+		kms_id = ciphertrust_aws_kms.kms.id
+		local_hosted_params = {
+			blocked             = true
+			health_check_key_id = ciphertrust_cm_key.cm_key.id
+			max_credentials     = 4
+			source_key_tier     = "local"
+		}
+	}`, keyStoreName, keyStoreName)
+
+	// PlanOnly: connect_disconnect_keystore at create time (new resource, never in state).
+	createConnectConfig := `
+	resource "ciphertrust_aws_custom_keystore" "test_create_connect" {
+		name                        = "tf-test-connect-create"
+		region                      = ciphertrust_aws_kms.kms.regions[0]
+		kms_id                      = ciphertrust_aws_kms.kms.id
+		connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
+		local_hosted_params = {
+			max_credentials = 4
+			source_key_tier = "local"
+		}
+	}`
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create unblocked with audit disabled.
+			{
+				Config: awsConnectionResource + baseConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keystoreResourceName, "id"),
+					resource.TestCheckResourceAttrSet(keystoreResourceName, "kms_id"),
+					resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "false"),
+					resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "false"),
+				),
+			},
+			// Step 2: import state.
+			{
+				ResourceName:      keystoreResourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"aws_param.key_store_password", // write-only; not returned by the API
+					"enable_credential_rotation",   // not surfaced in GET response; cannot round-trip
+					"updated_at",                   // timestamp; may differ between import Read and prior-state Read
 				},
 			},
-		})
-	})
-
-	t.Run("OnUpdate", func(t *testing.T) {
-
-		// Verifies that a key store created unblocked with audit events disabled can
-		// have both toggled to true via update, then back to false. Linking, connecting,
-		// and credential rotation are not possible in automated tests; only LOCAL
-		// unlinked stores are exercised here.
-
-		cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
-		keyStoreName := "tf-cks-" + uuid.New().String()[:8]
-		keystoreResourceName := "ciphertrust_aws_custom_keystore.keystore"
-
-		cmKeyResource := fmt.Sprintf(`
-		resource "ciphertrust_cm_key" "cm_key" {
-			name                         = "%s"
-			algorithm                    = "AES"
-			usage_mask                   = local.cm_key_usage_mask
-			remove_from_state_on_destroy = true
-		}`, cmKeyName)
-
-		// Step 1: created unblocked, audit events disabled.
-		createConfig := cmKeyResource + fmt.Sprintf(`
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name                       = "%s"
-			region                     = ciphertrust_aws_kms.kms.regions[0]
-			kms_id                     = ciphertrust_aws_kms.kms.id
-			enable_success_audit_event = false
-			local_hosted_params = {
-				health_check_key_id = ciphertrust_cm_key.cm_key.id
-				max_credentials     = 4
-				source_key_tier     = "local"
-			}
-		}`, keyStoreName)
-
-		// Step 2: blocked, audit events enabled.
-		enableConfig := cmKeyResource + fmt.Sprintf(`
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name                       = "%s"
-			region                     = ciphertrust_aws_kms.kms.regions[0]
-			kms_id                     = ciphertrust_aws_kms.kms.id
-			enable_success_audit_event = true
-			local_hosted_params = {
-				blocked             = true
-				health_check_key_id = ciphertrust_cm_key.cm_key.id
-				max_credentials     = 4
-				source_key_tier     = "local"
-			}
-		}`, keyStoreName)
-
-		// Step 3: unblocked, audit events disabled.
-		disableConfig := cmKeyResource + fmt.Sprintf(`
-		resource "ciphertrust_aws_custom_keystore" "keystore" {
-			name                       = "%s"
-			region                     = ciphertrust_aws_kms.kms.regions[0]
-			kms_id                     = ciphertrust_aws_kms.kms.id
-			enable_success_audit_event = false
-			local_hosted_params = {
-				blocked             = false
-				health_check_key_id = ciphertrust_cm_key.cm_key.id
-				max_credentials     = 4
-				source_key_tier     = "local"
-			}
-		}`, keyStoreName)
-
-		resource.Test(t, resource.TestCase{
-			PreCheck:                 func() { cleanupCckmAwsKMS() },
-			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-			Steps: []resource.TestStep{
-				{
-					Config: awsConnectionResource + createConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "false"),
-						resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "false"),
-					),
-				},
-				{
-					Config: awsConnectionResource + enableConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "true"),
-						resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "true"),
-					),
-				},
-				{
-					Config: awsConnectionResource + disableConfig,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "false"),
-						resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "false"),
-					),
-				},
+			// Step 3: block the key store and enable the audit event.
+			{
+				Config: awsConnectionResource + blockedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "true"),
+					resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "true"),
+				),
 			},
-		})
-
+			// Step 4: unblock the key store and disable the audit event.
+			{
+				Config: awsConnectionResource + baseConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keystoreResourceName, "local_hosted_params.blocked", "false"),
+					resource.TestCheckResourceAttr(keystoreResourceName, "enable_success_audit_event", "false"),
+				),
+			},
+			// Step 5: create a second key store with blocked=true at creation time.
+			// Verifies that the API accepts blocked=true on an unlinked key store at creation.
+			{
+				Config: awsConnectionResource + createBlockedConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_aws_custom_keystore.keystore_blocked", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_custom_keystore.keystore_blocked", "local_hosted_params.blocked", "true"),
+				),
+			},
+			// Step 6: clean up the blocked key store so it is not in state for the PlanOnly steps.
+			{
+				Config: awsConnectionResource + baseConfig,
+			},
+			// Step 7: verify ModifyPlan rejects custom_key_store_type change (immutable).
+			{
+				Config:      awsConnectionResource + immutableTypeConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			// Step 8: verify ModifyPlan rejects max_credentials change (immutable).
+			{
+				Config:      awsConnectionResource + immutableMaxCredsConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+			},
+			// Step 9: verify ModifyPlan rejects connect_disconnect_keystore at creation time.
+			// The resource name is new so Terraform plans a create, triggering the guard.
+			{
+				Config:      awsConnectionResource + baseConfig + createConnectConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Cannot connect or disconnect a key store at creation time`),
+			},
+			// Step 10: verify ModifyPlan rejects enable_credential_rotation at creation time.
+			// The resource name is new so Terraform plans a create, triggering the guard.
+			{
+				Config: awsConnectionResource + baseConfig + `
+					resource "ciphertrust_aws_custom_keystore" "test_create_cred_rotation" {
+						name   = "tf-test-cred-rotation-create"
+						region = ciphertrust_aws_kms.kms.regions[0]
+						kms_id = ciphertrust_aws_kms.kms.id
+						local_hosted_params = {
+							max_credentials = 4
+							source_key_tier = "local"
+						}
+						enable_credential_rotation = {
+							job_config_id = "00000000-0000-0000-0000-000000000000"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Cannot enable credential rotation at creation time`),
+			},
+		},
 	})
 }
 

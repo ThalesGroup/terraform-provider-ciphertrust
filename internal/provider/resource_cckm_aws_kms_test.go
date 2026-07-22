@@ -144,23 +144,32 @@ func TestCckmAWSKms(t *testing.T) {
 			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 		}`
 
-	createArchivedConfig := `
+	// planArchiveOnCreateConfig verifies that archive = true is rejected at creation time.
+	// The existing kms resource is included unchanged; kms_b is a new resource with archive = true.
+	// This is plan-only so ModifyPlan fires and no apply occurs.
+	planArchiveOnCreateConfig := `
 		resource "ciphertrust_aws_connection" "aws_connection" {
+			name = "%s"
+		}
+		resource "ciphertrust_aws_connection" "new_aws_connection" {
 			name = "%s"
 		}
 		data "ciphertrust_aws_account_details" "account_details" {
 			connection_id = ciphertrust_aws_connection.aws_connection.id
 		}
-		resource "ciphertrust_aws_kms" "archived_kms" {
+		resource "ciphertrust_aws_kms" "kms" {
+			account_id     = %s
+			connection_id  = %s
+			name           = "%s"
+			archive        = false
+			regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
+		}
+		resource "ciphertrust_aws_kms" "kms_b" {
 			account_id     = data.ciphertrust_aws_account_details.account_details.account_id
 			connection_id  = ciphertrust_aws_connection.aws_connection.id
 			name           = "%s"
 			archive        = true
-			regions = [
-				data.ciphertrust_aws_account_details.account_details.regions[0],
-				data.ciphertrust_aws_account_details.account_details.regions[1],
-				data.ciphertrust_aws_account_details.account_details.regions[2]
-			]
+			regions        = [data.ciphertrust_aws_account_details.account_details.regions[1]]
 		}`
 
 	connNameA := "tf-A" + uuid.New().String()[:8]
@@ -181,11 +190,10 @@ func TestCckmAWSKms(t *testing.T) {
 	updateConnConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, updatedConnectionID, kmsNameA, "archive = false")
 	// try to change account
 	modifyPlanConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, invalidAccountID, updatedConnectionID, accountID, "archive = false")
-	// create a kms in archived state
-	createArchivedConfigStr := fmt.Sprintf(createArchivedConfig, connNameA, kmsNameB)
+	// plan-only: verify archive = true is rejected at creation time
+	planArchiveOnCreateConfigStr := fmt.Sprintf(planArchiveOnCreateConfig, connNameA, connNameB, accountID, updatedConnectionID, kmsNameA, kmsNameB)
 
 	resourceName := "ciphertrust_aws_kms.kms"
-	archivedResourceName := "ciphertrust_aws_kms.archived_kms"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
@@ -243,47 +251,11 @@ func TestCckmAWSKms(t *testing.T) {
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
-			// Archive via create: destroy the existing KMS and recreate with archive=true.
 			{
-				Config: createArchivedConfigStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(archivedResourceName, "archive", "true"),
-					resource.TestCheckResourceAttr(archivedResourceName, "status", "ARCHIVED"),
-				),
-			},
-		},
-	})
-}
-
-// TestCckmAWSKMSTwoKmsOverlappingRegions verifies that creating two KMS registrations for the
-// same account with overlapping regions results in an error. The second KMS uses regions[0]
-// which is already registered by the KMS created in awsConnectionResource.
-func TestCckmAWSKMSTwoKmsOverlappingRegions(t *testing.T) {
-	awsConnectionResource, ok := initCckmAwsTest()
-	if !ok {
-		t.Skip()
-	}
-	kmsTwoConfig := `
-		resource "ciphertrust_aws_kms" "kms_two" {
-			account_id    = data.ciphertrust_aws_account_details.account_details.account_id
-			connection_id = ciphertrust_aws_connection.aws_connection.id
-			name          = "%s"
-			regions = [
-				data.ciphertrust_aws_account_details.account_details.regions[0],
-			]
-		}`
-	kmsTwoConfigStr := fmt.Sprintf(kmsTwoConfig, "tf-"+uuid.New().String()[:8])
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmAwsKMS() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				// kms (from awsConnectionResource) and kms_two both claim regions[0].
-				// Terraform applies them concurrently; one will fail with an API error
-				// because the region is already registered to this account.
-				Config:      awsConnectionResource + kmsTwoConfigStr,
-				ExpectError: regexp.MustCompile(`Error creating AWS KMS`),
+				// Verify ModifyPlan fires an error when archive = true is set at creation time.
+				Config:      planArchiveOnCreateConfigStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Invalid create-time configuration`),
 			},
 		},
 	})

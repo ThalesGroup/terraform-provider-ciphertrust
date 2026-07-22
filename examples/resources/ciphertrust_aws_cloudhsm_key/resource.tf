@@ -1,11 +1,6 @@
 # Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
-  name = "aws_connection_name"
-}
-
-# Get the AWS account details
-data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
+  name = "name"
 }
 
 # Define a kms
@@ -13,25 +8,24 @@ resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
   ]
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
+  account_id     = "account-id"
   aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "kms-name"
-  regions        = ["us-west-1"]
+  name           = "name"
+  regions        = ["region"]
 }
 
 # Define a CloudHSM custom keystore
-resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
+resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
   depends_on = [
     ciphertrust_aws_kms.kms,
   ]
-  name                        = "cloudhsm-keystore-demo-1"
-  region                      = "us-west-1"
+  name                        = "name"
+  region                      = "region"
   kms_id                      = ciphertrust_aws_kms.kms.id
-  connect_disconnect_keystore = "CONNECT_KEYSTORE"
   aws_param = {
     custom_key_store_type    = "AWS_CLOUDHSM"
-    cloud_hsm_cluster_id     = "cluster-pxkcyeoqij"
-    key_store_password       = "kmsuser-password"
+    cloud_hsm_cluster_id     = "cluster-id"
+    key_store_password       = "keystore-password"
     trust_anchor_certificate = <<-EOT
                  -----BEGIN CERTIFICATE-----
                  MIIDhzCCAm+gAwIBAgIUHdJu4algAFs22h87meBhd9Qe4eMoDQYJKoZIhvcNAQEL
@@ -59,8 +53,8 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_custom_keystore" {
 }
 
 # Define a policy template using key users and roles
-resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
-  name             = "template-with-users-and-roles-test"
+resource "ciphertrust_aws_policy_template" "policy_template" {
+  name             = "name"
   kms_id           = ciphertrust_aws_kms.kms.id
   key_admins       = ["key-admins"]
   key_admins_roles = ["key-admins-roles"]
@@ -69,14 +63,13 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
 }
 
 # Define a CloudHSM key in the CloudHSM keystore
-resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key_1" {
-  custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_custom_keystore.id
-  enable_key          = false
+resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key" {
+  custom_key_store_id = ciphertrust_aws_custom_keystore.cloudhsm_keystore.id
   aws_param = {
-    alias       = ["a5_cloudhsm_key_1"]
-    description = "desc for cloudhsm_key_1"
+    alias       = ["alias"]
+    description = "description"
   }
   key_policy = {
-    policy_template = ciphertrust_aws_policy_template.template_with_users_and_roles.id
+    policy_template = ciphertrust_aws_policy_template.policy_template.id
   }
 }

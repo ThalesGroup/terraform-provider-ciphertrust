@@ -1,6 +1,6 @@
 # Define an AWS connection
 resource "ciphertrust_aws_connection" "aws-connection" {
-  name = "connection-name"
+  name = "name"
 }
 
 # Get the AWS account details
@@ -12,14 +12,14 @@ data "ciphertrust_aws_account_details" "account_details" {
 resource "ciphertrust_aws_kms" "kms" {
   account_id     = data.ciphertrust_aws_account_details.account_details.account_id
   aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "kms-name"
+  name           = "name"
   regions        = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Define an AES CipherTrust key for creating EXTERNAL_KEY_STORE with CipherTrust Manager as key source
 # key should be unexportable, undeletable, symmetric AES 256 key.
-resource "ciphertrust_cm_key" "cm_aes_key" {
-  name         = "aes-key-name"
+resource "ciphertrust_cm_key" "healthcheck_key" {
+  name         = "name"
   algorithm    = "AES"
   usage_mask   = 60
   unexportable = true
@@ -28,16 +28,15 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
   remove_from_state_on_destroy = true
 }
 
-# Define unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity
+# Define an unlinked external custom keystore with CipherTrust Manager as key source and PUBLIC_ENDPOINT proxy connectivity.
+# linked_state is omitted here so the keystore is created unlinked (default). Set linked_state = true to create it linked.
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
-  name                        = "keystore-name"
-  region                      = "us-west-1"
-  kms_id                      = ciphertrust_aws_kms.kms.id
-  linked_state                = false
-  connect_disconnect_keystore = "DISCONNECT_KEYSTORE"
+  name   = "name"
+  region = "region"
+  kms_id = ciphertrust_aws_kms.kms.id
   local_hosted_params = {
     blocked             = false
-    health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
+    health_check_key_id = ciphertrust_cm_key.healthcheck_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
@@ -48,28 +47,30 @@ resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
   }
 }
 
-# Define an unlinked XKS key with CipherTrust Manager as key source in above unlinked external key store
-# Keys can only be linked once the keystore is linked
+# Define a separate AES CipherTrust key to use as the XKS key source.
+# Must have the same specs as the health check key: unexportable, undeletable, symmetric AES 256.
+resource "ciphertrust_cm_key" "xks_source_key" {
+  name                         = "xks-source-key-name"
+  algorithm                    = "AES"
+  usage_mask                   = 60
+  unexportable                 = true
+  undeletable                  = true
+  remove_from_state_on_destroy = true
+}
+
+# Define an unlinked XKS key in the above keystore.
+# blocked and linked are both sent to the API at creation time.
+# To create a linked key, set linked = true (requires the keystore to also be linked).
+# Additional aliases, tags, enable_rotation, and enable_key = false must be set via update after creation.
 resource "ciphertrust_aws_xks_key" "xks_key" {
   local_hosted_params = {
     blocked             = false
     custom_key_store_id = ciphertrust_aws_custom_keystore.custom_keystore.id
     linked              = false
-    source_key_id       = ciphertrust_cm_key.cm_aes_key.id
+    source_key_id       = ciphertrust_cm_key.xks_source_key.id
     source_key_tier     = "local"
   }
   aws_param = {
-    alias = ["key-name"]
-  }
-}
-
-# An example resource for importing an existing xks key
-resource "ciphertrust_aws_xks_key" "imported_xks_key" {
-  local_hosted_params = {
-    blocked             = false
-    custom_key_store_id = "0813e489-6930-4c4f-a9ab-85ff275f9122"
-    linked              = false
-    source_key_id       = "5b0cce40a9434708bfb2510a670dce2d12a0253bda444a109224e519f0df5619"
-    source_key_tier     = "local"
+    alias = ["alias"]
   }
 }
