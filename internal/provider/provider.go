@@ -234,51 +234,104 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	homeDir, _ := os.UserHomeDir()
 	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
 
-	file, _ := os.Open(configFileName)
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
+	// Validate config file exists, is not a symlink, and has secure permissions
+	if info, err := os.Lstat(configFileName); err == nil {
+		// 1. Symlink validation to prevent symlink redirect attacks
+		if info.Mode()&os.ModeSymlink != 0 {
+			resp.Diagnostics.AddError(
+				"Unsecured Configuration File detected",
+				fmt.Sprintf("The configuration file %q is a symbolic link. Symbolic links are prohibited to prevent symlink attacks.", configFileName),
+			)
+			return
 		}
 
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
+		// 2. Permission validation (Must not be group or world readable/writable/executable, i.e., perm & 0077 != 0)
+		if info.Mode().Perm()&0077 != 0 {
+			resp.Diagnostics.AddError(
+				"Unsecured Configuration File detected",
+				fmt.Sprintf("The configuration file %q has insecure permissions (%04o). It must be restricted to user-only access (e.g., 0600 or 0400) to prevent credentials leakage to other users on the system.", configFileName, info.Mode().Perm()),
+			)
+			return
+		}
 
-		switch key {
-		case "address":
-			address = value
-		case "username":
-			username = value
-		case "password":
-			password = value
-		case "bootstrap":
-			bootstrap = value
-		case "domain":
-			domain = value
-		case "auth_domain":
-			auth_domain = value
-		case "tenant":
-			tenant = value
-		case "no_ssl_verify":
-			no_ssl_verify, _ = strconv.ParseBool(value)
-		case "ca_cert":
-			ca_cert = value
-		case "rest_api_timeout":
-			rest_api_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "aws_operation_timeout":
-			aws_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "oci_operation_timeout":
-			oci_operation_timeout, _ = strconv.ParseInt(value, 10, 64)
-		case "replication_delay_ms":
-			replication_delay_ms, _ = strconv.ParseInt(value, 10, 64)
-		case "log_file":
-			log_file = value
-		case "log_level":
-			log_level = value
+		// Read and parse the secure config file
+		if file, err := os.Open(configFileName); err == nil {
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				line := scanner.Text()
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				var parseErr error
+				switch key {
+				case "address":
+					address = value
+				case "username":
+					username = value
+				case "password":
+					password = value
+				case "bootstrap":
+					bootstrap = value
+				case "domain":
+					domain = value
+				case "auth_domain":
+					auth_domain = value
+				case "tenant":
+					tenant = value
+				case "no_ssl_verify":
+					no_ssl_verify, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "ca_cert":
+					ca_cert = value
+				case "rest_api_timeout":
+					rest_api_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "aws_operation_timeout":
+					aws_operation_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "oci_operation_timeout":
+					oci_operation_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "replication_delay_ms":
+					replication_delay_ms, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "log_file":
+					log_file = value
+				case "log_level":
+					log_level = value
+				}
+			}
 		}
 	}
 
@@ -313,7 +366,14 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 	noSSLVerifyEnvVal, noSSLVerifyEnvExists := os.LookupEnv("NO_SSL_VERIFY")
 	if noSSLVerifyEnvExists {
-		no_ssl_verify, _ = strconv.ParseBool(noSSLVerifyEnvVal)
+		var parseErr error
+		no_ssl_verify, parseErr = strconv.ParseBool(noSSLVerifyEnvVal)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable NO_SSL_VERIFY=%q as boolean: %s", noSSLVerifyEnvVal, parseErr.Error()),
+			)
+		}
 	}
 	caCertEnvVal, caCertEnvExists := os.LookupEnv("CIPHERTRUST_CA_CERT")
 	if caCertEnvExists {
@@ -321,11 +381,29 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 	restAPITimeoutEnvVal, restAPITimeoutEnvExists := os.LookupEnv("REST_API_TIMEOUT")
 	if restAPITimeoutEnvExists {
-		rest_api_timeout, _ = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
+		var parseErr error
+		rest_api_timeout, parseErr = strconv.ParseInt(restAPITimeoutEnvVal, 10, 64)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable REST_API_TIMEOUT=%q as integer: %s", restAPITimeoutEnvVal, parseErr.Error()),
+			)
+		}
 	}
 	replicationDelayEnvVal, replicationDelayEnvExists := os.LookupEnv("CM_REPLICATION_DELAY")
 	if replicationDelayEnvExists {
-		replication_delay_ms, _ = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
+		var parseErr error
+		replication_delay_ms, parseErr = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
+		if parseErr != nil {
+			resp.Diagnostics.AddError(
+				"Invalid environment variable configuration",
+				fmt.Sprintf("Failed to parse environment variable CM_REPLICATION_DELAY=%q as integer: %s", replicationDelayEnvVal, parseErr.Error()),
+			)
+		}
+	}
+
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	// Finally if the provider block has values, make that highest priority
