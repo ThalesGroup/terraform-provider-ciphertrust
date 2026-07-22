@@ -224,6 +224,8 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
 		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
 			state.CACert = types.StringValue(caCert.String())
+		} else {
+			state.CACert = types.StringNull()
 		}
 	} else {
 		state.CACert = types.StringNull()

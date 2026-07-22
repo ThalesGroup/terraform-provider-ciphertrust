@@ -274,7 +274,7 @@ func Test_CM_SyslogCACertNonTLS(t *testing.T) {
 				),
 			},
 			{
-				Config:             syslogConfigWithCACert(name, "udp", testSyslogCACertAny),
+				Config:             syslogConfigNoCACert(name, "udp"),
 				ExpectNonEmptyPlan: false,
 			},
 		},
@@ -329,7 +329,7 @@ func Test_CM_SyslogUpdateCACertNonTLS(t *testing.T) {
 				),
 			},
 			{
-				Config:             syslogConfigWithCACert(name, "tcp", testSyslogCACertAny),
+				Config:             syslogConfigNoCACert(name, "tcp"),
 				ExpectNonEmptyPlan: false,
 			},
 		},
