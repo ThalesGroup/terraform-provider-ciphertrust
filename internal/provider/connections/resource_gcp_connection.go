@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package connections
 
 import (
@@ -11,6 +14,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -71,24 +75,38 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 				Optional:    true,
 				Computed:    true,
 				Description: "Description about the connection.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
 				Computed:    true,
 				Description: labelsDescription,
+				PlanModifiers: []planmodifier.Map{
+					modifiers.UseStateWhenClearingMap(),
+				},
 			},
 			"meta": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
 				Computed:    true,
 				Description: "Optional end-user or service data stored with the connection.",
+				PlanModifiers: []planmodifier.Map{
+					modifiers.UseStateWhenClearingMap(),
+				},
 			},
 			"products": schema.ListAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
 				Computed:    true,
 				Description: productsDescription,
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(
+						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
+					),
+				},
 			},
 			"client_email": schema.StringAttribute{
 				Computed: true,
@@ -135,17 +153,21 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 		payload.Description = plan.Description.ValueString()
 	}
 
-	gcpLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		gcpLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		gcpLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			gcpLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = gcpLabelsPayload
 	}
-	payload.Labels = gcpLabelsPayload
 
-	gcpMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		gcpMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		gcpMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			gcpMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = gcpMetadataPayload
 	}
-	payload.Meta = gcpMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var gcpProducts []string
@@ -263,17 +285,21 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		payload.Description = plan.Description.ValueString()
 	}
 
-	gcpLabelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		gcpLabelsPayload[k] = v.(types.String).ValueString()
+	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
+		gcpLabelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			gcpLabelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = gcpLabelsPayload
 	}
-	payload.Labels = gcpLabelsPayload
 
-	gcpMetadataPayload := make(map[string]interface{})
-	for k, v := range plan.Meta.Elements() {
-		gcpMetadataPayload[k] = v.(types.String).ValueString()
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
+		gcpMetadataPayload := make(map[string]interface{})
+		for k, v := range plan.Meta.Elements() {
+			gcpMetadataPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Meta = gcpMetadataPayload
 	}
-	payload.Meta = gcpMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var gcpProducts []string
@@ -344,6 +370,10 @@ func (r *resourceGCPConnection) Delete(ctx context.Context, req resource.DeleteR
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_GCP_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "GCP connection already deleted out-of-band on CM")
+			return
+		}
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_gcp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust GCP Connection",

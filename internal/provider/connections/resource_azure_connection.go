@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package connections
 
 import (
@@ -9,6 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -157,6 +161,9 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Description: labelsDescription,
+				PlanModifiers: []planmodifier.Map{
+					modifiers.UseStateWhenClearingMap(),
+				},
 			},
 			"management_url": schema.StringAttribute{
 				Optional:    true,
@@ -177,6 +184,11 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Description: productsDescription,
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(
+						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
+					),
+				},
 			},
 			"resource_manager_url": schema.StringAttribute{
 				Optional:    true,
@@ -295,7 +307,7 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		payload.Description = plan.Description.ValueString()
 	}
 
-	if plan.IsCertificateUsed.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.IsCertificateUsed.IsNull() && !plan.IsCertificateUsed.IsUnknown() {
 		payload.IsCertificateUsed = plan.IsCertificateUsed.ValueBool()
 	}
 
@@ -494,7 +506,7 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.Description = plan.Description.ValueString()
 	}
 
-	if plan.IsCertificateUsed.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.IsCertificateUsed.IsNull() && !plan.IsCertificateUsed.IsUnknown() {
 		payload.IsCertificateUsed = plan.IsCertificateUsed.ValueBool()
 	}
 
@@ -603,6 +615,10 @@ func (r *resourceAzureConnection) Delete(ctx context.Context, req resource.Delet
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_AZURE_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			tflog.Debug(ctx, "Azure connection already deleted out-of-band on CM")
+			return
+		}
 		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_azure_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Azure Connection",
