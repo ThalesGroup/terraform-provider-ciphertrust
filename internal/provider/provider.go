@@ -53,6 +53,11 @@ type ciphertrustProvider struct {
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
+
+	// logFileHandle is the *os.File backing the provider-specific log writer.
+	// hclog does not own or close the writer, so we track it here to close it
+	// before opening a new one on repeated Configure calls (e.g. plan + apply).
+	logFileHandle *os.File
 }
 
 type ciphertrustProviderModel struct {
@@ -164,6 +169,29 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			},
 		},
 	}
+}
+
+// openProviderLog opens (or, when logLevel is "off", skips opening) the
+// provider log file. It returns the logger, the underlying *os.File (nil when
+// level is "off"), and any error. The caller owns the returned file handle and
+// must close it when no longer needed.
+//
+// The file is always created with mode 0600 so that sensitive API details
+// recorded at debug level are not world-readable on multi-user systems.
+func openProviderLog(logFile, logLevel string) (hclog.Logger, *os.File, error) {
+	if strings.EqualFold(logLevel, "off") {
+		return hclog.NewNullLogger(), nil, nil
+	}
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, nil, err
+	}
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name:   "ciphertrust",
+		Level:  hclog.LevelFromString(logLevel),
+		Output: f,
+	})
+	return logger, f, nil
 }
 
 // Configure prepares a CipherTrust API client for data sources and resources.
@@ -308,22 +336,25 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		log_level = config.LogLevel.ValueString()
 	}
 
-	// Create the provider-specific logger that writes to a dedicated file,
-	// independent of Terraform's TF_LOG output.
-	logFileHandle, err := os.OpenFile(log_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
+	// Close any file handle left open by a previous Configure call (e.g.
+	// terraform plan followed by terraform apply, or repeated acceptance-test
+	// runs). hclog does not own the writer lifecycle so we must do this here.
+	if p.logFileHandle != nil {
+		_ = p.logFileHandle.Close()
+		p.logFileHandle = nil
+	}
+	providerLogger, logFH, logErr := openProviderLog(log_file, log_level)
+	if logErr != nil {
 		resp.Diagnostics.AddError(
 			"Failed to open provider log file",
-			fmt.Sprintf("Could not open log file %q: %s", log_file, err.Error()),
+			fmt.Sprintf("Could not open log file %q: %s", log_file, logErr.Error()),
 		)
 		return
 	}
-	providerLogger := hclog.New(&hclog.LoggerOptions{
-		Name:   "ciphertrust",
-		Level:  hclog.LevelFromString(log_level),
-		Output: logFileHandle,
-	})
-	providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+	p.logFileHandle = logFH
+	if logFH != nil {
+		providerLogger.Info("CipherTrust provider initialising", "log_level", log_level, "log_file", log_file)
+	}
 
 	if !config.Address.IsNull() {
 		address = config.Address.ValueString()
