@@ -345,6 +345,7 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 											},
 											"private_key": schema.StringAttribute{
 												Computed:    true,
+												Sensitive:   true,
 												Description: "Client certificate for syslog application provided by the client. for example: -----BEGIN RSA PRIVATE KEY-----\n<key content>\n-----END RSA PRIVATE KEY-----",
 											},
 											"protocol": schema.StringAttribute{

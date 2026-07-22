@@ -96,6 +96,7 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"password": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Password for the client. Required when password_creation_method is MANUAL.",
 			},
 			"password_creation_method": schema.StringAttribute{
