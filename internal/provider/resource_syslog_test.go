@@ -270,7 +270,7 @@ func Test_CM_SyslogCACertNonTLS(t *testing.T) {
 				Config: syslogConfigWithCACert(name, "udp", testSyslogCACertAny),
 				Check: checkStep(t, "create udp with ca_cert",
 					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "transport", "udp"),
-					resource.TestCheckNoResourceAttr("ciphertrust_syslog."+name, "ca_cert"),
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "ca_cert", testSyslogCACertAny),
 				),
 			},
 			{
@@ -324,8 +324,8 @@ func Test_CM_SyslogUpdateCACertNonTLS(t *testing.T) {
 			},
 			{
 				Config: syslogConfigWithCACert(name, "tcp", testSyslogCACertAny),
-				Check: checkStep(t, "update tcp add ca_cert (should be discarded by CM)",
-					resource.TestCheckNoResourceAttr("ciphertrust_syslog."+name, "ca_cert"),
+				Check: checkStep(t, "update tcp add ca_cert (should be preserved in state)",
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "ca_cert", testSyslogCACertAny),
 				),
 			},
 			{
