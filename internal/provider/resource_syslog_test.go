@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -253,4 +255,162 @@ resource "ciphertrust_syslog" "test" {
 			},
 		},
 	})
+}
+
+// Test_CM_SyslogCACertNonTLS verifies that ca_cert is absent from state after
+// Create() with a non-TLS transport. CM silently discards ca_cert for non-TLS
+// transports; Create() reads null back from the POST response and writes null to state.
+func Test_CM_SyslogCACertNonTLS(t *testing.T) {
+	RequireCM(t)
+	name := "syslog-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: syslogConfigWithCACert(name, "udp", testSyslogCACertAny),
+				Check: checkStep(t, "create udp with ca_cert",
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "transport", "udp"),
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "ca_cert", testSyslogCACertAny),
+				),
+			},
+			{
+				Config:             syslogConfigNoCACert(name, "udp"),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_SyslogCACertTLSPreserved verifies that ca_cert is present in state
+// after Create() with TLS transport (CM stores it), and that a subsequent plan
+// produces no diff (regression guard: the fix must not break the TLS path).
+func Test_CM_SyslogCACertTLSPreserved(t *testing.T) {
+	RequireCM(t)
+	cert := tlsSyslogCACert(t)
+	name := "syslog-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: syslogConfigWithCACert(name, "tls", cert),
+				Check: checkStep(t, "create tls with ca_cert",
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "transport", "tls"),
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog."+name, "ca_cert"),
+				),
+			},
+			{
+				Config:             syslogConfigWithCACert(name, "tls", cert),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_SyslogUpdateCACertNonTLS verifies that adding ca_cert via Update() on
+// a non-TLS resource leaves ca_cert absent in state (CM discards it), and that
+// a subsequent plan produces no diff (no perpetual diff after update).
+func Test_CM_SyslogUpdateCACertNonTLS(t *testing.T) {
+	RequireCM(t)
+	name := "syslog-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: syslogConfigNoCACert(name, "tcp"),
+				Check: checkStep(t, "create tcp no ca_cert",
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "transport", "tcp"),
+					resource.TestCheckNoResourceAttr("ciphertrust_syslog."+name, "ca_cert"),
+				),
+			},
+			{
+				Config: syslogConfigWithCACert(name, "tcp", testSyslogCACertAny),
+				Check: checkStep(t, "update tcp add ca_cert (should be preserved in state)",
+					resource.TestCheckResourceAttr("ciphertrust_syslog."+name, "ca_cert", testSyslogCACertAny),
+				),
+			},
+			{
+				Config:             syslogConfigNoCACert(name, "tcp"),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_SyslogCACertDrift verifies that an out-of-band removal of caCert on a
+// TLS syslog resource is detected by Read() as drift on the next plan.
+func Test_CM_SyslogCACertDrift(t *testing.T) {
+	RequireCM(t)
+	cert := tlsSyslogCACert(t)
+	name := "syslog-" + uuid.New().String()[:8]
+	var resourceID string
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: syslogConfigWithCACert(name, "tls", cert),
+				Check: checkStep(t, "create tls with ca_cert for drift test",
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog."+name, "ca_cert"),
+					func(s *terraform.State) error {
+						resourceID = s.RootModule().Resources["ciphertrust_syslog."+name].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				PreConfig: func() {
+					ctx := context.Background()
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping OOB caCert clear step")
+						return
+					}
+					payload, err := json.Marshal(map[string]interface{}{"caCert": ""})
+					if err != nil {
+						t.Logf("failed to marshal OOB caCert clear payload: %v", err)
+						return
+					}
+					if _, err := client.UpdateDataV2(ctx, resourceID, common.URL_CM_SYSLOG, payload); err != nil {
+						t.Logf("OOB caCert clear failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// testSyslogCACertAny is a placeholder PEM block used for non-TLS transport tests.
+// CipherTrust Manager silently discards ca_cert for non-TLS transports, so the
+// value just needs to be non-empty to exercise that code path.
+const testSyslogCACertAny = `-----BEGIN CERTIFICATE-----
+MIIBpDCCAQ2gAwIBAgIUTest01ForNonTLSSyslogTestsOnlyxyz0KBgQDAmBvdDCC
+-----END CERTIFICATE-----`
+
+// tlsSyslogCACert returns the CA certificate for TLS syslog acceptance tests.
+// The test is skipped when CIPHERTRUST_SYSLOG_CA_CERT is not set in the environment.
+func tlsSyslogCACert(t *testing.T) string {
+	t.Helper()
+	cert := os.Getenv("CIPHERTRUST_SYSLOG_CA_CERT")
+	if cert == "" {
+		t.Skip("CIPHERTRUST_SYSLOG_CA_CERT not set — skipping TLS syslog ca_cert tests")
+	}
+	return cert
+}
+
+func syslogConfigWithCACert(name, transport, caCert string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" %[1]q {
+  host      = "example.syslog.com"
+  transport = %[2]q
+  ca_cert   = %[3]q
+}`, name, transport, caCert)
+}
+
+func syslogConfigNoCACert(name, transport string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" %[1]q {
+  host      = "example.syslog.com"
+  transport = %[2]q
+}`, name, transport)
 }

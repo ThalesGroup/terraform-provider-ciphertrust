@@ -72,7 +72,11 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"ca_cert": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode",
 			},
 			"message_format": schema.StringAttribute{
@@ -178,6 +182,18 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	// framework's post-Create consistency check (every Computed attribute must resolve
 	// to a known value) is satisfied even when the user never set them.
 	hydrateSyslogOptionalFields(&plan, response)
+	if plan.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the planned/configured value if known, otherwise set to null.
+		if plan.CACert.IsUnknown() {
+			plan.CACert = types.StringNull()
+		}
+	} else {
+		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+			plan.CACert = types.StringValue(caCert.String())
+		} else {
+			plan.CACert = types.StringNull()
+		}
+	}
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
 
@@ -221,16 +237,18 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	// State-Guarded Hydration: only hydrate ca_cert if it was actively configured in the HCL,
-	// to avoid perpetual plan diffs and infinite apply loops when it is omitted in configuration.
-	if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
-		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
-			state.CACert = types.StringValue(caCert.String())
+	if state.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the existing state value (config value) to prevent spurious diffs.
+	} else {
+		if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
+			if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+				state.CACert = types.StringValue(caCert.String())
+			} else {
+				state.CACert = types.StringNull()
+			}
 		} else {
 			state.CACert = types.StringNull()
 		}
-	} else {
-		state.CACert = types.StringNull()
 	}
 	// Always hydrate message_format and port from the API response so that
 	// out-of-band changes made directly via the CM API are surfaced during
@@ -326,15 +344,19 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	plan.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	if !plan.CACert.IsNull() {
+	hydrateSyslogOptionalFields(&plan, response)
+	if plan.Transport.ValueString() != "tls" {
+		// For non-TLS, CM silently discards caCert. Preserve the planned/configured value if known, otherwise set to null.
+		if plan.CACert.IsUnknown() {
+			plan.CACert = types.StringNull()
+		}
+	} else {
 		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
 			plan.CACert = types.StringValue(caCert.String())
+		} else {
+			plan.CACert = types.StringNull()
 		}
 	}
-	// message_format and port are Optional+Computed: hydrate unconditionally, matching
-	// Create() and Read(), so the framework's post-Update consistency check is satisfied
-	// even when the user never set them.
-	hydrateSyslogOptionalFields(&plan, response)
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
