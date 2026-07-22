@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package connections
 
 import (
@@ -74,6 +77,38 @@ func Test_CM_OCIConnectionSensitiveFields(t *testing.T) {
 		}
 		if !sensitive {
 			t.Errorf("ciphertrust_oci_connection: attribute %q must have Sensitive: true to prevent credential exposure in state/plan output", field)
+		}
+	}
+}
+
+// Test_CM_SCPConnectionSensitiveFields verifies that password is marked
+// Sensitive: true in the ciphertrust_scp_connection schema.
+func Test_CM_SCPConnectionSensitiveFields(t *testing.T) {
+	attrs := sensitiveAttrsForResource(t, NewResourceCMScpConnection())
+	for _, field := range []string{"password"} {
+		sensitive, exists := attrs[field]
+		if !exists {
+			t.Errorf("ciphertrust_scp_connection: attribute %q not found in schema", field)
+			continue
+		}
+		if !sensitive {
+			t.Errorf("ciphertrust_scp_connection: attribute %q must have Sensitive: true to prevent credential exposure in state/plan output", field)
+		}
+	}
+}
+
+// Test_CM_GCPConnectionSensitiveFields verifies that key_file and private_key_id are marked
+// Sensitive: true in the ciphertrust_gcp_connection schema.
+func Test_CM_GCPConnectionSensitiveFields(t *testing.T) {
+	attrs := sensitiveAttrsForResource(t, NewResourceGCPConnection())
+	for _, field := range []string{"key_file", "private_key_id"} {
+		sensitive, exists := attrs[field]
+		if !exists {
+			t.Errorf("ciphertrust_gcp_connection: attribute %q not found in schema", field)
+			continue
+		}
+		if !sensitive {
+			t.Errorf("ciphertrust_gcp_connection: attribute %q must have Sensitive: true to prevent credential exposure in state/plan output", field)
 		}
 	}
 }
