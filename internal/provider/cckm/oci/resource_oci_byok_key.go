@@ -104,12 +104,12 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"enable_auto_rotation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable the key for a scheduled rotation job.",
+				Description: "(Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
@@ -198,7 +198,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"length": schema.Int64Attribute{
 						Computed:    true,
-						Description: "The length of the key.",
+						Description: "The length of the key in bytes. Options are: AES (16, 24, 32), RSA (256, 384, 512), ECDSA (32, 48, 66).",
 					},
 					"lifecycle_state": schema.StringAttribute{
 						Computed:    true,
@@ -322,8 +322,8 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 }
 
 // Create uploads an existing CipherTrust Manager key to OCI as a BYOK key. If the upload succeeds, subsequent
-// failures (state wait, auto-rotation enablement, key disable, refresh) are reported as warnings only  -  the
-// resource is created and its ID is committed to state before any of those post-upload steps run.
+// failures (state wait, refresh) are reported as warnings only - the resource is created and its ID is
+// committed to state before any of those post-upload steps run.
 func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key.go -> Create]["+id+"]")
@@ -382,26 +382,6 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 	if waitDiags.HasError() {
 		for _, d := range waitDiags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	if plan.EnableAutoRotation != nil {
-		var diags diag.Diagnostics
-		enableSchedulerRotation(ctx, id, r.client, keyID, plan.EnableAutoRotation, &diags)
-		if diags.HasError() {
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
-		}
-	}
-
-	if !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		disableKey(ctx, id, r.client, keyID, &diags)
-		if diags.HasError() {
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
 		}
 	}
 
@@ -543,11 +523,36 @@ func (r *resourceCCKMOCIByokKey) Delete(ctx context.Context, req resource.Delete
 	}
 }
 
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that OCI does not allow to be modified after creation.
+// ModifyPlan validates create-time restrictions and errors at plan time if any immutable attribute
+// is changed on an existing resource, preventing silent in-place updates to fields that OCI does
+// not allow to be modified after creation.
 func (r *resourceCCKMOCIByokKey) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// destroy - nothing to validate
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// create-only validations
+	if req.State.Raw.IsNull() {
+		var plan models.BYOKKeyTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if plan.EnableAutoRotation != nil {
+			resp.Diagnostics.AddError(
+				"Invalid create-time attribute",
+				"enable_auto_rotation cannot be set at creation time. "+
+					"Remove it from the resource block and configure it via update after the key is created.",
+			)
+		}
+		if !plan.EnableKey.IsUnknown() && !plan.EnableKey.IsNull() && !plan.EnableKey.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Invalid create-time attribute",
+				"enable_key cannot be set to false at creation time. "+
+					"Remove it from the resource block and configure it via update after the key is created.",
+			)
+		}
 		return
 	}
 

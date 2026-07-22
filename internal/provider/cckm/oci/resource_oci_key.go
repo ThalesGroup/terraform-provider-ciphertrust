@@ -86,7 +86,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"enable_auto_rotation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable the key for a scheduled rotation job.",
+				Description: "(Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
@@ -102,7 +102,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true.",
+				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"id": schema.StringAttribute{
@@ -367,26 +367,6 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 		}
 	}
 
-	if plan.EnableAutoRotation != nil {
-		var diags diag.Diagnostics
-		enableSchedulerRotation(ctx, id, r.client, keyID, plan.EnableAutoRotation, &diags)
-		if diags.HasError() {
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
-		}
-	}
-
-	if !plan.EnableKey.ValueBool() {
-		var diags diag.Diagnostics
-		disableKey(ctx, id, r.client, keyID, &diags)
-		if diags.HasError() {
-			for _, d := range diags {
-				resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-			}
-		}
-	}
-
 	refreshResponse, err := ociPostNoDataWithRetry(ctx, r.client, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
 	if err != nil {
 		msg := "Error refreshing OCI key."
@@ -526,8 +506,32 @@ func (r *resourceCCKMOCIKey) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 func (r *resourceCCKMOCIKey) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+	// destroy - nothing to validate
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// create-only validations
+	if req.State.Raw.IsNull() {
+		var plan models.KeyTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if plan.EnableAutoRotation != nil {
+			resp.Diagnostics.AddError(
+				"Invalid create-time attribute",
+				"enable_auto_rotation cannot be set at creation time. "+
+					"Remove it from the resource block and configure it via update after the key is created.",
+			)
+		}
+		if !plan.EnableKey.IsUnknown() && !plan.EnableKey.IsNull() && !plan.EnableKey.ValueBool() {
+			resp.Diagnostics.AddError(
+				"Invalid create-time attribute",
+				"enable_key cannot be set to false at creation time. "+
+					"Remove it from the resource block and configure it via update after the key is created.",
+			)
+		}
 		return
 	}
 

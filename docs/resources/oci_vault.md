@@ -13,12 +13,25 @@ Use this resource to create and manage OCI vaults in CipherTrust Manager.
 ## Example Usage
 
 ```terraform
+# Pre-requisites for an OCI Vault - OCI connection
+
+# Define an OCI connection
+resource "ciphertrust_oci_connection" "connection" {
+  key_file            = "path-to-or-contents-of-oci-key-file"
+  name                = "name"
+  pub_key_fingerprint = "public-key-fingerprint"
+  region              = "region"
+  tenancy_ocid        = "tenancy-ocid"
+  user_ocid           = "user-ocid"
+}
+
+# Define an OCI Vault.
 resource "ciphertrust_oci_vault" "vault" {
   # Required parameters
-  connection_id    = ciphertrust_oci_connection.connection.name
+  connection_id    = ciphertrust_oci_connection.connection.id
   region           = "oci-region"
   vault_id         = "vault-ocid"
-  # Optional parameters
+  # Optional parameters for Virtual Private Vaults
   bucket_name      = "bucket-name"
   bucket_namespace = "bucket-namespace"
 }
@@ -46,20 +59,20 @@ resource "ciphertrust_oci_vault" "vault" {
 - `compartment_id` (String) The compartment's OCID.
 - `compartment_name` (String) Compartment name.
 - `connection_name` (String) The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.
-- `created_at` (String) Date/time the application was created
+- `created_at` (String) Date/time the vault was created in CipherTrust Manager.
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--defined_tags))
 - `freeform_tags` (Map of String) The freeform tags of the vault.
 - `id` (String) The vault's CipherTrust Managers resource ID.
-- `is_primary` (Boolean) Whether the key belongs to a primary vault or a replica vault.
+- `is_primary` (Boolean) Whether the vault is a primary vault or a replica vault.
 - `lifecycle_state` (String) The vault's current lifecycle state.
 - `management_endpoint` (String) The vault's management endpoint.
 - `name` (String) The vault's name.
-- `refreshed_at` (String) Date/time the application was refreshed.
+- `refreshed_at` (String) Date/time the vault was last refreshed.
 - `replication_id` (String) The replication ID associated with a vault operation.
 - `restored_from_vault_id` (String) OCID of the vault this vault was restored from.
 - `tenancy` (String) The tenancy name.
 - `time_created` (String) The time the vault was created in OCI.
-- `updated_at` (String) Date/time the application was updated.
+- `updated_at` (String) Date/time the vault was last updated.
 - `uri` (String) CipherTrust Manager's unique identifier for the resource.
 - `vault_type` (String) The vault's type.
 - `wrappingkey_id` (String) Vault's wrapping key OCID.
@@ -80,4 +93,4 @@ Read-Only:
 Read-Only:
 
 - `tag` (String) A tag assigned to the vault.
-- `values` (Map of String) The key:value pairs to added to the tag.
+- `values` (Map of String) The key:value pairs added to the tag.

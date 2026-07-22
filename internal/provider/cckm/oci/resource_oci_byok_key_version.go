@@ -63,7 +63,7 @@ func (r *resourceCCKMOCIByokVersion) Configure(_ context.Context, req resource.C
 
 func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager.",
+		Description: "Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager. A BYOK key version can be added to an oci_key or an oci_byok_key.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,
