@@ -57,15 +57,13 @@ resource "ciphertrust_cm_key" "healthcheck_key" {
   remove_from_state_on_destroy = true
 }
 
-# Define an unlinked XKS custom keystore with CipherTrust Manager as key source
+# Define a linked XKS custom keystore with CipherTrust Manager as key source
 # and PUBLIC_ENDPOINT proxy connectivity.
-# linked_state defaults to false so the keystore is created in CCKM only and not
-# registered in AWS KMS. To link the keystore, set linked_state = true at creation
-# or via update after creation.
 resource "ciphertrust_aws_custom_keystore" "external_keystore" {
-  name   = "name"
-  region = ciphertrust_aws_kms.kms.regions[0]
-  kms_id = ciphertrust_aws_kms.kms.id
+  name         = "name"
+  region       = ciphertrust_aws_kms.kms.regions[0]
+  kms_id       = ciphertrust_aws_kms.kms.id
+  linked_state = true
   local_hosted_params = {
     health_check_key_id = ciphertrust_cm_key.healthcheck_key.id
     max_credentials     = 2
@@ -78,8 +76,8 @@ resource "ciphertrust_aws_custom_keystore" "external_keystore" {
   }
 }
 
-# Define a scheduler job for XKS credential rotation.
-# Only valid to add to linked key stores; reference in update config only.
+# Once the keystore is linked, use an update to connect it and add credential rotation.
+/*
 resource "ciphertrust_scheduler" "credential_rotation" {
   name      = "name"
   operation = "CKSRotateCredentials"
@@ -87,8 +85,6 @@ resource "ciphertrust_scheduler" "credential_rotation" {
   run_on    = ""
 }
 
-# Use an update to link and connect the keystore above.
-# Once linked a rotation scheduler can also be applied.
 resource "ciphertrust_aws_custom_keystore" "external_keystore" {
   name                        = "name"
   region                      = ciphertrust_aws_kms.kms.regions[0]
@@ -109,6 +105,7 @@ resource "ciphertrust_aws_custom_keystore" "external_keystore" {
     job_config_id = ciphertrust_scheduler.credential_rotation.id
   }
 }
+*/
 
 # Define a CloudHSM custom keystore. CloudHSM key stores are always linked by AWS.
 # Do not set linked_state = false for AWS_CLOUDHSM keystores.

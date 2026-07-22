@@ -75,6 +75,7 @@ resource "ciphertrust_aws_byok_key" "byok_key" {
 }
 
 # After creation, update aliases, tags, description and add a scheduler by updating the resource:
+/*
 resource "ciphertrust_aws_byok_key" "byok_key" {
   kms_id                     = ciphertrust_aws_kms.kms.id
   region                     = ciphertrust_aws_kms.kms.regions[0]
@@ -97,6 +98,7 @@ resource "ciphertrust_aws_byok_key" "byok_key" {
     key_source      = "ciphertrust"
   }
 }
+*/
 
 # Multi-region BYOK primary key
 resource "ciphertrust_aws_byok_key" "byok_key_mr_primary" {
