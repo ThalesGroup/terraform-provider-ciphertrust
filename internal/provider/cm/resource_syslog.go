@@ -171,6 +171,11 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 	// framework's post-Create consistency check (every Computed attribute must resolve
 	// to a known value) is satisfied even when the user never set them.
 	hydrateSyslogOptionalFields(&plan, response)
+	if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+		plan.CACert = types.StringValue(caCert.String())
+	} else {
+		plan.CACert = types.StringNull()
+	}
 
 	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
 
@@ -214,13 +219,11 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Host = types.StringValue(gjson.Get(response, "host").String())
 	state.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	// State-Guarded Hydration: only hydrate ca_cert if it was actively configured in the HCL,
-	// to avoid perpetual plan diffs and infinite apply loops when it is omitted in configuration.
+	// State-Guarded Hydration: only hydrate ca_cert if it was actively configured in the HCL.
+	// Per TFIN-422 null-is-no-op semantics: when the user never set ca_cert, keep it null.
 	if !state.CACert.IsNull() && !state.CACert.IsUnknown() {
 		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
 			state.CACert = types.StringValue(caCert.String())
-		} else {
-			state.CACert = types.StringNull()
 		}
 	} else {
 		state.CACert = types.StringNull()
@@ -319,15 +322,12 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	plan.Transport = types.StringValue(gjson.Get(response, "transport").String())
-	if !plan.CACert.IsNull() {
-		if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
-			plan.CACert = types.StringValue(caCert.String())
-		}
-	}
-	// message_format and port are Optional+Computed: hydrate unconditionally, matching
-	// Create() and Read(), so the framework's post-Update consistency check is satisfied
-	// even when the user never set them.
 	hydrateSyslogOptionalFields(&plan, response)
+	if caCert := gjson.Get(response, "caCert"); caCert.Exists() && caCert.String() != "" {
+		plan.CACert = types.StringValue(caCert.String())
+	} else {
+		plan.CACert = types.StringNull()
+	}
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
