@@ -253,12 +253,32 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMLicenseTFSDK
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_license.go -> Read]["+id+"]")
+	// defer ensures MSG_METHOD_END fires on ALL return paths: 404 early return,
+	// error early return, and normal return.
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Read]["+id+"]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// Capture write-only field before any mutation.
+	// CM GET /v1/licensing/licenses/{id} does not return the license string —
+	// confirmed absent from the Swagger Licenses definition (present only in
+	// PostLicense for the POST request body).
+	//
+	// Restoring the prior state value prevents ImmutableString() from seeing a
+	// spurious "" → <license> transition on every plan/refresh cycle after the
+	// initial create (TFIN-430 fix).
+	//
+	// During terraform destroy, Terraform computes the plan value for a Required
+	// attribute as the current state value (no config change is being applied).
+	// With state.License preserved as the real license string,
+	// req.StateValue == req.PlanValue in ImmutableString.PlanModifyString(), so
+	// no immutability error fires and destroy proceeds normally.
+	priorLicense := state.License
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
@@ -279,8 +299,12 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
-	// Required — swagger Licenses definition confirms license is returned in GET response.
-	state.License = types.StringValue(gjson.Get(response, "license").String())
+
+	// license is write-only: absent from the Swagger Licenses GET response schema.
+	// Restore the prior state value so ImmutableString() sees an unchanged value
+	// on every plan/refresh cycle after the initial create.
+	state.License = priorLicense
+
 	// Optional+Computed — only hydrate when user configured bind_type (state non-null).
 	// CM returns a non-empty default bind_type even when the user omitted it;
 	// preserving null avoids perpetual state="instance" vs config=null drift.
@@ -291,7 +315,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 			state.BindType = types.StringNull()
 		}
 	}
-	// Computed-only — unconditional hydration.
+	// Computed-only — unconditional hydration from Swagger Licenses GET response fields.
 	state.Hash = types.StringValue(gjson.Get(response, "hash").String())
 	state.Type = types.StringValue(gjson.Get(response, "type").String())
 	state.State = types.StringValue(gjson.Get(response, "state").String())
@@ -301,8 +325,11 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	state.LicenseCount = types.Int64Value(gjson.Get(response, "license_count").Int())
 	state.TrialSecondsRemaining = types.StringValue(gjson.Get(response, "trial_seconds_remaining").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Read]["+id+"]")
-	// Set refreshed state
+	// Note: `feature` is present in the Swagger Licenses definition but absent from
+	// CMLicenseTFSDK. CM-side changes to feature are invisible to drift detection.
+	// Pre-existing gap; out of scope for TFIN-430.
+
+	// Set refreshed state.
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
