@@ -461,7 +461,7 @@ data "ciphertrust_scheduler_list" "jobs" {
 					if err != nil {
 						t.Fatal(err)
 					}
-					_, err = client.UpdateDataV2(context.Background(), capturedID, common.URL_CM_SCHEDULER, payload)
+					_, err = client.UpdateDataV2(context.Background(), capturedID, common.URL_SCHEDULER_JOB_CONFIGS, payload)
 					if err != nil {
 						t.Fatal(err)
 					}
