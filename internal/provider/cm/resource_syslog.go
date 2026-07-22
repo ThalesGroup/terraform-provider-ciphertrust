@@ -11,6 +11,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -66,6 +67,9 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"transport": schema.StringAttribute{
 				Required:    true,
 				Description: "udp, tcp or tls",
+				Validators: []validator.String{
+					stringvalidator.OneOf("udp", "tcp", "tls"),
+				},
 			},
 			"ca_cert": schema.StringAttribute{
 				Optional:    true,
@@ -77,7 +81,7 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
-				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef.",
+				Description: "The log message format for new log messages: rfc5424 (default) plain_message cef leef. Known limitation: once set, this cannot be cleared back to unset by removing it from config — CM's update API has no reset signal, so the last-applied value persists. To reset to the CM default, destroy and recreate the resource.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("rfc5424", "plain_message", "cef", "leef"),
 				},
@@ -89,7 +93,10 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 					int64planmodifier.UseStateForUnknown(),
 					modifiers.ImmutableInt64(),
 				},
-				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls",
+				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls. Known limitation: once set, this cannot be cleared back to unset by removing it from config; to reset to the CM default, destroy and recreate the resource.",
+				Validators: []validator.Int64{
+					int64validator.Between(1, 65535),
+				},
 			},
 			"account": schema.StringAttribute{
 				Computed: true,
