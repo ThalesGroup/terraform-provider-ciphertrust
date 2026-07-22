@@ -121,9 +121,9 @@ For example:
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
 - `description` (String) Description for the job configuration.
 - `disabled` (Boolean) By default, the job configuration starts in an active state. True disables the job configuration.
-- `end_date` (String) Date the job configuration becomes inactive. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
+- `end_date` (String) Date/time when the job ends. Format: YYYY-MM-DDTHH:MM:SSZ. Set to "" to clear.
 - `run_on` (String) Default is 'any'. For database_backup, the default will be the current node if in a cluster. This attribute is not supported in CDSPaaS.
-- `start_date` (String) Date the job configuration becomes active. RFC3339 format. For example, 2018-10-02T14:24:37.436073Z
+- `start_date` (String) Date/time when the job starts. Format: YYYY-MM-DDTHH:MM:SSZ. Set to "" to clear.
 
 ### Read-Only
 

@@ -228,6 +228,26 @@ resource "ciphertrust_syslog" "test" {
 	})
 }
 
+// Test_CM_Syslog_EmptyHostRejected verifies that an empty host is rejected at plan time.
+func Test_CM_Syslog_EmptyHostRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_syslog" "test" {
+  host      = ""
+  transport = "udp"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
 // Test_CM_Syslog_ValueNullNoDrift verifies that when ca_cert is unconfigured (null),
 // the state is guarded and no perpetual plan diff is generated.
 func Test_CM_Syslog_ValueNullNoDrift(t *testing.T) {
