@@ -36,7 +36,7 @@ Read-Only:
 - `is_domain_user` (Boolean)
 - `name` (String)
 - `nickname` (String)
-- `password` (String, Sensitive)
+- `password` (String, Sensitive) Deprecated. This attribute is always unpopulated (null) to protect sensitive credentials from being stored in state.
 - `password_change_required` (Boolean)
 - `prevent_ui_login` (Boolean)
 - `user_id` (String)

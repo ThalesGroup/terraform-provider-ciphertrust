@@ -233,6 +233,15 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
+	// Preserve write-only field before the CM GET call.
+	// After HSM setup completes, CM records the operation as done and returns
+	// reset: false in the GET /api/v1/system/hsm/servers/{id} response.
+	// Reading that value back would overwrite state.Reset from true to false,
+	// causing ImmutableBool.PlanModifyBool() to fire 'old: false, new: true'
+	// on every subsequent plan and destroy. Same pattern as priorLicense in
+	// resource_license.go (TFIN-430 fix).
+	priorReset := state.Reset
+
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -340,13 +349,8 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	// Optional field: reset
-	if !state.Reset.IsNull() {
-		if r := gjson.Get(response, "reset"); r.Exists() && r.Type != gjson.Null {
-			state.Reset = types.BoolValue(r.Bool())
-		}
-	}
-	// else: user never configured reset — preserve null prior state.
+	// Optional field: reset — write-only; restore prior state value (never read from API).
+	state.Reset = priorReset
 
 	// Optional field: delay
 	if !state.Delay.IsNull() {
