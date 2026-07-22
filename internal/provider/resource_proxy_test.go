@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -172,6 +173,49 @@ func Test_CM_Proxy_Idempotency(t *testing.T) {
 				Config:             config,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Proxy_InvalidValuesRejected verifies the fixes for the bugs reported
+// against ciphertrust_proxy: http_proxy/https_proxy/certificate previously
+// accepted malformed values with no validation at any layer (schema or CM API)
+// and stored them verbatim. Each step is PlanOnly so it never reaches the CM
+// API — the schema validators (validators.URL, validators.PEMCertificate) must
+// reject these values at plan time.
+func Test_CM_Proxy_InvalidValuesRejected(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "invalid" {
+  http_proxy = "totally_not_a_url###garbage"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Invalid URL`),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "invalid" {
+  https_proxy = "not_a_valid_url_at_all!!!"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Invalid URL`),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "invalid" {
+  certificate = "not-a-real-pem-cert-value"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Invalid PEM Certificate`),
 			},
 		},
 	})
