@@ -65,36 +65,6 @@ resource "ciphertrust_log_forwarder" "log_forwarder_1" {
     }
 }
 
-# Loki Log Forwarder Example
-resource "ciphertrust_log_forwarder" "loki_forwarder" {
-    connection_id = "loki-connection-uuid"
-    name          = "loki_test"
-    type          = "loki"
-    loki_params = {
-        labels = {
-            activity_kmip        = "jobs=activity_kmip"
-            activity_nae         = "jobs=activity_nae"
-            server_audit_records = "jobs=server_audit_records"
-            client_audit_records = "jobs=client_audit_records"
-        }
-    }
-}
-
-# Syslog Log Forwarder Example
-resource "ciphertrust_log_forwarder" "syslog_forwarder" {
-    connection_id = "syslog-connection-uuid"
-    name          = "syslog_test"
-    type          = "syslog"
-    syslog_params = {
-        forward_logs = {
-            activity_kmip        = true
-            activity_nae         = true
-            server_audit_records = true
-            client_audit_records = true
-        }
-    }
-}
-
 # Output the unique ID of the created log forwarder
 output "log_forwarder_id" {
     value = ciphertrust_log_forwarder.log_forwarder_1.id
@@ -106,7 +76,7 @@ output "log_forwarder_id" {
 
 ### Required
 
-- `connection_id` (String) (Immutable) connection id of log-forwarder connection (elasticsearch, loki, syslog).
+- `connection_id` (String) connection id of log-forwarder connection (elasticsearch, loki, syslog).
 - `name` (String) Unique name of the Log Forwarder.
 - `type` (String) (Immutable) Type of the log forwarder. Allowed values: elasticsearch, loki, syslog.
 
