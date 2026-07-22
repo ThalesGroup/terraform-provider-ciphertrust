@@ -64,7 +64,7 @@ output "cm_property_name" {
 
 ### Optional
 
-- `value` (String) Value to be set
+- `value` (String) Value to set for the property. If omitted or null, the property is reset to its CM default via POST /configs/properties/{name}/reset. An explicit empty string is rejected at plan time.
 
 ### Read-Only
 

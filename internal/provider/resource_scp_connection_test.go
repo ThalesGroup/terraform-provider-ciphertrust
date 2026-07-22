@@ -124,4 +124,28 @@ resource "ciphertrust_scp_connection" "test" {
 	})
 }
 
+// Test_CM_SCPConnection_EmptyNameRejected verifies that an empty name is rejected at plan time.
+func Test_CM_SCPConnection_EmptyNameRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scp_connection" "test" {
+  name       = ""
+  host       = "192.0.2.1"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDx"
+  username   = "testuser"
+  auth_method = "key"
+  path_to    = "/tmp/"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
 // terraform destroy will perform automatically at the end of the test

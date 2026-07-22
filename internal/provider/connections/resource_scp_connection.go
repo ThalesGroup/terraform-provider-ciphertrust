@@ -128,6 +128,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Required:      true,
 				Description:   "(Immutable) Unique connection name.",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"path_to": schema.StringAttribute{
 				Required:    true,

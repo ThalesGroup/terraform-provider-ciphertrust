@@ -217,6 +217,168 @@ resource "ciphertrust_property" "test_oob_destroy" {
 	})
 }
 
+func Test_CM_Property_EmptyNameRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = ""
+  value = "true"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
+func Test_CM_Property_EmptyValueRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = ""
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
+func Test_CM_Property_NullValueReset(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply with explicit value
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "true"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+			},
+			// Step 2: omit value — triggers /reset
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name = "ENABLE_REST_CRYPTO_RECORDS"
+}
+`,
+				Check: resource.TestCheckNoResourceAttr("ciphertrust_property.test", "value"),
+			},
+			// Step 3: refresh-only after reset — state stays null, no diff
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 4: restore explicit value
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "true"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+			},
+		},
+	})
+}
+
+func Test_CM_Property_UpdateValue(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "true"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "false"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "false"),
+			},
+		},
+	})
+}
+
+func Test_CM_Property_ValueDrift(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: apply with explicit value
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "true"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+			},
+			// Step 2: simulate out-of-band change, then refresh to detect drift
+			{
+				PreConfig: func() {
+					ctx := context.Background()
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping drift simulation")
+						return
+					}
+					payload := []byte(`{"value":"false"}`)
+					_, err := client.UpdateDataFullURL(
+						ctx,
+						"drift-setup",
+						common.URL_CM_PROPERTIES+"/ENABLE_REST_CRYPTO_RECORDS",
+						payload,
+						"name",
+					)
+					if err != nil {
+						t.Logf("PreConfig: failed to set CM property out-of-band: %v", err)
+						return
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 3: reconcile — re-apply to restore CM state
+			{
+				Config: providerConfig + `
+resource "ciphertrust_property" "test" {
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  value = "true"
+}
+`,
+				Check: resource.TestCheckResourceAttr("ciphertrust_property.test", "value", "true"),
+			},
+		},
+	})
+}
+
 func Test_CM_Property_ImmutableName(t *testing.T) {
 	RequireCM(t)
 	t.Cleanup(func() {

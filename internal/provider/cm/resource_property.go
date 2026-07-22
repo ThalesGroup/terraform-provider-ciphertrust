@@ -1,20 +1,22 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -60,10 +62,16 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{
 					NameImmutableModifier{},
 				},
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"value": schema.StringAttribute{
 				Optional:    true,
-				Description: "Value to be set",
+				Description: "Value to set for the property. If omitted or null, the property is reset to its CM default via POST /configs/properties/{name}/reset. An explicit empty string is rejected at plan time.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"description": schema.StringAttribute{
 				Computed:    true,
@@ -80,8 +88,8 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Create]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
 
-	// Retrieve values from plan
 	var plan CMPropertyTFSDK
 	var payload CMPropertyJSON
 
@@ -91,36 +99,54 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	payload.Value = plan.Value.ValueString()
+	if plan.Value.IsNull() || plan.Value.IsUnknown() {
+		// value omitted from config — reset the property to CM's default.
+		var resetPayload []byte
+		response, err := r.client.PostDataV2(
+			ctx,
+			id,
+			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString()+"/reset",
+			resetPayload)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error resetting property on CipherTrust Manager: ",
+				"Could not reset property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, "[resource_property.go -> Create (reset) -> Response]["+response+"]")
+	} else {
+		payload.Value = plan.Value.ValueString()
 
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Invalid data input: Property Updation",
-			err.Error(),
-		)
-		return
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Invalid data input: Property Updation",
+				err.Error(),
+			)
+			return
+		}
+
+		response, err := r.client.UpdateDataFullURL(
+			ctx,
+			id,
+			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString(),
+			payloadJSON,
+			"name")
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error updating property on CipherTrust Manager: ",
+				"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
 	}
 
-	response, err := r.client.UpdateDataFullURL(
-		ctx,
-		plan.Name.ValueString(),
-		common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString(),
-		payloadJSON,
-		"name")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Error updating property on CipherTrust Manager: ",
-			"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
-	tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
-
-	// Read back the property to get the description and other computed fields
+	// Read back the property to get the description and other computed fields.
 	readResponse, err := r.client.ReadDataByParam(ctx, id, plan.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create -> Read]["+id+"]")
@@ -131,11 +157,10 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// Update plan with computed values from API response; preserve user-provided name and value
+	// plan.Value is already correct (either the user-provided string or types.StringNull()).
 	plan.ID = plan.Name
 	plan.Description = types.StringValue(gjson.Get(readResponse, "description").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -197,6 +222,9 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
+	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Update]["+id+"]")
+	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Update]["+id+"]")
+
 	var plan CMPropertyTFSDK
 	var payload CMPropertyJSON
 
@@ -206,35 +234,54 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	payload.Value = plan.Value.ValueString()
+	if plan.Value.IsNull() || plan.Value.IsUnknown() {
+		// value removed from config — reset the property to CM's default.
+		var resetPayload []byte
+		response, err := r.client.PostDataV2(
+			ctx,
+			id,
+			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString()+"/reset",
+			resetPayload)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error resetting property on CipherTrust Manager: ",
+				"Could not reset property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, "[resource_property.go -> Update (reset) -> Response]["+response+"]")
+	} else {
+		payload.Value = plan.Value.ValueString()
 
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Invalid data input: Property Updation",
-			err.Error(),
-		)
-		return
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Invalid data input: Property Updation",
+				err.Error(),
+			)
+			return
+		}
+
+		response, err := r.client.UpdateDataFullURL(
+			ctx,
+			id,
+			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString(),
+			payloadJSON,
+			"name")
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Error updating property on CipherTrust Manager: ",
+				"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
+			)
+			return
+		}
+		tflog.Debug(ctx, "[resource_property.go -> Update -> Response]["+response+"]")
 	}
 
-	response, err := r.client.UpdateDataFullURL(
-		ctx,
-		plan.Name.ValueString(),
-		common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString(),
-		payloadJSON,
-		"name")
-	tflog.Debug(ctx, "[resource_property.go -> Update -> Response]["+response+"]")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+plan.Name.ValueString()+"]")
-		resp.Diagnostics.AddError(
-			"Error updating property on CipherTrust Manager: ",
-			"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
-	// Read back the property to get the description and other computed fields
+	// Read back the property to get the description and other computed fields.
 	readResponse, err := r.client.ReadDataByParam(ctx, id, plan.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update -> Read]["+id+"]")
@@ -245,7 +292,7 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	// Update plan with computed values from API response; preserve user-provided name and value
+	// plan.Value is already correct (either the user-provided string or types.StringNull()).
 	plan.ID = plan.Name
 	plan.Description = types.StringValue(gjson.Get(readResponse, "description").String())
 
