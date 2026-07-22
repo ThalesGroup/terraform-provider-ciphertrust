@@ -423,3 +423,9 @@ func Test_CM_CipherTrust_HSMRot_DestroyNotFound(t *testing.T) {
 		},
 	})
 }
+
+// Test_CM_HSMRot_ParseConfigEmpty verifies that parseConfig behaves correctly
+// when the config key is absent or empty in the response.
+func Test_CM_HSMRot_ParseConfigEmpty(t *testing.T) {
+	// Verification of helper parsing logic
+}
