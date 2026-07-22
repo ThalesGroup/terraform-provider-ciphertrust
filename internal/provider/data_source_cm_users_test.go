@@ -24,9 +24,9 @@ func Test_CM_DataSourceCMUsersList_PasswordSensitive(t *testing.T) {
 				Check: checkStep(t, "password attribute present",
 					resource.TestCheckResourceAttr(
 						"data.ciphertrust_cm_users_list.all", "users.#", "1"),
-					// CM does not return plaintext passwords; value is expected to be empty.
-					resource.TestCheckResourceAttr(
-						"data.ciphertrust_cm_users_list.all", "users.0.password", ""),
+					// CM does not return plaintext passwords; value is expected to be null/absent.
+					resource.TestCheckNoResourceAttr(
+						"data.ciphertrust_cm_users_list.all", "users.0.password"),
 				),
 			},
 		},
