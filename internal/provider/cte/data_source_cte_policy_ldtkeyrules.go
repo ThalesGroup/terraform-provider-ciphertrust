@@ -94,7 +94,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource
 	var state CTEPolicyLDTKeyRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/ldtkeyrules")

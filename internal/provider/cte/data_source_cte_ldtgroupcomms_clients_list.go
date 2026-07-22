@@ -161,7 +161,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 	var state CTELDTGroupCommSvcClientsDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_LDT_GROUP_COMM_SVC+"/"+state.GroupName.ValueString()+"/clients")

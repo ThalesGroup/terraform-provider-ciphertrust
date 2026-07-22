@@ -102,7 +102,7 @@ func (d *dataSourceCTEPolicy) Read(ctx context.Context, req datasource.ReadReque
 	req.Config.Get(ctx, &state)
 	tflog.Info(ctx, "PrathamMaini =====> "+state.PolicyName.ValueString())
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString())
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString())
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

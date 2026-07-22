@@ -126,7 +126,7 @@ func (d *dataSourceCTEPolicySecurityRule) Read(ctx context.Context, req datasour
 	var state CTEPolicySecurityRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/securityrules")

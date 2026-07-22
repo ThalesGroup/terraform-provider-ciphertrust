@@ -175,7 +175,7 @@ func (d *dataSourceCTEClientGuardPoint) Read(ctx context.Context, req datasource
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cteclientguardpoint.go -> Read]["+id+"]")
 	var state CTEClientGuardPointDataSourceModel
 	req.Config.Get(ctx, &state)
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints")
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cteclientguardpoint.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
