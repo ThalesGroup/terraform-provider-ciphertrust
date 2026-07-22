@@ -7,7 +7,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"strings"
-	"time"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -119,16 +118,11 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 						"cckm_key_rotation_params": schema.SingleNestedAttribute{
 							Computed: true,
 							Attributes: map[string]schema.Attribute{
-								"aws_params": schema.SingleNestedAttribute{
+								"aws_retain_alias": schema.BoolAttribute{
 									Computed: true,
-									Attributes: map[string]schema.Attribute{
-										"retain_alias": schema.BoolAttribute{
-											Computed: true,
-										},
-										"rotate_material": schema.BoolAttribute{
-											Computed: true,
-										},
-									},
+								},
+								"rotate_material": schema.BoolAttribute{
+									Computed: true,
 								},
 								"cloud_name": schema.StringAttribute{
 									Computed: true,
@@ -232,8 +226,18 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 				RunAt:       types.StringValue(jobs.RunAt),
 				RunOn:       types.StringValue(jobs.RunOn),
 				Disabled:    types.BoolValue(jobs.Disabled),
-				StartDate:   types.StringValue(jobs.StartDate.Format(time.RFC3339)),
-				EndDate:     types.StringValue(jobs.EndDate.Format(time.RFC3339)),
+				StartDate: func() types.String {
+					if jobs.StartDate != nil {
+						return types.StringValue(*jobs.StartDate)
+					}
+					return types.StringNull()
+				}(),
+				EndDate: func() types.String {
+					if jobs.EndDate != nil {
+						return types.StringValue(*jobs.EndDate)
+					}
+					return types.StringNull()
+				}(),
 			},
 		}
 
@@ -345,20 +349,24 @@ func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *Job
 		return
 	}
 	keyRotationParams := &CCKMKeyRotationParamsDatasourceTFSDK{
-		CloudName: types.StringValue(cckmKeyRotationParams.CloudName),
-		AwsParams: CCKMAwsKeyRotationParamsDatasourceTFSDK{
-			RetainAlias:    types.BoolValue(cckmKeyRotationParams.RetainAlias),
-			RotateMaterial: types.BoolValue(cckmKeyRotationParams.RotateMaterial),
-		},
+		CloudName:      types.StringValue(cckmKeyRotationParams.CloudName),
+		AwsRetainAlias: types.BoolValue(cckmKeyRotationParams.RetainAlias),
+		RotateMaterial: types.BoolValue(cckmKeyRotationParams.RotateMaterial),
 	}
 	if cckmKeyRotationParams.Expiration != nil {
 		keyRotationParams.Expiration = types.StringValue(*cckmKeyRotationParams.Expiration)
+	} else {
+		keyRotationParams.Expiration = types.StringNull()
 	}
 	if cckmKeyRotationParams.ExpireIn != nil {
 		keyRotationParams.ExpireIn = types.StringValue(*cckmKeyRotationParams.ExpireIn)
+	} else {
+		keyRotationParams.ExpireIn = types.StringNull()
 	}
 	if cckmKeyRotationParams.RotationAfter != nil {
 		keyRotationParams.RotationAfter = types.StringValue(*cckmKeyRotationParams.RotationAfter)
+	} else {
+		keyRotationParams.RotationAfter = types.StringNull()
 	}
 	schedulerJobs.CCKMKeyRotationParams = keyRotationParams
 }
