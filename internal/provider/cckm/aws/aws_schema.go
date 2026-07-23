@@ -786,7 +786,7 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.",
+			Description: "(Updatable) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(
@@ -834,7 +834,7 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) A list of tags assigned to the AWS key.",
+			Description: "(Updatable) A list of tags assigned to the AWS key. To remove all tags set tags = {}.",
 		},
 		// Computed-only fields sourced from aws_param in the CCKM API response.
 		"arn": schema.StringAttribute{
@@ -927,22 +927,6 @@ func nativeKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 // require customer-supplied key material.
 func byokAwsParamSchemaAttributes() map[string]schema.Attribute {
 	attrs := commonAwsParamSchemaAttributes()
-	attrs["alias"] = schema.SetAttribute{
-		Optional:    true,
-		Computed:    true,
-		ElementType: types.StringType,
-		Description: "(Updatable) Alias(es) of the key. At most one alias may be set at creation time. " +
-			"Additional aliases can be added via update after the key has been created. " +
-			"To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.",
-		Validators: []validator.Set{
-			setvalidator.ValueStringsAre(
-				stringvalidator.RegexMatches(
-					regexp.MustCompile(`^[a-zA-Z0-9/_-]+$`),
-					"must only contain alphanumeric characters, forward slashes, underscores, and dashes",
-				),
-			),
-		},
-	}
 	attrs["valid_to"] = schema.StringAttribute{
 		Optional:    true,
 		Computed:    true,
@@ -1239,7 +1223,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.",
+			Description: "(Updatable) Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(
@@ -1258,7 +1242,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Tags assigned to the key. Applicable only for keys in a linked state.",
+			Description: "(Updatable) Tags assigned to the key. To remove all tags set tags = {}.",
 		},
 		// Computed-only fields sourced from aws_param in the CCKM API response
 		"arn": schema.StringAttribute{
@@ -1335,6 +1319,27 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 // which holds the XksKeyConfiguration.Id value returned by AWS.
 func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 	attrs := keyStoreResourceCommonAwsParamSchemaAttributes()
+	// XKS keys may be unlinked; alias and tags are only applicable when linked.
+	attrs["alias"] = schema.SetAttribute{
+		Optional:    true,
+		Computed:    true,
+		ElementType: types.StringType,
+		Description: "(Updatable) Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
+		Validators: []validator.Set{
+			setvalidator.ValueStringsAre(
+				stringvalidator.RegexMatches(
+					regexp.MustCompile(`^[a-zA-Z0-9/_-]+$`),
+					"must only contain alphanumeric characters, forward slashes, underscores, and dashes",
+				),
+			),
+		},
+	}
+	attrs["tags"] = schema.MapAttribute{
+		Optional:    true,
+		Computed:    true,
+		ElementType: types.StringType,
+		Description: "(Updatable) Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.",
+	}
 	attrs["xks_key_configuration"] = schema.SingleNestedAttribute{
 		Computed:    true,
 		Description: "XKS key configuration assigned by AWS. Present only for keys in an external key store.",
