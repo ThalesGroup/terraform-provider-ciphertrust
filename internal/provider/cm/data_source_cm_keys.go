@@ -87,86 +87,113 @@ func (d *dataSourceKeys) Metadata(_ context.Context, req datasource.MetadataRequ
 
 func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM keys list API, e.g. \"name\", \"algorithm\", \"id\", \"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"version\", or \"state\". The '?' and '*' wildcard characters may be used in \"name\". Note: \"skip\" and \"limit\" cannot be set here — the data source always paginates internally starting at skip=0 in pages of 10 to retrieve the full result set.",
 			},
 			"keys": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of keys matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The unique identifier of the key.",
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "A human readable unique identifier of the key.",
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The account which owns this key.",
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The application this key belongs to.",
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The developer account which owns this key's application.",
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the key was created.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Friendly name of the key. The key name should not contain special characters such as angular brackets (<,>) and backslash (\\).",
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the key was last updated.",
 						},
 						"usage_mask": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Cryptographic usage mask. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Individual bit values are summed to form the mask.",
 						},
 						"version": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Version number of the key.",
 						},
 						"algorithm": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Cryptographic algorithm this key is used with. One of aes, tdes, rsa, ec, hmac-sha1, hmac-sha256, hmac-sha384, hmac-sha512, seed, aria, opaque, ml-dsa.",
 						},
 						"size": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Bit length for the key.",
 						},
 						"format": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Format of the returned key material. One of pkcs1, pkcs8 (default), or pkcs12 for asymmetric keys; raw or opaque for symmetric keys.",
 						},
 						"unexportable": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Key is not exportable if true.",
 						},
 						"undeletable": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Key is not deletable if true.",
 						},
 						"object_type": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Type of the key object. Valid values are 'Symmetric Key', 'Public Key', 'Private Key', 'Secret Data', 'Opaque Object', or 'Certificate'.",
 						},
 						"activation_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the object becomes active.",
 						},
 						"deactivation_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the object becomes inactive.",
 						},
 						"archive_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the object becomes archived.",
 						},
 						"destroy_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time the object was destroyed.",
 						},
 						"revocation_reason": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The reason the key was revoked.",
 						},
 						"state": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Current state of the key. One of Pre-Active, Active, Deactivated, Destroyed, Compromised, or Destroyed Compromised.",
 						},
 						"uuid": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Additional identifier of the key. The format of this value is 32 hexadecimal lowercase digits with 4 dashes.",
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Information about the key.",
 						},
 					},
 				},

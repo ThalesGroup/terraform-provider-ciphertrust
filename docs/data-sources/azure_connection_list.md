@@ -17,7 +17,7 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM Azure connections list API. Supported keys: "id", "name", "products", "meta_contains", "cloud_name", "createdBefore", "createdAfter", "last_connection_ok", "last_connection_before", "last_connection_after", "external_certificate_used", and "labels".
 
 ### Read-Only
 
@@ -29,34 +29,86 @@ description: |-
 Read-Only:
 
 - `account` (String)
-- `active_directory_endpoint` (String)
-- `azure_stack_connection_type` (String)
-- `azure_stack_server_cert` (String)
+- `active_directory_endpoint` (String) Azure stack active directory authority URL
+- `azure_stack_connection_type` (String) Azure stack connection type
+
+	Options:
+
+		AAD
+		ADFS
+- `azure_stack_server_cert` (String) Azure stack server certificate.The certificate should be provided in \n (newline) format.
 - `category` (String)
-- `cert_duration` (Number)
-- `certificate` (String)
-- `certificate_thumbprint` (String)
-- `client_id` (String)
-- `client_secret` (String)
-- `cloud_name` (String)
+- `cert_duration` (Number) Duration in days for which the azure certificate is valid, default (730 i.e. 2 Years).
+- `certificate` (String) User has the option to upload external certificate for Azure Cloud connection. This option cannot be used with option is_certificate_used and client_secret.User first has to generate a new Certificate Signing Request (CSR) in POST /v1/connectionmgmt/connections/csr. The generated CSR can be signed with any internal or external CA. The Certificate must have an RSA key strength of 2048 or 4096. User can also update the new external certificate in the existing connection. Any unused certificate will automatically deleted in 24 hours.The certificate should be provided in \n (newline) format.
+- `certificate_thumbprint` (String) Thumbprint of the certificate associated with the connection, when certificate-based authentication is used.
+- `client_id` (String) Unique Identifier (client ID) for the Azure application.
+- `client_secret` (String, Sensitive) Secret key for the Azure application. Required in Azure Stack connection. CM never returns this field on GET, so it is not populated by this data source.
+- `cloud_name` (String) Name of the cloud.
+
+	Options:
+
+		AzureCloud
+		AzureChinaCloud
+		AzureUSGovernment
+		AzureStack
 - `created_at` (String)
-- `description` (String)
-- `external_certificate_used` (Boolean)
+- `description` (String) Description about the connection.
+- `external_certificate_used` (Boolean) true if the certificate associated with the connection is generated externally, false otherwise.
 - `id` (String)
-- `is_certificate_used` (Boolean)
-- `key_vault_dns_suffix` (String)
-- `labels` (Map of String)
+- `is_certificate_used` (Boolean) User has the option to choose the Certificate Authentication method instead of Client Secret for Azure Cloud connection. In order to use the Certificate, set it to true. Once the connection is created, in the response user will get a certificate. By default, the certificate is valid for 2 Years. User can update the certificate in the existing connection by setting it to true.
+- `key_vault_dns_suffix` (String) Azure stack key vault dns suffix
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+
+To add a label, set the label's value as follows.
+
+    "labels": {
+      "key1": "value1",
+      "key2": "value2"
+    }
+
+To remove a key/value pair, pass value null to the particular key
+
+    "labels": {
+      "key1": null
+    }
 - `last_connection_at` (String)
 - `last_connection_error` (String)
 - `last_connection_ok` (Boolean)
-- `management_url` (String)
-- `meta` (Map of String)
-- `name` (String)
-- `products` (List of String)
-- `resource_manager_url` (String)
+- `management_url` (String) Azure stack management URL
+- `meta` (Map of String) Optional end-user or service data stored with the connection.
+- `name` (String) (Immutable) Unique connection name.
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
+
+    "cckm" for:
+        AWS
+        Azure
+        GCP
+        Luna connections
+        DSM
+        Salesforce
+        SAP Data Custodian
+    "ddc" for:
+        GCP
+        Hadoop connections
+    "cte" for:
+        Hadoop connections
+        SMB
+        OIDC
+        LDAP connections
+    "data discovery" for Hadoop connections.
+    "backup/restore" for SCP/SFTP connections.
+    "logger" for:
+        loki connections
+        elasticsearch connections
+        syslog connections
+    "hsm_anchored_domain" for:
+        Luna connections
+    "csm" for:
+        Akeyless connections
+- `resource_manager_url` (String) Azure stack resource manager URL.
 - `resource_url` (String)
 - `service` (String)
-- `tenant_id` (String)
+- `tenant_id` (String) Tenant ID of the Azure application.
 - `updated_at` (String)
 - `uri` (String)
-- `vault_resource_url` (String)
+- `vault_resource_url` (String) Azure stack vault service resource URL.

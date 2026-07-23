@@ -41,9 +41,11 @@ func (r *resourceCMUser) Metadata(_ context.Context, req resource.MetadataReques
 // Schema defines the schema for the resource.
 func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Manages a local CipherTrust Manager (or CDSPaaS) user account via the /v1/usermgmt/users API.",
 		Attributes: map[string]schema.Attribute{
 			"user_id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Unique identifier of the user, as assigned by CipherTrust Manager.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -65,8 +67,9 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"email": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "Email address of the user.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -80,8 +83,9 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"password": schema.StringAttribute{
-				Required:  true,
-				Sensitive: true,
+				Required:    true,
+				Sensitive:   true,
+				Description: "Password for the user account.",
 			},
 			"is_domain_user": schema.BoolAttribute{
 				Optional:    true,
@@ -93,14 +97,16 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"prevent_ui_login": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+				Description: "Whether the user is prevented from logging in through the CipherTrust Manager UI. Defaults to false.",
 			},
 			"password_change_required": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+				Description: "Whether the user must change their password on next login. Defaults to false.",
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -432,7 +438,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			}
 			payload.Metadata = nullMap
 		}
-	// default: both plan and state are null, or plan is unknown — nothing to send.
+		// default: both plan and state are null, or plan is unknown — nothing to send.
 	}
 
 	payloadJSON, err := json.Marshal(payload)

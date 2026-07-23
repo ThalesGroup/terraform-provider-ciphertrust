@@ -17,7 +17,7 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM GCP connections list API. Supported keys: "id", "name", "products", "meta_contains", "cloud_name", "createdBefore", "createdAfter", "last_connection_ok", "last_connection_before", "last_connection_after", and "labels".
 
 ### Read-Only
 
@@ -30,20 +30,64 @@ Read-Only:
 
 - `account` (String)
 - `category` (String)
-- `client_email` (String)
-- `cloud_name` (String)
+- `client_email` (String) The GCP service account email address associated with the key file.
+- `cloud_name` (String) Name of the cloud. Default value is gcp.
+
+Options:
+
+gcp
 - `created_at` (String)
-- `description` (String)
+- `description` (String) Description about the connection.
 - `id` (String)
-- `key_file` (String)
-- `labels` (Map of String)
+- `key_file` (String, Sensitive) The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. CM never returns this field on GET, so it is not populated by this data source.
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+
+To add a label, set the label's value as follows.
+
+    "labels": {
+      "key1": "value1",
+      "key2": "value2"
+    }
+
+To remove a key/value pair, pass value null to the particular key
+
+    "labels": {
+      "key1": null
+    }
 - `last_connection_at` (String)
 - `last_connection_error` (String)
 - `last_connection_ok` (Boolean)
-- `meta` (Map of String)
-- `name` (String)
-- `private_key_id` (String)
-- `products` (List of String)
+- `meta` (Map of String) Optional end-user or service data stored with the connection.
+- `name` (String) (Immutable) Unique connection name.
+- `private_key_id` (String, Sensitive) Private key ID is a unique ID corresponding to a private key.
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
+
+    "cckm" for:
+        AWS
+        Azure
+        GCP
+        Luna connections
+        DSM
+        Salesforce
+        SAP Data Custodian
+    "ddc" for:
+        GCP
+        Hadoop connections
+    "cte" for:
+        Hadoop connections
+        SMB
+        OIDC
+        LDAP connections
+    "data discovery" for Hadoop connections.
+    "backup/restore" for SCP/SFTP connections.
+    "logger" for:
+        loki connections
+        elasticsearch connections
+        syslog connections
+    "hsm_anchored_domain" for:
+        Luna connections
+    "csm" for:
+        Akeyless connections
 - `resource_url` (String)
 - `service` (String)
 - `updated_at` (String)

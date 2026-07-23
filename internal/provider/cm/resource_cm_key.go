@@ -48,6 +48,7 @@ func (r *resourceCMKey) Metadata(_ context.Context, req resource.MetadataRequest
 // Schema defines the schema for the resource.
 func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Manages a cryptographic key on CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Supports creating symmetric, asymmetric, and secret-data key objects; importing existing key material; configuring versions, metadata, and access permissions; wrapping/unwrapping material for import or export; and setting CTE (CipherTrust Transparent Encryption) client-facing key attributes.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -82,9 +83,9 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"seed", "aria", "opaque",
 						"AES", "TDES", "RSA", "EC",
 						"HMAC-SHA1", "HMAC-SHA256", "HMAC-SHA384", "HMAC-SHA512",
-					"SEED", "ARIA", "OPAQUE",
-					"ml-dsa", "ML-DSA",
-				}...),
+						"SEED", "ARIA", "OPAQUE",
+						"ml-dsa", "ML-DSA",
+					}...),
 				},
 			},
 			"aliases": schema.ListNestedAttribute{
@@ -345,38 +346,47 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 							"decrypt_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to decrypt data with this key.",
 							},
 							"encrypt_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to encrypt data with this key.",
 							},
 							"export_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to export this key.",
 							},
 							"mac_verify_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to verify a MAC with this key.",
 							},
 							"mac_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to generate a MAC with this key.",
 							},
 							"read_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to read this key.",
 							},
 							"sign_verify_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to verify a signature with this key.",
 							},
 							"sign_with_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted permission to sign with this key.",
 							},
 							"use_key": schema.ListAttribute{
 								Optional:    true,
 								ElementType: types.StringType,
+								Description: "Identifiers (user, group, or client) granted general permission to use this key.",
 							},
 						},
 					},
@@ -385,13 +395,23 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Description: "CTE specific attributes",
 						Attributes: map[string]schema.Attribute{
 							"persistent_on_client": schema.BoolAttribute{
-								Optional: true,
+								Optional:    true,
+								Description: "If set to true, the CTE client caches (persists) this key locally so it remains available for decryption even when disconnected from CipherTrust Manager. Defaults to false.",
 							},
 							"encryption_mode": schema.StringAttribute{
-								Optional: true,
+								Optional:    true,
+								Description: "Encryption mode used by CTE when protecting data with this key. Applies to AES symmetric keys.",
+								Validators: []validator.String{
+									stringvalidator.OneOf([]string{
+										"CBC",
+										"CBC_CS1",
+										"XTS",
+									}...),
+								},
 							},
 							"cte_versioned": schema.BoolAttribute{
-								Optional: true,
+								Optional:    true,
+								Description: "If set to true, this key is a versioned CTE key, allowing new key versions to be rotated in over time for CTE-protected data (used with CTE's Live Data Transformation / LDT rekey). Defaults to false.",
 							},
 						},
 					},
@@ -486,6 +506,16 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "(Immutable) Optional initial key state (Pre-Active) upon creation. Defaults to Active. If set, activationDate and processStartDate can not be specified during key creation. In case of import, allowed values are Pre-Active, Active, Deactivated, Destroyed, Compromised and Destroyed Compromised. If key material is not specified, it will not be autogenerated if input parameters correspond to either of these states - Deactivated, Destroyed, Compromised and Destroyed Compromised. Key in Destroyed or Destroyed Compromised state would not have key material even if specified during key creation.",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf([]string{
+						"Pre-Active",
+						"Active",
+						"Deactivated",
+						"Destroyed",
+						"Compromised",
+						"Destroyed Compromised",
+					}...),
 				},
 			},
 			"usage_mask": schema.Int64Attribute{
@@ -628,7 +658,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					},
 					"aliases": schema.ListNestedAttribute{
 						Optional:    true,
-						Description: "",
+						Description: "Aliases associated with the corresponding public key object that is created alongside this (private/asymmetric) key. Unlike the top-level `aliases`, these aliases are attached to the paired public key, not to this key itself. The alias and alias-type must be specified; the alias index is assigned by the server and need not be supplied.",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"alias": schema.StringAttribute{
@@ -798,7 +828,8 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "Optional map of string key-value labels to associate with the key.",
 			},
 			"all_versions": schema.BoolAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "When updating the key, apply the group/custom-attribute permission changes in `meta`, along with `usage_mask`, `undeletable`, and `unexportable`, to all versions of the key at once instead of only the current version. Defaults to false. When set to true, the key must be identified by name.",
 			},
 		},
 	}
@@ -1314,7 +1345,14 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Key Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed key %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this key has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the key was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")

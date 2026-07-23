@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cm
 
 import (
@@ -38,13 +35,16 @@ func (d *dataSourceGroups) Metadata(_ context.Context, req datasource.MetadataRe
 
 func (d *dataSourceGroups) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Lists local CipherTrust Manager user groups via the /v1/usermgmt/groups API.",
 		Attributes: map[string]schema.Attribute{
 			"groups": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of groups matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Unique group name.",
 						},
 					},
 				},
@@ -52,6 +52,7 @@ func (d *dataSourceGroups) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM groups list API. Supported keys: \"name\" (filter by group name), \"users\" (filter by user membership; use \"nil\" for groups with no members, or prefix a user ID with \"-\" for groups the user is not part of), \"connection\" (filter by connection name or ID; applies only to user group membership), \"clients\" (filter by client membership; use \"nil\" for groups with no members, or prefix a client ID with \"-\" for groups the client is not part of), \"skip\", and \"limit\". If \"skip\" or \"limit\" is set, only a single page is fetched as specified; otherwise the data source automatically paginates internally and returns all groups.",
 			},
 		},
 	}

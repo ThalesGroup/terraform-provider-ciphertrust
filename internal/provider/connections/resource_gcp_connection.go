@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package connections
 
 import (
@@ -19,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -47,6 +45,7 @@ func (r *resourceGCPConnection) Metadata(_ context.Context, req resource.Metadat
 // Schema defines the schema for the resource.
 func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "The APIs in this section deal with connections to the Google Cloud Platform (GCP). The following operations can be performed:\n* Create/Delete/Get/Update a GCP connection.\n* List all GCP connections.\n* Test an existing GCP connection.\n*Test a connection that hasn't been created yet by passing in the connection parameters.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -109,23 +108,54 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 				},
 			},
 			"client_email": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The GCP service account email address associated with the key file.",
 			},
 			"private_key_id": schema.StringAttribute{
 				Computed:  true,
 				Sensitive: true,
 			},
-			//common response parameters (optional)
-			"uri":                   schema.StringAttribute{Computed: true, Optional: true},
-			"account":               schema.StringAttribute{Computed: true, Optional: true},
-			"created_at":            schema.StringAttribute{Computed: true, Optional: true},
-			"updated_at":            schema.StringAttribute{Computed: true, Optional: true},
-			"service":               schema.StringAttribute{Computed: true, Optional: true},
-			"category":              schema.StringAttribute{Computed: true, Optional: true},
-			"resource_url":          schema.StringAttribute{Computed: true, Optional: true},
-			"last_connection_ok":    schema.BoolAttribute{Computed: true, Optional: true},
-			"last_connection_error": schema.StringAttribute{Computed: true, Optional: true},
-			"last_connection_at":    schema.StringAttribute{Computed: true, Optional: true},
+			//common response parameters (read-only)
+			"uri": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"account": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			// updated_at intentionally has no UseStateForUnknown(): CM sets a fresh
+			// timestamp on every successful update, so showing it as "known after
+			// apply" is accurate, not spurious drift.
+			"updated_at": schema.StringAttribute{Computed: true},
+			"service": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"category": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"resource_url": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_ok": schema.BoolAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_error": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"last_connection_at": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 		},
 	}
 }

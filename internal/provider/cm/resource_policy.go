@@ -1,21 +1,23 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -48,19 +50,26 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 		Description: "Manages a CipherTrust Manager admin policy: an allow/deny rule that authorizes a set of actions (e.g. CreateKey, EncryptWithKey) with optional conditional clauses. **Only available on CipherTrust Manager — not supported on CDSPaaS, where authorization is managed by the platform.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
-				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey. Changing this value forces the resource to be destroyed and recreated.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"allow": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Allow is the effect of the policy, either to allow the actions or to deny the actions.",
+				Description: "(Immutable) Allow is the effect of the policy, either to allow the actions or to deny the actions. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"conditions": schema.ListNestedAttribute{
 				Optional:    true,
@@ -68,16 +77,23 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"negate": schema.BoolAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "If true, reverses (negates) the result of the 'op' comparison.",
 						},
 						"op": schema.StringAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "The comparison operator used to compare the operation value at 'path' to 'values'. Per the CipherTrust Manager API, supported operators include: \"equals\", \"==\", \"equalsIgnoreCase\", \"matches\", \"regex\", \"=~\", \"empty\", \"contains\", \"@>\".",
+							Validators: []validator.String{
+								stringvalidator.OneOf("equals", "==", "equalsIgnoreCase", "matches", "regex", "=~", "empty", "contains", "@>"),
+							},
 						},
 						"path": schema.StringAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "A JSON path, with template variables, which resolves to a value in the operation to compare against 'values'.",
 						},
 						"values": schema.ListAttribute{
 							Optional:    true,
+							Description: "The value or values to compare with the operation value resolved from 'path'. If multiple values are given, the condition matches if any one of them satisfies 'op' (logical OR).",
 							ElementType: types.StringType,
 						},
 					},
@@ -87,11 +103,20 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("deny"),
-				Description: "Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.",
+				Description: "(Immutable) Specifies the effect of the policy. Valid values: allow, deny, obligate_on_allow, obligate_on_deny. Default is 'deny'. Changing this value forces the resource to be destroyed and recreated.",
+				Validators: []validator.String{
+					stringvalidator.OneOf("allow", "deny", "obligate_on_allow", "obligate_on_deny"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"include_descendant_accounts": schema.BoolAttribute{
 				Optional:    true,
-				Description: "When false, only the resources in the principal's account can be accessed if the policy allows it.",
+				Description: "(Immutable) If true, this policy will also apply to accounts that are descendants of this account. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Optional:    true,
@@ -106,19 +131,22 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				ElementType: types.StringType,
 			},
 			"uri": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The account which owns this resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Date/time the resource was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

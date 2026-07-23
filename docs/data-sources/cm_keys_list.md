@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_keys_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists cryptographic keys from CipherTrust Manager's core vault key-management API (/v1/vault/keys2). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.
 ---
 
 # ciphertrust_cm_keys_list (Data Source)
 
-
+Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.
 
 
 
@@ -17,38 +17,38 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM keys list API, e.g. "name", "algorithm", "id", "uuid", "muid", "keyId", "size", "curveid", "version", or "state". The '?' and '*' wildcard characters may be used in "name". Note: "skip" and "limit" cannot be set here — the data source always paginates internally starting at skip=0 in pages of 10 to retrieve the full result set.
 
 ### Read-Only
 
-- `keys` (Attributes List) (see [below for nested schema](#nestedatt--keys))
+- `keys` (Attributes List) List of keys matching the given filters. (see [below for nested schema](#nestedatt--keys))
 
 <a id="nestedatt--keys"></a>
 ### Nested Schema for `keys`
 
 Read-Only:
 
-- `account` (String)
-- `activation_date` (String)
-- `algorithm` (String)
-- `application` (String)
-- `archive_date` (String)
-- `created_at` (String)
-- `deactivation_date` (String)
-- `description` (String)
-- `destroy_date` (String)
-- `dev_account` (String)
-- `format` (String)
-- `id` (String)
-- `name` (String)
-- `object_type` (String)
-- `revocation_reason` (String)
-- `size` (Number)
-- `state` (String)
-- `undeletable` (Boolean)
-- `unexportable` (Boolean)
-- `updated_at` (String)
-- `uri` (String)
-- `usage_mask` (Number)
-- `uuid` (String)
-- `version` (Number)
+- `account` (String) The account which owns this key.
+- `activation_date` (String) Date/time the object becomes active.
+- `algorithm` (String) Cryptographic algorithm this key is used with. One of aes, tdes, rsa, ec, hmac-sha1, hmac-sha256, hmac-sha384, hmac-sha512, seed, aria, opaque, ml-dsa.
+- `application` (String) The application this key belongs to.
+- `archive_date` (String) Date/time the object becomes archived.
+- `created_at` (String) Date/time the key was created.
+- `deactivation_date` (String) Date/time the object becomes inactive.
+- `description` (String) Information about the key.
+- `destroy_date` (String) Date/time the object was destroyed.
+- `dev_account` (String) The developer account which owns this key's application.
+- `format` (String) Format of the returned key material. One of pkcs1, pkcs8 (default), or pkcs12 for asymmetric keys; raw or opaque for symmetric keys.
+- `id` (String) The unique identifier of the key.
+- `name` (String) Friendly name of the key. The key name should not contain special characters such as angular brackets (<,>) and backslash (\).
+- `object_type` (String) Type of the key object. Valid values are 'Symmetric Key', 'Public Key', 'Private Key', 'Secret Data', 'Opaque Object', or 'Certificate'.
+- `revocation_reason` (String) The reason the key was revoked.
+- `size` (Number) Bit length for the key.
+- `state` (String) Current state of the key. One of Pre-Active, Active, Deactivated, Destroyed, Compromised, or Destroyed Compromised.
+- `undeletable` (Boolean) Key is not deletable if true.
+- `unexportable` (Boolean) Key is not exportable if true.
+- `updated_at` (String) Date/time the key was last updated.
+- `uri` (String) A human readable unique identifier of the key.
+- `usage_mask` (Number) Cryptographic usage mask. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Individual bit values are summed to form the mask.
+- `uuid` (String) Additional identifier of the key. The format of this value is 32 hexadecimal lowercase digits with 4 dashes.
+- `version` (Number) Version number of the key.

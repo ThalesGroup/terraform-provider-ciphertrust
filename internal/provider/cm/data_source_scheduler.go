@@ -40,75 +40,98 @@ func (d *dataSourceScheduler) Metadata(_ context.Context, req datasource.Metadat
 
 func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Lists CipherTrust Manager scheduler job configurations via the /v1/scheduler/job-configs API.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM scheduler job-configs list API. Supported keys: \"name\", \"id\", \"operation\", \"disabled\", \"cloud_name\" (matches cloud_name in cckm_synchronization and cckm_key_rotation jobs), \"expire_in\" (matches cckm_key_rotation jobs), \"createdBefore\", and \"createdAfter\" (RFC3339Nano timestamp or relative timestamp, e.g. \"-1Y-2M-5D\").",
 			},
 			"scheduler": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of scheduler job configurations matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The unique identifier of the scheduler job configuration.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The name of the job configuration.",
 						},
 						"operation": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The type of operation performed by this job configuration. One of: " + strings.Join(supportedOperations, ", ") + ".",
 						},
 						"run_at": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: runAt,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Description for the job configuration.",
 						},
 						"run_on": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The node(s) the job runs on. Default is 'any'. For database_backup, the default is the current node if in a cluster. This attribute is not supported in CDSPaaS.",
 						},
 						"disabled": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "By default, the job configuration starts in an active state. True indicates the job configuration is disabled.",
 						},
 						"start_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time when the job starts. Format: YYYY-MM-DDTHH:MM:SSZ.",
 						},
 						"end_date": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Date/time when the job ends. Format: YYYY-MM-DDTHH:MM:SSZ.",
 						},
 						"database_backup_params": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Database backup operation specific arguments. Populated only when operation is \"database_backup\".",
 							Attributes: map[string]schema.Attribute{
 								"tied_to_hsm": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "If true, the system backup can only be restored to instances that use the same HSM partition. Valid only with the system scoped backup.",
 								},
 								"scope": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Scope of the backup to be taken - system (default) or domain.",
 								},
 								"retention_count": schema.Int64Attribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Number of backups saved for this job config. Default is an unlimited quantity.",
 								},
 								"do_scp": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "If true, the system backup will also be transferred to the external server via SCP.",
 								},
 								"description": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "User defined description associated with the backup. This is stored along with the backup, and is returned while retrieving the backup information, or while listing backups. Users may find it useful to store various types of information here: a backup name or description, ID of the HSM the backup is tied to, etc.",
 								},
 								"connection": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Name or ID of the SCP connection which stores the details for SCP server.",
 								},
 								"backup_key": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "ID of backup key used for encrypting the backup. The default backup key is used if this is not specified.",
 								},
 								"filters": schema.ListNestedAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: filterDescription,
 									NestedObject: schema.NestedAttributeObject{
 										Attributes: map[string]schema.Attribute{
 											"resource_type": schema.StringAttribute{
-												Computed: true,
+												Computed:    true,
+												Description: "Type of resources to be backed up. Valid values are \"Keys\", \"cte_policies\", \"customer_fragments\" and, \"users_groups\".",
 											},
 											"resource_query": schema.StringAttribute{
-												Computed: true,
+												Computed:    true,
+												Description: resourceQueryDescription,
 											},
 										},
 									},
@@ -116,57 +139,77 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 							},
 						},
 						"cckm_key_rotation_params": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Cloud key rotation operation specific arguments. Populated only when operation is \"cckm_key_rotation\".",
 							Attributes: map[string]schema.Attribute{
 								"aws_retain_alias": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.",
 								},
 								"rotate_material": schema.BoolAttribute{
 									Computed: true,
+									Description: "If true, rotate the key material during the key rotation job. " +
+										"Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and " +
+										"valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.",
 								},
 								"cloud_name": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Name of the cloud for which the key rotation is scheduled. Options are: " + strings.Join(cckmRotationClouds, ",") + ".",
 								},
 								"expiration": schema.StringAttribute{
 									Computed: true,
+									Description: "Expiration time of the new key. If not specified, the new key material never expires. " +
+										"Use either 'Xd' for x days or 'Yh' for y hours.",
 								},
 								"expire_in": schema.StringAttribute{
 									Computed: true,
+									Description: "Period during which certain keys are going to expire. " +
+										"The scheduler rotates the keys that are expiring in this period. " +
+										"If not specified, the scheduler rotates all the keys. Use either 'Xd' for x days or 'Yh' for y hours.",
 								},
 								"rotation_after": schema.StringAttribute{
 									Computed: true,
+									Description: "Number of days after which the keys will be rotated. Specified as Xd for x days. " +
+										"The first key rotation happens after x days of key creation; subsequent rotations happen every x days after the last rotation date.",
 								},
 							},
 						},
 						"cckm_synchronization_params": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Cloud key synchronization operation specific arguments. Populated only when operation is \"cckm_synchronization\".",
 							Attributes: map[string]schema.Attribute{
 								"cloud_name": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "The cloud that is synchronized on schedule. Options are: " + strings.Join(cckmSyncClouds, ",") + ".",
 								},
 								"kms": schema.SetAttribute{
 									ElementType: types.StringType,
 									Computed:    true,
+									Description: "A list of kms resource ID's for which AWS keys are synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
 								},
 								"oci_vaults": schema.SetAttribute{
 									ElementType: types.StringType,
 									Computed:    true,
+									Description: "A list of OCI vaults resource ID's for which OCI keys are synchronized. Unless synchronizing all OCI keys, at least one vault is required.",
 								},
 								"synchronize_all": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "True if all keys are synchronized.",
 								}},
 						},
-						"uri":         schema.StringAttribute{Computed: true},
-						"account":     schema.StringAttribute{Computed: true},
-						"created_at":  schema.StringAttribute{Computed: true},
-						"updated_at":  schema.StringAttribute{Computed: true},
-						"application": schema.StringAttribute{Computed: true},
-						"dev_account": schema.StringAttribute{Computed: true},
+						"uri":         schema.StringAttribute{Computed: true, Description: "A human readable unique identifier of the resource."},
+						"account":     schema.StringAttribute{Computed: true, Description: "The account which owns this resource."},
+						"created_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was created."},
+						"updated_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was last updated."},
+						"application": schema.StringAttribute{Computed: true, Description: "The application this resource belongs to."},
+						"dev_account": schema.StringAttribute{Computed: true, Description: "The developer account which owns this resource's application."},
 						"cckm_xks_credential_rotation_params": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "CCKM XKS credential rotation operation specific arguments. Populated only when operation is \"cckm_xks_credential_rotation\".",
 							Attributes: map[string]schema.Attribute{
 								"cloud_name": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "Name of the cloud in which the rotation operation is triggered. The only supported value is 'aws'.",
 								},
 							},
 						},
