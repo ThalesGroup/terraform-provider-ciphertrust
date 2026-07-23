@@ -11,11 +11,13 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -55,12 +57,18 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
-				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey. Changing this value forces the resource to be destroyed and recreated.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"allow": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Allow is the effect of the policy, either to allow the actions or to deny the actions.",
+				Description: "(Immutable) Allow is the effect of the policy, either to allow the actions or to deny the actions. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"conditions": schema.ListNestedAttribute{
 				Optional:    true,
@@ -71,7 +79,11 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 							Optional: true,
 						},
 						"op": schema.StringAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "op is the operator for comparison. Valid values: equals, not_equals, contains, not_contains, starts_with, ends_with.",
+							Validators: []validator.String{
+								stringvalidator.OneOf("equals", "not_equals", "contains", "not_contains", "starts_with", "ends_with"),
+							},
 						},
 						"path": schema.StringAttribute{
 							Optional: true,
@@ -87,11 +99,20 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("deny"),
-				Description: "Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.",
+				Description: "(Immutable) Specifies the effect of the policy. Valid values: allow, deny, obligate_on_allow, obligate_on_deny. Default is 'deny'. Changing this value forces the resource to be destroyed and recreated.",
+				Validators: []validator.String{
+					stringvalidator.OneOf("allow", "deny", "obligate_on_allow", "obligate_on_deny"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"include_descendant_accounts": schema.BoolAttribute{
 				Optional:    true,
-				Description: "When false, only the resources in the principal's account can be accessed if the policy allows it.",
+				Description: "(Immutable) If true, this policy will also apply to accounts that are descendants of this account. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Optional:    true,
