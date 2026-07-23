@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a cryptographic key on CipherTrust Manager's core vault key-management API (/v1/vault/keys2). Supports creating symmetric, asymmetric, and secret-data key objects; importing existing key material; configuring versions, metadata, and access permissions; wrapping/unwrapping material for import or export; and setting CTE (CipherTrust Transparent Encryption) client-facing key attributes.
 ---
 
 # ciphertrust_cm_key (Resource)
 
-
+Manages a cryptographic key on CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Supports creating symmetric, asymmetric, and secret-data key objects; importing existing key material; configuring versions, metadata, and access permissions; wrapping/unwrapping material for import or export; and setting CTE (CipherTrust Transparent Encryption) client-facing key attributes.
 
 ## Example Usage
 
@@ -114,7 +114,7 @@ output "key_name" {
 - `activation_date` (String) Date/time the object becomes active
 - `algorithm` (String) (Immutable) Cryptographic algorithm this key is used with. Defaults to 'aes'. Supported values: aes, tdes, rsa, ec, hmac-sha1, hmac-sha256, hmac-sha384, hmac-sha512, seed, aria, opaque, ml-dsa.
 - `aliases` (Attributes List) Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified. (see [below for nested schema](#nestedatt--aliases))
-- `all_versions` (Boolean)
+- `all_versions` (Boolean) When updating the key, apply the group/custom-attribute permission changes in `meta`, along with `usage_mask`, `undeletable`, and `unexportable`, to all versions of the key at once instead of only the current version. Defaults to false. When set to true, the key must be identified by name.
 - `archive_date` (String) Date/time the object becomes archived
 - `assign_self_as_owner` (Boolean) (Immutable) If set to true, the user who is creating the key is set as the key owner. Specify either assignSelfAsOwner or ownerId in the meta, not both. Specifying both in the meta returns an error.
 - `cert_type` (String) (Immutable) This specifies the type of certificate object that is being created. Valid values are 'x509-pem' and 'x509-der'. At present, we only support x.509 certificates. The cerfificate data is passed in via the 'material' field. The certificate type is infered from the material if it is left blank.
@@ -230,9 +230,9 @@ Optional:
 
 Optional:
 
-- `cte_versioned` (Boolean)
-- `encryption_mode` (String)
-- `persistent_on_client` (Boolean)
+- `cte_versioned` (Boolean) If set to true, this key is a versioned CTE key, allowing new key versions to be rotated in over time for CTE-protected data (used with CTE's Live Data Transformation / LDT rekey). Defaults to false.
+- `encryption_mode` (String) Encryption mode used by CTE when protecting data with this key. Applies to AES symmetric keys.
+- `persistent_on_client` (Boolean) If set to true, the CTE client caches (persists) this key locally so it remains available for decryption even when disconnected from CipherTrust Manager. Defaults to false.
 
 
 <a id="nestedatt--meta--permissions"></a>
@@ -240,15 +240,15 @@ Optional:
 
 Optional:
 
-- `decrypt_with_key` (List of String)
-- `encrypt_with_key` (List of String)
-- `export_key` (List of String)
-- `mac_verify_with_key` (List of String)
-- `mac_with_key` (List of String)
-- `read_key` (List of String)
-- `sign_verify_with_key` (List of String)
-- `sign_with_key` (List of String)
-- `use_key` (List of String)
+- `decrypt_with_key` (List of String) Identifiers (user, group, or client) granted permission to decrypt data with this key.
+- `encrypt_with_key` (List of String) Identifiers (user, group, or client) granted permission to encrypt data with this key.
+- `export_key` (List of String) Identifiers (user, group, or client) granted permission to export this key.
+- `mac_verify_with_key` (List of String) Identifiers (user, group, or client) granted permission to verify a MAC with this key.
+- `mac_with_key` (List of String) Identifiers (user, group, or client) granted permission to generate a MAC with this key.
+- `read_key` (List of String) Identifiers (user, group, or client) granted permission to read this key.
+- `sign_verify_with_key` (List of String) Identifiers (user, group, or client) granted permission to verify a signature with this key.
+- `sign_with_key` (List of String) Identifiers (user, group, or client) granted permission to sign with this key.
+- `use_key` (List of String) Identifiers (user, group, or client) granted general permission to use this key.
 
 
 
@@ -258,7 +258,7 @@ Optional:
 Optional:
 
 - `activation_date` (String) Date/time the object becomes active
-- `aliases` (Attributes List) (see [below for nested schema](#nestedatt--public_key_parameters--aliases))
+- `aliases` (Attributes List) Aliases associated with the corresponding public key object that is created alongside this (private/asymmetric) key. Unlike the top-level `aliases`, these aliases are attached to the paired public key, not to this key itself. The alias and alias-type must be specified; the alias index is assigned by the server and need not be supplied. (see [below for nested schema](#nestedatt--public_key_parameters--aliases))
 - `archive_date` (String) Date/time the object becomes archived
 - `deactivation_date` (String) Date/time the object becomes inactive
 - `name` (String) Friendly name of the corresponding public key

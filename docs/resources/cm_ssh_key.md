@@ -66,16 +66,16 @@ output "key_id" {
 
 ### Optional
 
-- `curve` (String)
-- `key_size` (Number)
-- `public_key_encoding` (String)
-- `username` (String)
+- `curve` (String) Name of the elliptic curve used by the key (applicable to EC/Ed25519 keys), as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives. Exact accepted/reported curve name values could not be confirmed from the swagger spec or this resource's code, so no enum validator is applied.
+- `key_size` (Number) Bit length of the key, applicable to RSA keys. Reported by CipherTrust Manager based on the supplied public key material. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives.
+- `public_key_encoding` (String) Encoding format of the public key (e.g. PEM, OpenSSH/RFC4253), as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives. Exact accepted/reported encoding values could not be confirmed from the swagger spec or this resource's code, so no enum validator is applied.
+- `username` (String) System/OS username associated with this SSH key on the CipherTrust Manager appliance, as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives.
 
 ### Read-Only
 
-- `algorithm` (String)
+- `algorithm` (String) SSH public key algorithm (e.g. rsa, ed25519, ecdsa), as determined by CipherTrust Manager from the supplied public key material.
 - `created_at` (String)
 - `fingerprint` (String)
 - `id` (String) The ID of this resource.
-- `name` (String)
+- `name` (String) Name assigned by CipherTrust Manager to this SSH key resource.
 - `updated_at` (String)

@@ -1,10 +1,10 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -50,7 +50,8 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 		Description: "Manages a CipherTrust Manager admin policy: an allow/deny rule that authorizes a set of actions (e.g. CreateKey, EncryptWithKey) with optional conditional clauses. **Only available on CipherTrust Manager — not supported on CDSPaaS, where authorization is managed by the platform.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -76,20 +77,23 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"negate": schema.BoolAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "If true, reverses (negates) the result of the 'op' comparison.",
 						},
 						"op": schema.StringAttribute{
 							Optional:    true,
-							Description: "op is the operator for comparison. Valid values: equals, not_equals, contains, not_contains, starts_with, ends_with.",
+							Description: "The comparison operator used to compare the operation value at 'path' to 'values'. Per the CipherTrust Manager API, supported operators include: \"equals\", \"==\", \"equalsIgnoreCase\", \"matches\", \"regex\", \"=~\", \"empty\", \"contains\", \"@>\".",
 							Validators: []validator.String{
-								stringvalidator.OneOf("equals", "not_equals", "contains", "not_contains", "starts_with", "ends_with"),
+								stringvalidator.OneOf("equals", "==", "equalsIgnoreCase", "matches", "regex", "=~", "empty", "contains", "@>"),
 							},
 						},
 						"path": schema.StringAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "A JSON path, with template variables, which resolves to a value in the operation to compare against 'values'.",
 						},
 						"values": schema.ListAttribute{
 							Optional:    true,
+							Description: "The value or values to compare with the operation value resolved from 'path'. If multiple values are given, the condition matches if any one of them satisfies 'op' (logical OR).",
 							ElementType: types.StringType,
 						},
 					},
@@ -127,19 +131,22 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				ElementType: types.StringType,
 			},
 			"uri": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The account which owns this resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Date/time the resource was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

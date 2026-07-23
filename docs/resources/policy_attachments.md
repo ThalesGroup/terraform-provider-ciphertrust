@@ -77,7 +77,7 @@ output "cm_policy_attachment_id" {
 
 ### Read-Only
 
-- `account` (String)
-- `created_at` (String)
+- `account` (String) The account which owns this resource.
+- `created_at` (String) Date/time the resource was created.
 - `id` (String) The ID of this resource.
-- `uri` (String)
+- `uri` (String) A human readable unique identifier of the resource.

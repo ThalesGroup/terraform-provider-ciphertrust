@@ -69,7 +69,7 @@ output "oci_connection_details" {
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM OCI connections list API. Supported keys: "id", "name", "products", "meta_contains", "createdBefore", "createdAfter", "last_connection_ok", "last_connection_before", and "last_connection_after".
 
 ### Read-Only
 

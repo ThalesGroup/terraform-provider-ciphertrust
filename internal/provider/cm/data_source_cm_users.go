@@ -57,6 +57,7 @@ func (d *dataSourceUsers) Metadata(_ context.Context, req datasource.MetadataReq
 
 func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Lists local CipherTrust Manager (or CDSPaaS) user accounts via the /v1/usermgmt/users API.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -65,6 +66,7 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM users list API. Supported keys: \"name\", \"username\", \"email\", \"groups\" (comma-separated group names; use \"nil\" for users in no group), \"exclude_groups\" (comma-separated group names to exclude), \"auth_domain_name\", \"account_expired\" (boolean), \"allowed_auth_methods\" (comma-separated; use \"empty\" for users with no allowed auth method), \"allowed_client_types\" (comma-separated), \"password_policy\", \"return_groups\" (boolean), and \"is_admin\" (boolean; overrides \"groups\" when true).",
 			},
 			"limit": schema.Int64Attribute{
 				Optional:    true,
@@ -75,26 +77,33 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 				Description: "Number of users to skip (default: 0).",
 			},
 			"users": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of users matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Unique identifier of the user, same value as `user_id`.",
 						},
 						"user_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Unique identifier of the user, as assigned by CipherTrust Manager.",
 						},
 						"username": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Username of the user.",
 						},
 						"nickname": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Display name / nickname of the user.",
 						},
 						"email": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Email address of the user.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Users full name",
 						},
 						"password": schema.StringAttribute{
 							Computed:    true,
@@ -102,17 +111,21 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 							Description: "Deprecated. This attribute is always unpopulated (null) to protect sensitive credentials from being stored in state.",
 						},
 						"is_domain_user": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Set to true if user is a domain user.",
 						},
 						"prevent_ui_login": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Whether the user is prevented from logging in through the CipherTrust Manager UI.",
 						},
 						"password_change_required": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Whether the user must change their password on next login.",
 						},
 						"user_metadata": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
+							Description: "Information that can be stored with the user.",
 						},
 					},
 				},
@@ -147,7 +160,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 		skipVal = state.Skip.ValueInt64()
 	}
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, total, err := d.client.GetAllWithTotal(
 		ctx,
 		id,
 		fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_USER_MANAGEMENT, strings.Join(kvs, ""), skipVal, limitVal))
@@ -159,6 +172,13 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 			err.Error(),
 		)
 		return
+	}
+
+	if total > limitVal {
+		resp.Diagnostics.AddWarning(
+			"Result Set Truncated",
+			fmt.Sprintf("The server returned %d total users, but only %d were retrieved due to the configured limit parameter. To retrieve more items, please increase the 'limit' attribute in your data source configuration.", total, limitVal),
+		)
 	}
 
 	// CM omits the "resources" field (gjson returns "") when zero entries match the filter.

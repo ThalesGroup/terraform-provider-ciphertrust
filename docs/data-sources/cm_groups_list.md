@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_groups_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists local CipherTrust Manager user groups via the /v1/usermgmt/groups API.
 ---
 
 # ciphertrust_cm_groups_list (Data Source)
 
-
+Lists local CipherTrust Manager user groups via the /v1/usermgmt/groups API.
 
 
 
@@ -17,15 +17,15 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM groups list API. Supported keys: "name" (filter by group name), "users" (filter by user membership; use "nil" for groups with no members, or prefix a user ID with "-" for groups the user is not part of), "connection" (filter by connection name or ID; applies only to user group membership), "clients" (filter by client membership; use "nil" for groups with no members, or prefix a client ID with "-" for groups the client is not part of), "skip", and "limit". If "skip" or "limit" is set, only a single page is fetched as specified; otherwise the data source automatically paginates internally and returns all groups.
 
 ### Read-Only
 
-- `groups` (Attributes List) (see [below for nested schema](#nestedatt--groups))
+- `groups` (Attributes List) List of groups matching the given filters. (see [below for nested schema](#nestedatt--groups))
 
 <a id="nestedatt--groups"></a>
 ### Nested Schema for `groups`
 
 Read-Only:
 
-- `name` (String)
+- `name` (String) Unique group name.

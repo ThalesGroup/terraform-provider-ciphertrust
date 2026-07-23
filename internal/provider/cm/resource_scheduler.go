@@ -74,10 +74,11 @@ func (r *resourceScheduler) Metadata(_ context.Context, req resource.MetadataReq
 // Schema defines the schema for the resource.
 func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.",
+		Description: "Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params', 'cckm_key_rotation_params', and 'cckm_xks_credential_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The unique identifier of the scheduler job configuration.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -170,6 +171,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Computed:    true,
 						Optional:    true,
 						Description: "Scope of the backup to be taken - system (default) or domain.",
+						Validators: []validator.String{
+							stringvalidator.OneOf("system", "domain"),
+						},
 					},
 					"retention_count": schema.Int64Attribute{
 						Computed:    true,
@@ -208,6 +212,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 								"resource_type": schema.StringAttribute{
 									Required:    true,
 									Description: "Type of resources to be backed up. Valid values are \"Keys\", \"cte_policies\", \"customer_fragments\" and, \"users_groups\".",
+									Validators: []validator.String{
+										stringvalidator.OneOf("Keys", "cte_policies", "customer_fragments", "users_groups"),
+									},
 								},
 								"resource_query": schema.StringAttribute{
 									Optional:    true,
@@ -237,12 +244,12 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 					},
 				},
 			},
-			"uri":         schema.StringAttribute{Computed: true},
-			"account":     schema.StringAttribute{Computed: true},
-			"created_at":  schema.StringAttribute{Computed: true},
-			"updated_at":  schema.StringAttribute{Computed: true},
-			"application": schema.StringAttribute{Computed: true},
-			"dev_account": schema.StringAttribute{Computed: true},
+			"uri":         schema.StringAttribute{Computed: true, Description: "A human readable unique identifier of the resource."},
+			"account":     schema.StringAttribute{Computed: true, Description: "The account which owns this resource."},
+			"created_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was created."},
+			"updated_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was last updated."},
+			"application": schema.StringAttribute{Computed: true, Description: "The application this resource belongs to."},
+			"dev_account": schema.StringAttribute{Computed: true, Description: "The developer account which owns this resource's application."},
 			"cckm_key_rotation_params": schema.SingleNestedAttribute{
 				Optional: true,
 				Computed: true,

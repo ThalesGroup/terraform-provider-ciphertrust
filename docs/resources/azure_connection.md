@@ -3,12 +3,18 @@
 page_title: "ciphertrust_azure_connection Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  The APIs in this section deal with connections to the Azure cloud. The following operations can be performed:
+  Create/Delete/Get/Update an Azure connection.List all Azure connections.Test an existing Azure connection.
+  *Test a connection that hasn't been created yet by passing in the connection parameters.
 ---
 
 # ciphertrust_azure_connection (Resource)
 
-
+The APIs in this section deal with connections to the Azure cloud. The following operations can be performed:
+* Create/Delete/Get/Update an Azure connection.
+* List all Azure connections.
+* Test an existing Azure connection.
+*Test a connection that hasn't been created yet by passing in the connection parameters.
 
 ## Example Usage
 
@@ -180,7 +186,7 @@ To remove a key/value pair, pass value null to the particular key
 
 - `account` (String)
 - `category` (String)
-- `certificate_thumbprint` (String)
+- `certificate_thumbprint` (String) Thumbprint of the certificate associated with the connection, when certificate-based authentication is used.
 - `created_at` (String)
 - `external_certificate_used` (Boolean) true if the certificate associated with the connection is generated externally, false otherwise.
 - `id` (String) The ID of this resource.

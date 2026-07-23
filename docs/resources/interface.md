@@ -82,20 +82,20 @@ output "interface_id" {
 - `kmip_enable_hard_delete` (Number) Enables hard delete of keys on KMIP Destroy operation, that is both meta-data and material will be removed from CipherTrust Manager for the key being deleted. By default, only key material is removed and meta-data is preserved with the updated key state. This setting applies only to KMIP interface. Should be set to 1 for enabling the feature or 0 for returning to default behavior.
 - `local_auto_gen_attributes` (Attributes) Local CSR parameters for interface's certificate. These are for the local node itself, and they do not affect other nodes in the cluster. This gives user a convenient way to supply custom fields for automatic interface certification generation. Without them, the system defaults are used. (see [below for nested schema](#nestedatt--local_auto_gen_attributes))
 - `maximum_tls_version` (String) Maximum TLS version to be configured for NAE or KMIP interface, default is latest maximum supported protocol.
-- `meta` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--meta))
+- `meta` (Attributes) Meta information related to the interface. (see [below for nested schema](#nestedatt--meta))
 - `minimum_tls_version` (String) Minimum TLS version to be configured for NAE or KMIP interface, default is v1.2 (tls_1_2).
 - `mode` (String) The interface mode can be one of the following: no-tls-pw-opt, no-tls-pw-req, unauth-tls-pw-opt, tls-cert-opt-pw-opt, tls-pw-opt, tls-pw-req, tls-cert-pw-opt, or tls-cert-and-pw. Default mode is no-tls-pw-opt. Refer to the top level discussion of the Interface section for further details.
 - `name` (String) (Immutable) The name of the interface. Not valid for interface_type nae or kmip — CM auto-assigns the name for those types.
 - `network_interface` (String) Defines what ethernet adapter the interface should listen to, use "all" for all. Defaults to all if not specified.
-- `registration_token` (String) Registration token in case auto registration is true.
-- `tls_ciphers` (Attributes List) Certificate to be associated with the interface (see [below for nested schema](#nestedatt--tls_ciphers))
-- `trusted_cas` (Attributes) Information which is used to create a Key using HKDF. (see [below for nested schema](#nestedatt--trusted_cas))
+- `registration_token` (String, Sensitive) Registration token in case auto registration is true.
+- `tls_ciphers` (Attributes List) The list of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. (see [below for nested schema](#nestedatt--tls_ciphers))
+- `trusted_cas` (Attributes) Collection of local and external CA IDs to trust for client authentication on this interface. (see [below for nested schema](#nestedatt--trusted_cas))
 
 ### Read-Only
 
-- `created_at` (String)
-- `id` (String) The ID of this resource.
-- `updated_at` (String)
+- `created_at` (String) Timestamp when the interface was created.
+- `id` (String) The unique identifier of the interface.
+- `updated_at` (String) Timestamp when the interface was last updated.
 
 <a id="nestedatt--certificate"></a>
 ### Nested Schema for `certificate`
@@ -105,7 +105,7 @@ Optional:
 - `certificate_chain` (String) The certificate and key data in PEM format or base64 encoded PKCS12 format. A chain chain of certs may be included - it must be in ascending order (server to root ca).
 - `format` (String) The format of the certificate data (PEM or PKCS12).
 - `generate` (Boolean) Create a new self-signed certificate.
-- `password` (String) Password to the encrypted key.
+- `password` (String, Sensitive) Password to the encrypted key.
 
 
 <a id="nestedatt--local_auto_gen_attributes"></a>
@@ -113,26 +113,26 @@ Optional:
 
 Required:
 
-- `dns_names` (List of String)
-- `email_addresses` (List of String)
-- `ip_addresses` (List of String)
+- `dns_names` (List of String) Subject Alternative Name (SAN) DNS names for the interface's auto-generated certificate/CSR.
+- `email_addresses` (List of String) Subject Alternative Name (SAN) email addresses for the interface's auto-generated certificate/CSR.
+- `ip_addresses` (List of String) Subject Alternative Name (SAN) IP addresses for the interface's auto-generated certificate/CSR.
 
 Optional:
 
-- `cn` (String)
+- `cn` (String) Common Name (CN) to use for the interface's auto-generated certificate/CSR.
 - `names` (Attributes List) Name fields are "O=organization, OU=organizational unit, L=location, ST=state/province, C=country" (see [below for nested schema](#nestedatt--local_auto_gen_attributes--names))
-- `uid` (String)
+- `uid` (String) Subject UID to use for the interface's auto-generated certificate/CSR.
 
 <a id="nestedatt--local_auto_gen_attributes--names"></a>
 ### Nested Schema for `local_auto_gen_attributes.names`
 
 Optional:
 
-- `c` (String)
-- `l` (String)
-- `o` (String)
-- `ou` (String)
-- `st` (String)
+- `c` (String) Country, for example "US".
+- `l` (String) Locality, for example "Belcamp".
+- `o` (String) Organization, for example "Thales Group".
+- `ou` (String) Organizational Unit, for example "Accounting".
+- `st` (String) State/province, for example "MD".
 
 
 
@@ -141,14 +141,14 @@ Optional:
 
 Optional:
 
-- `nae` (Attributes) (see [below for nested schema](#nestedatt--meta--nae))
+- `nae` (Attributes) Meta information related to the NAE interface. (see [below for nested schema](#nestedatt--meta--nae))
 
 <a id="nestedatt--meta--nae"></a>
 ### Nested Schema for `meta.nae`
 
 Optional:
 
-- `mask_system_groups` (Boolean)
+- `mask_system_groups` (Boolean) Flag for masking system groups in NAE requests.
 
 
 
@@ -157,8 +157,8 @@ Optional:
 
 Optional:
 
-- `cipher_suite` (String)
-- `enabled` (Boolean)
+- `cipher_suite` (String) TLS cipher suite name.
+- `enabled` (Boolean) TLS cipher suite enabled flag. If set to true, the cipher suite will be available for the TLS handshake.
 
 
 <a id="nestedatt--trusted_cas"></a>

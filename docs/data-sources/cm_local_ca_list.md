@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_local_ca_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists local certificate authorities (CAs) on CipherTrust Manager via the /v1/ca/local-cas API.
 ---
 
 # ciphertrust_cm_local_ca_list (Data Source)
 
-
+Lists local certificate authorities (CAs) on CipherTrust Manager via the /v1/ca/local-cas API.
 
 
 
@@ -17,25 +17,25 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
-- `limit` (Number)
-- `skip` (Number)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM local CAs list API. Supported keys: "id" (filter by ID), "subject" (filter by subject), "issuer" (filter by issuer), "state" (filter by state; active or pending), and "cert" (filter by cert).
+- `limit` (Number) Maximum number of local CAs to return. Defaults to 1000.
+- `skip` (Number) Number of local CAs to skip before returning results, for pagination. Defaults to 0.
 
 ### Read-Only
 
-- `cas` (Attributes List) (see [below for nested schema](#nestedatt--cas))
-- `id` (String) The ID of this resource.
+- `cas` (Attributes List) List of local CAs matching the given filters. (see [below for nested schema](#nestedatt--cas))
+- `id` (String) Static identifier for this data source instance (always "local-ca-list").
 
 <a id="nestedatt--cas"></a>
 ### Nested Schema for `cas`
 
 Read-Only:
 
-- `cert` (String)
-- `id` (String)
-- `issuer` (String)
-- `name` (String)
-- `serial_number` (String)
-- `state` (String)
-- `subject` (String)
-- `uri` (String)
+- `cert` (String) PEM-encoded certificate of the local CA. This is public certificate material.
+- `id` (String) The unique identifier of the local CA.
+- `issuer` (String) Issuer distinguished name of the local CA certificate.
+- `name` (String) Name of the local CA.
+- `serial_number` (String) Serial number of the local CA certificate.
+- `state` (String) State of the local CA. One of "pending" or "active".
+- `subject` (String) Subject distinguished name of the local CA certificate.
+- `uri` (String) A human readable unique identifier of the local CA.
