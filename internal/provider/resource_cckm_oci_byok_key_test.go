@@ -264,9 +264,9 @@ func TestCckmOCIByokKey(t *testing.T) {
 		fmt.Sprintf(createConfig, "\n", keyNameUpdate, 7, true, removeTagsConfig,
 			"ciphertrust_cm_key.cm_aes_key.id", "\n", "ciphertrust_oci_byok_key.aes.id", 7)
 
-	// Update name
+	// Update name, remove empty tags
 	updateResourceStr4 := localsResource + connectionResource +
-		fmt.Sprintf(createConfig, "\n", keyName, 7, true, removeTagsConfig,
+		fmt.Sprintf(createConfig, "\n", keyName, 7, true, "\n",
 			"ciphertrust_cm_key.cm_aes_key.id", "\n", "ciphertrust_oci_byok_key.aes.id", 7)
 
 	keyResource := "ciphertrust_oci_byok_key.aes"

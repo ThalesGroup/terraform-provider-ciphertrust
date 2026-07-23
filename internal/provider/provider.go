@@ -483,7 +483,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	if !config.ReplicationDelayMS.IsNull() {
-		replication_delay_ms = config.ReplicationDelayMS.ValueInt64()
+		oci_operation_timeout = config.ReplicationDelayMS.ValueInt64()
 	}
 
 	// Surface the insecure mode loudly — it should only be used in test
