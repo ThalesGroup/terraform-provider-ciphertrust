@@ -21,4 +21,4 @@ Enables and configures the Prometheus metrics endpoint on the CipherTrust Manage
 
 ### Read-Only
 
-- `token` (String, Sensitive)
+- `token` (String, Sensitive) Bearer token required to authenticate scrape requests to the CipherTrust Manager Prometheus metrics endpoint.

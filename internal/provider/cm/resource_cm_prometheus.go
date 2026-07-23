@@ -48,8 +48,9 @@ func (r *resourceCMPrometheus) Schema(_ context.Context, _ resource.SchemaReques
 		Description: "Enables and configures the Prometheus metrics endpoint on the CipherTrust Manager appliance with transient response resilience. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"token": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
+				Description: "Bearer token required to authenticate scrape requests to the CipherTrust Manager Prometheus metrics endpoint.",
+				Computed:    true,
+				Sensitive:   true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

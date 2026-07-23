@@ -3,12 +3,12 @@
 page_title: "ciphertrust_log_forwarder Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Configures a CipherTrust Manager log forwarder that streams logs to an external destination (Elasticsearch, Loki, or Syslog) over a pre-existing connection.
 ---
 
 # ciphertrust_log_forwarder (Resource)
 
-
+Configures a CipherTrust Manager log forwarder that streams logs to an external destination (Elasticsearch, Loki, or Syslog) over a pre-existing connection.
 
 ## Example Usage
 
@@ -88,10 +88,10 @@ output "log_forwarder_id" {
 
 ### Read-Only
 
-- `account` (String)
-- `created_at` (String)
-- `id` (String) The ID of this resource.
-- `updated_at` (String)
+- `account` (String) The account which owns this resource.
+- `created_at` (String) Date/time the log forwarder was created.
+- `id` (String) The unique identifier of the log forwarder.
+- `updated_at` (String) Date/time the log forwarder was last updated.
 
 <a id="nestedatt--elasticsearch_params"></a>
 ### Nested Schema for `elasticsearch_params`

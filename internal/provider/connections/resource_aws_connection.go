@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package connections
 
 import (
@@ -74,15 +77,15 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					modifiers.ImmutableString(),
 				},
 			},
-		"access_key_id": schema.StringAttribute{
-			Optional:    true,
-			Computed:    true,
-			Sensitive:   true,
-			Description: "Key ID of the AWS user",
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
+			"access_key_id": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Key ID of the AWS user",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-		},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
 				Description: "AWS IAM role ARN",
@@ -104,6 +107,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				Description: "By default, AWS Security Token Service (AWS STS) is available as a global service, and all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints instead of the global endpoint to reduce latency, build in redundancy, and increase session token validity. valid values are: \n" +
 					"legacy (default): Uses the global AWS STS endpoint, sts.amazonaws.com \n" +
 					"regional: The SDK or tool always uses the AWS STS endpoint for the currently configured Region. \n",
+				Validators: []validator.String{
+					stringvalidator.OneOf("legacy", "regional"),
+				},
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional: true,
@@ -111,6 +117,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					"aws (default) \n" +
 					"aws-us-gov \n" +
 					"aws-cn",
+				Validators: []validator.String{
+					stringvalidator.OneOf("aws", "aws-us-gov", "aws-cn"),
+				},
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
@@ -172,15 +181,15 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					),
 				},
 			},
-		"secret_access_key": schema.StringAttribute{
-			Optional:    true,
-			Computed:    true,
-			Sensitive:   true,
-			Description: "Secret associated with the access key ID of the AWS user",
-			PlanModifiers: []planmodifier.String{
-				stringplanmodifier.UseStateForUnknown(),
+			"secret_access_key": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Secret associated with the access key ID of the AWS user",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-		},
 			//common response parameters
 			"uri": schema.StringAttribute{
 				Computed:      true,

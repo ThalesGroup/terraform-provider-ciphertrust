@@ -3,12 +3,18 @@
 page_title: "ciphertrust_gcp_connection Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  The APIs in this section deal with connections to the Google Cloud Platform (GCP). The following operations can be performed:
+  Create/Delete/Get/Update a GCP connection.List all GCP connections.Test an existing GCP connection.
+  *Test a connection that hasn't been created yet by passing in the connection parameters.
 ---
 
 # ciphertrust_gcp_connection (Resource)
 
-
+The APIs in this section deal with connections to the Google Cloud Platform (GCP). The following operations can be performed:
+* Create/Delete/Get/Update a GCP connection.
+* List all GCP connections.
+* Test an existing GCP connection.
+*Test a connection that hasn't been created yet by passing in the connection parameters.
 
 ## Example Usage
 
@@ -101,14 +107,11 @@ output "gcp_connection_name" {
 
 ### Optional
 
-- `account` (String)
-- `category` (String)
 - `cloud_name` (String) Name of the cloud. Default value is gcp.
 
 Options:
 
 gcp
-- `created_at` (String)
 - `description` (String) Description about the connection.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 
@@ -124,9 +127,6 @@ To remove a key/value pair, pass value null to the particular key
     "labels": {
       "key1": null
     }
-- `last_connection_at` (String)
-- `last_connection_error` (String)
-- `last_connection_ok` (Boolean)
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
 
@@ -156,13 +156,19 @@ To remove a key/value pair, pass value null to the particular key
         Luna connections
     "csm" for:
         Akeyless connections
+
+### Read-Only
+
+- `account` (String)
+- `category` (String)
+- `client_email` (String) The GCP service account email address associated with the key file.
+- `created_at` (String)
+- `id` (String) The ID of this resource.
+- `last_connection_at` (String)
+- `last_connection_error` (String)
+- `last_connection_ok` (Boolean)
+- `private_key_id` (String, Sensitive)
 - `resource_url` (String)
 - `service` (String)
 - `updated_at` (String)
 - `uri` (String)
-
-### Read-Only
-
-- `client_email` (String)
-- `id` (String) The ID of this resource.
-- `private_key_id` (String, Sensitive)

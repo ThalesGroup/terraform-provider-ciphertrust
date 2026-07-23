@@ -60,6 +60,7 @@ func (r *resourceAzureConnection) Metadata(_ context.Context, req resource.Metad
 // Schema defines the schema for the resource.
 func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "The APIs in this section deal with connections to the Azure cloud. The following operations can be performed:\n* Create/Delete/Get/Update an Azure connection.\n* List all Azure connections.\n* Test an existing Azure connection.\n*Test a connection that hasn't been created yet by passing in the connection parameters.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -73,8 +74,8 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Unique Identifier (client ID) for the Azure application.",
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "(Immutable) Unique connection name.",
+				Required:      true,
+				Description:   "(Immutable) Unique connection name.",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"tenant_id": schema.StringAttribute{
@@ -91,6 +92,9 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Description: azureStackConnectionTypeDescription,
+				Validators: []validator.String{
+					stringvalidator.OneOf("AAD", "ADFS"),
+				},
 			},
 			"azure_stack_server_cert": schema.StringAttribute{
 				Optional:    true,
@@ -201,7 +205,8 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Azure stack vault service resource URL.",
 			},
 			"certificate_thumbprint": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Thumbprint of the certificate associated with the connection, when certificate-based authentication is used.",
 			},
 			//common response parameters (read-only)
 			"uri": schema.StringAttribute{

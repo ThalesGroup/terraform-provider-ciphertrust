@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_prometheus_status Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Returns the current Prometheus metrics endpoint status on the CipherTrust Manager appliance. This is a singleton status data source — it does not return a list, and has no filters. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_cm_prometheus_status (Data Source)
 
-
+Returns the current Prometheus metrics endpoint status on the CipherTrust Manager appliance. This is a singleton status data source — it does not return a list, and has no filters. **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 
 
@@ -17,6 +17,6 @@ description: |-
 
 ### Read-Only
 
-- `enabled` (Boolean)
-- `id` (String) The ID of this resource.
-- `token` (String, Sensitive)
+- `enabled` (Boolean) Whether the Prometheus metrics endpoint is enabled on the CipherTrust Manager appliance.
+- `id` (String) Static identifier for this data source instance (always "prometheus-status").
+- `token` (String, Sensitive) Bearer token required to authenticate scrape requests to the CipherTrust Manager Prometheus metrics endpoint.

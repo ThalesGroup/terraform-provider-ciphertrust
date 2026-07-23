@@ -85,10 +85,10 @@ output "domain_id" {
 
 ### Read-Only
 
-- `account` (String)
-- `application` (String)
-- `created_at` (String)
-- `dev_account` (String)
-- `id` (String) The ID of this resource.
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) The account which owns this resource.
+- `application` (String) The application this resource belongs to.
+- `created_at` (String) Date/time the resource was created.
+- `dev_account` (String) The developer account which owns this resource's application.
+- `id` (String) The unique identifier of the resource.
+- `updated_at` (String) Date/time the resource was last updated.
+- `uri` (String) A human readable unique identifier of the resource.

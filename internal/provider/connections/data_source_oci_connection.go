@@ -51,6 +51,7 @@ func (d *dataSourceOCIConnection) Schema(_ context.Context, _ datasource.SchemaR
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM OCI connections list API. Supported keys: \"id\", \"name\", \"products\", \"meta_contains\", \"createdBefore\", \"createdAfter\", \"last_connection_ok\", \"last_connection_before\", and \"last_connection_after\".",
 			},
 			"oci": schema.ListNestedAttribute{
 				Computed: true,

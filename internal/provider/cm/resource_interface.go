@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -50,7 +53,8 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 		Description: "Manages a service endpoint interface (NAE, KMIP, or SNMP) on the CipherTrust Manager appliance, controlling the port, TLS settings, authentication mode, and network binding. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The unique identifier of the interface.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -81,6 +85,15 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			"cert_user_field": schema.StringAttribute{
 				Optional:    true,
 				Description: "Specifies how the user name is extracted from the client certificate. Allowed values are: CN, SN, E, E_ND, UID and OU. Refer to the top level discussion of the Interfaces section for more details.",
+				Validators: []validator.String{
+					stringvalidator.OneOf([]string{
+						"CN",
+						"SN",
+						"E",
+						"E_ND",
+						"UID",
+						"OU"}...),
+				},
 			},
 			"custom_uid_size": schema.Int64Attribute{
 				Optional:    true,
@@ -127,13 +140,15 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"meta": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Information which is used to create a Key using HKDF.",
+				Description: "Meta information related to the interface.",
 				Attributes: map[string]schema.Attribute{
 					"nae": schema.SingleNestedAttribute{
-						Optional: true,
+						Optional:    true,
+						Description: "Meta information related to the NAE interface.",
 						Attributes: map[string]schema.Attribute{
 							"mask_system_groups": schema.BoolAttribute{
-								Optional: true,
+								Optional:    true,
+								Description: "Flag for masking system groups in NAE requests.",
 							},
 						},
 					},
@@ -180,11 +195,12 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"registration_token": schema.StringAttribute{
 				Optional:    true,
+				Sensitive:   true,
 				Description: "Registration token in case auto registration is true.",
 			},
 			"trusted_cas": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Information which is used to create a Key using HKDF.",
+				Description: "Collection of local and external CA IDs to trust for client authentication on this interface.",
 				Attributes: map[string]schema.Attribute{
 					"external": schema.ListAttribute{
 						Required:    true,
@@ -220,6 +236,7 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 					},
 					"password": schema.StringAttribute{
 						Optional:    true,
+						Sensitive:   true,
 						Description: "Password to the encrypted key.",
 					},
 				},
@@ -229,18 +246,22 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Local CSR parameters for interface's certificate. These are for the local node itself, and they do not affect other nodes in the cluster. This gives user a convenient way to supply custom fields for automatic interface certification generation. Without them, the system defaults are used.",
 				Attributes: map[string]schema.Attribute{
 					"cn": schema.StringAttribute{
-						Optional: true,
+						Optional:    true,
+						Description: "Common Name (CN) to use for the interface's auto-generated certificate/CSR.",
 					},
 					"dns_names": schema.ListAttribute{
 						Required:    true,
+						Description: "Subject Alternative Name (SAN) DNS names for the interface's auto-generated certificate/CSR.",
 						ElementType: types.StringType,
 					},
 					"email_addresses": schema.ListAttribute{
 						Required:    true,
+						Description: "Subject Alternative Name (SAN) email addresses for the interface's auto-generated certificate/CSR.",
 						ElementType: types.StringType,
 					},
 					"ip_addresses": schema.ListAttribute{
 						Required:    true,
+						Description: "Subject Alternative Name (SAN) IP addresses for the interface's auto-generated certificate/CSR.",
 						ElementType: types.StringType,
 					},
 					"names": schema.ListNestedAttribute{
@@ -249,50 +270,60 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"c": schema.StringAttribute{
-									Optional: true,
+									Optional:    true,
+									Description: "Country, for example \"US\".",
 								},
 								"l": schema.StringAttribute{
-									Optional: true,
+									Optional:    true,
+									Description: "Locality, for example \"Belcamp\".",
 								},
 								"o": schema.StringAttribute{
-									Optional: true,
+									Optional:    true,
+									Description: "Organization, for example \"Thales Group\".",
 								},
 								"ou": schema.StringAttribute{
-									Optional: true,
+									Optional:    true,
+									Description: "Organizational Unit, for example \"Accounting\".",
 								},
 								"st": schema.StringAttribute{
-									Optional: true,
+									Optional:    true,
+									Description: "State/province, for example \"MD\".",
 								},
 							},
 						},
 					},
 					"uid": schema.StringAttribute{
-						Optional: true,
+						Optional:    true,
+						Description: "Subject UID to use for the interface's auto-generated certificate/CSR.",
 					},
 				},
 			},
 			"tls_ciphers": schema.ListNestedAttribute{
 				Optional:    true,
-				Description: "Certificate to be associated with the interface",
+				Description: "The list of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"cipher_suite": schema.StringAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "TLS cipher suite name.",
 						},
 						"enabled": schema.BoolAttribute{
-							Optional: true,
+							Optional:    true,
+							Description: "TLS cipher suite enabled flag. If set to true, the cipher suite will be available for the TLS handshake.",
 						},
 					},
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Timestamp when the interface was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"updated_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Timestamp when the interface was last updated.",
 				// No UseStateForUnknown — CM writes a new timestamp on every PATCH.
 			},
 		},
@@ -762,7 +793,7 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 	// When a sub-field is absent (anomalous CM behaviour), the field is left at its zero value
 	// (nil slice from struct initialisation) rather than explicitly assigned nil.
 	if state.LocalAutogenAttributes != nil {
-	if lagaResult := gjson.Get(response, "local_auto_gen_attributes"); lagaResult.Exists() && lagaResult.Type != gjson.Null {
+		if lagaResult := gjson.Get(response, "local_auto_gen_attributes"); lagaResult.Exists() && lagaResult.Type != gjson.Null {
 			var laga CMInterfaceLocalAutogenAttrTFSDK
 			if r := gjson.Get(response, "local_auto_gen_attributes.cn"); r.Exists() && r.String() != "" {
 				laga.CN = types.StringValue(r.String())

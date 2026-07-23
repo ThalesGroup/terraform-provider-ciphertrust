@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_tokens_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists CipherTrust Manager client registration tokens via the /v1/client-management/regtokens API.
 ---
 
 # ciphertrust_cm_tokens_list (Data Source)
 
-
+Lists CipherTrust Manager client registration tokens via the /v1/client-management/regtokens API.
 
 
 
@@ -17,32 +17,32 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM registration tokens list API. Supported keys: "id" (filter by token ID), "token" (filter by token value), "label" (filter by the token's label metadata, as a JSON value), and "labels" (filter by label selector expression, e.g. "key1=value1,key2=value2").
 
 ### Read-Only
 
-- `tokens` (Attributes List) (see [below for nested schema](#nestedatt--tokens))
+- `tokens` (Attributes List) List of registration tokens matching the given filters. (see [below for nested schema](#nestedatt--tokens))
 
 <a id="nestedatt--tokens"></a>
 ### Nested Schema for `tokens`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `ca_id` (String)
-- `cert_duration` (Number)
-- `client_management_profile_id` (String)
-- `clients_registered` (Number)
-- `created_at` (String)
-- `dev_account` (String)
-- `id` (String)
-- `label` (Map of String)
-- `labels` (Map of String)
-- `lifetime` (String)
-- `max_clients` (Number)
-- `name_prefix` (String)
-- `token` (String, Sensitive)
-- `updated_at` (String)
-- `uri` (String)
-- `valid_until` (String)
+- `account` (String) The account which owns this registration token.
+- `application` (String) The application this registration token belongs to.
+- `ca_id` (String) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that was used to sign client certificates during the registration process.
+- `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. It is not recommended to use this parameter; use the one supported in client profile.
+- `client_management_profile_id` (String) ID of the client management profile.
+- `clients_registered` (Number) Number of clients registered using this token so far.
+- `created_at` (String) Date/time the registration token was created.
+- `dev_account` (String) The developer account which owns this registration token's application.
+- `id` (String) The unique identifier of the registration token.
+- `label` (Map of String) Map of key/value pairs sent verbatim to CipherTrust Manager as the token's label metadata. CM expects a single fixed key here depending on the client type registered with this token: key "KmipClientProfile" for KMIP client registration, or "ClientProfile" for ProtectApp (PA) client registration; the corresponding value is the name of the KMIP/ProtectApp client profile associated with the token. This is distinct from `labels` below, which holds free-form user-defined metadata rather than a client-profile association.
+- `labels` (Map of String) Labels are free-form key/value pairs used to group and tag resources, based on Kubernetes labels. This is distinct from `label` above, which holds a single CM-convention key naming the KMIP/ProtectApp client profile associated with the token.
+- `lifetime` (String) Duration the token is valid. A positive integer followed by a unit: s (seconds), m (minutes), h (hours), or d (days). Example: '30d', '24h', '3600s'. Empty string means no expiry.
+- `max_clients` (Number) Maximum number of clients that can be registered using this token. No limit by default.
+- `name_prefix` (String) Prefix for the client name. For a client registered using this registration token, name_prefix, if specified, client name is constructed as 'name_prefix{nth client registered using this registration token}'. If name_prefix is not specified, CipherTrust Manager server generates a random name for the client.
+- `token` (String, Sensitive) Registration token secret returned by the API. Marked sensitive — value is redacted in plan/apply output.
+- `updated_at` (String) Date/time the registration token was last updated.
+- `uri` (String) A human readable unique identifier of the registration token.
+- `valid_until` (String) Date/time until which the registration token remains valid, derived from `lifetime` at creation time.

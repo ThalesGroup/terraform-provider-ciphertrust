@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package cm
 
 import (
@@ -43,37 +46,48 @@ func (d *dataSourceCertificateAuthorities) Metadata(_ context.Context, req datas
 
 func (d *dataSourceCertificateAuthorities) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Lists local certificate authorities (CAs) on CipherTrust Manager via the /v1/ca/local-cas API.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Static identifier for this data source instance (always \"local-ca-list\").",
 			},
 			"cas": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of local CAs matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The unique identifier of the local CA.",
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "A human readable unique identifier of the local CA.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Name of the local CA.",
 						},
 						"state": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "State of the local CA. One of \"pending\" or \"active\".",
 						},
 						"cert": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "PEM-encoded certificate of the local CA. This is public certificate material.",
 						},
 						"serial_number": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Serial number of the local CA certificate.",
 						},
 						"subject": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Subject distinguished name of the local CA certificate.",
 						},
 						"issuer": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Issuer distinguished name of the local CA certificate.",
 						},
 					},
 				},
@@ -81,12 +95,15 @@ func (d *dataSourceCertificateAuthorities) Schema(_ context.Context, _ datasourc
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM local CAs list API. Supported keys: \"id\" (filter by ID), \"subject\" (filter by subject), \"issuer\" (filter by issuer), \"state\" (filter by state; active or pending), and \"cert\" (filter by cert).",
 			},
 			"limit": schema.Int64Attribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Maximum number of local CAs to return. Defaults to 1000.",
 			},
 			"skip": schema.Int64Attribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Number of local CAs to skip before returning results, for pagination. Defaults to 0.",
 			},
 		},
 	}
