@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -23,6 +25,33 @@ var (
 	_ resource.ResourceWithValidateConfig = &resourceCMProxy{}
 	_ resource.ResourceWithImportState    = &resourceCMProxy{}
 )
+
+// proxyURLValidator rejects proxy URL values that are missing a scheme or host.
+type proxyURLValidator struct{}
+
+func (v proxyURLValidator) Description(_ context.Context) string {
+	return "value must be a well-formed URL with a scheme and a host (e.g. http://user:pass@host:port)"
+}
+
+func (v proxyURLValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v proxyURLValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	raw := req.ConfigValue.ValueString()
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid Proxy URL",
+			fmt.Sprintf("Expected a well-formed URL with a scheme and host, got: %q. "+
+				"Example: http://user:pass@proxy.example.com:8080", raw),
+		)
+	}
+}
 
 func NewResourceCMProxy() resource.Resource {
 	return &resourceCMProxy{}
@@ -54,14 +83,30 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description: "CA certificate to trust for proxy.",
 			},
 			"http_proxy": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.",
+				Optional:  true,
+				Sensitive: true,
+				Description: "HTTP proxy URL for proxy configurations. If the proxy server's password contains " +
+					"any special character replace it with encoded values. Must be a well-formed URL with a " +
+					"scheme (e.g. http://) and a host. " +
+					"Note: CM masks the password in GET responses. After initial apply, neither password-only " +
+					"nor host/port out-of-band changes can be detected by terraform plan -refresh-only. " +
+					"State retains the last-applied plaintext value.",
+				Validators: []validator.String{
+					proxyURLValidator{},
+				},
 			},
 			"https_proxy": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.",
+				Optional:  true,
+				Sensitive: true,
+				Description: "HTTPS proxy URL for proxy configurations. If the proxy server's password contains " +
+					"any special character replace it with encoded values. Must be a well-formed URL with a " +
+					"scheme (e.g. https://) and a host. " +
+					"Note: CM masks the password in GET responses. After initial apply, neither password-only " +
+					"nor host/port out-of-band changes can be detected by terraform plan -refresh-only. " +
+					"State retains the last-applied plaintext value.",
+				Validators: []validator.String{
+					proxyURLValidator{},
+				},
 			},
 			"no_proxy": schema.ListAttribute{
 				Optional:    true,
@@ -182,42 +227,13 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 		state.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve state values when masked.
-	// When the API returns an empty string the field has been removed OOB; surface that as null so Terraform
-	// can detect the drift.
-	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
-	if httpProxyFromAPI == "" {
-		state.HTTPProxy = types.StringNull()
-	} else {
-		if !state.HTTPProxy.IsNull() && !state.HTTPProxy.IsUnknown() {
-			maskedState := maskProxyURL(state.HTTPProxy.ValueString())
-			maskedAPI := maskProxyURL(httpProxyFromAPI)
-			if maskedState == maskedAPI {
-				// No host/username/port drift; keep the cleartext state.HTTPProxy
-			} else {
-				state.HTTPProxy = types.StringValue(httpProxyFromAPI)
-			}
-		} else {
-			state.HTTPProxy = types.StringValue(httpProxyFromAPI)
-		}
-	}
-
-	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
-	if httpsProxyFromAPI == "" {
-		state.HTTPSProxy = types.StringNull()
-	} else {
-		if !state.HTTPSProxy.IsNull() && !state.HTTPSProxy.IsUnknown() {
-			maskedState := maskProxyURL(state.HTTPSProxy.ValueString())
-			maskedAPI := maskProxyURL(httpsProxyFromAPI)
-			if maskedState == maskedAPI {
-				// No host/username/port drift; keep the cleartext state.HTTPSProxy
-			} else {
-				state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
-			}
-		} else {
-			state.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
-		}
-	}
+	// http_proxy and https_proxy are write-only with respect to Read():
+	// CM unconditionally masks the credential portion of any credentialed proxy URL in GET responses
+	// (e.g. "http://user:xxxxxx@host:8080"). state.HTTPProxy and state.HTTPSProxy are already populated
+	// from req.State.Get above and retain the last-applied plaintext — no assignment needed here.
+	// Deliberate trade-off: password-only OOB changes (TFIN-439) and host/port OOB changes are both
+	// undetectable after this fix. This is the maximum correctness achievable without CM returning
+	// unmasked credentials.
 
 	hosts := gjson.Get(response, "no_proxy").Array()
 	var noProxies []types.String
@@ -324,40 +340,10 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		plan.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// API returns masked passwords (user:xxxxxx@host:port) for security - preserve plan values when masked
-	httpProxyFromAPI := gjson.Get(response, "http_proxy").String()
-	if httpProxyFromAPI == "" {
-		plan.HTTPProxy = types.StringNull()
-	} else {
-		if !plan.HTTPProxy.IsNull() && !plan.HTTPProxy.IsUnknown() {
-			maskedState := maskProxyURL(plan.HTTPProxy.ValueString())
-			maskedAPI := maskProxyURL(httpProxyFromAPI)
-			if maskedState == maskedAPI {
-				// keep plan value
-			} else {
-				plan.HTTPProxy = types.StringValue(httpProxyFromAPI)
-			}
-		} else {
-			plan.HTTPProxy = types.StringValue(httpProxyFromAPI)
-		}
-	}
-
-	httpsProxyFromAPI := gjson.Get(response, "https_proxy").String()
-	if httpsProxyFromAPI == "" {
-		plan.HTTPSProxy = types.StringNull()
-	} else {
-		if !plan.HTTPSProxy.IsNull() && !plan.HTTPSProxy.IsUnknown() {
-			maskedState := maskProxyURL(plan.HTTPSProxy.ValueString())
-			maskedAPI := maskProxyURL(httpsProxyFromAPI)
-			if maskedState == maskedAPI {
-				// keep plan value
-			} else {
-				plan.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
-			}
-		} else {
-			plan.HTTPSProxy = types.StringValue(httpsProxyFromAPI)
-		}
-	}
+	// http_proxy and https_proxy: write-only — do not overwrite plan values from API response.
+	// plan.HTTPProxy and plan.HTTPSProxy are already populated from req.Plan.Get at the top of Update()
+	// and hold the user's plaintext. Overwriting from the masked GET response would replace the plaintext
+	// with the masked value in state, reintroducing the credential blind spot.
 
 	noProxyHosts := gjson.Get(response, "no_proxy").Array()
 	var noProxies []types.String
@@ -419,28 +405,3 @@ func (r *resourceCMProxy) ImportState(ctx context.Context, req resource.ImportSt
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// maskProxyURL masks passwords inside a proxy URL with xxxxxx for secure drift checking
-func maskProxyURL(u string) string {
-	if u == "" {
-		return ""
-	}
-	scheme := ""
-	rem := u
-	if strings.Contains(u, "://") {
-		parts := strings.SplitN(u, "://", 2)
-		scheme = parts[0] + "://"
-		rem = parts[1]
-	}
-
-	if strings.Contains(rem, "@") {
-		parts := strings.SplitN(rem, "@", 2)
-		creds := parts[0]
-		hostPart := parts[1]
-		if strings.Contains(creds, ":") {
-			credParts := strings.SplitN(creds, ":", 2)
-			user := credParts[0]
-			return scheme + user + ":xxxxxx@" + hostPart
-		}
-	}
-	return u
-}

@@ -62,8 +62,8 @@ output "proxie_id" {
 ### Optional
 
 - `certificate` (String) CA certificate to trust for proxy.
-- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
-- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
+- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values. Must be a well-formed URL with a scheme (e.g. http://) and a host. Note: CM masks the password in GET responses. After initial apply, neither password-only nor host/port out-of-band changes can be detected by terraform plan -refresh-only. State retains the last-applied plaintext value.
+- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values. Must be a well-formed URL with a scheme (e.g. https://) and a host. Note: CM masks the password in GET responses. After initial apply, neither password-only nor host/port out-of-band changes can be detected by terraform plan -refresh-only. State retains the last-applied plaintext value.
 - `no_proxy` (List of String) List of hosts for a proxy exception.
 
 ### Read-Only
