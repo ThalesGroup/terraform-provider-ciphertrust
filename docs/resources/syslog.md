@@ -71,7 +71,7 @@ output "syslog_connection_value" {
 
 ### Read-Only
 
-- `account` (String)
+- `account` (String) The account which owns this resource.
 - `created_at` (String)
 - `id` (String) The ID of this resource.
 - `updated_at` (String)

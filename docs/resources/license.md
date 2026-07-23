@@ -59,7 +59,7 @@ output "license_id" {
 
 ### Required
 
-- `license` (String) (Immutable) License String
+- `license` (String, Sensitive) (Immutable) License String
 
 ### Optional
 
@@ -67,12 +67,12 @@ output "license_id" {
 
 ### Read-Only
 
-- `expiration` (String)
-- `hash` (String)
+- `expiration` (String) End date/time of the license, or "no expiration" if it never expires. For trial licenses, use trial_seconds_remaining instead.
+- `hash` (String) Hash of the license.
 - `id` (String) The ID of this resource.
-- `license_count` (Number)
-- `start` (String)
-- `state` (String)
-- `trial_seconds_remaining` (String)
-- `type` (String)
-- `version` (String)
+- `license_count` (Number) Number of licenses granted.
+- `start` (String) Start date/time of the license.
+- `state` (String) The current state of the license (e.g. "active" or "inactive" per the CM API). This value can change over the license's lifecycle as it is activated, renewed, or expires.
+- `trial_seconds_remaining` (String) For trial licenses only, the number of seconds remaining until the trial period ends.
+- `type` (String) License type, e.g. "Normal" or "Trial".
+- `version` (String) Version of the license feature.

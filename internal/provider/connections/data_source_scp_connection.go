@@ -43,6 +43,7 @@ func (d *dataSourceScpConnection) Schema(_ context.Context, _ datasource.SchemaR
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM SCP/SFTP connections list API. Supported keys: \"id\", \"name\", \"products\", \"meta_contains\", \"createdBefore\", \"createdAfter\", \"last_connection_ok\", \"last_connection_before\", \"last_connection_after\", \"protocol\", and \"labels\".",
 			},
 			"scp": schema.ListNestedAttribute{
 				Computed: true,
@@ -52,46 +53,60 @@ func (d *dataSourceScpConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Computed: true,
 						},
 						"auth_method": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'",
 						},
 						"host": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Hostname or FQDN of SCP/SFTP remote machine.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "(Immutable) Unique connection name.",
 						},
 						"path_to": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'",
 						},
 						"username": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Username for accessing SCP/SFTP server.",
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Description about the connection.",
 						},
 						"port": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Port where SCP/SFTP service runs on host (usually 22).",
 						},
 						"products": schema.ListAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: productsDescription,
 						},
 						"protocol": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Use 'sftp' or 'scp'. 'sftp' is the default value",
 						},
 						"password": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "Password for SCP/SFTP server. CM never returns this field on GET, so it is not populated by this data source.",
 						},
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: labelsDescription,
 						},
 						"meta": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: "Optional end-user or service data stored with the connection.",
 						},
 						"public_key": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Public key of destination host machine. It will be used to verify the host's identity by verifying key fingerprint. You can find it in /etc/ssh/ at host machine.",
 						},
 						//common response parameters (optional)
 						"uri":                   schema.StringAttribute{Computed: true},

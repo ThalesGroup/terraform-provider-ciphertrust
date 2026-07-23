@@ -1,14 +1,11 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -52,7 +49,8 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 		Description: "Manages a CipherTrust Manager domain (a tenant boundary inside a single CipherTrust Manager instance). **Only available on CipherTrust Manager — not supported on CDSPaaS, where each customer is their own tenant and domains are managed by the platform.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -108,38 +106,44 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"uri": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The account which owns this resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"application": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The application this resource belongs to.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"dev_account": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The developer account which owns this resource's application.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Date/time the resource was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-		"updated_at": schema.StringAttribute{
-			Computed: true,
-		},
+			"updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the resource was last updated.",
+			},
 		},
 	}
 }

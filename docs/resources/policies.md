@@ -76,27 +76,27 @@ output "cm_policy_id" {
 
 ### Optional
 
-- `actions` (List of String) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
-- `allow` (Boolean) Allow is the effect of the policy, either to allow the actions or to deny the actions.
+- `actions` (List of String) (Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey. Changing this value forces the resource to be destroyed and recreated.
+- `allow` (Boolean) (Immutable) Allow is the effect of the policy, either to allow the actions or to deny the actions. Changing this value forces the resource to be destroyed and recreated.
 - `conditions` (Attributes List) Conditions are rules for matching the other attributes of the operation (see [below for nested schema](#nestedatt--conditions))
-- `effect` (String) Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.
-- `include_descendant_accounts` (Boolean) When false, only the resources in the principal's account can be accessed if the policy allows it.
+- `effect` (String) (Immutable) Specifies the effect of the policy. Valid values: allow, deny, obligate_on_allow, obligate_on_deny. Default is 'deny'. Changing this value forces the resource to be destroyed and recreated.
+- `include_descendant_accounts` (Boolean) (Immutable) If true, this policy will also apply to accounts that are descendants of this account. Changing this value forces the resource to be destroyed and recreated.
 - `name` (String) (Immutable) This is the name of the policy.
 - `resources` (List of String) Resources is a list of URI strings, which must be in URI format.
 
 ### Read-Only
 
-- `account` (String)
-- `created_at` (String)
-- `id` (String) The ID of this resource.
-- `uri` (String)
+- `account` (String) The account which owns this resource.
+- `created_at` (String) Date/time the resource was created.
+- `id` (String) The unique identifier of the resource.
+- `uri` (String) A human readable unique identifier of the resource.
 
 <a id="nestedatt--conditions"></a>
 ### Nested Schema for `conditions`
 
 Optional:
 
-- `negate` (Boolean)
-- `op` (String)
-- `path` (String)
-- `values` (List of String)
+- `negate` (Boolean) If true, reverses (negates) the result of the 'op' comparison.
+- `op` (String) The comparison operator used to compare the operation value at 'path' to 'values'. Per the CipherTrust Manager API, supported operators include: "equals", "==", "equalsIgnoreCase", "matches", "regex", "=~", "empty", "contains", "@>".
+- `path` (String) A JSON path, with template variables, which resolves to a value in the operation to compare against 'values'.
+- `values` (List of String) The value or values to compare with the operation value resolved from 'path'. If multiple values are given, the condition matches if any one of them satisfies 'op' (logical OR).

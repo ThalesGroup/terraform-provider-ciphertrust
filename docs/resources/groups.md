@@ -3,12 +3,12 @@
 page_title: "ciphertrust_groups Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a local CipherTrust Manager user group via the /v1/usermgmt/groups API.
 ---
 
 # ciphertrust_groups (Resource)
 
-
+Manages a local CipherTrust Manager user group via the /v1/usermgmt/groups API.
 
 ## Example Usage
 

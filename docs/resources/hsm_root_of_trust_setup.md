@@ -154,5 +154,5 @@ Note: JSON does not allow line-breaks, it needs to be replaced with \n. Use "sed
 ### Read-Only
 
 - `config` (Map of String) Configuration of the HSM.
-- `id` (String) The ID of this resource.
+- `id` (String) The unique identifier of the HSM root-of-trust setup resource.
 - `sub_type` (String) The subtype of the HSM setup.

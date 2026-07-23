@@ -43,6 +43,7 @@ func (d *dataSourceAzureConnection) Schema(_ context.Context, _ datasource.Schem
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM Azure connections list API. Supported keys: \"id\", \"name\", \"products\", \"meta_contains\", \"cloud_name\", \"createdBefore\", \"createdAfter\", \"last_connection_ok\", \"last_connection_before\", \"last_connection_after\", \"external_certificate_used\", and \"labels\".",
 			},
 			"azure": schema.ListNestedAttribute{
 				Computed: true,
@@ -52,70 +53,92 @@ func (d *dataSourceAzureConnection) Schema(_ context.Context, _ datasource.Schem
 							Computed: true,
 						},
 						"client_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Unique Identifier (client ID) for the Azure application.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "(Immutable) Unique connection name.",
 						},
 						"tenant_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Tenant ID of the Azure application.",
 						},
 						"active_directory_endpoint": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack active directory authority URL",
 						},
 						"azure_stack_connection_type": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: azureStackConnectionTypeDescription,
 						},
 						"azure_stack_server_cert": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack server certificate.The certificate should be provided in \\n (newline) format.",
 						},
 						"cert_duration": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Duration in days for which the azure certificate is valid, default (730 i.e. 2 Years).",
 						},
 						"certificate": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "User has the option to upload external certificate for Azure Cloud connection. This option cannot be used with option is_certificate_used and client_secret.User first has to generate a new Certificate Signing Request (CSR) in POST /v1/connectionmgmt/connections/csr. The generated CSR can be signed with any internal or external CA. The Certificate must have an RSA key strength of 2048 or 4096. User can also update the new external certificate in the existing connection. Any unused certificate will automatically deleted in 24 hours.The certificate should be provided in \\n (newline) format.",
 						},
 						"client_secret": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "Secret key for the Azure application. Required in Azure Stack connection. CM never returns this field on GET, so it is not populated by this data source.",
 						},
 						"cloud_name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: cloudNameDescription,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Description about the connection.",
 						},
 						"external_certificate_used": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "true if the certificate associated with the connection is generated externally, false otherwise.",
 						},
 						"is_certificate_used": schema.BoolAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "User has the option to choose the Certificate Authentication method instead of Client Secret for Azure Cloud connection. In order to use the Certificate, set it to true. Once the connection is created, in the response user will get a certificate. By default, the certificate is valid for 2 Years. User can update the certificate in the existing connection by setting it to true.",
 						},
 						"key_vault_dns_suffix": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack key vault dns suffix",
 						},
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: labelsDescription,
 						},
 						"management_url": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack management URL",
 						},
 						"meta": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: "Optional end-user or service data stored with the connection.",
 						},
 						"products": schema.ListAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: productsDescription,
 						},
 						"resource_manager_url": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack resource manager URL.",
 						},
 						"vault_resource_url": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Azure stack vault service resource URL.",
 						},
 						"certificate_thumbprint": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Thumbprint of the certificate associated with the connection, when certificate-based authentication is used.",
 						},
 						//common response parameters (optional)
 						"uri":                   schema.StringAttribute{Computed: true},

@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cm
 
 import (
@@ -48,8 +45,9 @@ func (r *resourceCMPrometheus) Schema(_ context.Context, _ resource.SchemaReques
 		Description: "Enables and configures the Prometheus metrics endpoint on the CipherTrust Manager appliance with transient response resilience. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"token": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
+				Description: "Bearer token required to authenticate scrape requests to the CipherTrust Manager Prometheus metrics endpoint.",
+				Computed:    true,
+				Sensitive:   true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -106,7 +104,9 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 	}
 	plan.Token = types.StringValue(gjson.Get(response, "token").String())
 
-	tflog.Debug(ctx, "[resource_cm_prometheus.go -> Enable/Disable Create Output]["+response+"]")
+	tflog.Debug(ctx, "[resource_cm_prometheus.go -> Enable/Disable Create Output] Prometheus state changed successfully", map[string]interface{}{
+		"enabled": plan.Enabled.ValueBool(),
+	})
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
 	diags = resp.State.Set(ctx, plan)

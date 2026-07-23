@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cm
 
 import (
@@ -17,20 +14,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
 var (
-	_ resource.Resource              = &resourceCMRegToken{}
-	_ resource.ResourceWithConfigure = &resourceCMRegToken{}
+	_ resource.Resource                = &resourceCMRegToken{}
+	_ resource.ResourceWithConfigure   = &resourceCMRegToken{}
 	_ resource.ResourceWithImportState = &resourceCMRegToken{}
 )
 
@@ -49,6 +46,7 @@ func (r *resourceCMRegToken) Metadata(_ context.Context, req resource.MetadataRe
 // Schema defines the schema for the resource.
 func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Manages a CipherTrust Manager client registration token via the /v1/client-management/regtokens API.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -82,7 +80,7 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 			"label": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "(Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.",
+				Description: "(Immutable) Map of key/value pairs sent verbatim to CipherTrust Manager as the token's label metadata. In practice, CM expects a single fixed key here depending on the client type being registered with this token: use key \"KmipClientProfile\" for KMIP client registration, or \"ClientProfile\" for ProtectApp (PA) client registration; the corresponding value is the name of the KMIP/ProtectApp client profile to associate with the token. The provider does not enforce or validate these key names — they are a CipherTrust Manager convention, not a schema constraint.",
 				PlanModifiers: []planmodifier.Map{
 					modifiers.ImmutableMap(),
 				},

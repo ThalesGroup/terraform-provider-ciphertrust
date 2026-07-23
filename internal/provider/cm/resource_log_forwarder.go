@@ -1,11 +1,11 @@
 package cm
 
 import (
-	"strings"
 	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
@@ -41,9 +41,11 @@ func (r *resourceCMLogForwarders) Metadata(_ context.Context, req resource.Metad
 // Schema defines the schema for the resource.
 func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Configures a CipherTrust Manager log forwarder that streams logs to an external destination (Elasticsearch, Loki, or Syslog) over a pre-existing connection.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Description: "The unique identifier of the log forwarder.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -156,19 +158,22 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Description: "The account which owns this resource.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Description: "Date/time the log forwarder was created.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"updated_at": schema.StringAttribute{
-				Computed: true,
+				Description: "Date/time the log forwarder was last updated.",
+				Computed:    true,
 			},
 		},
 	}

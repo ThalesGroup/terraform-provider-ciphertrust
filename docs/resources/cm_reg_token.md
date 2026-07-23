@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_reg_token Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a CipherTrust Manager client registration token via the /v1/client-management/regtokens API.
 ---
 
 # ciphertrust_cm_reg_token (Resource)
 
-
+Manages a CipherTrust Manager client registration token via the /v1/client-management/regtokens API.
 
 ## Example Usage
 
@@ -75,7 +75,7 @@ output "reg_token_value" {
 - `ca_id` (String) (Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.
 - `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. The value cannot be negative. If 0 is provided then the value will be ignored. It is not recommended to use this parameter. Please use the one supported in client profile.
 - `client_management_profile_id` (String) ID of the client management profile
-- `label` (Map of String) (Immutable) Label is the key value pair. In case of KMIP client registration, Key is KmipClientProfile and in case of PA client registration Key is ClientProfile. Value for the key is the profile name of protectapp/Kmip client profile to be mapped with the token for protectapp/Kmip client registration.
+- `label` (Map of String) (Immutable) Map of key/value pairs sent verbatim to CipherTrust Manager as the token's label metadata. In practice, CM expects a single fixed key here depending on the client type being registered with this token: use key "KmipClientProfile" for KMIP client registration, or "ClientProfile" for ProtectApp (PA) client registration; the corresponding value is the name of the KMIP/ProtectApp client profile to associate with the token. The provider does not enforce or validate these key names — they are a CipherTrust Manager convention, not a schema constraint.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels
 - `lifetime` (String) Duration the token is valid. Must be a positive integer followed by a unit: s (seconds), m (minutes), h (hours), or d (days). Example: '30d', '24h', '3600s'. Empty string disables expiry.
 - `max_clients` (Number) Maximum number of clients that can be registered using this token. Must be 0 or greater.

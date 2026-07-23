@@ -17,7 +17,7 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM SCP/SFTP connections list API. Supported keys: "id", "name", "products", "meta_contains", "createdBefore", "createdAfter", "last_connection_ok", "last_connection_before", "last_connection_after", "protocol", and "labels".
 
 ### Read-Only
 
@@ -29,26 +29,66 @@ description: |-
 Read-Only:
 
 - `account` (String)
-- `auth_method` (String)
+- `auth_method` (String) Authentication type for SCP/SFTP server. Accepted values are 'key' or 'password'
 - `category` (String)
 - `created_at` (String)
-- `description` (String)
-- `host` (String)
+- `description` (String) Description about the connection.
+- `host` (String) Hostname or FQDN of SCP/SFTP remote machine.
 - `id` (String)
-- `labels` (Map of String)
+- `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
+
+To add a label, set the label's value as follows.
+
+    "labels": {
+      "key1": "value1",
+      "key2": "value2"
+    }
+
+To remove a key/value pair, pass value null to the particular key
+
+    "labels": {
+      "key1": null
+    }
 - `last_connection_at` (String)
 - `last_connection_error` (String)
 - `last_connection_ok` (Boolean)
-- `meta` (Map of String)
-- `name` (String)
-- `password` (String)
-- `path_to` (String)
-- `port` (Number)
-- `products` (List of String)
-- `protocol` (String)
-- `public_key` (String)
+- `meta` (Map of String) Optional end-user or service data stored with the connection.
+- `name` (String) (Immutable) Unique connection name.
+- `password` (String, Sensitive) Password for SCP/SFTP server. CM never returns this field on GET, so it is not populated by this data source.
+- `path_to` (String) A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'
+- `port` (Number) Port where SCP/SFTP service runs on host (usually 22).
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:
+
+    "cckm" for:
+        AWS
+        Azure
+        GCP
+        Luna connections
+        DSM
+        Salesforce
+        SAP Data Custodian
+    "ddc" for:
+        GCP
+        Hadoop connections
+    "cte" for:
+        Hadoop connections
+        SMB
+        OIDC
+        LDAP connections
+    "data discovery" for Hadoop connections.
+    "backup/restore" for SCP/SFTP connections.
+    "logger" for:
+        loki connections
+        elasticsearch connections
+        syslog connections
+    "hsm_anchored_domain" for:
+        Luna connections
+    "csm" for:
+        Akeyless connections
+- `protocol` (String) Use 'sftp' or 'scp'. 'sftp' is the default value
+- `public_key` (String) Public key of destination host machine. It will be used to verify the host's identity by verifying key fingerprint. You can find it in /etc/ssh/ at host machine.
 - `resource_url` (String)
 - `service` (String)
 - `updated_at` (String)
 - `uri` (String)
-- `username` (String)
+- `username` (String) Username for accessing SCP/SFTP server.

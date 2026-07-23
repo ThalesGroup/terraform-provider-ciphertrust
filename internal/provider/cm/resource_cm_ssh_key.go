@@ -58,44 +58,50 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"name": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Name assigned by CipherTrust Manager to this SSH key resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"algorithm": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "SSH public key algorithm (e.g. rsa, ed25519, ecdsa), as determined by CipherTrust Manager from the supplied public key material.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"key_size": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "Bit length of the key, applicable to RSA keys. Reported by CipherTrust Manager based on the supplied public key material. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives.",
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 					modifiers.ImmutableInt64(),
 				},
 			},
 			"curve": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "Name of the elliptic curve used by the key (applicable to EC/Ed25519 keys), as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives. Exact accepted/reported curve name values could not be confirmed from the swagger spec or this resource's code, so no enum validator is applied.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					modifiers.ImmutableString(),
 				},
 			},
 			"username": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "System/OS username associated with this SSH key on the CipherTrust Manager appliance, as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					modifiers.ImmutableString(),
 				},
 			},
 			"public_key_encoding": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "Encoding format of the public key (e.g. PEM, OpenSSH/RFC4253), as reported by CipherTrust Manager. Although marked Optional in the schema, this field is not sent to CipherTrust Manager on create/update (the API only accepts the raw public key) — any configured value is effectively ignored in favor of the value CM derives. Exact accepted/reported encoding values could not be confirmed from the swagger spec or this resource's code, so no enum validator is applied.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					modifiers.ImmutableString(),

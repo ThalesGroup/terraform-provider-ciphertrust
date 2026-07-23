@@ -43,6 +43,7 @@ func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaR
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM GCP connections list API. Supported keys: \"id\", \"name\", \"products\", \"meta_contains\", \"cloud_name\", \"createdBefore\", \"createdAfter\", \"last_connection_ok\", \"last_connection_before\", \"last_connection_after\", and \"labels\".",
 			},
 			"gcp": schema.ListNestedAttribute{
 				Computed: true,
@@ -52,34 +53,45 @@ func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Computed: true,
 						},
 						"key_file": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. CM never returns this field on GET, so it is not populated by this data source.",
 						},
 						"cloud_name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Name of the cloud. Default value is gcp.\n\nOptions:\n\ngcp",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "(Immutable) Unique connection name.",
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "Description about the connection.",
 						},
 						"products": schema.ListAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: productsDescription,
 						},
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: labelsDescription,
 						},
 						"meta": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
+							Description: "Optional end-user or service data stored with the connection.",
 						},
 						"client_email": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The GCP service account email address associated with the key file.",
 						},
 						"private_key_id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Sensitive:   true,
+							Description: "Private key ID is a unique ID corresponding to a private key.",
 						},
 						//common response parameters (optional)
 						"uri":                   schema.StringAttribute{Computed: true},

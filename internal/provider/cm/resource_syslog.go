@@ -106,7 +106,8 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Description: "The account which owns this resource.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

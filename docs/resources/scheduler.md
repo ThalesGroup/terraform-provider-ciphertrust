@@ -3,12 +3,12 @@
 page_title: "ciphertrust_scheduler Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+  Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params', 'cckm_key_rotation_params', and 'cckm_xks_credential_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 ---
 
 # ciphertrust_scheduler (Resource)
 
-Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params' and 'cckm_key_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
+Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params', 'cckm_key_rotation_params', and 'cckm_xks_credential_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.
 
 ## Example Usage
 
@@ -127,13 +127,13 @@ For example:
 
 ### Read-Only
 
-- `account` (String)
-- `application` (String)
-- `created_at` (String)
-- `dev_account` (String)
-- `id` (String) The ID of this resource.
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) The account which owns this resource.
+- `application` (String) The application this resource belongs to.
+- `created_at` (String) Date/time the resource was created.
+- `dev_account` (String) The developer account which owns this resource's application.
+- `id` (String) The unique identifier of the scheduler job configuration.
+- `updated_at` (String) Date/time the resource was last updated.
+- `uri` (String) A human readable unique identifier of the resource.
 
 <a id="nestedatt--cckm_key_rotation_params"></a>
 ### Nested Schema for `cckm_key_rotation_params`
