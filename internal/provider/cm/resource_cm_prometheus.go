@@ -106,7 +106,9 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 	}
 	plan.Token = types.StringValue(gjson.Get(response, "token").String())
 
-	tflog.Debug(ctx, "[resource_cm_prometheus.go -> Enable/Disable Create Output]["+response+"]")
+	tflog.Debug(ctx, "[resource_cm_prometheus.go -> Enable/Disable Create Output] Prometheus state changed successfully", map[string]interface{}{
+		"enabled": plan.Enabled.ValueBool(),
+	})
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
 	diags = resp.State.Set(ctx, plan)

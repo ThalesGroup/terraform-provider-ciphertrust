@@ -147,7 +147,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 		skipVal = state.Skip.ValueInt64()
 	}
 
-	jsonStr, err := d.client.GetAll(
+	jsonStr, total, err := d.client.GetAllWithTotal(
 		ctx,
 		id,
 		fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_USER_MANAGEMENT, strings.Join(kvs, ""), skipVal, limitVal))
@@ -159,6 +159,13 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 			err.Error(),
 		)
 		return
+	}
+
+	if total > limitVal {
+		resp.Diagnostics.AddWarning(
+			"Result Set Truncated",
+			fmt.Sprintf("The server returned %d total users, but only %d were retrieved due to the configured limit parameter. To retrieve more items, please increase the 'limit' attribute in your data source configuration.", total, limitVal),
+		)
 	}
 
 	// CM omits the "resources" field (gjson returns "") when zero entries match the filter.

@@ -76,6 +76,29 @@ func (c *Client) GetAll(ctx context.Context, uuid string, endpoint string) (stri
 	return responseJson, nil
 }
 
+func (c *Client) GetAllWithTotal(ctx context.Context, uuid string, endpoint string) (string, int64, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAllWithTotal][Request ID: "+uuid+
+		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllWithTotal]["+uuid+"]")
+		return "", 0, err
+	}
+
+	body, err := c.doRequest(ctx, uuid, req, nil)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllWithTotal]["+uuid+"]")
+		return "", 0, err
+	}
+
+	bodyStr := string(body)
+	responseJson := gjson.Get(bodyStr, "resources").String()
+	total := gjson.Get(bodyStr, "total").Int()
+
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAllWithTotal]["+uuid+"]")
+	return responseJson, total, nil
+}
+
 // cteListPageSize is the number of results requested per page by GetAllPaged.
 // It is intentionally large to minimise round-trips; CipherTrust Manager honours
 // smaller server-side caps transparently because GetAllPaged advances by the
@@ -229,7 +252,16 @@ func (c *Client) PostData(ctx context.Context, uuid string, endpoint string, dat
 		return "", err
 	}
 
-	ret := gjson.Get(string(body), id).String()
+	jsonResult := gjson.Get(string(body), id)
+	if !jsonResult.Exists() {
+		return "", fmt.Errorf("creation successful on endpoint %q, but the expected identifier field %q is missing from the API response payload", endpoint, id)
+	}
+
+	ret := jsonResult.String()
+	if ret == "" {
+		return "", fmt.Errorf("creation successful on endpoint %q, but the expected identifier field %q has an empty string value in the API response payload", endpoint, id)
+	}
+
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
 	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
@@ -304,8 +336,8 @@ func (c *Client) PutData(ctx context.Context, uuid string, endpoint string, data
 	return string(body), nil
 }
 
-func (c *Client) UpdateData(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData]["+uuid+"]")
+func (c *Client) UpdateData(ctx context.Context, resourceID string, endpoint string, data []byte, id string) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
 	var payload io.Reader
 	if len(data) == 0 {
 		payload = nil
@@ -314,26 +346,26 @@ func (c *Client) UpdateData(ctx context.Context, uuid string, endpoint string, d
 	}
 	//tflog.Debug(ctx, "*****PATCH data for*****"+endpoint+"*****"+string(payload)+"*****")
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, resourceID), payload)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
 		return "", err
 	}
 
-	body, err := c.doRequest(ctx, uuid, req, nil)
+	body, err := c.doRequest(ctx, resourceID, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
 		return "", err
 	}
 
 	ret := gjson.Get(string(body), id).String()
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
 	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
 	return ret, nil
 }
 
-func (c *Client) UpdateDataV2(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData]["+uuid+"]")
+func (c *Client) UpdateDataV2(ctx context.Context, resourceID string, endpoint string, data []byte) (string, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
 	var payload io.Reader
 	if len(data) == 0 {
 		payload = nil
@@ -341,19 +373,19 @@ func (c *Client) UpdateDataV2(ctx context.Context, uuid string, endpoint string,
 		payload = bytes.NewBuffer(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, uuid), payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, resourceID), payload)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
 		return "", err
 	}
 
-	body, err := c.doRequest(ctx, uuid, req, nil)
+	body, err := c.doRequest(ctx, resourceID, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
 		return "", err
 	}
 	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
 	return string(body), nil
 }
 
