@@ -91,15 +91,15 @@ output "custom_pwd_policy_id" {
 ### Optional
 
 - `failed_logins_lockout_thresholds` (List of Number) List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.
-- `inclusive_max_total_length` (Number) The maximum length of the password. Value 0 is ignored.
+- `inclusive_max_total_length` (Number) The maximum length of the password. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.
 - `inclusive_min_digits` (Number) The minimum number of digits.
 - `inclusive_min_lower_case` (Number) The minimum number of lower cases.
 - `inclusive_min_other` (Number) The minimum number of other characters.
-- `inclusive_min_total_length` (Number) The minimum length of the password. Value 0 is ignored.
+- `inclusive_min_total_length` (Number) The minimum length of the password. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.
 - `inclusive_min_upper_case` (Number) The minimum number of upper cases.
-- `password_change_min_days` (Number) The minimum period in days between password changes. Value 0 is ignored.
+- `password_change_min_days` (Number) The minimum period in days between password changes. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.
 - `password_history_threshold` (Number) Determines the number of past passwords a user cannot reuse. Even with value 0, the user will not be able to change their password to the same password.
-- `password_lifetime` (Number) The maximum lifetime of the password in days. Value 0 is ignored.
+- `password_lifetime` (Number) The maximum lifetime of the password in days. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.
 - `policy_name` (String) (Immutable) The name for the custom password policy. Changing this field in place is not supported — it would silently target a different policy on CipherTrust Manager.
 
 ### Read-Only

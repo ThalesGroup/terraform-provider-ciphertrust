@@ -92,13 +92,14 @@ resource "ciphertrust_password_policy" "CustomPasswordPolicy" {
 
 func Test_CM_PasswordPolicyCreateAndUpdate(t *testing.T) {
 	RequireCM(t)
+	policyName := "tf-test-policy-" + uuid.New().String()[:8]
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "test" {
-    policy_name                       = "tf-test-policy"
+    policy_name                       = %q
     inclusive_min_total_length        = 8
     inclusive_max_total_length        = 64
     inclusive_min_digits              = 1
@@ -110,10 +111,10 @@ resource "ciphertrust_password_policy" "test" {
     password_change_min_days          = 1
     failed_logins_lockout_thresholds  = [0, 5]
 }
-`,
+`, policyName),
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "policy_name", "tf-test-policy"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "policy_name", policyName),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "8"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_max_total_length", "64"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "1"),
@@ -127,9 +128,9 @@ resource "ciphertrust_password_policy" "test" {
 				),
 			},
 			{
-				Config: providerConfig + `
+				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "test" {
-    policy_name                       = "tf-test-policy"
+    policy_name                       = %q
     inclusive_min_total_length        = 10
     inclusive_max_total_length        = 128
     inclusive_min_digits              = 2
@@ -141,7 +142,7 @@ resource "ciphertrust_password_policy" "test" {
     password_change_min_days          = 2
     failed_logins_lockout_thresholds  = [0, 10, 30]
 }
-`,
+`, policyName),
 				Check: checkStep(t, "update",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_max_total_length", "128"),
@@ -469,6 +470,94 @@ resource "ciphertrust_password_policy" "omission_test" {
 				Check: checkStep(t, "omission-test: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.omission_test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.omission_test", "inclusive_min_total_length", "14"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_ValidationRules verifies that ValidateConfig prevents
+// invalid complexity rule configurations where the sum of minimum bounds exceeds total length.
+func Test_CM_AccCMPasswordPolicy_ValidationRules(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_password_policy" "invalid_sum" {
+  policy_name                = "tf-test-pwpolicy-invalid-sum"
+  inclusive_min_total_length = 8
+  inclusive_min_digits       = 3
+  inclusive_min_lower_case   = 3
+  inclusive_min_upper_case   = 3
+  inclusive_min_other        = 1
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)sum of inclusive complexity rules`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_ExpiryNotification verifies the inclusion and functional wiring
+// of the password_expiry_notification_days attribute.
+func Test_CM_AccCMPasswordPolicy_ExpiryNotification(t *testing.T) {
+	RequireCM(t)
+	policyName := "TFTestPwdNotification-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "notification_test" {
+  policy_name                       = %q
+  password_expiry_notification_days = 15
+}
+`, policyName),
+				Check: checkStep(t, "expiry-notification: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.notification_test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.notification_test", "password_expiry_notification_days", "15"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that planning inclusive_min_total_length = 0
+// triggers the custom plan modifier, preserving state value to prevent perpetual plan drift.
+func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
+	RequireCM(t)
+	policyName := "TFTestPwdZero-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "zero_test" {
+  policy_name                = %q
+  inclusive_min_total_length = 10
+}
+`, policyName),
+				Check: checkStep(t, "zero-test: initial create",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
+				),
+			},
+			{
+				// Update to 0. The plan modifier should intercept and modify the plan value back to 10.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "zero_test" {
+  policy_name                = %q
+  inclusive_min_total_length = 0
+}
+`, policyName),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "zero-test: update to 0",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
 				),
 			},
 		},

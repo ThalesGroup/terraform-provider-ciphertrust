@@ -159,3 +159,43 @@ func (m useStateForNullOrUnknownBoolModifier) PlanModifyBool(_ context.Context, 
 		resp.PlanValue = req.StateValue
 	}
 }
+
+// UseStateWhenZeroInt64 returns an Int64 plan modifier that preserves the prior
+// state value when the planned value is 0. Use this on Int64 attributes that CM
+// cannot reset back to 0 once configured (e.g. inclusive_min_total_length).
+func UseStateWhenZeroInt64() planmodifier.Int64 {
+	return useStateWhenZeroInt64Modifier{}
+}
+
+type useStateWhenZeroInt64Modifier struct{}
+
+func (m useStateWhenZeroInt64Modifier) Description(_ context.Context) string {
+	return "Preserves state value when plan is 0 because CM ignores 0 values."
+}
+
+func (m useStateWhenZeroInt64Modifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m useStateWhenZeroInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
+	// Brand-new resource — no prior state, nothing to preserve.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	// Plan value is not 0 — pass through.
+	if !req.PlanValue.IsNull() && req.PlanValue.ValueInt64() != 0 {
+		return
+	}
+	// State is also empty/null or 0 — nothing to preserve, pass through.
+	if req.StateValue.IsNull() || req.StateValue.ValueInt64() == 0 {
+		return
+	}
+	// Plan is trying to clear/set to 0. CM cannot honour this,
+	// so substitute the state value to suppress the perpetual diff.
+	resp.Diagnostics.AddAttributeWarning(
+		req.Path,
+		"Zero ignored by CipherTrust Manager",
+		"CM does not support setting this field to 0 once configured; retaining previous non-zero value.",
+	)
+	resp.PlanValue = req.StateValue
+}
