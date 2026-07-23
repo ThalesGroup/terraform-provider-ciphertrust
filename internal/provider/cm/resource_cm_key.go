@@ -1345,7 +1345,14 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Key Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed key %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this key has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the key was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")

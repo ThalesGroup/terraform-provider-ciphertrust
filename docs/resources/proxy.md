@@ -62,8 +62,8 @@ output "proxie_id" {
 ### Optional
 
 - `certificate` (String) CA certificate to trust for proxy.
-- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
-- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. If the proxy server's password contains any special character replace it with encoded values.
+- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. Include the scheme (e.g. `http://username:password@proxy.example.com:8080`). If the proxy server's password contains any special character replace it with percent-encoded values. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change (same scheme, host, port, and username; different password only) is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
+- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. Include the scheme (e.g. `https://username:password@proxy.example.com:8080`). If the proxy server's password contains any special character replace it with percent-encoded values. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change (same scheme, host, port, and username; different password only) is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
 - `no_proxy` (List of String) List of hosts for a proxy exception.
 
 ### Read-Only

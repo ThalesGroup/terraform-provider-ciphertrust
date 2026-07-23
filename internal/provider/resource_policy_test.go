@@ -55,7 +55,7 @@ resource "ciphertrust_policies" "policy_no_effect" {
 	resources = ["kylo:*:vault:keys:*"]
 	conditions = [{
 		path   = "context.resource.meta.cte"
-		op     = "empty"
+		op     = "equals"
 		negate = true
 	}]
 }
@@ -402,6 +402,200 @@ resource "ciphertrust_policies" "test" {
 				Config:             updatedConfig,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableActions verifies that changing actions after creation produces
+// a plan-time immutable error from ImmutableList.
+func Test_CM_AccCMPolicy_ImmutableActions(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["DeleteKey"]
+  effect  = "deny"
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "actions.0", "DeleteKey"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  actions = ["ReadKey"]
+  effect  = "deny"
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableAllow verifies that changing allow after creation produces
+// a plan-time immutable error from ImmutableBool.
+func Test_CM_AccCMPolicy_ImmutableAllow(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "deny"
+  allow  = false
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "allow", "false"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "deny"
+  allow  = true
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableEffect verifies that changing effect after creation produces
+// a plan-time immutable error from ImmutableString.
+func Test_CM_AccCMPolicy_ImmutableEffect(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "deny"
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "effect", "deny"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "allow"
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableIncludeDescendantAccounts verifies that adding
+// include_descendant_accounts after creation produces a plan-time immutable error.
+// Step 1 omits include_descendant_accounts (null state); step 2 attempts to set it,
+// triggering the ImmutableBool error since the field cannot be changed after creation.
+func Test_CM_AccCMPolicy_ImmutableIncludeDescendantAccounts(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "deny"
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name                        = %q
+  effect                      = "deny"
+  include_descendant_accounts = true
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_EffectValidator verifies that an invalid effect value produces
+// a plan-time validation error before any CM API call.
+func Test_CM_AccCMPolicy_EffectValidator(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name   = %q
+  effect = "invalid_effect_value"
+}
+`, policyName),
+				ExpectError: regexp.MustCompile("Invalid Attribute Value Match"),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ConditionsOpValidator verifies that an invalid op value in a
+// conditions block produces a plan-time validation error before any CM API call.
+func Test_CM_AccCMPolicy_ConditionsOpValidator(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name = %q
+  conditions = [{
+    op     = "bogus_op"
+    path   = "some/key"
+    values = ["some_value"]
+  }]
+}
+`, policyName),
+				ExpectError: regexp.MustCompile("Invalid Attribute Value Match"),
 			},
 		},
 	})

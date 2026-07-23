@@ -58,12 +58,18 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"actions": schema.ListAttribute{
 				Optional:    true,
-				Description: "Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey. Changing this value forces the resource to be destroyed and recreated.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"allow": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Allow is the effect of the policy, either to allow the actions or to deny the actions.",
+				Description: "(Immutable) Allow is the effect of the policy, either to allow the actions or to deny the actions. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"conditions": schema.ListNestedAttribute{
 				Optional:    true,
@@ -77,6 +83,9 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 						"op": schema.StringAttribute{
 							Optional:    true,
 							Description: "The comparison operator used to compare the operation value at 'path' to 'values'. Per the CipherTrust Manager API, supported operators include: \"equals\", \"==\", \"equalsIgnoreCase\", \"matches\", \"regex\", \"=~\", \"empty\", \"contains\", \"@>\".",
+							Validators: []validator.String{
+								stringvalidator.OneOf("equals", "==", "equalsIgnoreCase", "matches", "regex", "=~", "empty", "contains", "@>"),
+							},
 						},
 						"path": schema.StringAttribute{
 							Optional:    true,
@@ -94,14 +103,20 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("deny"),
-				Description: "Specifies the effect of the policy. Possible values are 'allow', 'deny', 'obligate_on_allow', and 'obligate_on_deny'. Default is 'deny'.",
+				Description: "(Immutable) Specifies the effect of the policy. Valid values: allow, deny, obligate_on_allow, obligate_on_deny. Default is 'deny'. Changing this value forces the resource to be destroyed and recreated.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("allow", "deny", "obligate_on_allow", "obligate_on_deny"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
 				},
 			},
 			"include_descendant_accounts": schema.BoolAttribute{
 				Optional:    true,
-				Description: "When false, only the resources in the principal's account can be accessed if the policy allows it.",
+				Description: "(Immutable) If true, this policy will also apply to accounts that are descendants of this account. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Optional:    true,

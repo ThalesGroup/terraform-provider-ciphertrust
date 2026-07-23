@@ -129,7 +129,7 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 		skipVal = state.Skip.ValueInt64()
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_LOCAL_CA, strings.Join(kvs, ""), skipVal, limitVal))
+	jsonStr, total, err := d.client.GetAllWithTotal(ctx, id, fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_LOCAL_CA, strings.Join(kvs, ""), skipVal, limitVal))
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_certificate_authorities.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -137,6 +137,13 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 			err.Error(),
 		)
 		return
+	}
+
+	if total > limitVal {
+		resp.Diagnostics.AddWarning(
+			"Result Set Truncated",
+			fmt.Sprintf("The server returned %d total local CAs, but only %d were retrieved due to the configured limit parameter. To retrieve more items, please increase the 'limit' attribute in your data source configuration.", total, limitVal),
+		)
 	}
 
 	cas := []LocalCAsListModelJSON{}
