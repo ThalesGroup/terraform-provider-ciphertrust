@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -75,6 +77,15 @@ func scheduleOciKeyDeletionOutOfBand(keyID string) {
 		common.URL_OCI+"/keys/"+keyID+"/schedule-deletion",
 		payload,
 	)
+	// Poll until OCI reflects the SCHEDULING_DELETION state (the API call is asynchronous).
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(3 * time.Second)
+		resp, err := client.GetById(context.Background(), "poll-key-state-"+keyID, keyID, common.URL_OCI+"/keys")
+		if err == nil && strings.Contains(resp, `"SCHEDULING_DELETION"`) {
+			break
+		}
+	}
 }
 
 // scheduleOciKeyVersionDeletionOutOfBand calls the OCI key version schedule-deletion API
@@ -92,13 +103,20 @@ func scheduleOciKeyVersionDeletionOutOfBand(keyID, versionID string) {
 		common.URL_OCI+"/keys/"+keyID+"/versions/"+versionID+"/schedule-deletion",
 		payload,
 	)
+	// Poll until OCI reflects the SCHEDULING_DELETION state (the API call is asynchronous).
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(3 * time.Second)
+		resp, err := client.GetById(context.Background(), "poll-version-state-"+versionID, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
+		if err == nil && strings.Contains(resp, `"SCHEDULING_DELETION"`) {
+			break
+		}
+	}
 }
 
 // TestCckmOCIKeyNative is a comprehensive lifecycle test for ciphertrust_oci_key and
 // ciphertrust_oci_key_version that runs all non-backup scenarios on a single OCI key:
 //
-//   - ModifyPlan create-time rejections: enable_key=false and enable_auto_rotation are
-//     both rejected with a plan-time error when set at resource creation.
 //   - Create with schedule_for_deletion_days, data source checks, import, and refresh.
 //   - Update lifecycle: disable/re-enable, freeform tags, rename, scheduler add/change/remove.
 //   - Post-update immutability checks: algorithm, length, and vault on the key; cckm_key_id
@@ -112,7 +130,6 @@ func TestCckmOCIKeyNative(t *testing.T) {
 
 	keyName := "tf-" + uuid.New().String()[:8]
 	keyNameUpdated := "tf-" + uuid.New().String()[:8]
-	schedulerAtCreateName := "tf-" + uuid.New().String()[:8]
 	schedulerOneName := "tf-" + uuid.New().String()[:8]
 	schedulerTwoName := "tf-" + uuid.New().String()[:8]
 	keyResource := "ciphertrust_oci_key.key"
@@ -120,48 +137,6 @@ func TestCckmOCIKeyNative(t *testing.T) {
 	v2Resource := "ciphertrust_oci_key_version.v2"
 	keysDataSource := "data.ciphertrust_oci_key_list.keys"
 	versionsDataSource := "data.ciphertrust_oci_key_version_list.versions"
-
-	// disableAtCreateConfig: enable_key = false at create - rejected by ModifyPlan.
-	disableAtCreateConfig := connectionResource + fmt.Sprintf(`
-		resource "ciphertrust_oci_key" "key" {
-			enable_key = false
-			name       = "%s"
-			oci_key_params = {
-				algorithm       = "RSA"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				length          = 256
-				protection_mode = "SOFTWARE"
-			}
-			vault = ciphertrust_oci_vault.vault.id
-		}`, keyName)
-
-	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
-	schedulerAtCreateConfig := connectionResource + fmt.Sprintf(`
-		resource "ciphertrust_scheduler" "scheduler" {
-			cckm_key_rotation_params = {
-				cloud_name = "oci"
-			}
-			end_date   = "2050-03-07T14:24:00Z"
-			name       = "%s"
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
-		resource "ciphertrust_oci_key" "key" {
-			enable_auto_rotation = {
-				job_config_id = ciphertrust_scheduler.scheduler.id
-				key_source    = "ciphertrust"
-			}
-			name = "%s"
-			oci_key_params = {
-				algorithm       = "RSA"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				length          = 256
-				protection_mode = "SOFTWARE"
-			}
-			vault = ciphertrust_oci_vault.vault.id
-		}`, schedulerAtCreateName, keyName)
 
 	// createConfig: key + v1 + key-list data source + key-version-list data source.
 	createConfig := connectionResource + fmt.Sprintf(`
@@ -287,7 +262,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			oci_key_params = {
 				algorithm       = "RSA"
 				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				freeform_tags   = {}
+				freeform_tags = {}
 				length          = 256
 				protection_mode = "SOFTWARE"
 			}
@@ -499,19 +474,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Step 1: enable_key = false at create must be rejected at plan time.
-				Config:      disableAtCreateConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
-			},
-			{
-				// Step 2: enable_auto_rotation at create must be rejected at plan time.
-				Config:      schedulerAtCreateConfig,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
-			},
-			{
-				// Step 3: create a valid key + v1; verify attributes and data sources.
+				// Step 1: create a valid key + v1; verify attributes and data sources.
 				Config: createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
@@ -545,18 +508,18 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 4: refresh state - verify no unexpected drift.
+				// Step 2: refresh state - verify no unexpected drift.
 				RefreshState: true,
 			},
 			{
-				// Step 5: import the key resource and verify all computed attributes round-trip.
+				// Step 3: import the key resource and verify all computed attributes round-trip.
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
 			},
 			{
-				// Step 6: import the key version resource.
+				// Step 4: import the key version resource.
 				ResourceName:      v1Resource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -566,7 +529,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				ImportStateIdFunc: getOCIKeyVersionID(keyResource, v1Resource),
 			},
 			{
-				// Step 7: disable key + rename + add freeform tag.
+				// Step 5: disable key + rename + add freeform tag.
 				Config: updateConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
@@ -576,7 +539,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 8: re-enable key + clear freeform tag (name stays keyNameUpdated).
+				// Step 6: re-enable key (name stays keyNameUpdated).
 				Config: restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
@@ -586,7 +549,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 9: add scheduler_one and enable auto-rotation.
+				// Step 7: add scheduler_one and enable auto-rotation.
 				Config: addRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
@@ -594,7 +557,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 10: switch auto-rotation to scheduler_two.
+				// Step 8: switch auto-rotation to scheduler_two.
 				Config: changeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
@@ -602,7 +565,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 11: remove enable_auto_rotation block - auto_rotate must become false.
+				// Step 9: remove enable_auto_rotation block - auto_rotate must become false.
 				Config: removeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
@@ -610,32 +573,32 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 12: changing algorithm must be rejected at plan time.
+				// Step 10: changing algorithm must be rejected at plan time.
 				// State is unchanged (PlanOnly) - key must NOT be destroyed.
 				Config:      badAlgorithmConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
-				// Step 13: changing length must be rejected at plan time.
+				// Step 11: changing length must be rejected at plan time.
 				Config:      badLengthConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
-				// Step 14: changing vault must be rejected at plan time.
+				// Step 12: changing vault must be rejected at plan time.
 				Config:      badVaultConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
-				// Step 15: changing cckm_key_id on the version must be rejected at plan time.
+				// Step 13: changing cckm_key_id on the version must be rejected at plan time.
 				Config:      badCckmKeyIdConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
-				// Step 16: re-apply a clean config to confirm key and version are still ENABLED
+				// Step 14: re-apply a clean config to confirm key and version are still ENABLED
 				// with all immutable attributes unchanged. Schedulers are destroyed here as a
 				// side effect since they are not present in this config.
 				// Capture key and v1 IDs for the OOB deletion tests that follow.
@@ -664,7 +627,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 17: add v2 (depends_on v1) so that v1 becomes non-current.
+				// Step 15: add v2 (depends_on v1) so that v1 becomes non-current.
 				// Only non-current versions are eligible for OOB scheduled deletion.
 				Config: twoVersionsConfig,
 				Check: resource.ComposeTestCheckFunc(
@@ -674,7 +637,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 18: schedule v1 for deletion OOB, then refresh state.
+				// Step 16: schedule v1 for deletion OOB, then refresh state.
 				// Expected: v1 retained with lifecycle_state = SCHEDULING_DELETION;
 				// v2 remains ENABLED.
 				PreConfig: func() {
@@ -697,7 +660,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 19: apply update with schedule_for_deletion_days = 7 on v1.
+				// Step 17: apply update with schedule_for_deletion_days = 7 on v1.
 				// v1 is already SCHEDULING_DELETION. Expected: provider issues a warning
 				// (not an error) and retains v1 in state with SCHEDULING_DELETION.
 				Config: twoVersionsUpdateV1Config,
@@ -716,7 +679,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 20: schedule the key itself for deletion OOB, then refresh state.
+				// Step 18: schedule the key itself for deletion OOB, then refresh state.
 				// OCI auto-disables keys when scheduling deletion, causing drift on enable_key
 				// (plan wants true from schema default, read-back is false).
 				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
@@ -740,7 +703,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				),
 			},
 			{
-				// Step 21: apply a rename on the SCHEDULING_DELETION key.
+				// Step 19: apply a rename on the SCHEDULING_DELETION key.
 				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
 				// but the plan used the schema default (true). The Terraform framework raises
 				// "Provider produced inconsistent result".
@@ -874,145 +837,74 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 	})
 }
 
-// TestCckmOCIByokKeyRestoreFromBackup has been moved to resource_cckm_oci_byok_key_test.go.
-func _TestCckmOCIByokKeyRestoreFromBackup_moved(t *testing.T) {
-	vpVaultOCID := os.Getenv("CCKM_OCI_VP_VAULT_OCID")
-	if vpVaultOCID == "" {
-		t.Skip("CCKM_OCI_VP_VAULT_OCID not set")
-	}
+// TestCckmOCIKeyInvalidCreateConfigs
+//
+//   - ModifyPlan create-time rejections: enable_key=false and enable_auto_rotation are
+//     both rejected with a plan-time error when set at resource creation.
+func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
 
-	// List buckets accessible from the standard vault's compartment so the VP vault
-	// can be configured with bucket storage, which is required for HSM key backup/restore.
-	// Register the virtual private vault alongside the standard vault.
-	vpVaultResource := fmt.Sprintf(`
-		data "ciphertrust_get_oci_buckets" "buckets" {
-			connection_id  = ciphertrust_oci_connection.oci_connection.id
-			compartment_id = ciphertrust_oci_vault.vault.compartment_id
-			limit          = 1
+	keyName := "tf-" + uuid.New().String()[:8]
+	schedulerAtCreateName := "tf-" + uuid.New().String()[:8]
+
+	// disableAtCreateConfig: enable_key = false at create - rejected by ModifyPlan.
+	disableAtCreateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_oci_key" "key" {
+			enable_key = false
+			name       = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
+			}
+			vault = ciphertrust_oci_vault.vault.id
+		}`, keyName)
+
+	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
+	schedulerAtCreateConfig := connectionResource + fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "oci"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
 		}
-
-		resource "ciphertrust_oci_vault" "vp_vault" {
-			connection_id    = ciphertrust_oci_connection.oci_connection.id
-			vault_id         = "%s"
-			region           = local.region
-			bucket_name      = data.ciphertrust_get_oci_buckets.buckets.buckets[0].name
-			bucket_namespace = data.ciphertrust_get_oci_buckets.buckets.buckets[0].namespace
-		}`, vpVaultOCID)
-
-	baseConfig := connectionResource + vpVaultResource
-
-	cmKeyName := "tf-" + uuid.New().String()[:8]
-	cmVersionKeyName := "tf-" + uuid.New().String()[:8]
-	ociKeyName := "tf-" + uuid.New().String()[:8]
-	keyResource := "ciphertrust_oci_byok_key.key"
-	versionResource := "ciphertrust_oci_byok_key_version.version"
-
-	createConfig := fmt.Sprintf(`
-			resource "ciphertrust_cm_key" "cm_key" {
-				name       = "%s"
-				algorithm  = "AES"
-				usage_mask = local.cm_key_usage_mask
+		resource "ciphertrust_oci_key" "key" {
+			enable_auto_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "ciphertrust"
 			}
-			resource "ciphertrust_cm_key" "cm_version_key" {
-				name       = "%s"
-				algorithm  = "AES"
-				usage_mask = local.cm_key_usage_mask
+			name = "%s"
+			oci_key_params = {
+				algorithm       = "RSA"
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				length          = 256
+				protection_mode = "SOFTWARE"
 			}
-			resource "ciphertrust_oci_byok_key" "key" {
-				name = "%s"
-				oci_key_params = {
-					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
-					protection_mode = "HSM"
-				}
-				source_key_id   = ciphertrust_cm_key.cm_key.id
-				source_key_tier = "local"
-				vault           = ciphertrust_oci_vault.vp_vault.id
-			}
-			resource "ciphertrust_oci_byok_key_version" "version" {
-				cckm_key_id   = ciphertrust_oci_byok_key.key.id
-				source_key_id = ciphertrust_cm_key.cm_version_key.id
-			}`, cmKeyName, cmVersionKeyName, ociKeyName)
-
-	restoreConfig := fmt.Sprintf(`
-			resource "ciphertrust_cm_key" "cm_key" {
-				name       = "%s"
-				algorithm  = "AES"
-				usage_mask = local.cm_key_usage_mask
-			}
-			resource "ciphertrust_cm_key" "cm_version_key" {
-				name       = "%s"
-				algorithm  = "AES"
-				usage_mask = local.cm_key_usage_mask
-			}
-			resource "ciphertrust_oci_byok_key" "key" {
-				name = "%s"
-				oci_key_params = {
-					compartment_id  = ciphertrust_oci_vault.vp_vault.compartment_id
-					protection_mode = "HSM"
-				}
-				restore_from_backup_trigger = "1"
-				source_key_id   = ciphertrust_cm_key.cm_key.id
-				source_key_tier = "local"
-				vault           = ciphertrust_oci_vault.vp_vault.id
-			}
-			resource "ciphertrust_oci_byok_key_version" "version" {
-				cckm_key_id   = ciphertrust_oci_byok_key.key.id
-				source_key_id = ciphertrust_cm_key.cm_version_key.id
-			}`, cmKeyName, cmVersionKeyName, ociKeyName)
-
-	var capturedVersionUpdatedAt string
+			vault = ciphertrust_oci_vault.vault.id
+		}`, schedulerAtCreateName, keyName)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmOCIVaults() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Step 1: create an HSM-protected BYOK key and a BYOK version on the VP vault.
-				Config: baseConfig + createConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found in state: %s", versionResource)
-						}
-						capturedVersionUpdatedAt = rs.Primary.Attributes["updated_at"]
-						return nil
-					},
-				),
+				// Step 1: enable_key = false at create must be rejected at plan time.
+				Config:      disableAtCreateConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 			{
-				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
-				// Verify the trigger attribute is reflected in state.
-				Config: baseConfig + restoreConfig,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-				),
-			},
-			{
-				// Step 3: refresh state to re-read version attributes from the API,
-				// then verify updated_at changed after the restore.
-				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found in state: %s", versionResource)
-						}
-						newUpdatedAt := rs.Primary.Attributes["updated_at"]
-						if capturedVersionUpdatedAt != "" && newUpdatedAt == capturedVersionUpdatedAt {
-							return fmt.Errorf("expected version updated_at to change after restore, got same value: %s", newUpdatedAt)
-						}
-						return nil
-					},
-				),
+				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				Config:      schedulerAtCreateConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 		},
 	})

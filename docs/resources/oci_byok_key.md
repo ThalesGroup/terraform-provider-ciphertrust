@@ -144,8 +144,8 @@ Required:
 
 Optional:
 
-- `defined_tags` (Attributes Set) (Updatable) Defined tags for the key. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
-- `freeform_tags` (Map of String) (Updatable) Freeform tags for the key. Freeform tags are key:value pairs.
+- `defined_tags` (Attributes Set) (Updatable) Defined tags for the key. To remove all tags set defined_tags = []. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
+- `freeform_tags` (Map of String) (Updatable) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
 
 Read-Only:
 

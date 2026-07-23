@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -49,38 +48,124 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 }
 
 // TestCckmOCIByokKey is a comprehensive lifecycle test for ciphertrust_oci_byok_key and
-// related version resources:
+// ciphertrust_oci_byok_key_version that covers:
 //
-//   - Steps 1-2: ModifyPlan create-time rejections: enable_key=false and enable_auto_rotation
-//     are both rejected with a plan-time error when set at resource creation.
-//   - Steps 3-7: full-feature create (with defined/freeform tags) + refresh + import + update
-//     (rotation, name change, sfd=10) using the first key; key is then destroyed.
-//   - Steps 8-13: minimal create + refresh + import + update cycle on a second key.
-//   - Steps 14-15: ModifyPlan immutability rejections: source_key_id and cckm_key_id are
-//     rejected at plan time when changed on an existing resource.
-//   - Steps 16-22: OOB version/key deletion scenarios (RefreshState retains with warning;
-//     Update on a SCHEDULING_DELETION key triggers "Provider produced inconsistent result").
+//   - Create with tags, schedule_for_deletion_days, and data source checks.
+//   - ModifyPlan immutability rejections: source_key_id and cckm_key_id both produce a
+//     plan-time error when changed after creation.
+//   - Refresh and import (key and version).
+//   - Update lifecycle: disable/re-enable, freeform and defined tags, rename, scheduler
+//     add/change/remove.
+//   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
+//     (schedule_for_deletion_days) retains with warning.
+//   - OOB key deletion: RefreshState retains key as SCHEDULING_DELETION (drift reported);
+//     Update triggers "Provider produced inconsistent result".
 func TestCckmOCIByokKey(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
 
 	localsConfig := `locals {
 		cm_key_name         = "tf-%s"
-		oci_key_name        = "tf-%s"
 		cm_key_version_name = "tf-%s"
 		rotation_job_name   = "tf-%s"
 		rotation_job_name_2 = "tf-%s"
-		oci_key_name_update = "tf-%s"
 	}`
 
 	localsResource := fmt.Sprintf(localsConfig,
-		uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8],
-		uuid.New().String()[:8], uuid.New().String()[:8], uuid.New().String()[:8])
+		uuid.New().String()[:8], uuid.New().String()[:8],
+		uuid.New().String()[:8], uuid.New().String()[:8])
 
-	maxConfig := `
-		%s
-		%s
+	keyName := "tf-" + uuid.New().String()[:8]
+	keyNameUpdate := "tf-" + uuid.New().String()[:8]
 
+	schedulersConfig := `
+		resource "ciphertrust_scheduler" "scheduler_1" {
+			end_date = "2050-03-07T14:24:00Z"
+			cckm_key_rotation_params = {
+				cloud_name       = "oci"
+			}
+			name       = local.rotation_job_name
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
+
+		resource "ciphertrust_scheduler" "scheduler_2" {
+			end_date = "2050-03-07T14:24:00Z"
+			cckm_key_rotation_params = {
+			cloud_name       = "oci"
+			}
+			name       = local.rotation_job_name_2
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}`
+
+	enableRotationConfig := `
+			enable_auto_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler_1.id
+				key_source    = "ciphertrust"
+			}`
+
+	updateEnableRotationConfig := `
+			enable_auto_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler_2.id
+				key_source    = "ciphertrust"
+			}`
+
+	tagsConfig := `
+		defined_tags = [
+			{
+				tag = "CCKM_OCI_1"
+				values = {
+					"TagKey1" = "TagValue1"
+					"TagKey2" = "TagValue2"
+				}
+			},
+			{
+			tag = "CCKM_OCI"
+				values = {
+					"CCKM_OCI_Tag_1" = "cckmocitag1"
+					"CCKM_OCI_Tag_2" = "cckmocitag2"
+					"CCKM_OCI_Tag_3" = "cckmocitag3"
+				}
+			}
+		]
+		freeform_tags = {
+			bonjour = "french"
+			hello = "english"
+		}`
+
+	updateTagsConfig := `
+		defined_tags = [
+			{
+				tag = "CCKM_OCI_1"
+				values = {
+					"TagKey3" = "TagValue3"
+				}
+			},
+			{
+				tag = "CCKM_OCI"
+				values = {
+					"CCKM_OCI_Tag_3" = "cckmocitag3"
+					"CCKM_OCI_Tag_4" = "cckmocitag4"
+				}
+			}
+		]
+		freeform_tags = {
+			bonjour = "french"
+		}`
+
+	removeTagsConfig := `
+		defined_tags = []
+		freeform_tags = {}
+	`
+
+	createConfig := `
+		# Place holder for schedulers
+		%s
 		# Create an AES CipherTrust key
 		resource "ciphertrust_cm_key" "cm_aes_key" {
 			name         = local.cm_key_name
@@ -90,35 +175,20 @@ func TestCckmOCIByokKey(t *testing.T) {
 
 		# Create a byok OCI key
 		resource "ciphertrust_oci_byok_key" "aes" {
-			name            = local.oci_key_name
+			name                       = "%s"
+			schedule_for_deletion_days = %d
+            enable_key                 = %t
 			oci_key_params = {
 				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
 				protection_mode = "SOFTWARE"
-				defined_tags = [
-					{
-						tag = "CCKM_OCI_1"
-						values = {
-							"TagKey1" = "TagValue1"
-							"TagKey2" = "TagValue2"
-						}
-					},
-					{
-					tag = "CCKM_OCI"
-						values = {
-							"CCKM_OCI_Tag_1" = "cckmocitag1"
-							"CCKM_OCI_Tag_2" = "cckmocitag2"
-							"CCKM_OCI_Tag_3" = "cckmocitag3"
-						}
-					}
-				]
-				freeform_tags = {
-					bonjour = "french"
-					hello = "english"
-				}
+				# Place holder for tags
+				%s
 			}
 			source_key_id   = %s
 			source_key_tier = "local"
 			vault           = ciphertrust_oci_vault.vault.id
+			# Place holder for enable_rotation
+			%s
 		}
 
 		# Create an AES CipherTrust key for the key version
@@ -132,6 +202,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 		resource "ciphertrust_oci_byok_key_version" "byok_v1" {
 			cckm_key_id = %s
 			source_key_id = ciphertrust_cm_key.cm_key_version.id
+			schedule_for_deletion_days = %d
 		}
 
 		# Add another byok version
@@ -161,330 +232,49 @@ func TestCckmOCIByokKey(t *testing.T) {
 			depends_on = [ciphertrust_oci_key_version.native_v1]
 		}`
 
-	updateConfig := `
-		%s
-		%s
+	// Creates keys and versons - scheduled_for_deletion in 10 days
+	createResourceStr := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, "\n", keyName, 10, true, tagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", "\n", "ciphertrust_oci_byok_key.aes.id", 10)
 
-		# Create a rotation scheduler
-		resource "ciphertrust_scheduler" "scheduler_1" {
-			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params = {
-				cloud_name       = "oci"
-			}
-			name       = local.rotation_job_name
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
+	// modifyKeyConfigStr: source_key_id changed to a fake value - triggers plan-time immutability error.
+	modifyKeyConfigStr := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, "\n", keyName, 10, true, tagsConfig,
+			`"tf-fake-source-key-id"`, "\n", "ciphertrust_oci_byok_key.aes.id", 10)
 
-		resource "ciphertrust_scheduler" "scheduler_2" {
-			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params = {
-			cloud_name       = "oci"
-			}
-			name       = local.rotation_job_name_2
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
+	// modifyVersionConfigStr: cckm_key_id on byok_v1 changed to a fake value - triggers plan-time error.
+	modifyVersionConfigStr := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, "\n", keyName, 10, true, tagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", "\n", `"tf-fake-key-id"`, 10)
 
-		# Create an AES CipherTrust key
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name         = local.cm_key_name
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-		}
+	// Update key - add tags and scheduler and change deletion days to 7
+	updateResourceStr := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, schedulersConfig, keyName, 7, false, tagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", enableRotationConfig, "ciphertrust_oci_byok_key.aes.id", 7)
+	updateResourceStr = applyCDSPAAS(updateResourceStr)
 
-		# Create a byok OCI key
-		resource "ciphertrust_oci_byok_key" "aes" {
-			enable_key = true
-			enable_auto_rotation = {
-				job_config_id = ciphertrust_scheduler.scheduler_2.id
-				key_source    = "ciphertrust"
-			}
-			name                       = local.oci_key_name_update
-			schedule_for_deletion_days = 10
-			oci_key_params = {
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				protection_mode = "SOFTWARE"
-				defined_tags = [
-					{
-						tag = "CCKM_OCI_1"
-						values = {
-							"TagKey3" = "TagValue3"
-						}
-					},
-					{
-						tag = "CCKM_OCI"
-						values = {
-							"CCKM_OCI_Tag_3" = "cckmocitag3"
-							"CCKM_OCI_Tag_4" = "cckmocitag4"
-						}
-					}
-				]
-				freeform_tags = {
-					bonjour = "french"
-					ciao = "italian"
-				}
-			}
-			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier = "local"
-			vault           = ciphertrust_oci_vault.vault.id
-		}
+	// Update tags and name and change scheduler
+	updateResourceStr2 := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, schedulersConfig, keyNameUpdate, 7, true, updateTagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", updateEnableRotationConfig, "ciphertrust_oci_byok_key.aes.id", 7)
+	updateResourceStr2 = applyCDSPAAS(updateResourceStr2)
 
-		# Create an AES CipherTrust key for the key version
-		resource "ciphertrust_cm_key" "cm_key_version" {
-			name      = local.cm_key_version_name
-			algorithm = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
+	// Remove tags and scheduler
+	updateResourceStr3 := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, "\n", keyNameUpdate, 7, true, removeTagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", "\n", "ciphertrust_oci_byok_key.aes.id", 7)
 
-		# Add a byok version to the key
-		resource "ciphertrust_oci_byok_key_version" "byok_v1" {
-			cckm_key_id                = ciphertrust_oci_byok_key.aes.id
-			source_key_id              = ciphertrust_cm_key.cm_key_version.id
-			schedule_for_deletion_days = 10
-		}
-
-		# Add another byok version
-		resource "ciphertrust_oci_byok_key_version" "byok_v2" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-			source_key_id = ciphertrust_cm_key.cm_key_version.id
-		}
-
-		# Add a native version to the key
-		resource "ciphertrust_oci_key_version" "native_v1" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-		}`
-
-	minConfig := `
-		%s
-		%s
-
-		# Create an AES CipherTrust key
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name         = local.cm_key_name
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-		}
-
-		# Create a byok OCI key
-		resource "ciphertrust_oci_byok_key" "aes" {
-			name                       = local.oci_key_name
-			schedule_for_deletion_days = 8
-			oci_key_params = {
-				protection_mode = "SOFTWARE"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-			}
-			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier = "local"
-			vault           = ciphertrust_oci_vault.vault.id
-		}
-
-		# Create an AES CipherTrust key for the key version
-		resource "ciphertrust_cm_key" "cm_key_version" {
-			name      = local.cm_key_version_name
-			algorithm = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-
-		# Add a byok version to the key
-		resource "ciphertrust_oci_byok_key_version" "byok_v1" {
-			cckm_key_id                = ciphertrust_oci_byok_key.aes.id
-			source_key_id              = ciphertrust_cm_key.cm_key_version.id
-			schedule_for_deletion_days = 8
-		}
-
-		# Add another byok version
-		resource "ciphertrust_oci_byok_key_version" "byok_v2" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-			source_key_id = ciphertrust_cm_key.cm_key_version.id
-		}
-
-		# Add a native version to the key
-		resource "ciphertrust_oci_key_version" "native_v1" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-		}`
-
-	// minConfigV1Sfd10: same as minConfig with byok_v1.schedule_for_deletion_days = 10.
-	// Used in the OOB version deletion update step.
-	minConfigV1Sfd10 := `
-		%s
-		%s
-
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name         = local.cm_key_name
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key" "aes" {
-			name                       = local.oci_key_name
-			schedule_for_deletion_days = 7
-			oci_key_params = {
-				protection_mode = "SOFTWARE"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-			}
-			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier = "local"
-			vault           = ciphertrust_oci_vault.vault.id
-		}
-
-		resource "ciphertrust_cm_key" "cm_key_version" {
-			name      = local.cm_key_version_name
-			algorithm = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key_version" "byok_v1" {
-			cckm_key_id                = ciphertrust_oci_byok_key.aes.id
-			source_key_id              = ciphertrust_cm_key.cm_key_version.id
-			schedule_for_deletion_days = 10
-		}
-
-		resource "ciphertrust_oci_byok_key_version" "byok_v2" {
-			cckm_key_id   = ciphertrust_oci_byok_key.aes.id
-			source_key_id = ciphertrust_cm_key.cm_key_version.id
-		}
-
-		resource "ciphertrust_oci_key_version" "native_v1" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-		}`
-
-	// minConfigKeyNameUpdate: same as minConfig with key name changed to
-	// local.oci_key_name_update to trigger Update on the key (used in OOB key deletion test).
-	minConfigKeyNameUpdate := `
-		%s
-		%s
-
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name         = local.cm_key_name
-			algorithm    = "AES"
-			usage_mask   = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key" "aes" {
-			name                       = local.oci_key_name_update
-			schedule_for_deletion_days = 7
-			oci_key_params = {
-				protection_mode = "SOFTWARE"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-			}
-			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
-			source_key_tier = "local"
-			vault           = ciphertrust_oci_vault.vault.id
-		}
-
-		resource "ciphertrust_cm_key" "cm_key_version" {
-			name      = local.cm_key_version_name
-			algorithm = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key_version" "byok_v1" {
-			cckm_key_id                = ciphertrust_oci_byok_key.aes.id
-			source_key_id              = ciphertrust_cm_key.cm_key_version.id
-			schedule_for_deletion_days = 10
-		}
-
-		resource "ciphertrust_oci_byok_key_version" "byok_v2" {
-			cckm_key_id   = ciphertrust_oci_byok_key.aes.id
-			source_key_id = ciphertrust_cm_key.cm_key_version.id
-		}
-
-		resource "ciphertrust_oci_key_version" "native_v1" {
-			cckm_key_id = ciphertrust_oci_byok_key.aes.id
-		}`
-
-	// disableAtCreateConfig: enable_key = false at create - rejected by ModifyPlan.
-	disableAtCreateConfig := `
-		%s
-		%s
-
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name       = local.cm_key_name
-			algorithm  = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key" "aes" {
-			enable_key    = false
-			name          = local.oci_key_name
-			oci_key_params = {
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				protection_mode = "SOFTWARE"
-			}
-			source_key_id = ciphertrust_cm_key.cm_aes_key.id
-			vault         = ciphertrust_oci_vault.vault.id
-		}`
-
-	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
-	schedulerAtCreateConfig := `
-		%s
-		%s
-
-		resource "ciphertrust_scheduler" "scheduler_at_create" {
-			end_date = "2050-03-07T14:24:00Z"
-			cckm_key_rotation_params = {
-				cloud_name = "oci"
-			}
-			name       = local.rotation_job_name
-			operation  = "cckm_key_rotation"
-			run_at     = "0 9 * * sat"
-			run_on     = "any"
-			start_date = "2026-03-07T14:24:00Z"
-		}
-
-		resource "ciphertrust_cm_key" "cm_aes_key" {
-			name       = local.cm_key_name
-			algorithm  = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-
-		resource "ciphertrust_oci_byok_key" "aes" {
-			enable_auto_rotation = {
-				job_config_id = ciphertrust_scheduler.scheduler_at_create.id
-				key_source    = "ciphertrust"
-			}
-			name          = local.oci_key_name
-			oci_key_params = {
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				protection_mode = "SOFTWARE"
-			}
-			source_key_id = ciphertrust_cm_key.cm_aes_key.id
-			vault         = ciphertrust_oci_vault.vault.id
-		}`
+	// Update name
+	updateResourceStr4 := localsResource + connectionResource +
+		fmt.Sprintf(createConfig, "\n", keyName, 7, true, removeTagsConfig,
+			"ciphertrust_cm_key.cm_aes_key.id", "\n", "ciphertrust_oci_byok_key.aes.id", 7)
 
 	keyResource := "ciphertrust_oci_byok_key.aes"
 	versionResource := "ciphertrust_oci_byok_key_version.byok_v1"
 	keysDataSource := "data.ciphertrust_oci_key_list.keys"
 	versionDataSource := "data.ciphertrust_oci_key_version_list.versions"
-
-	maxConfig = applyCDSPAAS(maxConfig)
-	updateConfig = applyCDSPAAS(updateConfig)
-	createResourceStr := fmt.Sprintf(maxConfig, localsResource, connectionResource,
-		"ciphertrust_cm_key.cm_aes_key.id", "ciphertrust_oci_byok_key.aes.id")
-	updateResourceStr := fmt.Sprintf(updateConfig, localsResource, connectionResource)
-	minResourceStr := fmt.Sprintf(minConfig, localsResource, connectionResource)
-	// resetResourceStr: sets schedule_for_deletion_days = 7 (default) on key and byok_v1.
-	resetResourceStr := strings.NewReplacer("schedule_for_deletion_days = 8", "schedule_for_deletion_days = 7").Replace(minResourceStr)
-	// modifyKeyConfigStr: source_key_id changed to a fake value - triggers plan-time immutability error.
-	modifyKeyConfigStr := fmt.Sprintf(maxConfig, localsResource, connectionResource,
-		`"tf-fake-source-key-id"`, "ciphertrust_oci_byok_key.aes.id")
-	// modifyVersionConfigStr: cckm_key_id on byok_v1 changed to a fake value - triggers plan-time error.
-	modifyVersionConfigStr := fmt.Sprintf(maxConfig, localsResource, connectionResource,
-		"ciphertrust_cm_key.cm_aes_key.id", `"tf-fake-key-id"`)
-	// versionOobUpdateResourceStr: resetResourceStr equivalent with byok_v1.sfd = 10.
-	versionOobUpdateResourceStr := fmt.Sprintf(minConfigV1Sfd10, localsResource, connectionResource)
-	// keyOobUpdateResourceStr: renames the key to oci_key_name_update to trigger Update on
-	// a SCHEDULING_DELETION key (final OOB step expects "Provider produced inconsistent result").
-	keyOobUpdateResourceStr := fmt.Sprintf(minConfigKeyNameUpdate, localsResource, connectionResource)
-	// disableAtCreateStr: enable_key = false at create - plan-time rejection test.
-	disableAtCreateStr := fmt.Sprintf(disableAtCreateConfig, localsResource, connectionResource)
-	// schedulerAtCreateStr: enable_auto_rotation at create - plan-time rejection test.
-	schedulerAtCreateStr := fmt.Sprintf(schedulerAtCreateConfig, localsResource, connectionResource)
+	schedulerResource1 := "ciphertrust_scheduler.scheduler_1"
+	schedulerResource2 := "ciphertrust_scheduler.scheduler_2"
 
 	var capturedByokKeyID, capturedByokV1ID string
 
@@ -493,39 +283,34 @@ func TestCckmOCIByokKey(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// Step 1: enable_key = false at create must be rejected at plan time.
-				Config:      disableAtCreateStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
-			},
-			{
-				// Step 2: enable_auto_rotation at create must be rejected at plan time.
-				Config:      schedulerAtCreateStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
-			},
-			{
-				// Step 3: create a valid key + versions; verify attributes and data sources.
+				// Step 1: create a valid key + versions; verify attributes and data sources.
 				Config: createResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "name", keyName),
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttrPair(keyResource, "source_key_id", "ciphertrust_cm_key.cm_aes_key", "id"),
 					resource.TestCheckResourceAttr(keyResource, "source_key_tier", "local"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
 					resource.TestCheckResourceAttrPair(keyResource, "vault", "ciphertrust_oci_vault.vault", "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "oci_key_params.key_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "vault_id"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "10"),
 					// version_summary reflects versions present at key-read time (not later-added versions in same apply)
 					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.bonjour", "french"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.hello", "english"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.defined_tags.#", "2"),
 					// Version resource (byok_v1)
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
 					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.vault_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.key_id"),
 					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "10"),
 					// Key list data source
 					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
 					resource.TestCheckResourceAttr(keysDataSource, "matched", "1"),
@@ -538,149 +323,108 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Step 4: refresh state after create.
-				RefreshState: true,
-			},
-			{
-				// Step 5: import the key resource.
-				ResourceName:            keyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
-			},
-			{
-				// Step 6: import the key version resource.
-				ResourceName:      versionResource,
-				ImportState:       true,
-				ImportStateVerify: true,
-				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
-			},
-			{
-				// Step 7: update - schedule_for_deletion_days = 10 for both key and version.
-				Config: updateResourceStr,
-				Check: resource.ComposeTestCheckFunc(
-					// Key resource -- scheduler switched to scheduler_2, name changed to oci_key_name_update
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "10"),
-					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
-					// Version resource
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
-					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "10"),
-				),
-			},
-			{
-				// Step 8: destroy the first key so the min-config cycle creates a fresh key.
-				Config: connectionResource,
-				Check:  resource.ComposeTestCheckFunc(),
-			},
-			{
-				// Step 9: min create - schedule_for_deletion_days = 8 for both key and version.
-				Config: minResourceStr,
-				Check: resource.ComposeTestCheckFunc(
-					// Key resource -- no rotation, no tags, default enable_key (true)
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
-					resource.TestCheckResourceAttr(keyResource, "source_key_tier", "local"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "8"),
-					// Version resource
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
-					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.vault_id"),
-					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.key_id"),
-					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "8"),
-				),
-			},
-			{
-				// Step 10: refresh state after min create.
-				RefreshState: true,
-			},
-			{
-				// Step 11: import the key resource.
-				ResourceName:            keyResource,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
-			},
-			{
-				// Step 12: import the key version resource.
-				ResourceName:      versionResource,
-				ImportState:       true,
-				ImportStateVerify: true,
-				ImportStateVerifyIgnore: []string{
-					"schedule_for_deletion_days",
-				},
-				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
-			},
-			{
-				// Step 13: update (second) - no schedule_for_deletion_days; retained as 8 from prior state.
-				Config: updateResourceStr,
-				Check: resource.ComposeTestCheckFunc(
-					// Key resource -- schedule_for_deletion_days not in config; retained from prior state.
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "2"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "10"),
-					// Version resource -- schedule_for_deletion_days = 10 (set explicitly in updateConfig).
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "10"),
-				),
-			},
-			{
-				// Step 14: create (second) - no schedule_for_deletion_days; retained as 10 (not reset to default 7).
-				Config: createResourceStr,
-				Check: resource.ComposeTestCheckFunc(
-					// Key resource -- schedule_for_deletion_days not in config; retained from prior state.
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "10"),
-					// Version resource -- schedule_for_deletion_days not in config; retained from prior state.
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "10"),
-					// Key list data source
-					resource.TestCheckResourceAttr(keysDataSource, "keys.#", "1"),
-					// Key version list data source
-					resource.TestCheckResourceAttr(versionDataSource, "versions.#", "4"),
-				),
-			},
-			{
-				// Step 15: reset - set schedule_for_deletion_days = 7 (default) on key and byok_v1.
-				Config: resetResourceStr,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet(keyResource, "id"),
-					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
-					resource.TestCheckResourceAttrSet(versionResource, "id"),
-					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
-				),
-			},
-			{
-				// Step 16: ModifyPlan - source_key_id changed, expect plan-time immutability error.
+				// Step 2: ModifyPlan - source_key_id changed, expect plan-time immutability error.
 				Config:      modifyKeyConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
 			},
 			{
-				// Step 17: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
+				// Step 3: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
 				Config:      modifyVersionConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
 			},
 			{
-				// Step 18: re-apply resetResourceStr to restore the correct config context
-				// after the PlanOnly error steps (16, 17) used different configs.
-				// Re-capture IDs here so step 19 OOB calls use the current resource IDs.
-				Config: resetResourceStr,
+				// Step 4: re-apply createResourceStr to reset the framework's current config after
+				// the PlanOnly steps. This prevents the stale modifyVersionConfigStr from being
+				// used as the consistency plan config in the RefreshState step that follows.
+				Config: createResourceStr,
+			},
+			{
+				// Step 5: refresh state after create.
+				RefreshState: true,
+			},
+			{
+				// Step 6: import the key resource.
+				ResourceName:            keyResource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
+			},
+			{
+				// Step 7: import the key version resource.
+				ResourceName:      versionResource,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"schedule_for_deletion_days",
+					// source_key_id is reconstructed from the version list on read; may not
+					// round-trip exactly after import if the version order differs.
+					"source_key_id",
+				},
+				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
+			},
+			{
+				// Step 8: disable key + enable scheduler_1 rotation + update tags.
+				// schedule_for_deletion_days reduced to 7 for both key and version.
+				Config: updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "name", keyName),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "DISABLED"),
+					resource.TestCheckResourceAttr(keyResource, "labels.%", "2"),
+					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource1, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.%", "2"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.bonjour", "french"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.hello", "english"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.defined_tags.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
+					// Version resource
 					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					resource.TestCheckResourceAttrPair(versionResource, "cckm_key_id", keyResource, "id"),
+					resource.TestCheckResourceAttrSet(versionResource, "oci_key_version_params.version_id"),
 					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
+				),
+			},
+			{
+				// Step 9: re-enable key + switch rotation to scheduler_2 + update tags + rename.
+				Config: updateResourceStr2,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttr(keyResource, "labels.%", "2"),
+					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource2, "id"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.%", "1"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.bonjour", "french"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.defined_tags.#", "2"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
+				),
+			},
+			{
+				// Step 10: remove schedulers, key rotation, and tags.
+				// Capture key and byok_v1 IDs for the OOB deletion steps that follow.
+				Config: updateResourceStr3,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
+					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
+					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttr(keyResource, "labels.%", "0"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.%", "0"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.defined_tags.#", "0"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "SOFTWARE"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[keyResource]
 						if !ok {
@@ -700,7 +444,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Step 19: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
+				// Step 11: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
 				// then refresh state. Expected: byok_v1 retained with SCHEDULING_DELETION.
 				PreConfig: func() {
 					scheduleOciKeyVersionDeletionOutOfBand(capturedByokKeyID, capturedByokV1ID)
@@ -722,9 +466,9 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Step 20: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
+				// Step 12: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
 				// byok_v1 is already SCHEDULING_DELETION. Expected: warning issued, byok_v1 retained.
-				Config: versionOobUpdateResourceStr,
+				Config: updateResourceStr4,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[versionResource]
@@ -740,7 +484,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Step 21: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
+				// Step 13: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
 				// OCI auto-disables the key, causing drift on enable_key - ExpectNonEmptyPlan captures this.
 				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
 				PreConfig: func() {
@@ -763,11 +507,11 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Step 22: OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
+				// Step 14: OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
 				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
 				// but the plan used the schema default (true). The Terraform framework raises
 				// "Provider produced inconsistent result".
-				Config:      keyOobUpdateResourceStr,
+				Config:      updateResourceStr2,
 				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
 			},
 		},
@@ -916,6 +660,102 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 						return nil
 					},
 				),
+			},
+		},
+	})
+}
+
+func TestCckmOCIByokInvalidCreateConfigs(t *testing.T) {
+
+	connectionResource := initCckmOCITest(t)
+
+	localsConfig := `locals {
+		cm_key_name      = "tf-%s"
+		oci_key_name     = "tf-%s"
+		rotation_job_name = "tf-%s"
+		source_key_tier  = "local"
+	}`
+
+	localsResource := fmt.Sprintf(localsConfig,
+		uuid.New().String()[:8], uuid.New().String()[:8],
+		uuid.New().String()[:8])
+
+	// disableAtCreateConfig: enable_key = false at create - rejected by ModifyPlan.
+	disableAtCreateConfig := `
+		resource "ciphertrust_cm_key" "cm_aes_key" {
+			name       = local.cm_key_name
+			algorithm  = "AES"
+			usage_mask = local.cm_key_usage_mask
+		}
+
+		resource "ciphertrust_oci_byok_key" "aes" {
+			enable_key    = false
+			name         = local.oci_key_name
+			oci_key_params = {
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				protection_mode = "SOFTWARE"
+			}
+			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier = local.source_key_tier
+			vault           = ciphertrust_oci_vault.vault.id
+		}`
+
+	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
+	schedulerAtCreateConfig := `
+		resource "ciphertrust_scheduler" "scheduler_at_create" {
+			end_date = "2050-03-07T14:24:00Z"
+			cckm_key_rotation_params = {
+				cloud_name = "oci"
+			}
+			name       = local.rotation_job_name
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}
+
+		resource "ciphertrust_cm_key" "cm_aes_key" {
+			name       = local.cm_key_name
+			algorithm  = "AES"
+			usage_mask = local.cm_key_usage_mask
+		}
+
+		resource "ciphertrust_oci_byok_key" "aes" {
+			enable_auto_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler_at_create.id
+				key_source    = "ciphertrust"
+			}
+			name          = local.oci_key_name
+			oci_key_params = {
+				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
+				protection_mode = "SOFTWARE"
+			}
+			source_key_id   = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier = local.source_key_tier
+			vault           = ciphertrust_oci_vault.vault.id
+		}`
+
+	// disableAtCreateStr: enable_key = false at create - plan-time rejection test.
+	disableAtCreateStr := localsResource + connectionResource + disableAtCreateConfig
+
+	// schedulerAtCreateStr: enable_auto_rotation at create - plan-time rejection test.
+	schedulerAtCreateStr := applyCDSPAAS(localsResource + connectionResource + schedulerAtCreateConfig)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmOCIVaults() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: enable_key = false at create must be rejected at plan time.
+				Config:      disableAtCreateStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
+			},
+			{
+				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				Config:      schedulerAtCreateStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 		},
 	})
