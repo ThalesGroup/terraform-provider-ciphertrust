@@ -581,6 +581,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
+					resource.TestCheckResourceAttr(keyResource, "oci_key_params.freeform_tags.%", "0"),
 					resource.TestCheckResourceAttrSet(v1Resource, "id"),
 				),
 			},

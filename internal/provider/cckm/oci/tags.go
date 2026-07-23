@@ -40,6 +40,10 @@ func getFreeformTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *
 }
 
 func setFreeformTagsState(ctx context.Context, tags map[string]string, state *types.Map, diags *diag.Diagnostics) {
+	if len(tags) == 0 {
+		*state = types.MapNull(types.StringType)
+		return
+	}
 	tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, tags)
 	if dg.HasError() {
 		diags.Append(dg...)
@@ -89,6 +93,10 @@ func getDefinedTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *d
 }
 
 func setDefinedTagsState(ctx context.Context, tags map[string]map[string]string, state *types.Set, diags *diag.Diagnostics) {
+	if len(tags) == 0 {
+		*state = types.SetNull(types.ObjectType{AttrTypes: models.DefinedTagAttribs})
+		return
+	}
 	var definedTagsTFSDK []models.DefinedTagTFSDK
 	for namespace, valueMap := range tags {
 		tfMapValue, dg := types.MapValueFrom(ctx, types.StringType, valueMap)

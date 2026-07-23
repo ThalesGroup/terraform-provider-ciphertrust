@@ -148,7 +148,6 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					},
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
-						Computed:    true,
 						Description: "(Updatable) Defined tags for the key.",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
@@ -170,7 +169,6 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					},
 					"freeform_tags": schema.MapAttribute{
 						Optional:    true,
-						Computed:    true,
 						ElementType: types.StringType,
 						Description: "(Updatable) Freeform tags for the key. Freeform tags are key:value pairs.",
 					},

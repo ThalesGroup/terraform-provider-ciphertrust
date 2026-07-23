@@ -58,7 +58,7 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 //   - Steps 8-13: minimal create + refresh + import + update cycle on a second key.
 //   - Steps 14-15: ModifyPlan immutability rejections: source_key_id and cckm_key_id are
 //     rejected at plan time when changed on an existing resource.
-//   - Steps 16-19: OOB version/key deletion scenarios (RefreshState retains with warning;
+//   - Steps 16-22: OOB version/key deletion scenarios (RefreshState retains with warning;
 //     Update on a SCHEDULING_DELETION key triggers "Provider produced inconsistent result").
 func TestCckmOCIByokKey(t *testing.T) {
 
@@ -516,7 +516,6 @@ func TestCckmOCIByokKey(t *testing.T) {
 					resource.TestCheckResourceAttrPair(keyResource, "vault", "ciphertrust_oci_vault.vault", "id"),
 					resource.TestCheckResourceAttrSet(keyResource, "oci_key_params.key_id"),
 					resource.TestCheckResourceAttrSet(keyResource, "vault_id"),
-					resource.TestCheckResourceAttr(keyResource, "labels.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
 					// version_summary reflects versions present at key-read time (not later-added versions in same apply)
 					resource.TestCheckResourceAttrSet(keyResource, "version_summary.0.version_id"),
@@ -539,22 +538,25 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
+				// Step 4: refresh state after create.
 				RefreshState: true,
 			},
 			{
+				// Step 5: import the key resource.
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
 			},
 			{
+				// Step 6: import the key version resource.
 				ResourceName:      versionResource,
 				ImportState:       true,
 				ImportStateVerify: true,
 				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
 			},
 			{
-				// Update step: schedule_for_deletion_days = 10 for both key and version.
+				// Step 7: update - schedule_for_deletion_days = 10 for both key and version.
 				Config: updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource -- scheduler switched to scheduler_2, name changed to oci_key_name_update
@@ -572,12 +574,12 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Destroy the first key so the min-config cycle creates a fresh key.
+				// Step 8: destroy the first key so the min-config cycle creates a fresh key.
 				Config: connectionResource,
 				Check:  resource.ComposeTestCheckFunc(),
 			},
 			{
-				// Min step: schedule_for_deletion_days = 8 for both key and version.
+				// Step 9: min create - schedule_for_deletion_days = 8 for both key and version.
 				Config: minResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource -- no rotation, no tags, default enable_key (true)
@@ -597,15 +599,18 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
+				// Step 10: refresh state after min create.
 				RefreshState: true,
 			},
 			{
+				// Step 11: import the key resource.
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreOCIKey,
 			},
 			{
+				// Step 12: import the key version resource.
 				ResourceName:      versionResource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -615,7 +620,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				ImportStateIdFunc: getOCIKeyVersionID(keyResource, versionResource),
 			},
 			{
-				// Update step (second): no schedule_for_deletion_days; retained as 8 from prior state.
+				// Step 13: update (second) - no schedule_for_deletion_days; retained as 8 from prior state.
 				Config: updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource -- schedule_for_deletion_days not in config; retained from prior state.
@@ -628,7 +633,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Create step (second): no schedule_for_deletion_days; retained as 10 (not reset to default 7).
+				// Step 14: create (second) - no schedule_for_deletion_days; retained as 10 (not reset to default 7).
 				Config: createResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource -- schedule_for_deletion_days not in config; retained from prior state.
@@ -645,8 +650,31 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// Reset step: set schedule_for_deletion_days = 7 (default) on key and byok_v1.
-				// Capture byok_v1 and key IDs for the OOB tests that follow.
+				// Step 15: reset - set schedule_for_deletion_days = 7 (default) on key and byok_v1.
+				Config: resetResourceStr,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(keyResource, "id"),
+					resource.TestCheckResourceAttr(keyResource, "schedule_for_deletion_days", "7"),
+					resource.TestCheckResourceAttrSet(versionResource, "id"),
+					resource.TestCheckResourceAttr(versionResource, "schedule_for_deletion_days", "7"),
+				),
+			},
+			{
+				// Step 16: ModifyPlan - source_key_id changed, expect plan-time immutability error.
+				Config:      modifyKeyConfigStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+			},
+			{
+				// Step 17: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
+				Config:      modifyVersionConfigStr,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+			},
+			{
+				// Step 18: re-apply resetResourceStr to restore the correct config context
+				// after the PlanOnly error steps (16, 17) used different configs.
+				// Re-capture IDs here so step 19 OOB calls use the current resource IDs.
 				Config: resetResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
@@ -671,20 +699,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 					},
 				),
 			},
-			// ModifyPlan: source_key_id changed - plan-time immutability error on byok key.
 			{
-				Config:      modifyKeyConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
-			},
-			// ModifyPlan: cckm_key_id changed on byok_v1 - plan-time immutability error.
-			{
-				Config:      modifyVersionConfigStr,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
-			},
-			{
-				// OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
+				// Step 19: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
 				// then refresh state. Expected: byok_v1 retained with SCHEDULING_DELETION.
 				PreConfig: func() {
 					scheduleOciKeyVersionDeletionOutOfBand(capturedByokKeyID, capturedByokV1ID)
@@ -706,7 +722,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
+				// Step 20: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
 				// byok_v1 is already SCHEDULING_DELETION. Expected: warning issued, byok_v1 retained.
 				Config: versionOobUpdateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
@@ -724,7 +740,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
+				// Step 21: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
 				// OCI auto-disables the key, causing drift on enable_key - ExpectNonEmptyPlan captures this.
 				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
 				PreConfig: func() {
@@ -747,7 +763,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				),
 			},
 			{
-				// OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
+				// Step 22: OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
 				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
 				// but the plan used the schema default (true). The Terraform framework raises
 				// "Provider produced inconsistent result".

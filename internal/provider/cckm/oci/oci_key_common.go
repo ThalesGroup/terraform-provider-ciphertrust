@@ -403,36 +403,58 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 		}
 	}
 
-	if plan.KeyParams != nil && !plan.KeyParams.FreeformTags.IsUnknown() {
-		planFreeformTags := getFreeformTagsFromPlan(ctx, &plan.KeyParams.FreeformTags, diags)
-		if diags.HasError() {
-			return
-		}
-
+	if plan.KeyParams != nil {
 		keyFreeformTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "oci_params.freeform_tags"), diags)
 		if diags.HasError() {
 			return
 		}
 
-		if !reflect.DeepEqual(planFreeformTags, keyFreeformTags) {
-			payload.FreeformTags = planFreeformTags
+		freeformTagsForPayload := map[string]string{}
+		sendFreeformTagsInRequest := len(keyFreeformTags) > 0
+
+		if !plan.KeyParams.FreeformTags.IsNull() && !plan.KeyParams.FreeformTags.IsUnknown() {
+			planFreeformTags := getFreeformTagsFromPlan(ctx, &plan.KeyParams.FreeformTags, diags)
+			if diags.HasError() {
+				return
+			}
+			if reflect.DeepEqual(planFreeformTags, keyFreeformTags) {
+				sendFreeformTagsInRequest = false
+			} else {
+				freeformTagsForPayload = planFreeformTags
+				sendFreeformTagsInRequest = true
+			}
+		}
+
+		if sendFreeformTagsInRequest {
+			payload.FreeformTags = freeformTagsForPayload
 			sendRequest = true
 		}
 	}
 
-	if plan.KeyParams != nil && !plan.KeyParams.DefinedTags.IsUnknown() {
-		planDefinedTags := getDefinedTagsFromPlan(ctx, &plan.KeyParams.DefinedTags, diags)
-		if diags.HasError() {
-			return
-		}
-
+	if plan.KeyParams != nil {
 		keyDefinedTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
 		if diags.HasError() {
 			return
 		}
 
-		if !reflect.DeepEqual(planDefinedTags, keyDefinedTags) {
-			payload.DefinedTags = planDefinedTags
+		definedTagsForPayload := map[string]map[string]string{}
+		sendDefinedTagsInRequest := len(keyDefinedTags) > 0
+
+		if !plan.KeyParams.DefinedTags.IsNull() && !plan.KeyParams.DefinedTags.IsUnknown() {
+			planDefinedTags := getDefinedTagsFromPlan(ctx, &plan.KeyParams.DefinedTags, diags)
+			if diags.HasError() {
+				return
+			}
+			if reflect.DeepEqual(planDefinedTags, keyDefinedTags) {
+				sendDefinedTagsInRequest = false
+			} else {
+				definedTagsForPayload = planDefinedTags
+				sendDefinedTagsInRequest = true
+			}
+		}
+
+		if sendDefinedTagsInRequest {
+			payload.DefinedTags = definedTagsForPayload
 			sendRequest = true
 		}
 	}
