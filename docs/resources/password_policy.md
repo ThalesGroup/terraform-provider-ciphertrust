@@ -90,7 +90,7 @@ output "custom_pwd_policy_id" {
 
 ### Optional
 
-- `failed_logins_lockout_thresholds` (List of Number) List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.
+- `failed_logins_lockout_thresholds` (List of Number) List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.
 - `inclusive_max_total_length` (Number) The maximum length of the password. Value 0 is ignored.
 - `inclusive_min_digits` (Number) The minimum number of digits.
 - `inclusive_min_lower_case` (Number) The minimum number of lower cases.

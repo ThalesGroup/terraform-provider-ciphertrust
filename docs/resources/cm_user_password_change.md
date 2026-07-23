@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_user_password_change Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Changes the password of a CipherTrust Manager (or CDSPaaS) local user. This is a write-only, one-shot action modeled as a resource: applying it changes the password immediately, terraform destroy does not revert it, and updates are not supported — to change the password again, delete and recreate this resource with new values. Credential fields are never read back from CipherTrust Manager and are preserved from prior state across terraform plan/refresh.
 ---
 
 # ciphertrust_cm_user_password_change (Resource)
 
-
+Changes the password of a CipherTrust Manager (or CDSPaaS) local user. This is a write-only, one-shot action modeled as a resource: applying it changes the password immediately, `terraform destroy` does not revert it, and updates are not supported — to change the password again, delete and recreate this resource with new values. Credential fields are never read back from CipherTrust Manager and are preserved from prior state across `terraform plan`/`refresh`.
 
 ## Example Usage
 
@@ -63,8 +63,8 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 
 ### Required
 
-- `new_password` (String) (Immutable) New password to set for the user.
-- `password` (String) (Immutable) Current password for the user.
+- `new_password` (String, Sensitive) (Immutable) New password to set for the user.
+- `password` (String, Sensitive) (Immutable) Current password for the user.
 - `username` (String) (Immutable) Username of the CipherTrust Manager user whose password is being changed.
 
 ### Optional

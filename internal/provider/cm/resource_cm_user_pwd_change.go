@@ -39,6 +39,7 @@ func (r *resourceCMPwdChange) Metadata(_ context.Context, req resource.MetadataR
 // Schema defines the schema for the resource.
 func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Changes the password of a CipherTrust Manager (or CDSPaaS) local user. This is a write-only, one-shot action modeled as a resource: applying it changes the password immediately, `terraform destroy` does not revert it, and updates are not supported — to change the password again, delete and recreate this resource with new values. Credential fields are never read back from CipherTrust Manager and are preserved from prior state across `terraform plan`/`refresh`.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,

@@ -3,12 +3,12 @@
 page_title: "ciphertrust_scheduler_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists CipherTrust Manager scheduler job configurations via the /v1/scheduler/job-configs API.
 ---
 
 # ciphertrust_scheduler_list (Data Source)
 
-
+Lists CipherTrust Manager scheduler job configurations via the /v1/scheduler/job-configs API.
 
 
 
@@ -17,48 +17,54 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM scheduler job-configs list API. Supported keys: "name", "id", "operation", "disabled", "cloud_name" (matches cloud_name in cckm_synchronization and cckm_key_rotation jobs), "expire_in" (matches cckm_key_rotation jobs), "createdBefore", and "createdAfter" (RFC3339Nano timestamp or relative timestamp, e.g. "-1Y-2M-5D").
 
 ### Read-Only
 
-- `scheduler` (Attributes List) (see [below for nested schema](#nestedatt--scheduler))
+- `scheduler` (Attributes List) List of scheduler job configurations matching the given filters. (see [below for nested schema](#nestedatt--scheduler))
 
 <a id="nestedatt--scheduler"></a>
 ### Nested Schema for `scheduler`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `cckm_key_rotation_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_key_rotation_params))
-- `cckm_synchronization_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_synchronization_params))
-- `cckm_xks_credential_rotation_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--cckm_xks_credential_rotation_params))
-- `created_at` (String)
-- `database_backup_params` (Attributes) (see [below for nested schema](#nestedatt--scheduler--database_backup_params))
-- `description` (String)
-- `dev_account` (String)
-- `disabled` (Boolean)
-- `end_date` (String)
-- `id` (String)
-- `name` (String)
-- `operation` (String)
-- `run_at` (String)
-- `run_on` (String)
-- `start_date` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) The account which owns this resource.
+- `application` (String) The application this resource belongs to.
+- `cckm_key_rotation_params` (Attributes) Cloud key rotation operation specific arguments. Populated only when operation is "cckm_key_rotation". (see [below for nested schema](#nestedatt--scheduler--cckm_key_rotation_params))
+- `cckm_synchronization_params` (Attributes) Cloud key synchronization operation specific arguments. Populated only when operation is "cckm_synchronization". (see [below for nested schema](#nestedatt--scheduler--cckm_synchronization_params))
+- `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. Populated only when operation is "cckm_xks_credential_rotation". (see [below for nested schema](#nestedatt--scheduler--cckm_xks_credential_rotation_params))
+- `created_at` (String) Date/time the resource was created.
+- `database_backup_params` (Attributes) Database backup operation specific arguments. Populated only when operation is "database_backup". (see [below for nested schema](#nestedatt--scheduler--database_backup_params))
+- `description` (String) Description for the job configuration.
+- `dev_account` (String) The developer account which owns this resource's application.
+- `disabled` (Boolean) By default, the job configuration starts in an active state. True indicates the job configuration is disabled.
+- `end_date` (String) Date/time when the job ends. Format: YYYY-MM-DDTHH:MM:SSZ.
+- `id` (String) The unique identifier of the scheduler job configuration.
+- `name` (String) The name of the job configuration.
+- `operation` (String) The type of operation performed by this job configuration. One of: database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation.
+- `run_at` (String) Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
+
+For example:
+
+    To run every min: "* * * * *"
+    To run on Saturday at 23:45(11:45 PM): "45 23 * * 6"
+    To run on Monday at 09:00: "0 9 * * 1"
+- `run_on` (String) The node(s) the job runs on. Default is 'any'. For database_backup, the default is the current node if in a cluster. This attribute is not supported in CDSPaaS.
+- `start_date` (String) Date/time when the job starts. Format: YYYY-MM-DDTHH:MM:SSZ.
+- `updated_at` (String) Date/time the resource was last updated.
+- `uri` (String) A human readable unique identifier of the resource.
 
 <a id="nestedatt--scheduler--cckm_key_rotation_params"></a>
 ### Nested Schema for `scheduler.cckm_key_rotation_params`
 
 Read-Only:
 
-- `aws_retain_alias` (Boolean)
-- `cloud_name` (String)
-- `expiration` (String)
-- `expire_in` (String)
-- `rotate_material` (Boolean)
-- `rotation_after` (String)
+- `aws_retain_alias` (Boolean) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
+- `cloud_name` (String) Name of the cloud for which the key rotation is scheduled. Options are: aws,oci.
+- `expiration` (String) Expiration time of the new key. If not specified, the new key material never expires. Use either 'Xd' for x days or 'Yh' for y hours.
+- `expire_in` (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. Use either 'Xd' for x days or 'Yh' for y hours.
+- `rotate_material` (Boolean) If true, rotate the key material during the key rotation job. Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.
+- `rotation_after` (String) Number of days after which the keys will be rotated. Specified as Xd for x days. The first key rotation happens after x days of key creation; subsequent rotations happen every x days after the last rotation date.
 
 
 <a id="nestedatt--scheduler--cckm_synchronization_params"></a>
@@ -66,10 +72,10 @@ Read-Only:
 
 Read-Only:
 
-- `cloud_name` (String)
-- `kms` (Set of String)
-- `oci_vaults` (Set of String)
-- `synchronize_all` (Boolean)
+- `cloud_name` (String) The cloud that is synchronized on schedule. Options are: aws,oci.
+- `kms` (Set of String) A list of kms resource ID's for which AWS keys are synchronized. Unless synchronizing all AWS keys, at least one kms is required.
+- `oci_vaults` (Set of String) A list of OCI vaults resource ID's for which OCI keys are synchronized. Unless synchronizing all OCI keys, at least one vault is required.
+- `synchronize_all` (Boolean) True if all keys are synchronized.
 
 
 <a id="nestedatt--scheduler--cckm_xks_credential_rotation_params"></a>
@@ -77,7 +83,7 @@ Read-Only:
 
 Read-Only:
 
-- `cloud_name` (String)
+- `cloud_name` (String) Name of the cloud in which the rotation operation is triggered. The only supported value is 'aws'.
 
 
 <a id="nestedatt--scheduler--database_backup_params"></a>
@@ -85,19 +91,26 @@ Read-Only:
 
 Read-Only:
 
-- `backup_key` (String)
-- `connection` (String)
-- `description` (String)
-- `do_scp` (Boolean)
-- `filters` (Attributes List) (see [below for nested schema](#nestedatt--scheduler--database_backup_params--filters))
-- `retention_count` (Number)
-- `scope` (String)
-- `tied_to_hsm` (Boolean)
+- `backup_key` (String) ID of backup key used for encrypting the backup. The default backup key is used if this is not specified.
+- `connection` (String) Name or ID of the SCP connection which stores the details for SCP server.
+- `description` (String) User defined description associated with the backup. This is stored along with the backup, and is returned while retrieving the backup information, or while listing backups. Users may find it useful to store various types of information here: a backup name or description, ID of the HSM the backup is tied to, etc.
+- `do_scp` (Boolean) If true, the system backup will also be transferred to the external server via SCP.
+- `filters` (Attributes List) A set of selection criteria to specify what resources to include in the backup. Only applicable to domain-scoped backups. By default, no filters are applied and the backup includes all keys. For example, to back up all keys with a name containing 'enc-key', set the filters to [{"resourceType": "Keys", "resourceQuery":{"name":"*enc-key*"}}]. (see [below for nested schema](#nestedatt--scheduler--database_backup_params--filters))
+- `retention_count` (Number) Number of backups saved for this job config. Default is an unlimited quantity.
+- `scope` (String) Scope of the backup to be taken - system (default) or domain.
+- `tied_to_hsm` (Boolean) If true, the system backup can only be restored to instances that use the same HSM partition. Valid only with the system scoped backup.
 
 <a id="nestedatt--scheduler--database_backup_params--filters"></a>
 ### Nested Schema for `scheduler.database_backup_params.filters`
 
 Read-Only:
 
-- `resource_query` (String)
-- `resource_type` (String)
+- `resource_query` (String) A JSON object containing resource attributes and attribute values to be queried. The resources returned in the query are backed up. If empty, all the resources of the specified resourceType will be backed up. For Keys, valid resourceQuery paramater values are the same as the body of the 'vault/query-keys' POST endpoint described on the Keys page. If multiple parameters of 'vault/query-keys' are provided then the result will be AND of all. To back up AES keys with a meta parameter value containing {"info":{"color":"red"}}}, use {"algorithm":"AES", "metaContains": {"info":{"color":"red"}}}. To backup specific keys using names, use {"names":["key1", "key2"]}.
+
+For CTE policies, valid resourceQuery parameter values are the same as query parameters of the list '/v1/transparent-encryption/policies' endpoint described in the CTE > Policies section. For example, to back up LDT policies only, use {"policy_type":"LDT"}. Similarly, to back up policies with learn mode enabled, use {"never_deny": true}. For users, the valid resourceQuery parameter values are the same as query parameters of the list '/v1/usermgmt/users' endpoint as described in the "Users" page. For example, to back up all users with name "frank" and email id "frank@local", use {"name":"frank","email": "frank@local"}.
+
+For Customer fragments, valid resourceQuery parameter values are 'ids' and 'names' of Customer fragments. To backup specific customer fragments using ids, use {"ids":["370c4373-2675-4aa1-8cc7-07a9f95a5861", "4e1b9dec-2e38-40d7-b4d6-244043200546"]}. To backup specific customer fragments using names, use {"names":["customerFragment1", "customerFragment2"]}.
+
+Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
+For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"
+- `resource_type` (String) Type of resources to be backed up. Valid values are "Keys", "cte_policies", "customer_fragments" and, "users_groups".

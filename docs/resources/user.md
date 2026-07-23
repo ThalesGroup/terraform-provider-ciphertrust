@@ -3,12 +3,12 @@
 page_title: "ciphertrust_user Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Manages a local CipherTrust Manager (or CDSPaaS) user account via the /v1/usermgmt/users API.
 ---
 
 # ciphertrust_user (Resource)
 
-
+Manages a local CipherTrust Manager (or CDSPaaS) user account via the /v1/usermgmt/users API.
 
 ## Example Usage
 
@@ -71,20 +71,20 @@ output "username" {
 
 ### Required
 
-- `password` (String, Sensitive)
+- `password` (String, Sensitive) Password for the user account.
 - `username` (String) (Immutable) Username of the user.
 
 ### Optional
 
-- `email` (String)
+- `email` (String) Email address of the user.
 - `is_domain_user` (Boolean) (Immutable) Set to true if user is a domain user. Removing this attribute from config after setting it to true also triggers the immutability error — destroy and recreate to change.
 - `name` (String) Users full name
 - `nickname` (String) (Effectively immutable) Display name / nickname of the user. CM's PATCH /api/v1/usermgmt/users/{id} silently ignores changes to this field (HTTP 200, value unchanged). Set at creation time only; changing this attribute on an existing resource will produce a plan-time error. Destroy and recreate to change nickname.
-- `password_change_required` (Boolean)
-- `prevent_ui_login` (Boolean)
+- `password_change_required` (Boolean) Whether the user must change their password on next login. Defaults to false.
+- `prevent_ui_login` (Boolean) Whether the user is prevented from logging in through the CipherTrust Manager UI. Defaults to false.
 - `user_metadata` (Map of String) Information that can be stored with the user.
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `user_id` (String)
+- `user_id` (String) Unique identifier of the user, as assigned by CipherTrust Manager.

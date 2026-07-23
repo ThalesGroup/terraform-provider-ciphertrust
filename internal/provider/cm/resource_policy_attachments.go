@@ -96,19 +96,22 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				},
 			},
 			"uri": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"account": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The account which owns this resource.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"created_at": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Date/time the resource was created.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},

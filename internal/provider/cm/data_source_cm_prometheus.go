@@ -40,16 +40,20 @@ func (d *dataSourcePrometheus) Metadata(_ context.Context, req datasource.Metada
 
 func (d *dataSourcePrometheus) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Returns the current Prometheus metrics endpoint status on the CipherTrust Manager appliance. This is a singleton status data source — it does not return a list, and has no filters. **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Static identifier for this data source instance (always \"prometheus-status\").",
 			},
 			"token": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
+				Computed:    true,
+				Sensitive:   true,
+				Description: "Bearer token required to authenticate scrape requests to the CipherTrust Manager Prometheus metrics endpoint.",
 			},
 			"enabled": schema.BoolAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Whether the Prometheus metrics endpoint is enabled on the CipherTrust Manager appliance.",
 			},
 		},
 	}

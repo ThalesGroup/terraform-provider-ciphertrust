@@ -62,7 +62,7 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
-				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
+				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 				ElementType: types.Int64Type,
 			},
 			"inclusive_max_total_length": schema.Int64Attribute{

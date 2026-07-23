@@ -57,6 +57,7 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"license": schema.StringAttribute{
 				Required:    true,
+				Sensitive:   true,
 				Description: "(Immutable) License String",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
@@ -76,13 +77,15 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 				},
 			},
 			"hash": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Hash of the license.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"type": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "License type, e.g. \"Normal\" or \"Trial\".",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -90,35 +93,41 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			// state: NO UseStateForUnknown — license state changes over lifecycle
 			// (e.g. "Pending" → "Active" → "Expired").
 			"state": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The current state of the license (e.g. \"active\" or \"inactive\" per the CM API). This value can change over the license's lifecycle as it is activated, renewed, or expires.",
 			},
 			"start": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Start date/time of the license.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"expiration": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "End date/time of the license, or \"no expiration\" if it never expires. For trial licenses, use trial_seconds_remaining instead.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"version": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Version of the license feature.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"license_count": schema.Int64Attribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Number of licenses granted.",
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
 			},
 			// trial_seconds_remaining: NO UseStateForUnknown — continuously decrementing countdown.
 			"trial_seconds_remaining": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "For trial licenses only, the number of seconds remaining until the trial period ends.",
 			},
 		},
 	}

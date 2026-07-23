@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_users_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  
+  Lists local CipherTrust Manager (or CDSPaaS) user accounts via the /v1/usermgmt/users API.
 ---
 
 # ciphertrust_cm_users_list (Data Source)
 
-
+Lists local CipherTrust Manager (or CDSPaaS) user accounts via the /v1/usermgmt/users API.
 
 
 
@@ -17,28 +17,28 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM users list API. Supported keys: "name", "username", "email", "groups" (comma-separated group names; use "nil" for users in no group), "exclude_groups" (comma-separated group names to exclude), "auth_domain_name", "account_expired" (boolean), "allowed_auth_methods" (comma-separated; use "empty" for users with no allowed auth method), "allowed_client_types" (comma-separated), "password_policy", "return_groups" (boolean), and "is_admin" (boolean; overrides "groups" when true).
 - `limit` (Number) Limit the number of returned users (default: 1000).
 - `skip` (Number) Number of users to skip (default: 0).
 
 ### Read-Only
 
 - `id` (String) The stable computed ID of this data source.
-- `users` (Attributes List) (see [below for nested schema](#nestedatt--users))
+- `users` (Attributes List) List of users matching the given filters. (see [below for nested schema](#nestedatt--users))
 
 <a id="nestedatt--users"></a>
 ### Nested Schema for `users`
 
 Read-Only:
 
-- `email` (String)
-- `id` (String)
-- `is_domain_user` (Boolean)
-- `name` (String)
-- `nickname` (String)
+- `email` (String) Email address of the user.
+- `id` (String) Unique identifier of the user, same value as `user_id`.
+- `is_domain_user` (Boolean) Set to true if user is a domain user.
+- `name` (String) Users full name
+- `nickname` (String) Display name / nickname of the user.
 - `password` (String, Sensitive) Deprecated. This attribute is always unpopulated (null) to protect sensitive credentials from being stored in state.
-- `password_change_required` (Boolean)
-- `prevent_ui_login` (Boolean)
-- `user_id` (String)
-- `user_metadata` (Map of String)
-- `username` (String)
+- `password_change_required` (Boolean) Whether the user must change their password on next login.
+- `prevent_ui_login` (Boolean) Whether the user is prevented from logging in through the CipherTrust Manager UI.
+- `user_id` (String) Unique identifier of the user, as assigned by CipherTrust Manager.
+- `user_metadata` (Map of String) Information that can be stored with the user.
+- `username` (String) Username of the user.
