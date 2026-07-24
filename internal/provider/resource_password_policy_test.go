@@ -701,3 +701,57 @@ resource "ciphertrust_password_policy" "zero_test" {
 		},
 	})
 }
+
+// Test_CM_PasswordPolicy_LockoutThresholdsLifecycle verifies the lifecycle of failed_logins_lockout_thresholds
+// across omitted, configured, and transitioned configurations as a Computed field.
+func Test_CM_PasswordPolicy_LockoutThresholdsLifecycle(t *testing.T) {
+	RequireCM(t)
+	policyName := "tf-test-pp-lc-" + uuid.New().String()[:8]
+
+	configOmitted := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "lifecycle_test" {
+    policy_name = %q
+}
+`, policyName)
+
+	configConfigured := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "lifecycle_test" {
+    policy_name = %q
+    failed_logins_lockout_thresholds = [0, 10, 60]
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: omitted in HCL. Because it is Optional + Computed, the state is hydrated with the server-default list.
+			{
+				Config: configOmitted,
+				Check: checkStep(t, "omitted",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "5"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.4", "1"),
+				),
+			},
+			// Step 2: transition from omitted to configured.
+			{
+				Config: configConfigured,
+				Check: checkStep(t, "omitted to configured",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "3"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.1", "10"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.2", "60"),
+				),
+			},
+			// Step 3: transition from configured back to omitted. The framework retains the last-applied state value [0, 10, 60] cleanly.
+			{
+				Config: configOmitted,
+				Check: checkStep(t, "configured to omitted",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "3"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.2", "60"),
+				),
+			},
+		},
+	})
+}

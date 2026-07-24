@@ -100,6 +100,7 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 				ElementType: types.Int64Type,
 			},
@@ -692,12 +693,10 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		plan.PasswordExpiryNotificationDays = types.Int64Null()
 	}
 
-	// Only hydrate from the PATCH response when the plan had the field set (non-null).
-	// When the plan is null (user didn't configure this field), CM returns its server
-	// default in the response. Writing that to plan would cause a post-apply
-	// consistency error (plan said null, provider returned a non-null list).
 	thresholdsResult := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
-	if thresholdsResult.Exists() && !plan.FailedLoginsLockoutThresholds.IsNull() && !plan.FailedLoginsLockoutThresholds.IsUnknown() {
+	if !thresholdsResult.Exists() {
+		plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
+	} else {
 		thresholds := []attr.Value{}
 		thresholdsResult.ForEach(func(_, v gjson.Result) bool {
 			thresholds = append(thresholds, types.Int64Value(v.Int()))
@@ -710,11 +709,6 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		}
 		plan.FailedLoginsLockoutThresholds = listValue
 	}
-	// Absent or plan-null: plan.FailedLoginsLockoutThresholds retains the deserialized
-	// plan value (null for unset, non-nil empty list for explicit []).
-	// This prevents the post-apply consistency check from failing when the field is
-	// absent from the PATCH response or was not configured by the user.
-
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
