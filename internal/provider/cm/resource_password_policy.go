@@ -100,6 +100,7 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 				ElementType: types.Int64Type,
 			},
@@ -552,15 +553,18 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 	}
 
 	if !plan.FailedLoginsLockoutThresholds.IsNull() && !plan.FailedLoginsLockoutThresholds.IsUnknown() {
-		var thresholds []int64
 		var listVals []types.Int64
 		diags := plan.FailedLoginsLockoutThresholds.ElementsAs(ctx, &listVals, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		for _, int := range listVals {
-			thresholds = append(thresholds, int.ValueInt64())
+		// make ensures a non-nil slice even when listVals is empty.
+		// A nil slice via append(&nil) marshals as null; a non-nil empty slice marshals as [],
+		// which CM interprets as "clear the lockout list".
+		thresholds := make([]int64, 0, len(listVals))
+		for _, v := range listVals {
+			thresholds = append(thresholds, v.ValueInt64())
 		}
 		payload.FailedLoginsLockoutThresholds = &thresholds
 	}
@@ -689,12 +693,12 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		plan.PasswordExpiryNotificationDays = types.Int64Null()
 	}
 
-	result := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
-	if !result.Exists() {
+	thresholdsResult := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
+	if !thresholdsResult.Exists() {
 		plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
 	} else {
 		thresholds := []attr.Value{}
-		result.ForEach(func(_, v gjson.Result) bool {
+		thresholdsResult.ForEach(func(_, v gjson.Result) bool {
 			thresholds = append(thresholds, types.Int64Value(v.Int()))
 			return true
 		})
@@ -705,7 +709,6 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		}
 		plan.FailedLoginsLockoutThresholds = listValue
 	}
-
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

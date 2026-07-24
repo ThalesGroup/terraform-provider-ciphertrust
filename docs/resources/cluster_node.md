@@ -200,7 +200,7 @@ output "status" {
 
 ### Optional
 
-- `credentials` (Attributes) Credentials for the new node. If omitted, the provider's configured credentials are used. (see [below for nested schema](#nestedatt--credentials))
+- `credentials` (Attributes) (Immutable) Credentials for the new node. If omitted, the provider's configured credentials are used. (see [below for nested schema](#nestedatt--credentials))
 - `member_host` (String) (Immutable) Hostname or FQDN of any existing cluster member to join through. Can be any node already in the cluster, not necessarily the first/original node. If omitted, the provider's configured address is used. Use an FQDN (e.g. ec2-1-2-3-4.compute-1.amazonaws.com) to match the member node's TLS certificate.
 - `member_port` (Number) (Immutable) Port of the existing cluster member (the provider's configured node). Defaults to 5432.
 
