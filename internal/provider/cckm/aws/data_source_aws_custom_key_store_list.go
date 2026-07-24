@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -290,8 +289,8 @@ type customKeyStoreListJSON struct {
 // Read lists custom key stores matching the given filters and populates Terraform state.
 func (d *dataSourceAWSCustomKeyStoreList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_custom_key_store.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_custom_key_store.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_custom_key_store.go -> Read][" + id + "]")
 
 	var state AWSCustomKeyStoreListDataSourceModel
 	diags := req.Config.Get(ctx, &state)
@@ -309,7 +308,7 @@ func (d *dataSourceAWSCustomKeyStoreList) Read(ctx context.Context, req datasour
 
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_XKS+"/", filters)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_custom_key_store.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_custom_key_store.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS custom key stores from CipherTrust Manager",
 			err.Error(),
@@ -319,7 +318,7 @@ func (d *dataSourceAWSCustomKeyStoreList) Read(ctx context.Context, req datasour
 
 	var list customKeyStoreListJSON
 	if err := json.Unmarshal([]byte(jsonStr), &list); err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_custom_key_store.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_custom_key_store.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to parse AWS custom key stores response",
 			err.Error(),

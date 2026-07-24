@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -248,8 +247,8 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 // emitted instead of an error so the key ID is preserved for subsequent operations and destroy).
 func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_cloudhsm_key.go -> Create][" + id + "]")
 	var (
 		plan     AWSCloudHSMKeyTFSDK
 		response string
@@ -299,7 +298,7 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -308,11 +307,11 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error creating AWS CloudHSM key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Create][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Create][response:" + redactAWSResponse(response) + "]")
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
 	// Do not return error after this
@@ -323,15 +322,15 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		response = getResponse
-		tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Create][get response:"+redactAWSResponse(response)+"]")
+		r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Create][get response:" + redactAWSResponse(response) + "]")
 	}
 
 	var diags diag.Diagnostics
-	setCloudHSMKeyResourceState(ctx, response, &plan.AWSKeyStoreResourceCommonTFSDK, &diags)
+	setCloudHSMKeyResourceState(ctx, r.client, response, &plan.AWSKeyStoreResourceCommonTFSDK, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
@@ -343,8 +342,8 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 // Returns an error if the key or key store is not reachable.
 func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_cloudhsm_key.go -> Read][" + id + "]")
 	var state AWSCloudHSMKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -359,14 +358,14 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 		(readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion") {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "CloudHSM key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
-	setCloudHSMKeyResourceState(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
+	setCloudHSMKeyResourceState(ctx, r.client, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error reading AWS CloudHSM key, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -381,8 +380,8 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 // Returns an error if the key or key store is not reachable.
 func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_cloudhsm_key.go -> Update][" + id + "]")
 	var (
 		plan  AWSCloudHSMKeyTFSDK
 		state AWSCloudHSMKeyTFSDK
@@ -399,7 +398,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Update][get response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Update][get response:" + redactAWSResponse(response) + "]")
 
 	keyID := gjson.Get(response, "id").String()
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
@@ -407,7 +406,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 		(updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion") {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "CloudHSM key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		// Policy updates are permitted by AWS on keys pending deletion.
 		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
@@ -429,7 +428,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 		}
 		// key_policy IS updated in this path - reflect the new config value in state.
 		state.KeyPolicy = plan.KeyPolicy
-		setCloudHSMKeyResourceState(ctx, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
+		setCloudHSMKeyResourceState(ctx, r.client, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -492,16 +491,16 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if err != nil {
 		msg := "Error reading AWS CloudHSM key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Trace(ctx, "[resource_aws_cloudhsm_key.go -> Update][response:"+redactAWSResponse(response)+"]")
-	setCloudHSMKeyResourceState(ctx, response, &plan.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
+	r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Update][response:" + redactAWSResponse(response) + "]")
+	setCloudHSMKeyResourceState(ctx, r.client, response, &plan.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS CloudHSM key, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -509,7 +508,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Update][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Update][response:" + redactAWSResponse(response) + "]")
 }
 
 // Delete schedules a linked AWS CloudHSM key for deletion via the schedule-deletion API, or directly
@@ -519,8 +518,8 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 //   - If the key is not found (404), a warning is returned and the key is removed from state.
 func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_cloudhsm_key.go -> Delete][" + id + "]")
 	var state AWSCloudHSMKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -539,7 +538,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		if keyState == "PendingDeletion" {
 			msg := fmt.Sprintf(utils.PendingDeletionDeleteFmt, "AWS", "CloudHSM key")
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			resp.Diagnostics.AddWarning(details, "")
 			return
 		}
@@ -551,7 +550,7 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 		if err != nil {
 			msg := "Error deleting AWS CloudHSM key, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -560,12 +559,12 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 			if strings.Contains(err.Error(), notFoundError) {
 				msg := "AWS CloudHSM key was not found, it will be removed from state."
 				details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				msg := "Error deleting AWS CloudHSM key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
+				r.client.Log.Error(details)
 				resp.Diagnostics.AddError(details, "")
 			}
 		}
@@ -575,18 +574,18 @@ func (r *resourceAWSCloudHSMKey) Delete(ctx context.Context, req resource.Delete
 			if strings.Contains(err.Error(), notFoundError) {
 				msg := "AWS CloudHSM key was not found, it will be removed from state."
 				details := utils.ApiError(msg, map[string]interface{}{"id": state.ID.ValueString()})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				msg := "Error deleting AWS CloudHSM Key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
+				r.client.Log.Error(details)
 				resp.Diagnostics.AddError(details, "")
 				return
 			}
 		}
 	}
-	tflog.Debug(ctx, "[resource_aws_cloudhsm_key.go -> Delete][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_cloudhsm_key.go -> Delete][response:" + redactAWSResponse(response) + "]")
 }
 
 // ModifyPlan enforces two categories of plan-time constraint:
@@ -665,8 +664,8 @@ func (r *resourceAWSCloudHSMKey) ModifyPlan(ctx context.Context, req resource.Mo
 // ImportState imports an existing AWS CloudHSM key into Terraform state using its resource ID.
 func (r *resourceAWSCloudHSMKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_cloudhsm_key.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_cloudhsm_key.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -689,8 +688,8 @@ func (r *resourceAWSCloudHSMKey) decodeCloudHSMKeyTerraformResourceID(resourceID
 // setCloudHSMKeyResourceState populates the full Terraform state for an aws_cloudhsm_key resource.
 // Identical to setXKSKeyResourceState except it uses the CloudHSM-typed aws_param struct and
 // sets key_rotation_enabled instead of xks_key_configuration.
-func setCloudHSMKeyResourceState(ctx context.Context, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
-	setKeyStoreResourceCommonTopLevel(ctx, response, state, diags)
+func setCloudHSMKeyResourceState(ctx context.Context, client *common.Client, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
+	setKeyStoreResourceCommonTopLevel(ctx, client, response, state, diags)
 	if diags.HasError() {
 		return
 	}
@@ -720,7 +719,7 @@ func setCloudHSMKeyResourceState(ctx context.Context, response string, state *AW
 	policy := gjson.Get(response, "aws_param.Policy").String()
 	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
 		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
-		!getPoliciesAreEqual(ctx, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
+		!getPoliciesAreEqual(client, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
 		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
 	}
 	// CloudHSM-specific computed field.

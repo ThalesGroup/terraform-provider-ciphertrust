@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // ociErrThrottled is the OCI error code for transient rate-throttle responses (HTTP 429).
@@ -65,20 +64,20 @@ func ociPostNoDataWithRetry(
 			sleep = time.Duration(500*(1<<i)) * time.Millisecond
 		}
 		if throttled {
-			tflog.Warn(ctx, fmt.Sprintf(
+			client.Log.Warn(fmt.Sprintf(
 				"[OCI retry] PostNoData throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		if vaultStateConflict {
-			tflog.Debug(ctx, fmt.Sprintf(
+			client.Log.Debug(fmt.Sprintf(
 				"[OCI retry] PostNoData vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		time.Sleep(sleep)
 	}
-	tflog.Warn(ctx, fmt.Sprintf(
+	client.Log.Warn(fmt.Sprintf(
 		"[OCI retry] PostNoData all %d attempts exhausted, endpoint: %s, last error: %s",
 		ociMaxRetries, endpoint, lastErr.Error(),
 	))
@@ -116,20 +115,20 @@ func ociPostDataV2WithRetry(
 			sleep = time.Duration(500*(1<<i)) * time.Millisecond
 		}
 		if throttled {
-			tflog.Warn(ctx, fmt.Sprintf(
+			client.Log.Warn(fmt.Sprintf(
 				"[OCI retry] PostDataV2 throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		if vaultStateConflict {
-			tflog.Debug(ctx, fmt.Sprintf(
+			client.Log.Debug(fmt.Sprintf(
 				"[OCI retry] PostDataV2 vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		time.Sleep(sleep)
 	}
-	tflog.Warn(ctx, fmt.Sprintf(
+	client.Log.Warn(fmt.Sprintf(
 		"[OCI retry] PostDataV2 all %d attempts exhausted, endpoint: %s, last error: %s",
 		ociMaxRetries, endpoint, lastErr.Error(),
 	))
@@ -167,20 +166,20 @@ func ociUpdateDataV2WithRetry(
 			sleep = time.Duration(500*(1<<i)) * time.Millisecond
 		}
 		if throttled {
-			tflog.Warn(ctx, fmt.Sprintf(
+			client.Log.Warn(fmt.Sprintf(
 				"[OCI retry] UpdateDataV2 throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		if vaultStateConflict {
-			tflog.Debug(ctx, fmt.Sprintf(
+			client.Log.Debug(fmt.Sprintf(
 				"[OCI retry] UpdateDataV2 vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
 		time.Sleep(sleep)
 	}
-	tflog.Warn(ctx, fmt.Sprintf(
+	client.Log.Warn(fmt.Sprintf(
 		"[OCI retry] UpdateDataV2 all %d attempts exhausted, endpoint: %s, last error: %s",
 		ociMaxRetries, endpoint, lastErr.Error(),
 	))

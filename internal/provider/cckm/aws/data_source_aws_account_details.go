@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -23,7 +22,7 @@ func NewDataSourceAWSAccountDetails() datasource.DataSource {
 	return &dataSourceAWSAccountDetails{}
 }
 
-func (d *dataSourceAWSAccountDetails) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSAccountDetails) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -89,8 +88,8 @@ func (d *dataSourceAWSAccountDetails) Schema(_ context.Context, _ datasource.Sch
 
 // Read fetches the AWS account ID and available regions for a given AWS connection and populates Terraform state.
 func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_account_details.go -> Read]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_account_details.go -> Read]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_account_details.go -> Read]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_account_details.go -> Read]")
 	var state AWSAccountDetailsDataSourceModel
 	diags := req.Config.Get(ctx, &state)
 	if diags.HasError() {
@@ -110,7 +109,7 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	if err != nil {
 		msg := "Error reading AWS account details, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -118,7 +117,7 @@ func (d *dataSourceAWSAccountDetails) Read(ctx context.Context, req datasource.R
 	if err != nil {
 		msg := "Error reading AWS account details."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}

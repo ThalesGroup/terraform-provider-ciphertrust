@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -25,7 +24,7 @@ func NewDataSourceAWSKeys() datasource.DataSource {
 	return &dataSourceAWSKey{}
 }
 
-func (d *dataSourceAWSKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSKey) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -78,8 +77,8 @@ func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest,
 // Read lists AWS keys matching the given filters and populates Terraform state.
 func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_key.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_key.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_key.go -> Read][" + id + "]")
 
 	var state AWSKeyListDataSourceTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -98,7 +97,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 	if err != nil {
 		msg := "Error listing AWS keys on CipherTrust Manager."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -126,7 +125,7 @@ func (d *dataSourceAWSKey) Read(ctx context.Context, req datasource.ReadRequest,
 // exclusively inside the aws_param nested block via setKeyDSAwsParam; they are NOT set at the
 // outer level.
 func (d *dataSourceAWSKey) setKeyDataSourceState(ctx context.Context, response string, state *AWSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyDataSourceState(ctx, response, &state.AWSKeyDataSourceCommonTFSDK, diags)
+	setCommonKeyDataSourceState(ctx, d.client, response, &state.AWSKeyDataSourceCommonTFSDK, diags)
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())
 	state.AutoRotationPeriodInDays = types.Int64Value(gjson.Get(response, "aws_param.RotationPeriodInDays").Int())
 	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
@@ -179,7 +178,7 @@ func setKeyDSAwsParam(ctx context.Context, response string, diags *diag.Diagnost
 // setCommonKeyDataSourceState populates the non-aws_param fields shared across all three
 // AWS key list datasource item types. Fields sourced from the API aws_param block are NOT set here;
 // each datasource sets them exclusively inside its own aws_param nested block.
-func setCommonKeyDataSourceState(ctx context.Context, response string, state *AWSKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
+func setCommonKeyDataSourceState(ctx context.Context, client *common.Client, response string, state *AWSKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
 	state.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
@@ -191,7 +190,7 @@ func setCommonKeyDataSourceState(ctx context.Context, response string, state *AW
 	state.KeyType = types.StringValue(gjson.Get(response, "key_type").String())
 	state.KeyUsers = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users").Array(), diags)
 	state.KeyUsersRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
-	setKeyLabels(ctx, response, state.KeyID.ValueString(), &state.Labels, diags)
+	setKeyLabels(ctx, client, response, state.KeyID.ValueString(), &state.Labels, diags)
 	state.LocalKeyID = types.StringValue(gjson.Get(response, "local_key_id").String())
 	state.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)

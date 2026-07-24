@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -177,8 +176,8 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 // Read lists the rotation history for a given AWS key and populates Terraform state.
 func (d *dataSourceAWSKeyRotationList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_key_rotation_list.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_key_rotation_list.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_key_rotation_list.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_key_rotation_list.go -> Read][" + id + "]")
 
 	var state KeyRotationsDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -195,7 +194,7 @@ func (d *dataSourceAWSKeyRotationList) Read(ctx context.Context, req datasource.
 	keyID := state.KeyID.ValueString()
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotations", filters)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_key_rotation_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS key rotation list from CipherTrust Manager",
 			err.Error(),
@@ -206,7 +205,7 @@ func (d *dataSourceAWSKeyRotationList) Read(ctx context.Context, req datasource.
 	var rotations DataSourceKeyRotationsJSON
 	err = json.Unmarshal([]byte(jsonStr), &rotations)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_key_rotation_list.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_key_rotation_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS key rotation list from CipherTrust Manager",
 			err.Error(),

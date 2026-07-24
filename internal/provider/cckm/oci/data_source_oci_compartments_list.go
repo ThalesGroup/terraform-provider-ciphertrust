@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -146,8 +145,8 @@ func (d *dataSourceOCICompartmentsList) Schema(_ context.Context, _ datasource.S
 // by the key:value pairs in the filters attribute, and saves the results to state.
 func (d *dataSourceOCICompartmentsList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_oci_compartments_list.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_oci_compartments_list.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_oci_compartments_list.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_oci_compartments_list.go -> Read][" + id + "]")
 
 	var state models.OCICompartmentListDataSourceModelTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -165,7 +164,7 @@ func (d *dataSourceOCICompartmentsList) Read(ctx context.Context, req datasource
 
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_OCI+"/compartments/", filters)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_compartments_list.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_compartments_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read OCI compartments from CipherTrust Manager",
 			err.Error(),
@@ -176,7 +175,7 @@ func (d *dataSourceOCICompartmentsList) Read(ctx context.Context, req datasource
 	var list models.OCICompartmentListJSON
 	err = json.Unmarshal([]byte(jsonStr), &list)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_compartments_list.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_compartments_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read OCI compartments from CipherTrust Manager",
 			err.Error(),

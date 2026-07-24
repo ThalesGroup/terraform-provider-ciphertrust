@@ -23,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -193,8 +192,8 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 //   - the post-creation GetById refresh call fails (state is set from the create response)
 func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key_version.go -> Create][" + id + "]")
 
 	var plan models.BYOKKeyVersionTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -217,7 +216,7 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 	if err != nil {
 		msg := "Error uploading key to OCI, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -225,7 +224,7 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 	if err != nil {
 		msg := "Error adding key version to OCI."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -246,14 +245,14 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 	if err != nil {
 		msg := "Error reading OCI key version."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		response = getResponse
 	}
 
 	var setStateDiags diag.Diagnostics
-	tflog.Debug(ctx, "[resource_oci_byok_key_version.go -> Create][response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_byok_key_version.go -> Create][response:" + redactOCIResponse(response) + "]")
 	setBYOOKKeyVersionState(ctx, response, &plan, &setStateDiags)
 	for _, d := range setStateDiags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
@@ -266,8 +265,8 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 // or if the version is scheduled for deletion.
 func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key_version.go -> Read][" + id + "]")
 
 	var state models.BYOKKeyVersionTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -285,7 +284,7 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	setBYOOKKeyVersionState(ctx, response, &state, &resp.Diagnostics)
@@ -302,8 +301,8 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 // preserved in state after the check.
 func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key_version.go -> Update][" + id + "]")
 
 	var state models.BYOKKeyVersionTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -322,13 +321,13 @@ func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.Up
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_oci_byok_key_version.go -> Update][get response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_byok_key_version.go -> Update][get response:" + redactOCIResponse(response) + "]")
 
 	updateVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 
@@ -352,8 +351,8 @@ func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.Up
 //     state but the version remains active in OCI until the parent key is deleted
 func (r *resourceCCKMOCIByokVersion) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key_version.go -> Delete][" + id + "]")
 	var state models.BYOKKeyVersionTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -412,14 +411,14 @@ func (r *resourceCCKMOCIByokVersion) ModifyPlan(ctx context.Context, req resourc
 // ImportState imports an OCI BYOK key version using the composite ID format: cckm_key_id.version_id.
 func (r *resourceCCKMOCIByokVersion) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_byok_key_version.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_byok_key_version.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key_version.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 	versionInfo := strings.Split(req.ID, ".")
 	if len(versionInfo) != 2 {
 		msg := "Invalid OCI BYOK key version import ID. Please set id to cckm_key_id.version_id."
 		details := utils.ApiError(msg, map[string]interface{}{"id": req.ID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -429,11 +428,11 @@ func (r *resourceCCKMOCIByokVersion) ImportState(ctx context.Context, req resour
 	if err != nil {
 		msg := "Error reading OCI key version."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[resource_oci_byok_key_version.go -> ImportState][response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_byok_key_version.go -> ImportState][response:" + redactOCIResponse(response) + "]")
 	var state models.BYOKKeyVersionTFSDK
 	state.CCKMKeyID = types.StringValue(keyID)
 	state.ID = types.StringValue(versionID)

@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -38,7 +37,7 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 		msg := "Error refreshing OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		diags.AddError(details, "")
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		return
 	}
 
@@ -116,13 +115,13 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 		if strings.Contains(err.Error(), notFoundError) {
 			msg := "OCI key was not found, it will be removed from state."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 		} else {
 			msg := "Error refreshing OCI key."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			diags.AddError(details, "")
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 		}
 		return
 	}
@@ -131,36 +130,35 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 	if keyState == keyStateScheduledForDeletion || keyState == keyStatePendingDeletion {
 		msg := "OCI key is already scheduled for or pending deletion, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		diags.AddWarning(details, "")
 		return
-	} else {
-		payload := models.ScheduleForDeletionJSON{
-			Days: days,
-		}
-		payloadJSON, err := json.Marshal(payload)
-		if err != nil {
-			msg := "Error scheduling OCI key for deletion, invalid data input."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
-			diags.AddError(details, "")
-			return
-		}
-		response, err = ociPostDataV2WithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/schedule-deletion", payloadJSON)
-		if err != nil {
-			msg := "Error scheduling OCI key for deletion."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			if strings.Contains(err.Error(), notFoundError) {
-				tflog.Warn(ctx, details)
-				diags.AddWarning(details, "")
-			} else {
-				tflog.Error(ctx, details)
-				diags.AddError(details, "")
-			}
-			return
-		}
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> deleteOCIKey][response:"+redactOCIResponse(response)+"]")
+	payload := models.ScheduleForDeletionJSON{
+		Days: days,
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		msg := "Error scheduling OCI key for deletion, invalid data input."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		client.Log.Error(details)
+		diags.AddError(details, "")
+		return
+	}
+	response, err = ociPostDataV2WithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/schedule-deletion", payloadJSON)
+	if err != nil {
+		msg := "Error scheduling OCI key for deletion."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		if strings.Contains(err.Error(), notFoundError) {
+			client.Log.Warn(details)
+			diags.AddWarning(details, "")
+		} else {
+			client.Log.Error(details)
+			diags.AddError(details, "")
+		}
+		return
+	}
+	client.Log.Debug("[oci_key_common.go -> deleteOCIKey][response:" + redactOCIResponse(response) + "]")
 }
 
 // getOciVault fetches an OCI vault by its CipherTrust Manager ID.
@@ -176,17 +174,17 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 			}
 			details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID})
 			if opLabel == "deleting" {
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + opLabel + " OCI vault, failed to read OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -209,7 +207,7 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 			if opLabel == "deleting" {
 				msg := "OCI key was not found, it will be removed from state."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 				return "", false
 			}
@@ -219,39 +217,39 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 					if strings.Contains(vaultErr.Error(), notFoundError) {
 						msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI vault")
 						details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
-						tflog.Error(ctx, details)
+						client.Log.Error(details)
 						diags.AddError(details, "")
 					} else {
 						msg := "Error reading OCI vault while " + opLabel + " OCI key."
 						details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID, "error": vaultErr.Error()})
-						tflog.Error(ctx, details)
+						client.Log.Error(details)
 						diags.AddError(details, "")
 					}
 				} else {
 					// Vault is reachable but the key is gone.
 					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key")
 					details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "key_id": keyID})
-					tflog.Error(ctx, details)
+					client.Log.Error(details)
 					diags.AddError(details, "")
 				}
 				return "", false
 			}
 			msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key")
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return "", false
 		}
 		msg := "Error " + opLabel + " OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return "", false
 	}
 	return response, false
 }
 
-// setKeyState sets the full Terraform state. Used by resourceCCKMOCIKey and resourceCCKMOCIByokKey.
+// setKeyState sets the full Terraform state.
 func setKeyState(ctx context.Context, id string, client *common.Client, response string, state *models.KeyTFSDK, diags *diag.Diagnostics) {
 	setCommonKeyState(ctx, id, client, response, &state.KeyCommonTFSDK, diags)
 	if diags.HasError() {
@@ -295,7 +293,7 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 	// Capture the plan/prior-state tag values before overwriting, so we can
 	// preserve null-vs-empty semantics (see corrections below).
 	oldKeyParams := state.KeyParams
-	definedTagsJSON := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
+	definedTagsJSON := getDefinedTagsFromJSON(client, gjson.Get(response, "oci_params.defined_tags"), diags)
 	if diags.HasError() {
 		return
 	}
@@ -303,7 +301,7 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 	if diags.HasError() {
 		return
 	}
-	freeformTagsJSON := getFreeformTagsFromJSON(ctx, gjson.Get(response, "oci_params.freeform_tags"), diags)
+	freeformTagsJSON := getFreeformTagsFromJSON(client, gjson.Get(response, "oci_params.freeform_tags"), diags)
 	if diags.HasError() {
 		return
 	}
@@ -332,7 +330,7 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 	}
 	state.KeyParams = &keyParams
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
-	labels := getKeyLabelsFromJSON(ctx, response, state.ID.ValueString(), diags)
+	labels := getKeyLabelsFromJSON(client, response, state.ID.ValueString(), diags)
 	if diags.HasError() {
 		return
 	}
@@ -370,7 +368,7 @@ func setKeyVersionSummaryState(ctx context.Context, id string, client *common.Cl
 	if err != nil {
 		msg := "Error reading OCI key versions."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -408,7 +406,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -431,7 +429,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 			return
 		}
 
-		keyFreeformTags := getFreeformTagsFromJSON(ctx, gjson.Get(response, "oci_params.freeform_tags"), diags)
+		keyFreeformTags := getFreeformTagsFromJSON(client, gjson.Get(response, "oci_params.freeform_tags"), diags)
 		if diags.HasError() {
 			return
 		}
@@ -448,7 +446,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 			return
 		}
 
-		keyDefinedTags := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
+		keyDefinedTags := getDefinedTagsFromJSON(client, gjson.Get(response, "oci_params.defined_tags"), diags)
 		if diags.HasError() {
 			return
 		}
@@ -464,7 +462,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 		if err != nil {
 			msg := "Error updating OCI key, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -472,11 +470,11 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 		if err != nil {
 			msg := "Error updating OCI key"
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Debug(ctx, "[oci_key_common.go -> updateKey][response:"+redactOCIResponse(response)+"]")
+		client.Log.Debug("[oci_key_common.go -> updateKey][response:" + redactOCIResponse(response) + "]")
 		keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 		if keyState == keyStateUpdating {
 			waitForKeyStateChange(ctx, id, client, keyID, keyState, true, diags)
@@ -488,14 +486,14 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 }
 
 // getKeyLabelsFromJSON parses the CM-side labels map from a raw API response string.
-func getKeyLabelsFromJSON(ctx context.Context, response string, keyID string, diags *diag.Diagnostics) map[string]string {
+func getKeyLabelsFromJSON(client *common.Client, response string, keyID string, diags *diag.Diagnostics) map[string]string {
 	labels := make(map[string]string)
 	if gjson.Get(response, "labels").Exists() {
 		labelsJSON := gjson.Get(response, "labels").Raw
 		if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
 			msg := "Error setting state for key labels, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return nil
 		}
@@ -513,7 +511,7 @@ func enableSchedulerRotation(ctx context.Context, id string, client *common.Clie
 	if err != nil {
 		msg := "Error enabling auto rotation for OCI key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -521,11 +519,11 @@ func enableSchedulerRotation(ctx context.Context, id string, client *common.Clie
 	if err != nil {
 		msg := "Error enabling auto rotation for OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> enableSchedulerRotation][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> enableSchedulerRotation][response:" + redactOCIResponse(response) + "]")
 }
 
 // disableSchedulerRotation disables scheduled auto-rotation for an OCI key.
@@ -535,10 +533,10 @@ func disableSchedulerRotation(ctx context.Context, id string, client *common.Cli
 		msg := "Error updating OCI key, failed to disable scheduled key rotation for OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		diags.AddError(details, "")
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> disableSchedulerRotation][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> disableSchedulerRotation][response:" + redactOCIResponse(response) + "]")
 }
 
 // enableKey enables an OCI key and waits for the state to settle.
@@ -547,11 +545,11 @@ func enableKey(ctx context.Context, id string, client *common.Client, keyID stri
 	if err != nil {
 		msg := "Error enabling OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> enableKey][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> enableKey][response:" + redactOCIResponse(response) + "]")
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	if keyState == keyStateEnabling {
 		waitForKeyStateChange(ctx, id, client, keyID, keyState, false, diags)
@@ -567,11 +565,11 @@ func disableKey(ctx context.Context, id string, client *common.Client, keyID str
 	if err != nil {
 		msg := "Error disabling OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> disableKey][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> disableKey][response:" + redactOCIResponse(response) + "]")
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	if keyState == keyStateDisabling {
 		waitForKeyStateChange(ctx, id, client, keyID, keyState, false, diags)
@@ -590,7 +588,7 @@ func changeKeyCompartment(ctx context.Context, id string, client *common.Client,
 	if err != nil {
 		msg := "Error changing OCI key compartment ID, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "compartment_id": compartmentID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -598,11 +596,11 @@ func changeKeyCompartment(ctx context.Context, id string, client *common.Client,
 	if err != nil {
 		msg := "Error changing OCI key compartment ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "compartment_id": compartmentID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> changeKeyCompartment][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> changeKeyCompartment][response:" + redactOCIResponse(response) + "]")
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	if keyState == keyStateUpdating || keyState == keyStateChangingCompartment {
 		waitForKeyStateChange(ctx, id, client, keyID, keyState, true, diags)
@@ -622,7 +620,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 		msg := "Error refreshing OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		diags.AddError(details, "")
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		return
 	}
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
@@ -635,7 +633,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 				msg := "Error refreshing OCI key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				diags.AddError(details, "")
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				return
 			}
 		} else {
@@ -643,7 +641,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 			if err != nil {
 				msg := "Error reading OCI key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 				return
 			}
@@ -653,15 +651,15 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 	if keyState == currentState {
 		msg := fmt.Sprintf("Failed to confirm OCI key state has changed from '%s' in the given time. Consider extending provider configuration option 'oci_operation_timeout'.", currentState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 	} else if keyState != keyStateEnabled && keyState != keyStateDisabled {
 		msg := "OCI key is neither enabled or disabled."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		diags.AddWarning(details, "")
 	}
-	tflog.Debug(ctx, "[oci_key_common.go -> waitForKeyStateChange][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_common.go -> waitForKeyStateChange][response:" + redactOCIResponse(response) + "]")
 }
 
 // restoreKeyFromBackup restores an OCI key from its most recent backup.
@@ -676,7 +674,7 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 	if err != nil {
 		msg := "Error listing OCI key versions before restore."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -692,7 +690,7 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 	if err != nil {
 		msg := "Error restoring OCI key from backup."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -715,7 +713,7 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 
 		postJSON, listErr := client.ListWithFilters(ctx, id, versionsURL, url.Values{})
 		if listErr != nil {
-			tflog.Warn(ctx, "Error listing OCI key versions while waiting for restore: "+listErr.Error())
+			client.Log.Warn("Error listing OCI key versions while waiting for restore: " + listErr.Error())
 		} else {
 			for _, v := range gjson.Get(postJSON, "resources").Array() {
 				vid := gjson.Get(v.String(), "id").String()
@@ -732,7 +730,7 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 			break
 		}
 		if time.Since(lastChangeTime) > idleTimeout {
-			tflog.Warn(ctx, "Timed out waiting for all key versions to be updated after restore.")
+			client.Log.Warn("Timed out waiting for all key versions to be updated after restore.")
 			break
 		}
 	}

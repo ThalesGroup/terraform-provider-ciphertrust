@@ -6,16 +6,16 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
 // setNativeAndByokKeyCommonState populates the top-level Terraform state fields shared by
 // the aws_key and aws_byok_key resources. It writes into AWSNativeAndByokKeyCommonTFSDK.
-func setNativeAndByokKeyCommonState(ctx context.Context, response string, state *AWSNativeAndByokKeyCommonTFSDK, diags *diag.Diagnostics) {
+func setNativeAndByokKeyCommonState(ctx context.Context, client *common.Client, response string, state *AWSNativeAndByokKeyCommonTFSDK, diags *diag.Diagnostics) {
 	keyID := gjson.Get(response, "id").String()
 	state.EnableKey = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
@@ -30,7 +30,7 @@ func setNativeAndByokKeyCommonState(ctx context.Context, response string, state 
 	state.KeyUsersRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
 	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
 	state.KMSName = types.StringValue(gjson.Get(response, "kms").String())
-	setKeyLabels(ctx, response, keyID, &state.Labels, diags)
+	setKeyLabels(ctx, client, response, keyID, &state.Labels, diags)
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
 	state.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_from").String())
@@ -43,7 +43,7 @@ func setNativeAndByokKeyCommonState(ctx context.Context, response string, state 
 // setKeyStoreResourceCommonTopLevel sets all top-level fields on AWSKeyStoreResourceCommonTFSDK
 // from the API response JSON. Fields sourced from the aws_param block (arn, key_id, etc.) are
 // NOT set here; they are set by the caller inside the aws_param nested object.
-func setKeyStoreResourceCommonTopLevel(ctx context.Context, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
+func setKeyStoreResourceCommonTopLevel(ctx context.Context, client *common.Client, response string, state *AWSKeyStoreResourceCommonTFSDK, diags *diag.Diagnostics) {
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.ExternalAccounts = utils.StringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
@@ -56,7 +56,7 @@ func setKeyStoreResourceCommonTopLevel(ctx context.Context, response string, sta
 	state.KeyUsersRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_users_roles").Array(), diags)
 	state.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())
 	state.KMSName = types.StringValue(gjson.Get(response, "kms").String())
-	setKeyLabels(ctx, response, state.ID.ValueString(), &state.Labels, diags)
+	setKeyLabels(ctx, client, response, state.ID.ValueString(), &state.Labels, diags)
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.RotatedAt = types.StringValue(gjson.Get(response, "rotated_at").String())
 	state.RotatedFrom = types.StringValue(gjson.Get(response, "rotated_from").String())
@@ -74,14 +74,14 @@ func setKeyStoreResourceCommonTopLevel(ctx context.Context, response string, sta
 }
 
 // setKeyLabels parses the CipherTrust Manager labels from the API response and stores them in Terraform state.
-func setKeyLabels(ctx context.Context, response string, keyID string, stateLabels *types.Map, diags *diag.Diagnostics) {
+func setKeyLabels(ctx context.Context, client *common.Client, response string, keyID string, stateLabels *types.Map, diags *diag.Diagnostics) {
 	labels := make(map[string]string)
 	if gjson.Get(response, "labels").Exists() {
 		labelsJSON := gjson.Get(response, "labels").Raw
 		if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
 			msg := "Error setting state for key labels, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -194,6 +194,13 @@ func setKeyTags(ctx context.Context, response string, stateTags *types.Map, diag
 	tagMap, d := types.MapValueFrom(ctx, types.StringType, filteredTags)
 	if d.HasError() {
 		diags.Append(d...)
+		return
+	}
+	// If the result is an empty map but the prior state/plan had null, keep null.
+	// This prevents "was null, but now cty.MapValEmpty" inconsistency errors when
+	// tags are not configured and the API returns no tags.
+	if !tagMap.IsNull() && len(tagMap.Elements()) == 0 && stateTags.IsNull() {
+		*stateTags = types.MapNull(types.StringType)
 		return
 	}
 	*stateTags = tagMap

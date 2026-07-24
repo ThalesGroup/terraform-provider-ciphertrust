@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -25,7 +24,7 @@ func NewDataSourceAWSCloudHSMKeys() datasource.DataSource {
 	return &dataSourceAWSCloudHSMKey{}
 }
 
-func (d *dataSourceAWSCloudHSMKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSCloudHSMKey) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -79,8 +78,8 @@ func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.Schema
 // Read lists AWS CloudHSM keys matching the given filters and populates Terraform state.
 func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_cloudhsm_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_cloudhsm_key.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_cloudhsm_key.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_cloudhsm_key.go -> Read][" + id + "]")
 
 	var state AWSCloudHSMKeyListDataSourceTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -99,7 +98,7 @@ func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.Read
 	if err != nil {
 		msg := "Error listing AWS CloudHSM keys on CipherTrust Manager."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "filters": fmt.Sprintf("%v", filters)})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -120,5 +119,5 @@ func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.Read
 
 // setCloudHSMKeyState populates the Terraform data source state for an AWS CloudHSM key from an API response JSON string.
 func (d *dataSourceAWSCloudHSMKey) setCloudHSMKeyState(ctx context.Context, response string, plan *AWSCloudHSMKeyDataSourceTFSDK, diags *diag.Diagnostics) {
-	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
+	setCustomKeyStoreKeyCommonState(ctx, d.client, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
 }

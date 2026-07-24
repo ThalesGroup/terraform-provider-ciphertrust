@@ -23,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -346,8 +345,8 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 // must be applied via update after the key store is created.
 func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> Create][" + id + "]")
 	var plan AWSCustomKeyStoreTFSDK
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -367,7 +366,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	if _, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS); err != nil {
 		msg := "Error creating AWS custom key store: kms_id does not resolve to a valid KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -438,7 +437,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: AWS Custom Key Store Creation",
 			err.Error(),
@@ -448,28 +447,28 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_XKS, payloadJSON)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating AWS Custom Key Store on CipherTrust Manager: ",
 			"Could not create AWS Custom Key Store, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Create][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> Create][response:" + redactAWSResponse(response) + "]")
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
 	// No error after this
 
 	getResponse, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AWS_XKS)
 	if err != nil {
-		tflog.Warn(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Create]["+plan.ID.ValueString()+"]")
+		r.client.Log.Warn(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Create][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddWarning(
 			"Error reading AWS Custom Key Store on CipherTrust Manager: ",
 			"Could not read AWS Custom Key Store, unexpected error: "+err.Error(),
 		)
 	} else {
 		response = getResponse
-		tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Create][response:"+redactAWSResponse(response)+"]")
+		r.client.Log.Debug("[resource_aws_custom_key_store.go -> Create][response:" + redactAWSResponse(response) + "]")
 	}
 
 	var warningDiags diag.Diagnostics
@@ -486,8 +485,8 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 // Terraform state rather than returning an error, allowing Terraform to plan its recreation.
 func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> Read][" + id + "]")
 
 	var state AWSCustomKeyStoreTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -525,8 +524,8 @@ func (r *resourceAWSCustomKeyStore) Read(ctx context.Context, req resource.ReadR
 //  6. Enable\disable credential rotation.
 func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> Update][" + id + "]")
 	var plan AWSCustomKeyStoreTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -554,7 +553,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> Update][response:" + redactAWSResponse(response) + "]")
 
 	// Unlinking is not supported once a key store has been linked to AWS.
 	// Only check when linked_state is explicitly set to false (not null/omitted).
@@ -602,7 +601,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			plan.ID.ValueString(),
 			common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/unblock")
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> unblock]["+plan.ID.ValueString()+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> unblock][" + plan.ID.ValueString() + "]")
 			resp.Diagnostics.AddError(
 				"Error unblocking AWS Custom Key Store on CipherTrust Manager: ",
 				"Could not unblock AWS Custom Key Store, unexpected error: "+err.Error(),
@@ -685,7 +684,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 		var payloadJSON []byte
 		payloadJSON, err = json.Marshal(payload)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Update][" + plan.ID.ValueString() + "]")
 			resp.Diagnostics.AddError(
 				"Invalid data input: AWS Custom Key Store Update",
 				err.Error(),
@@ -695,7 +694,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 
 		response, err = r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AWS_XKS, payloadJSON)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Update]["+plan.ID.ValueString()+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Update][" + plan.ID.ValueString() + "]")
 			resp.Diagnostics.AddError(
 				"Error updating AWS Custom Key Store on CipherTrust Manager: ",
 				"Could not update AWS Custom Key Store, unexpected error: "+err.Error(),
@@ -736,7 +735,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 			plan.ID.ValueString(),
 			common.URL_AWS_XKS+"/"+plan.ID.ValueString()+"/block")
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> block]["+plan.ID.ValueString()+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> block][" + plan.ID.ValueString() + "]")
 			resp.Diagnostics.AddError(
 				"Error blocking AWS Custom Key Store on CipherTrust Manager: ",
 				"Could not block AWS Custom Key Store, unexpected error: "+err.Error(),
@@ -755,7 +754,7 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Update][final response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> Update][final response:" + redactAWSResponse(response) + "]")
 
 	r.setCustomKeyStoreState(ctx, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -770,8 +769,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 // removed from state rather than returning an error.
 func (r *resourceAWSCustomKeyStore) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> Delete][" + id + "]")
 	var state AWSCustomKeyStoreTFSDK
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -797,11 +796,11 @@ func (r *resourceAWSCustomKeyStore) Delete(ctx context.Context, req resource.Del
 
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_AWS_XKS, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		msg := "Error deleting AWS custom key store."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": state.ID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 	}
 }
@@ -939,8 +938,8 @@ func (r *resourceAWSCustomKeyStore) ModifyPlan(ctx context.Context, req resource
 // ImportState imports an existing AWS custom key store into Terraform state using its resource ID.
 func (r *resourceAWSCustomKeyStore) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -955,19 +954,19 @@ func getAwsCustomKeyStore(ctx context.Context, client *common.Client, id string,
 			if op == "deleting" {
 				msg := "AWS custom key store (" + keystoreID + ") was not found. It will be removed from state."
 				details := utils.ApiError(msg, map[string]interface{}{"id": keystoreID})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
 				msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS custom key store")
 				details := utils.ApiError(msg, map[string]interface{}{"id": keystoreID})
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + op + " AWS custom key store, failed to read custom key store."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": keystoreID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -1021,7 +1020,7 @@ func (r *resourceAWSCustomKeyStore) setCustomKeyStoreState(ctx context.Context, 
 
 	keyStoreID := gjson.Get(response, "id").String()
 	var labels types.Map
-	setKeyStoreLabels(ctx, response, keyStoreID, &labels, diags)
+	setKeyStoreLabels(ctx, r.client, response, keyStoreID, &labels, diags)
 	if diags.HasError() {
 		return
 	}
@@ -1054,7 +1053,7 @@ func (r *resourceAWSCustomKeyStore) linkKeyStore(
 		return currentResponse
 	}
 	if gjson.Get(currentResponse, "local_hosted_params.linked_state").Bool() {
-		tflog.Debug(ctx, "[linkKeyStore] key store is already linked; skipping")
+		r.client.Log.Debug("[linkKeyStore] key store is already linked; skipping")
 		return currentResponse
 	}
 
@@ -1070,13 +1069,13 @@ func (r *resourceAWSCustomKeyStore) linkKeyStore(
 	linkPayload.AWSParams = &linkAWSParams
 	payloadJSON, err := json.Marshal(linkPayload)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [linkKeyStore]["+keystoreID+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [linkKeyStore][" + keystoreID + "]")
 		diags.AddError("Invalid data input: AWS Custom Key Store link", err.Error())
 		return currentResponse
 	}
 	resp, err := r.client.PostDataV2(ctx, keystoreID, common.URL_AWS_XKS+"/"+keystoreID+"/link", payloadJSON)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [linkKeyStore]["+keystoreID+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [linkKeyStore][" + keystoreID + "]")
 		diags.AddError(
 			"Error linking AWS Custom Key Store on CipherTrust Manager: ",
 			"Could not link AWS Custom Key Store, unexpected error: "+err.Error(),
@@ -1105,7 +1104,7 @@ func (r *resourceAWSCustomKeyStore) waitForStableConnectionState(ctx context.Con
 		if err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &p); err != nil {
 			return "", err
 		}
-		tflog.Debug(ctx, fmt.Sprintf("waitForStableConnectionState: %s (attempt %d/%d)", p.ConnectionState, attempt, maxRetries))
+		r.client.Log.Debug(fmt.Sprintf("waitForStableConnectionState: %s (attempt %d/%d)", p.ConnectionState, attempt, maxRetries))
 		if p.ConnectionState != StateConnecting && p.ConnectionState != StateDisconnecting {
 			return response, nil
 		}
@@ -1134,7 +1133,7 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 
 	currentConnectionState := gjson.Get(currentResponse, "aws_param.connection_state").String()
 	if currentConnectionState == StateConnecting || currentConnectionState == StateDisconnecting {
-		tflog.Debug(ctx, fmt.Sprintf("[connectDisconnectKeyStore] connection_state is %s; waiting for stable state", currentConnectionState))
+		r.client.Log.Debug(fmt.Sprintf("[connectDisconnectKeyStore] connection_state is %s; waiting for stable state", currentConnectionState))
 		maxWaitRetries := maxStableStateWaitSeconds / operationRetryDelay
 		resp, err := r.waitForStableConnectionState(ctx, id, state, maxWaitRetries)
 		if err != nil {
@@ -1143,7 +1142,7 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 		}
 		currentResponse = resp
 		currentConnectionState = gjson.Get(currentResponse, "aws_param.connection_state").String()
-		tflog.Debug(ctx, fmt.Sprintf("[connectDisconnectKeyStore] stable connection_state: %s", currentConnectionState))
+		r.client.Log.Debug(fmt.Sprintf("[connectDisconnectKeyStore] stable connection_state: %s", currentConnectionState))
 	}
 
 	operationTimeOutInSeconds := defaultConnectTimeoutSeconds
@@ -1151,7 +1150,7 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 
 	if operation == StateConnectKeystore {
 		if currentConnectionState != StateDisConnected && currentConnectionState != StateFailed {
-			tflog.Debug(ctx, fmt.Sprintf("[connectDisconnectKeyStore] skipping connect: connection_state is %s", currentConnectionState))
+			r.client.Log.Debug(fmt.Sprintf("[connectDisconnectKeyStore] skipping connect: connection_state is %s", currentConnectionState))
 			return currentResponse
 		}
 		if customKeystoreType == CustomKeystoreTypeAWSCloudHSM {
@@ -1163,20 +1162,20 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 		}
 		payloadJSON, err := json.Marshal(connectPayload)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [connectDisconnectKeyStore -> connect]["+keystoreID+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [connectDisconnectKeyStore -> connect][" + keystoreID + "]")
 			diags.AddError("Invalid data input: AWS Custom Key Store connect", err.Error())
 			return currentResponse
 		}
 		_, err = r.client.PostDataV2(ctx, keystoreID, common.URL_AWS_XKS+"/"+keystoreID+"/connect", payloadJSON)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [connectDisconnectKeyStore -> connect]["+keystoreID+"]")
+			r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [connectDisconnectKeyStore -> connect][" + keystoreID + "]")
 			diags.AddError(
 				"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
 				"Could not connect AWS Custom Key Store, unexpected error: "+err.Error(),
 			)
 			return currentResponse
 		}
-		resp, err := r.retryOperation(ctx, id, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, state) }, maxOperationRetries)
+		resp, err := r.retryOperation(ctx, StateConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, state) }, maxOperationRetries)
 		if err != nil {
 			diags.AddError(
 				"Error connecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -1189,7 +1188,7 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 
 	// DISCONNECT_KEYSTORE
 	if currentConnectionState != StateConnected {
-		tflog.Debug(ctx, fmt.Sprintf("[connectDisconnectKeyStore] skipping disconnect: connection_state is %s", currentConnectionState))
+		r.client.Log.Debug(fmt.Sprintf("[connectDisconnectKeyStore] skipping disconnect: connection_state is %s", currentConnectionState))
 		return currentResponse
 	}
 	if customKeystoreType == CustomKeystoreTypeAWSCloudHSM {
@@ -1198,14 +1197,14 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 	maxOperationRetries := operationTimeOutInSeconds / operationRetryDelay
 	_, err := r.client.PostNoData(ctx, keystoreID, common.URL_AWS_XKS+"/"+keystoreID+"/disconnect")
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [connectDisconnectKeyStore -> disconnect]["+keystoreID+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [connectDisconnectKeyStore -> disconnect][" + keystoreID + "]")
 		diags.AddError(
 			"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
 			"Could not disconnect AWS Custom Key Store, unexpected error: "+err.Error(),
 		)
 		return currentResponse
 	}
-	resp, err := r.retryOperation(ctx, id, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, state) }, maxOperationRetries)
+	resp, err := r.retryOperation(ctx, StateDisConnected, func() (string, error) { return r.customKeyStoreById(ctx, id, state) }, maxOperationRetries)
 	if err != nil {
 		diags.AddError(
 			"Error disconnecting AWS Custom Key Store on CipherTrust Manager: ",
@@ -1217,7 +1216,7 @@ func (r *resourceAWSCustomKeyStore) connectDisconnectKeyStore(
 }
 
 // retryOperation polls the custom key store until its connection state matches wantState or the retry limit is reached.
-func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id string, wantState string, operation func() (string, error), maxRetries int) (string, error) {
+func (r *resourceAWSCustomKeyStore) retryOperation(_ context.Context, wantState string, operation func() (string, error), maxRetries int) (string, error) {
 	var (
 		response string
 		err      error
@@ -1235,7 +1234,7 @@ func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id strin
 		if err := json.Unmarshal([]byte(gjson.Get(response, "aws_param").String()), &awsParamJSONResponse); err != nil {
 			return "", err
 		}
-		tflog.Debug(ctx, fmt.Sprintf("ConnectionState: %s (attempt %d/%d)", awsParamJSONResponse.ConnectionState, attempt, maxRetries))
+		r.client.Log.Debug(fmt.Sprintf("ConnectionState: %s (attempt %d/%d)", awsParamJSONResponse.ConnectionState, attempt, maxRetries))
 		if awsParamJSONResponse.ConnectionState == wantState {
 			return response, nil
 		}
@@ -1251,7 +1250,7 @@ func (r *resourceAWSCustomKeyStore) retryOperation(ctx context.Context, id strin
 func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id string, state *AWSCustomKeyStoreTFSDK) (string, error) {
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_XKS)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_custom_key_store.go -> Read]["+state.ID.ValueString()+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_aws_custom_key_store.go -> Read][" + state.ID.ValueString() + "]")
 		return "", err
 	}
 	return response, nil
@@ -1261,8 +1260,8 @@ func (r *resourceAWSCustomKeyStore) customKeyStoreById(ctx context.Context, id s
 // for the custom key store based on the difference between plan and the actual API state (response).
 // The actual current job_config_id is read from labels.job_config_id in the API response.
 func (r *resourceAWSCustomKeyStore) enableDisableCredentialRotation(ctx context.Context, id string, plan *AWSCustomKeyStoreTFSDK, response string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_custom_key_store.go -> enableDisableCredentialRotation]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_custom_key_store.go -> enableDisableCredentialRotation][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_custom_key_store.go -> enableDisableCredentialRotation][" + id + "]")
 
 	planJobID := ""
 	if plan.EnableCredentialRotation != nil {
@@ -1290,7 +1289,7 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 	if err != nil {
 		msg := "Failed to enable credential rotation for custom key store, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -1298,12 +1297,12 @@ func (r *resourceAWSCustomKeyStore) enableCredentialRotation(ctx context.Context
 	if err != nil {
 		msg := "Failed to enable credential rotation for AWS key store."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_custom_key_store.go -> enableCredentialRotation] credential rotation enabled successfully. keystore_id: %s", keyStoreID))
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> enableCredentialRotation][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Info(fmt.Sprintf("[resource_aws_custom_key_store.go -> enableCredentialRotation] credential rotation enabled successfully. keystore_id: %s", keyStoreID))
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> enableCredentialRotation][response:" + redactAWSResponse(response) + "]")
 }
 
 // disableCredentialRotation removes the custom key store from its scheduled CipherTrust Manager credential rotation job.
@@ -1314,11 +1313,11 @@ func (r *resourceAWSCustomKeyStore) disableCredentialRotation(ctx context.Contex
 		msg := "Error updating custom key store, failed to disable credential rotation job for AWS key store."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
 		diags.AddError(details, "")
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_custom_key_store.go -> disableCredentialRotation] credential rotation disabled successfully. keystore_id: %s", keyStoreID))
-	tflog.Debug(ctx, "[resource_aws_custom_key_store.go -> disableCredentialRotation][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Info(fmt.Sprintf("[resource_aws_custom_key_store.go -> disableCredentialRotation] credential rotation disabled successfully. keystore_id: %s", keyStoreID))
+	r.client.Log.Debug("[resource_aws_custom_key_store.go -> disableCredentialRotation][response:" + redactAWSResponse(response) + "]")
 }
 
 // awsCustomKeyStoreParamAttrTypes returns the attribute type map for the aws_param
@@ -1411,14 +1410,14 @@ func setCustomKeyStoreLocalHostedParams(p LocalHostedParamsJSONResponse, diags *
 }
 
 // setKeyStoreLabels parses the custom key store labels from the API response and stores them in Terraform state.
-func setKeyStoreLabels(ctx context.Context, response string, keyStoreID string, stateLabels *types.Map, diags *diag.Diagnostics) {
+func setKeyStoreLabels(ctx context.Context, client *common.Client, response string, keyStoreID string, stateLabels *types.Map, diags *diag.Diagnostics) {
 	labels := make(map[string]string)
 	if gjson.Get(response, "labels").Exists() {
 		labelsJSON := gjson.Get(response, "labels").Raw
 		if err := json.Unmarshal([]byte(labelsJSON), &labels); err != nil {
 			msg := "Error setting state for custom keystore labels, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "keystore_id": keyStoreID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}

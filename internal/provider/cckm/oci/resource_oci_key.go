@@ -22,7 +22,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -149,7 +148,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
 						Computed:    true,
-						Description: "(Updatable) Defined tags for the key.",
+						Description: "(Updatable) Defined tags for the key. To remove all tags set defined_tags = [].",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"tag": schema.StringAttribute{
@@ -307,8 +306,8 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 //   - the post-creation refresh call fails (state is set from the original create response)
 func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_key.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_key.go -> Create][" + id + "]")
 
 	var plan models.KeyTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -340,7 +339,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error creating OCI key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "name": payload.Name})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -349,7 +348,7 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error creating OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "name": payload.Name})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -372,13 +371,13 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 		msg := "Error refreshing OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		resp.Diagnostics.AddWarning(details, "")
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 	} else {
 		response = refreshResponse
 	}
 
 	var diags diag.Diagnostics
-	tflog.Debug(ctx, "[resource_oci_key.go -> Create][response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_key.go -> Create][response:" + redactOCIResponse(response) + "]")
 	setKeyState(ctx, id, r.client, response, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
@@ -391,8 +390,8 @@ func (r *resourceCCKMOCIKey) Create(ctx context.Context, req resource.CreateRequ
 // Adds a warning if the key lifecycle state is SCHEDULING_DELETION but keeps the resource in state.
 func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_key.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_key.go -> Read][" + id + "]")
 
 	var state models.KeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -410,7 +409,7 @@ func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest,
 	if readKeyState == keyStateScheduledForDeletion || readKeyState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key", readKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	setKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
@@ -425,8 +424,8 @@ func (r *resourceCCKMOCIKey) Read(ctx context.Context, req resource.ReadRequest,
 // Compartment changes are applied via a separate change-compartment endpoint.
 func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_key.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_key.go -> Update][" + id + "]")
 
 	var plan models.KeyTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -446,13 +445,13 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_oci_key.go -> Update][get response:"+redactOCIResponse(preCheckResponse)+"]")
+	r.client.Log.Debug("[resource_oci_key.go -> Update][get response:" + redactOCIResponse(preCheckResponse) + "]")
 
 	preCheckKeyState := gjson.Get(preCheckResponse, "oci_params.lifecycle_state").String()
 	if preCheckKeyState == keyStateScheduledForDeletion || preCheckKeyState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key", preCheckKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		setKeyState(ctx, id, r.client, preCheckResponse, &plan, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
@@ -471,11 +470,11 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[resource_oci_key.go -> Update][response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_key.go -> Update][response:" + redactOCIResponse(response) + "]")
 
 	setKeyState(ctx, id, r.client, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -490,8 +489,8 @@ func (r *resourceCCKMOCIKey) Update(ctx context.Context, req resource.UpdateRequ
 // allowing Terraform to remove the resource from state cleanly.
 func (r *resourceCCKMOCIKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_key.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_key.go -> Delete][" + id + "]")
 	var state models.KeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -576,7 +575,7 @@ func (r *resourceCCKMOCIKey) ModifyPlan(ctx context.Context, req resource.Modify
 			if err != nil && strings.Contains(err.Error(), notFoundError) {
 				msg := "Previous OCI vault was not found, allowing vault update."
 				details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				changed = append(changed, "vault")
@@ -600,7 +599,7 @@ func (r *resourceCCKMOCIKey) ModifyPlan(ctx context.Context, req resource.Modify
 
 func (r *resourceCCKMOCIKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_key.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_key.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_key.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_key.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

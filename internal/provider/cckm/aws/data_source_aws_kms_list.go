@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -173,8 +172,8 @@ func (d *dataSourceAWSKms) Schema(_ context.Context, _ datasource.SchemaRequest,
 // Read lists AWS KMS resources matching the given filters and populates Terraform state.
 func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_kms.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_kms.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_kms.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_kms.go -> Read][" + id + "]")
 
 	var state AWSKmsDataSourceModel
 	diags := req.Config.Get(ctx, &state)
@@ -191,7 +190,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_AWS+"/kms/", filters)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_kms.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_kms.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS KMS from CipherTrust Manager",
 			err.Error(),
@@ -201,7 +200,7 @@ func (d *dataSourceAWSKms) Read(ctx context.Context, req datasource.ReadRequest,
 	var kmsList DataSourceKmsListJSON
 	err = json.Unmarshal([]byte(jsonStr), &kmsList)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_kms.go -> Read]["+id+"]")
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_kms.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read AWS KMS from CipherTrust Manager",
 			err.Error(),

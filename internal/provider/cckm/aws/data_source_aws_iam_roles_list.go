@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -139,8 +138,8 @@ func (d *dataSourceAWSIAMRolesList) Schema(_ context.Context, _ datasource.Schem
 // Read fetches all AWS IAM roles, paginating via IsTruncated/Marker until all results are collected.
 func (d *dataSourceAWSIAMRolesList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_aws_iam_roles_list.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_aws_iam_roles_list.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_iam_roles_list.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_aws_iam_roles_list.go -> Read][" + id + "]")
 
 	var state AWSIAMRolesDataSourceModel
 	diags := req.Config.Get(ctx, &state)
@@ -172,14 +171,14 @@ func (d *dataSourceAWSIAMRolesList) Read(ctx context.Context, req datasource.Rea
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_iam_roles_list.go -> Read]["+id+"]")
+			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError("Error building request for AWS IAM roles", err.Error())
 			return
 		}
 
 		response, err := d.client.PostDataV2(ctx, id, urlAWSIAMRoles, payloadJSON)
 		if err != nil {
-			tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_iam_roles_list.go -> Read]["+id+"]")
+			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError("Error reading AWS IAM roles from CipherTrust Manager", err.Error())
 			return
 		}

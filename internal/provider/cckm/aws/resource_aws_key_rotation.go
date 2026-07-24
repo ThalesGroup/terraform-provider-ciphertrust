@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -183,8 +182,8 @@ func (r *resourceAWSKeyRotation) Schema(_ context.Context, _ resource.SchemaRequ
 // rotate-material exactly once, then polls for completion before saving state.
 func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_rotation.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_rotation.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_rotation.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> Create][" + id + "]")
 
 	var plan AWSNativeKeyRotationTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -200,7 +199,7 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error rotating AWS key: key not found in CipherTrust Manager."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -210,7 +209,7 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 		msg := "key_id must refer to an AWS native symmetric key (Origin=AWS_KMS, key_type=symmetric). " +
 			"This resource does not support EXTERNAL or asymmetric keys. Use aws_key_material for EXTERNAL keys."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "origin": keyOrigin, "key_type": keyType})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -222,7 +221,7 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if refreshErr != nil {
 		msg := "Warning: pre-rotation key refresh failed; continuing with current cached state."
 		details := utils.ApiError(msg, map[string]interface{}{"error": refreshErr.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		// Step 3: wait for the refresh to complete by polling for updated_at to change.
@@ -237,7 +236,7 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error reading AWS key state before rotation."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -249,12 +248,12 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error reading rotation history before rotation."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	prevRotationCount := gjson.Get(rotListJSON, "total").Int()
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_rotation.go -> Create] pre-rotation snapshot: key_id=%s prevMaterialID=%q prevRotationCount=%d",
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_rotation.go -> Create] pre-rotation snapshot: key_id=%s prevMaterialID=%q prevRotationCount=%d",
 		keyID, prevMaterialID, prevRotationCount,
 	))
 
@@ -264,11 +263,11 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error calling rotate-material on AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, "[resource_aws_key_rotation.go -> Create] rotate-material called successfully for key_id="+keyID)
+	r.client.Log.Info("[resource_aws_key_rotation.go -> Create] rotate-material called successfully for key_id=" + keyID)
 
 	// Step 7: poll until the rotation is confirmed or timeout expires.
 	// waitForNativeRotation sleeps at the top of each iteration so no head-start
@@ -284,7 +283,7 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	if listErr != nil {
 		msg := "Error reading rotation history after successful rotation."
 		details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -299,8 +298,8 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 // is returned and state is preserved.
 func (r *resourceAWSKeyRotation) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_rotation.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_rotation.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_rotation.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> Read][" + id + "]")
 
 	var state AWSNativeKeyRotationTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -319,7 +318,7 @@ func (r *resourceAWSKeyRotation) Read(ctx context.Context, req resource.ReadRequ
 	if listErr != nil {
 		msg := "Error reading rotation history during refresh."
 		details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -389,20 +388,20 @@ func waitForKeyUpdatedAt(
 		time.Sleep(time.Duration(pollInterval) * time.Second)
 		keyJSON, err := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 		if err != nil {
-			tflog.Warn(ctx, fmt.Sprintf("[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] poll %d/%d: error fetching key: %s",
+			client.Log.Warn(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] poll %d/%d: error fetching key: %s",
 				i+1, maxPolls, err.Error(),
 			))
 			continue
 		}
 		currentUpdatedAt := gjson.Get(keyJSON, "updatedAt").String()
 		if currentUpdatedAt != "" && currentUpdatedAt != prevUpdatedAt {
-			tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] refresh detected: updated_at changed from %q to %q",
+			client.Log.Debug(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] refresh detected: updated_at changed from %q to %q",
 				prevUpdatedAt, currentUpdatedAt,
 			))
 			return
 		}
 	}
-	tflog.Warn(ctx, "[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] timed out waiting for updated_at to change; continuing")
+	client.Log.Warn("[resource_aws_key_rotation.go -> waitForKeyUpdatedAt] timed out waiting for updated_at to change; continuing")
 }
 
 // waitForNativeRotation polls CipherTrust Manager after a rotate-material call to confirm
@@ -423,8 +422,8 @@ func waitForNativeRotation(
 	prevRotationCount int64,
 	diags *diag.Diagnostics,
 ) bool {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_rotation.go -> waitForNativeRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_rotation.go -> waitForNativeRotation]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_rotation.go -> waitForNativeRotation][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> waitForNativeRotation][" + id + "]")
 
 	const (
 		maxPolls     = 12
@@ -442,7 +441,7 @@ func waitForNativeRotation(
 		if err != nil {
 			msg := "Error fetching key during rotation poll."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return false
 		}
@@ -455,16 +454,16 @@ func waitForNativeRotation(
 			currentRotationCount = gjson.Get(rotListJSON, "total").Int()
 		}
 
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] poll %d/%d - rotationCount: prev=%d current=%d, currentMaterialID: prev=%q current=%q",
+		client.Log.Debug(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] poll %d/%d - rotationCount: prev=%d current=%d, currentMaterialID: prev=%q current=%q",
 			i+1, maxPolls, prevRotationCount, currentRotationCount, prevMaterialID, currentMaterialID,
 		))
 
 		confirmed := false
 		if currentMaterialID != "" && currentMaterialID != prevMaterialID {
-			tflog.Info(ctx, "[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via material ID change")
+			client.Log.Info("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via material ID change")
 			confirmed = true
 		} else if currentRotationCount > prevRotationCount {
-			tflog.Info(ctx, "[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via rotation count increase")
+			client.Log.Info("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via rotation count increase")
 			confirmed = true
 		}
 
@@ -480,7 +479,7 @@ func waitForNativeRotation(
 		"The rotation may still complete asynchronously. " +
 		"Refresh the key before retrying."
 	details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-	tflog.Error(ctx, details)
+	client.Log.Error(details)
 	diags.AddError(details, "")
 	return false
 }
@@ -489,8 +488,8 @@ func waitForNativeRotation(
 // a types.List of rotation history entries suitable for use in AWSNativeKeyRotationTFSDK.
 // An error is returned when the API call or JSON parsing fails.
 func fetchNativeRotationHistory(ctx context.Context, id string, keyID string, client *common.Client) (types.List, error) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_rotation.go -> fetchNativeRotationHistory]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_rotation.go -> fetchNativeRotationHistory]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_rotation.go -> fetchNativeRotationHistory][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> fetchNativeRotationHistory][" + id + "]")
 
 	emptyList, _ := types.ListValue(nativeRotationEntryElemType, []attr.Value{})
 

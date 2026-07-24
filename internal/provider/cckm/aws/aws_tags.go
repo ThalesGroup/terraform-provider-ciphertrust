@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -18,8 +17,8 @@ import (
 // The internal policy-template tag (cckm_policy_template_id) is excluded from reconciliation and is
 // never added or removed by this function. Used by resourceAWSKey, resourceAWSXKSKey (linked only), resourceAWSCloudHSMKey (linked only).
 func updateTags(ctx context.Context, id string, client *common.Client, planTags map[string]string, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_tags.go -> updateTags]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_tags.go -> updateTags]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_tags.go -> updateTags][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_tags.go -> updateTags][" + id + "]")
 	var (
 		addTagsPayload    AddTagsJSON
 		removeTagsPayload RemoveTagsJSON
@@ -51,7 +50,7 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		if err != nil {
 			msg := "Error updating AWS key. Failed to remove tags, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -59,12 +58,12 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove tags."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Info(ctx, fmt.Sprintf("[aws_tags.go -> updateTags] tags removed successfully. key_id: %s", keyID))
-		tflog.Debug(ctx, "[aws_tags.go -> updateTags][response:"+redactAWSResponse(response))
+		client.Log.Info(fmt.Sprintf("[aws_tags.go -> updateTags] tags removed successfully. key_id: %s", keyID))
+		client.Log.Debug("[aws_tags.go -> updateTags][response:" + redactAWSResponse(response))
 	}
 	for planKey, planValue := range planTags {
 		found := false
@@ -87,7 +86,7 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		if err != nil {
 			msg := "Error updating AWS key. Failed to add tags, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -95,12 +94,12 @@ func updateTags(ctx context.Context, id string, client *common.Client, planTags 
 		if err != nil {
 			msg := "Error updating AWS key, failed to add tags."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Info(ctx, fmt.Sprintf("[aws_tags.go -> updateTags] tags added successfully. key_id: %s", keyID))
-		tflog.Debug(ctx, "[aws_tags.go -> updateTags][response:"+redactAWSResponse(response))
+		client.Log.Info(fmt.Sprintf("[aws_tags.go -> updateTags] tags added successfully. key_id: %s", keyID))
+		client.Log.Debug("[aws_tags.go -> updateTags][response:" + redactAWSResponse(response))
 	}
 }
 
@@ -172,7 +171,7 @@ func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.C
 		if err != nil {
 			msg := "Error updating AWS key. Failed to remove policy template tag, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			return
 		}
@@ -180,10 +179,10 @@ func removeKeyPolicyTemplateTag(ctx context.Context, id string, client *common.C
 		if err != nil {
 			msg := "Error updating AWS key, failed to remove policy template tag."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 		} else {
-			tflog.Info(ctx, fmt.Sprintf("[aws_tags.go -> removeKeyPolicyTemplateTag] policy template tag removed successfully. key_id: %s", keyID))
+			client.Log.Info(fmt.Sprintf("[aws_tags.go -> removeKeyPolicyTemplateTag] policy template tag removed successfully. key_id: %s", keyID))
 		}
 	}
 }
