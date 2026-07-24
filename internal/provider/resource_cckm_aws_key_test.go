@@ -65,9 +65,9 @@ var importStateVerifyIgnoreAwsKey = []string{
 // Returns the config string and true when the required AWS environment variables are set,
 // or an empty string and false when they are not (the caller should t.Skip() in that case).
 func initCckmAwsTest(timeout ...int) (string, bool) {
-	accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	if accessKeyID == "" || awsSecretAccessKey == "" {
+	if awsAccessKeyID == "" || awsSecretAccessKey == "" {
 		return "", false
 	}
 	operationTimeout := defaultAwsOperationTimeout
