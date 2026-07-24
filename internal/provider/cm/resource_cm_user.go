@@ -147,8 +147,20 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMUserTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.UserName = common.TrimString(plan.UserName.ValueString())
-	payload.Password = common.TrimString(plan.Password.ValueString())
+	payload.Password = common.TrimString(config.Password.ValueString())
 
 	if plan.PreventUILogin.ValueBool() != types.BoolNull().ValueBool() {
 		loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
@@ -357,6 +369,18 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMUserTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	plan.ID = state.ID
 	plan.UserID = state.UserID
 
@@ -379,7 +403,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	// diffed against a prior value — password_version is the explicit, state-tracked
 	// signal that the caller wants the current password value re-sent to CM.
 	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
-		payload.Password = common.TrimString(plan.Password.ValueString())
+		payload.Password = common.TrimString(config.Password.ValueString())
 	}
 
 	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
