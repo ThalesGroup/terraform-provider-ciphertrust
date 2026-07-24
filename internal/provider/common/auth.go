@@ -60,5 +60,8 @@ func (c *Client) RefreshToken(ctx context.Context, uuid string) error {
 		return err
 	}
 	c.Token = ar.Token
+	if ar.RefreshToken != "" {
+		c.CMRefreshToken = ar.RefreshToken
+	}
 	return nil
 }
