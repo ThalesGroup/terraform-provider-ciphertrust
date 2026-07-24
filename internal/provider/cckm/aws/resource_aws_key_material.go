@@ -741,7 +741,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		// NON-CURRENT). History is re-fetched and re-classified after all repairs so that
 		// A later step picks up any entries that are now in PENDING_ROTATION.
 		if len(pendingImportRepairs) > 0 {
-			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, diags)
+			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, keyJSON, diags)
 			if diags.HasError() {
 				return
 			}
@@ -934,9 +934,13 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 //  2. Calls ImportByokKeyMaterial with EXISTING_KEY_MATERIAL to re-upload the key material.
 //     An import failure is a hard error for that entry; the loop continues to attempt remaining
 //     entries, and the caller checks diags.HasError() after the call returns.
-//  3. Waits for import_state to leave PENDING_IMPORT (i.e. arrive at Imported). A poll
+//  3. For multi-region primary keys, calls repairMultiRegionReplicas to import the material
+//     to all replica keys BEFORE waiting for the primary's import_state to clear. AWS will
+//     not clear import_state on the primary until all replicas also have the material, so
+//     waiting first would always time out on a multi-region key.
+//  4. Waits for import_state to leave PENDING_IMPORT (i.e. arrive at Imported). A poll
 //     timeout is a warning only because the import call itself succeeded.
-func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id string, keyID string, pendingImportRepairs []AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
+func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id string, keyID string, pendingImportRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
 	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> repairPendingImport]["+id+"]")
 	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> repairPendingImport]["+id+"]")
 
@@ -971,7 +975,17 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 			continue
 		}
 
-		// Step 3: wait for import_state to leave PENDING_IMPORT (move to Imported).
+		// Step 3: for multi-region primary keys, import the material to all replica keys
+		// BEFORE waiting for the primary's import_state to clear. AWS will not clear
+		// import_state on the primary until all replicas also have the material - so
+		// waiting before fixing replicas would always time out on a multi-region key.
+		isMRPrimary := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() &&
+			gjson.Get(keyJSON, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String() == "PRIMARY"
+		if isMRPrimary {
+			r.repairMultiRegionReplicas(ctx, id, keyID, srcID, mat.SourceKeyTier.ValueString(), validTo, keyJSON, diags)
+		}
+
+		// Step 4: now wait for import_state to leave PENDING_IMPORT (move to Imported).
 		// key_material_state is not changed by a re-import - it stays CURRENT or NON-CURRENT.
 		// A timeout is a warning only - the import call already completed successfully.
 		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "import_state", "PENDING_IMPORT", "", diags)
