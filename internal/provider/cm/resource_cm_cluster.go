@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -27,6 +28,12 @@ var (
 	_ resource.Resource                   = &resourceCMCluster{}
 	_ resource.ResourceWithConfigure      = &resourceCMCluster{}
 	_ resource.ResourceWithValidateConfig = &resourceCMCluster{}
+
+	// deleteVerifyRetries/deleteVerifyInterval bound how many times Delete() re-checks
+	// actual cluster status after a DELETE /cluster error before giving up (see Delete
+	// below). Vars (not consts) so tests can shorten deleteVerifyInterval.
+	deleteVerifyRetries  = 3
+	deleteVerifyInterval = 5 * time.Second
 )
 
 func NewResourceCMCluster() resource.Resource {
@@ -107,7 +114,10 @@ func (r *resourceCMCluster) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"raft_status": schema.StringAttribute{
 				Computed:    true,
-				Description: "Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response. UseStateForUnknown() is intentionally absent — value changes on leader elections and suppressing it causes 'inconsistent result after apply' errors.",
+				Description: "Raft replication status for this cluster node (e.g. 'leader', 'follower'). Populated from ClusterInfo GET response.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -189,12 +199,8 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.ReadDataByParam(ctx, id, "", common.URL_CLUSTER_INFO)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not found (404); keeping in state [resource_cm_cluster.go -> Read]["+id+"]")
-			resp.Diagnostics.AddWarning(
-				"CipherTrust Cluster Not Found",
-				"Cluster "+state.ID.ValueString()+" was not found in CM and has been kept in Terraform state. "+
-					"If it was intentionally deleted, run terraform state rm before the next apply.",
-			)
+			tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not found (404); removing from state [resource_cm_cluster.go -> Read]["+id+"]")
+			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Read]["+id+"]")
@@ -205,14 +211,42 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	// GET /cluster does not 404 when this node has no cluster (e.g. it was deleted
+	// out-of-band) — it returns 200 with an empty/"none" status and no nodeID instead.
+	// Treat that as not-found so the next plan proposes recreating the cluster, rather
+	// than silently absorbing the drift as an in-place attribute change.
+	nodeID := gjson.Get(response, "nodeID").String()
+	statusCode := gjson.Get(response, "status.code").String()
+	if nodeID == "" || statusCode == "" || statusCode == "none" {
+		tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not clustered (status.code="+statusCode+"); removing from state [resource_cm_cluster.go -> Read]["+id+"]")
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	// Hydrate Computed fields from ClusterInfo.
-	// local_node_host, local_node_port, public_address, and id are absent from ClusterInfo
-	// and are preserved from prior state (loaded above via req.State.Get).
-	state.NodeId = types.StringValue(gjson.Get(response, "nodeID").String())
+	// local_node_host, local_node_port, and id are absent from ClusterInfo and are
+	// preserved from prior state (loaded above via req.State.Get).
+	state.NodeId = types.StringValue(nodeID)
 	state.NodeCount = types.Int64Value(gjson.Get(response, "nodeCount").Int())
-	state.StatusCode = types.StringValue(gjson.Get(response, "status.code").String())
+	state.StatusCode = types.StringValue(statusCode)
 	state.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
 	state.RaftStatus = types.StringValue(gjson.Get(response, "raftStatus").String())
+
+	// public_address is also absent from ClusterInfo — GET /nodes/{nodeID} is the only
+	// endpoint that returns it (same root cause/fix as ciphertrust_cluster_node's Read()).
+	// A transient fetch failure here shouldn't fail the whole Read, so leave the prior
+	// state value in place rather than erroring.
+	if nodeInfo, nerr := r.client.GetById(ctx, id, nodeID, common.URL_NODES); nerr == nil {
+		// CM returns "" (not an omitted field) when no public_address was ever
+		// configured. public_address is Optional (not Computed), so an unconfigured
+		// attribute plans as null, not "" — mapping "" to StringValue("") here would
+		// permanently disagree with that null and show a spurious diff on every plan.
+		if publicAddress := gjson.Get(nodeInfo, "publicAddress").String(); publicAddress != "" {
+			state.PublicAddress = types.StringValue(publicAddress)
+		} else {
+			state.PublicAddress = types.StringNull()
+		}
+	}
 
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -283,14 +317,35 @@ func (r *resourceCMCluster) Delete(ctx context.Context, req resource.DeleteReque
 	// DELETE /v1/cluster
 	// Note: This only works if this is the last/only node in the cluster
 	output, err := r.client.DeleteByURL(ctx, state.NodeId.ValueString(), common.URL_CLUSTER_INFO)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		// Deleting a node's own cluster config can make its management service briefly
+		// unresponsive while it tears down its local raft/postgres processes, so this
+		// call can time out client-side even though the server-side change already went
+		// through (confirmed live: DELETE /cluster timed out after ~170s, but a GET
+		// /cluster immediately after showed status.code="none" — already deleted).
+		// Verify the actual state before treating this as a real failure.
+		for attempt := 1; attempt <= deleteVerifyRetries; attempt++ {
+			verifyResponse, verifyErr := r.client.ReadDataByParam(ctx, state.ID.ValueString(), "", common.URL_CLUSTER_INFO)
+			if verifyErr == nil {
+				nodeID := gjson.Get(verifyResponse, "nodeID").String()
+				statusCode := gjson.Get(verifyResponse, "status.code").String()
+				if nodeID == "" || statusCode == "" || statusCode == "none" {
+					tflog.Debug(ctx, "[resource_cm_cluster.go -> Delete] DELETE /cluster errored ("+err.Error()+") but node is confirmed not clustered; treating as deleted")
+					return
+				}
+				break
+			}
+			if attempt < deleteVerifyRetries {
+				time.Sleep(deleteVerifyInterval)
+			}
+		}
 		resp.Diagnostics.AddError(
 			"Error deleting cluster",
 			err.Error(),
 		)
 		return
 	}
+	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 }
 
 func (d *resourceCMCluster) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
