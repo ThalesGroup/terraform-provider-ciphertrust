@@ -82,7 +82,7 @@ const (
 	providerDescWithDefault         = "%s can be set in the provider block or in ~/.ciphertrust/config. Default is %v."
 	providerDescNoDefaultWithEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config"
 	providerDescDefaultWithEnvVar   = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %v."
-	defaultRestAPITimeout           = "60"
+	defaultRestAPITimeout           = "180"
 	//providerDescWithDefaultAndEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %s."
 )
 
@@ -111,15 +111,15 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			},
 			"bootstrap": schema.StringAttribute{
 				Optional:    true,
-				Description: "Is it a bootstrap operation. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "bootstrap", "no"),
+				Description: "Is it a bootstrap operation. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar, "bootstrap", "BOOTSTRAP"),
 			},
 			"auth_domain": schema.StringAttribute{
 				Optional:    true,
-				Description: "CipherTrust authentication domain of the user. This is the domain where the user was created. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar+". Default is the empty string (root domain).", "auth_domain", "CM_AUTH_DOMAIN"),
+				Description: "CipherTrust authentication domain of the user. This is the domain where the user was created. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar+". Default is the empty string (root domain).", "auth_domain", "CIPHERTRUST_AUTH_DOMAIN"),
 			},
 			"domain": schema.StringAttribute{
 				Optional:    true,
-				Description: "CipherTrust domain to log in to. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar+". Default is the empty string (root domain).", "domain", "CM_DOMAIN"),
+				Description: "CipherTrust domain to log in to. " + fmt.Sprintf(providerDescNoDefaultWithEnvVar+". Default is the empty string (root domain).", "domain", "CIPHERTRUST_DOMAIN"),
 			},
 			"tenant": schema.StringAttribute{
 				Optional: true,
@@ -157,7 +157,7 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			},
 			"replication_delay_ms": schema.Int64Attribute{
 				Optional:    true,
-				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CM_REPLICATION_DELAY", defaultReplicationDelay),
+				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CIPHERTRUST_REPLICATION_DELAY", defaultReplicationDelay),
 			},
 			"log_file": schema.StringAttribute{
 				Optional:    true,
@@ -390,14 +390,14 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 			)
 		}
 	}
-	replicationDelayEnvVal, replicationDelayEnvExists := os.LookupEnv("CM_REPLICATION_DELAY")
+	replicationDelayEnvVal, replicationDelayEnvExists := os.LookupEnv("CIPHERTRUST_REPLICATION_DELAY")
 	if replicationDelayEnvExists {
 		var parseErr error
 		replication_delay_ms, parseErr = strconv.ParseInt(replicationDelayEnvVal, 10, 64)
 		if parseErr != nil {
 			resp.Diagnostics.AddError(
 				"Invalid environment variable configuration",
-				fmt.Sprintf("Failed to parse environment variable CM_REPLICATION_DELAY=%q as integer: %s", replicationDelayEnvVal, parseErr.Error()),
+				fmt.Sprintf("Failed to parse environment variable CIPHERTRUST_REPLICATION_DELAY=%q as integer: %s", replicationDelayEnvVal, parseErr.Error()),
 			)
 		}
 	}
@@ -483,7 +483,7 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	}
 
 	if !config.ReplicationDelayMS.IsNull() {
-		oci_operation_timeout = config.ReplicationDelayMS.ValueInt64()
+		replication_delay_ms = config.ReplicationDelayMS.ValueInt64()
 	}
 
 	// Surface the insecure mode loudly — it should only be used in test
