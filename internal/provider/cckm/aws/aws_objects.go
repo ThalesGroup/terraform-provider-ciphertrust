@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cckm
 
 // aws_objects.go centralises all Framework attr.Type maps and typed Object

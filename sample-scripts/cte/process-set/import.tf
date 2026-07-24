@@ -1,6 +1,3 @@
-# Copyright (c) HashiCorp, Inc.
-# SPDX-License-Identifier: MIT
-
 /*
 Terraform import functionality :- This is used to import real life infrastructure under terraform management by mapping it to state file.
 
