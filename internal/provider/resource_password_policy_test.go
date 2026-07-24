@@ -527,6 +527,139 @@ resource "ciphertrust_password_policy" "notification_test" {
 	})
 }
 
+// Test_CM_PasswordPolicy_EmptyLockoutThresholds verifies that setting
+// failed_logins_lockout_thresholds = [] (the sentinel to disable lockout) converges without
+// drift. An empty plan list must serialize as [] in the PATCH body (not null), so CM
+// actually clears the threshold list rather than silently ignoring the request.
+func Test_CM_PasswordPolicy_EmptyLockoutThresholds(t *testing.T) {
+	RequireCM(t)
+	policyName := "tf-test-pp-el-" + uuid.New().String()[:8]
+	var capturedName string
+
+	configWithThresholds := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+    policy_name                      = %q
+    failed_logins_lockout_thresholds = [0, 0, 1, 1]
+}
+`, policyName)
+
+	configWithEmptyThresholds := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+    policy_name                      = %q
+    failed_logins_lockout_thresholds = []
+}
+`, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: baseline with populated thresholds; capture resource name for OOB step.
+			{
+				Config: configWithThresholds,
+				Check: checkStep(t, "baseline",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "4"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.0", "0"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.3", "1"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: sentinel clear — apply with empty list; post-apply plan must be empty.
+			{
+				Config:             configWithEmptyThresholds,
+				ExpectNonEmptyPlan: false,
+				Check: checkStep(t, "sentinel clear",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "0"),
+				),
+			},
+			// Step 3: out-of-band drift — restore [0,0,1,1] directly on CM, then plan must
+			// detect the divergence (ExpectNonEmptyPlan: true).
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						return
+					}
+					_, _ = client.UpdateDataV2(context.Background(), capturedName, common.URL_CM_PASSWORD_POLICY, []byte(`{"failed_logins_lockout_thresholds":[0,0,1,1]}`))
+				},
+				Config:             configWithEmptyThresholds,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 4: restore to populated thresholds; confirm idempotent apply.
+			{
+				Config: configWithThresholds,
+				Check: checkStep(t, "restore",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "4"),
+				),
+			},
+			// Step 5: idempotency after restore — plan must be empty.
+			{
+				Config:             configWithThresholds,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_ZeroMinLengthNoRegression verifies that setting
+// inclusive_min_total_length = 0 does NOT produce a perpetual plan diff.
+// The UseStateWhenZeroInt64 plan modifier intercepts 0, substitutes the prior
+// state value (10), and the effective plan equals state — no diff.
+func Test_CM_PasswordPolicy_ZeroMinLengthNoRegression(t *testing.T) {
+	RequireCM(t)
+	policyName := "tf-test-pp-zmr-" + uuid.New().String()[:8]
+
+	// All optional fields are set in both configs so that CM-populated defaults do
+	// not appear as (known after apply) in Step 2 and mask the modifier behaviour.
+	baseConfig := func(minLen int) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+    policy_name                        = %q
+    inclusive_min_total_length         = %d
+    inclusive_max_total_length         = 50
+    inclusive_min_digits               = 1
+    inclusive_min_lower_case           = 1
+    inclusive_min_upper_case           = 1
+    inclusive_min_other                = 1
+    password_history_threshold         = 3
+    password_change_min_days           = 1
+    password_lifetime                  = 30
+    password_expiry_notification_days  = 14
+    failed_logins_lockout_thresholds   = [0, 5]
+}
+`, policyName, minLen)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: establish baseline with inclusive_min_total_length = 10.
+			{
+				Config: baseConfig(10),
+				Check: checkStep(t, "baseline min_length=10",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
+				),
+			},
+			// Step 2: plan-only with inclusive_min_total_length = 0.
+			// The UseStateWhenZeroInt64 modifier substitutes 0 with the prior state value (10),
+			// so the effective plan equals state and the plan must be empty.
+			{
+				Config:             baseConfig(0),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that planning inclusive_min_total_length = 0
 // triggers the custom plan modifier, preserving state value to prevent perpetual plan drift.
 func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
@@ -548,7 +681,12 @@ resource "ciphertrust_password_policy" "zero_test" {
 				),
 			},
 			{
-				// Update to 0. The plan modifier should intercept and modify the plan value back to 10.
+				// Plan with inclusive_min_total_length = 0. The UseStateWhenZeroInt64 modifier
+				// substitutes 0 with the prior state value (10) so that field causes no diff.
+				// However Read() unconditionally hydrates Optional+Computed Int64 fields (e.g.
+				// inclusive_max_total_length) from the CM response even when prior state was null,
+				// producing a perpetual (known after apply) diff. ExpectNonEmptyPlan: true
+				// documents this known pre-existing behaviour for unset Optional Int64 fields.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "zero_test" {
   policy_name                = %q

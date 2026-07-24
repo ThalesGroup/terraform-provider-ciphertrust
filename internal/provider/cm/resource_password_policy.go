@@ -552,15 +552,18 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 	}
 
 	if !plan.FailedLoginsLockoutThresholds.IsNull() && !plan.FailedLoginsLockoutThresholds.IsUnknown() {
-		var thresholds []int64
 		var listVals []types.Int64
 		diags := plan.FailedLoginsLockoutThresholds.ElementsAs(ctx, &listVals, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		for _, int := range listVals {
-			thresholds = append(thresholds, int.ValueInt64())
+		// make ensures a non-nil slice even when listVals is empty.
+		// A nil slice via append(&nil) marshals as null; a non-nil empty slice marshals as [],
+		// which CM interprets as "clear the lockout list".
+		thresholds := make([]int64, 0, len(listVals))
+		for _, v := range listVals {
+			thresholds = append(thresholds, v.ValueInt64())
 		}
 		payload.FailedLoginsLockoutThresholds = &thresholds
 	}
@@ -689,12 +692,14 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		plan.PasswordExpiryNotificationDays = types.Int64Null()
 	}
 
-	result := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
-	if !result.Exists() {
-		plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
-	} else {
+	// Only hydrate from the PATCH response when the plan had the field set (non-null).
+	// When the plan is null (user didn't configure this field), CM returns its server
+	// default in the response. Writing that to plan would cause a post-apply
+	// consistency error (plan said null, provider returned a non-null list).
+	thresholdsResult := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
+	if thresholdsResult.Exists() && !plan.FailedLoginsLockoutThresholds.IsNull() && !plan.FailedLoginsLockoutThresholds.IsUnknown() {
 		thresholds := []attr.Value{}
-		result.ForEach(func(_, v gjson.Result) bool {
+		thresholdsResult.ForEach(func(_, v gjson.Result) bool {
 			thresholds = append(thresholds, types.Int64Value(v.Int()))
 			return true
 		})
@@ -705,6 +710,10 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		}
 		plan.FailedLoginsLockoutThresholds = listValue
 	}
+	// Absent or plan-null: plan.FailedLoginsLockoutThresholds retains the deserialized
+	// plan value (null for unset, non-nil empty list for explicit []).
+	// This prevents the post-apply consistency check from failing when the field is
+	// absent from the PATCH response or was not configured by the user.
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
