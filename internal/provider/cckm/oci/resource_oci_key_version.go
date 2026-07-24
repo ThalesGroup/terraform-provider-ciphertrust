@@ -61,7 +61,7 @@ func (r *resourceCCKMOCIVersion) Configure(_ context.Context, req resource.Confi
 
 func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create and manage native OCI key versions in CipherTrust Manager.",
+		Description: "Use this resource to create and manage native OCI key versions in CipherTrust Manager. A native key version can be added to an oci_key or an oci_byok_key.",
 		Attributes: map[string]schema.Attribute{
 			"account": schema.StringAttribute{
 				Computed:    true,

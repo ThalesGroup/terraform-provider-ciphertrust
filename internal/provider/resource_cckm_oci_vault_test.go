@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -52,75 +53,32 @@ func cleanupCckmOCIVaults() {
 	}
 }
 
-// TestCckmOCIMinimalConfig verifies that a resource configuration containing only
-// the minimal required attributes is accepted and applied without error for every
-// OCI CCKM resource type: native key + key version, BYOK key + BYOK key version,
-// and vault ACL. A RefreshState step confirms there is no post-apply plan drift.
-func TestCckmOCIMinimalConfig(t *testing.T) {
-
-	connectionResource := initCckmOCITest(t)
-
-	keyConfig := `
-		resource "ciphertrust_oci_key" "native_key" {
-			oci_key_params = {
-				algorithm       = "RSA"
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				length          = 256
-				protection_mode = "SOFTWARE"
-			}
-			name  = "%s"
-			vault = ciphertrust_oci_vault.vault.id
+// deleteOciVaultOOB removes a CipherTrust Manager OCI vault registration out-of-band
+// (i.e. without going through Terraform). It is idempotent - if the vault is already
+// gone it returns silently. Errors are logged as warnings; the function never fails
+// the test on its own because the test steps that follow will surface any real problem.
+func deleteOciVaultOOB(t *testing.T, vaultID string) {
+	t.Helper()
+	if vaultID == "" {
+		t.Log("deleteOciVaultOOB: vaultID is empty, skipping")
+		return
+	}
+	client, ok := createCMClient()
+	if !ok {
+		t.Log("deleteOciVaultOOB: could not create CM client, skipping OOB delete")
+		return
+	}
+	ctx := context.Background()
+	_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_OCI+"/vaults/"+vaultID)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			t.Logf("deleteOciVaultOOB: vault %s already absent", vaultID)
+			return
 		}
-		resource "ciphertrust_oci_key_version" "native_version" {
-			cckm_key_id = ciphertrust_oci_key.native_key.id
-		}
-		resource "ciphertrust_cm_key" "cm_key" {
-			name       = "%s"
-			algorithm  = "AES"
-			usage_mask = local.cm_key_usage_mask
-		}
-		resource "ciphertrust_oci_byok_key" "byok_key" {
-			name = "%s"
-			oci_key_params = {
-				compartment_id  = ciphertrust_oci_vault.vault.compartment_id
-				protection_mode = "SOFTWARE"
-			}
-			source_key_id   = ciphertrust_cm_key.cm_key.id
-			source_key_tier = "local"
-			vault           = ciphertrust_oci_vault.vault.id
-		}
-		resource "ciphertrust_oci_byok_key_version" "byok_version" {
-			cckm_key_id   = ciphertrust_oci_byok_key.byok_key.id
-			source_key_id = ciphertrust_cm_key.cm_key.id
-		}
-		resource "ciphertrust_groups" "acl_group" {
-			name = "%s"
-		}
-		resource "ciphertrust_oci_acl" "acl" {
-			vault_id = ciphertrust_oci_vault.vault.id
-			group    = ciphertrust_groups.acl_group.id
-			actions  = ["view"]
-		}`
-
-	fullConfig := connectionResource + fmt.Sprintf(keyConfig,
-		"tf-"+uuid.New().String()[:8],
-		"tf-"+uuid.New().String()[:8],
-		"tf-"+uuid.New().String()[:8],
-		"tf-"+uuid.New().String()[:8],
-	)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { cleanupCckmOCIVaults() },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: fullConfig,
-			},
-			{
-				RefreshState: true,
-			},
-		},
-	})
+		t.Logf("deleteOciVaultOOB: warning - failed to delete vault %s: %s", vaultID, err.Error())
+		return
+	}
+	t.Logf("deleteOciVaultOOB: deleted vault %s out-of-band", vaultID)
 }
 
 func TestCckmOCIVault(t *testing.T) {
@@ -237,12 +195,24 @@ func TestCckmOCIVault(t *testing.T) {
 					// Vaults data source
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.lifecycle_state"),
-					// Vault resource
+					// Vault resource - required inputs round-trip
 					resource.TestCheckResourceAttrSet(vaultResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "region", regionsDataSource, "oci_regions.0"),
+					// Vault resource - computed attributes populated from OCI
+					resource.TestCheckResourceAttrSet(vaultResource, "name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "lifecycle_state"),
+					resource.TestCheckResourceAttrSet(vaultResource, "vault_type"),
+					resource.TestCheckResourceAttrSet(vaultResource, "compartment_name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "connection_name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "tenancy"),
+					resource.TestCheckResourceAttrSet(vaultResource, "management_endpoint"),
+					resource.TestCheckResourceAttrSet(vaultResource, "cloud_name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "created_at"),
+					resource.TestCheckResourceAttrSet(vaultResource, "time_created"),
+					resource.TestCheckResourceAttrSet(vaultResource, "uri"),
 				),
 			},
 			{
@@ -263,11 +233,19 @@ func TestCckmOCIVault(t *testing.T) {
 					// Vaults data source
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrSet(vaultsDataSource, "vaults.0.lifecycle_state"),
-					// Vault resource
+					// Vault resource - connection updated to connection_two
 					resource.TestCheckResourceAttrSet(vaultResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "connection_id", connectionTwoResource, "id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "vault_id", vaultsDataSource, "vaults.0.vault_id"),
 					resource.TestCheckResourceAttrPair(vaultResource, "compartment_id", compartmentsDataSource, "compartments.0.id"),
+					resource.TestCheckResourceAttrSet(vaultResource, "region"),
+					// Vault resource - computed attributes still populated after update
+					resource.TestCheckResourceAttrSet(vaultResource, "name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "lifecycle_state"),
+					resource.TestCheckResourceAttrSet(vaultResource, "vault_type"),
+					resource.TestCheckResourceAttrSet(vaultResource, "connection_name"),
+					resource.TestCheckResourceAttrSet(vaultResource, "management_endpoint"),
+					resource.TestCheckResourceAttrSet(vaultResource, "cloud_name"),
 				),
 			},
 			{

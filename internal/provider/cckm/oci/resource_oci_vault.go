@@ -121,7 +121,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was created",
+				Description: "Date/time the vault was created in CipherTrust Manager.",
 			},
 			"defined_tags": schema.SetNestedAttribute{
 				Computed:    true,
@@ -135,7 +135,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 						"values": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
-							Description: "The key:value pairs to added to the tag.",
+							Description: "The key:value pairs added to the tag.",
 						},
 					},
 				},
@@ -152,7 +152,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"is_primary": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Whether the key belongs to a primary vault or a replica vault.",
+				Description: "Whether the vault is a primary vault or a replica vault.",
 			},
 			"lifecycle_state": schema.StringAttribute{
 				Computed:    true,
@@ -168,7 +168,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"refreshed_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was refreshed.",
+				Description: "Date/time the vault was last refreshed.",
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
@@ -193,7 +193,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was updated.",
+				Description: "Date/time the vault was last updated.",
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,
@@ -422,11 +422,11 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		response = updatedResponse
 	}
 	tflog.Debug(ctx, "[resource_oci_vault.go -> Update][response:"+redactOCIResponse(response)+"]")
-	r.setVaultState(ctx, id, response, &state, &resp.Diagnostics)
+	r.setVaultState(ctx, id, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Delete removes the vault from CipherTrust Manager.

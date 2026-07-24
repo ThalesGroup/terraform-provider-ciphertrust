@@ -183,14 +183,14 @@ resource "ciphertrust_aws_key" "replicated_key" {
 
 Optional:
 
-- `alias` (Set of String) (Updatable) Alias(es) of the key. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored.
+- `alias` (Set of String) (Updatable) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].
 - `auto_rotation_period_in_days` (Number) (Updatable) Rotation period in days for AWS auto-rotation. Only applicable to native symmetric keys.
 - `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
 - `customer_master_key_spec` (String) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
 - `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
 - `key_usage` (String) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.
 - `multi_region` (Boolean) Creates or identifies a multi-region key.
-- `tags` (Map of String) (Updatable) A list of tags assigned to the AWS key.
+- `tags` (Map of String) (Updatable) A list of tags assigned to the AWS key. To remove all tags set tags = {}.
 
 Read-Only:
 
