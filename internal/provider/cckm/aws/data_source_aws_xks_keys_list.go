@@ -25,7 +25,7 @@ func NewDataSourceAWSXKSKeys() datasource.DataSource {
 	return &dataSourceAWSXKSKey{}
 }
 
-func (d *dataSourceAWSXKSKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSXKSKey) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -119,7 +119,7 @@ func (d *dataSourceAWSXKSKey) Read(ctx context.Context, req datasource.ReadReque
 
 // setXKSKeyState populates the Terraform data source state for an AWS XKS key from an API response JSON string.
 func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string, plan *AWSXKSKeyDataSourceTFSDK, diags *diag.Diagnostics) {
-	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
+	setCustomKeyStoreKeyCommonState(ctx, d.client, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
 	plan.Blocked = types.BoolValue(gjson.Get(response, "blocked").Bool())
 	plan.AWSXKSKeyID = types.StringValue(gjson.Get(response, "aws_param.XksKeyConfiguration.Id").String())
 	plan.SourceKeyTier = types.StringValue(gjson.Get(response, "key_source").String())
@@ -128,8 +128,8 @@ func (d *dataSourceAWSXKSKey) setXKSKeyState(ctx context.Context, response strin
 // setCustomKeyStoreKeyCommonState populates the common key store key fields shared by the XKS
 // and CloudHSM key data sources. Fields sourced from aws_param are stored exclusively inside
 // the aws_param nested block via setKeyStoreDSAwsParam; they are not set at the outer level.
-func setCustomKeyStoreKeyCommonState(ctx context.Context, response string, plan *AWSKeyStoreKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
-	setCommonKeyDataSourceState(ctx, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
+func setCustomKeyStoreKeyCommonState(ctx context.Context, client *common.Client, response string, plan *AWSKeyStoreKeyDataSourceCommonTFSDK, diags *diag.Diagnostics) {
+	setCommonKeyDataSourceState(ctx, client, response, &plan.AWSKeyDataSourceCommonTFSDK, diags)
 	plan.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
 	plan.KMSName = types.StringValue(gjson.Get(response, "kms").String())
 	plan.KMSID = types.StringValue(gjson.Get(response, "kms_id").String())

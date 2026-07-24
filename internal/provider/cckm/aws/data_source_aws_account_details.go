@@ -23,7 +23,7 @@ func NewDataSourceAWSAccountDetails() datasource.DataSource {
 	return &dataSourceAWSAccountDetails{}
 }
 
-func (d *dataSourceAWSAccountDetails) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSAccountDetails) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}

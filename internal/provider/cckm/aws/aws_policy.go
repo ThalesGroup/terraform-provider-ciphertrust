@@ -8,7 +8,6 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -73,8 +72,8 @@ func getKeyPolicyParams(ctx context.Context, keyPolicy *AWSKeyPolicyTFSDK, diags
 
 // updateKeyPolicy applies a new key policy to an AWS key when the policy parameters have changed.
 func updateKeyPolicy(ctx context.Context, id string, client *common.Client, planInput *AWSKeyUpdateInputTFSDK, stateInput *AWSKeyUpdateInputTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_policy.go -> updateKeyPolicy]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_policy.go -> updateKeyPolicy]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_policy.go -> updateKeyPolicy][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_policy.go -> updateKeyPolicy][" + id + "]")
 	statePolicy := getKeyPolicyParams(ctx, stateInput.KeyPolicy, diags)
 	if diags.HasError() {
 		return
@@ -89,7 +88,7 @@ func updateKeyPolicy(ctx context.Context, id string, client *common.Client, plan
 		if err != nil {
 			msg := "Error updating AWS key. Failed to update key policy, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -97,13 +96,13 @@ func updateKeyPolicy(ctx context.Context, id string, client *common.Client, plan
 		if err != nil {
 			msg := "Error updating AWS key, failed to update key policy."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
 		planInput.KeyID = gjson.Get(response, "id").String()
-		tflog.Info(ctx, fmt.Sprintf("[aws_policy.go -> updateKeyPolicy] key policy updated successfully. key_id: %s", keyID))
-		tflog.Debug(ctx, "[aws_policy.go -> updateKeyPolicy][response:"+redactAWSResponse(response))
+		client.Log.Info(fmt.Sprintf("[aws_policy.go -> updateKeyPolicy] key policy updated successfully. key_id: %s", keyID))
+		client.Log.Debug("[aws_policy.go -> updateKeyPolicy][response:" + redactAWSResponse(response))
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -138,8 +137,8 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 // results are returned (or the optional limit is reached).
 func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_get_oci_vaults.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_get_oci_vaults.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_vaults.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_get_oci_vaults.go -> Read][" + id + "]")
 
 	var state models.DataSourceGetOCIVaultsTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -163,37 +162,42 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data = append(data, vaults.Data...)
-	nextPage := vaults.NextPage
-	for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-		payload.NextPage = &nextPage
-		vaults = d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if vaults != nil {
 		data = append(data, vaults.Data...)
-		nextPage = vaults.NextPage
-	}
+		nextPage := vaults.NextPage
+		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
+			payload.NextPage = &nextPage
+			vaults = d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			if vaults == nil {
+				break
+			}
+			data = append(data, vaults.Data...)
+			nextPage = vaults.NextPage
+		}
 
-	for _, vault := range data {
-		ociVault := models.DataSourceGetOCIVaultTFSDK{
-			CompartmentID:      types.StringValue(vault.CompartmentID),
-			DisplayName:        types.StringValue(vault.DisplayName),
-			VaultID:            types.StringValue(vault.VaultID),
-			LifecycleState:     types.StringValue(vault.LifecycleState),
-			ManagementEndpoint: types.StringValue(vault.ManagementEndpoint),
-			TimeCreated:        types.StringValue(vault.TimeCreated),
-			VaultType:          types.StringValue(vault.VaultType),
+		for _, vault := range data {
+			ociVault := models.DataSourceGetOCIVaultTFSDK{
+				CompartmentID:      types.StringValue(vault.CompartmentID),
+				DisplayName:        types.StringValue(vault.DisplayName),
+				VaultID:            types.StringValue(vault.VaultID),
+				LifecycleState:     types.StringValue(vault.LifecycleState),
+				ManagementEndpoint: types.StringValue(vault.ManagementEndpoint),
+				TimeCreated:        types.StringValue(vault.TimeCreated),
+				VaultType:          types.StringValue(vault.VaultType),
+			}
+			setFreeformTagsState(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			setDefinedTagsState(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Vaults = append(state.Vaults, ociVault)
 		}
-		setFreeformTagsState(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		setDefinedTagsState(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		state.Vaults = append(state.Vaults, ociVault)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -205,7 +209,7 @@ func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, pay
 	if err != nil {
 		msg := "Error reading OCI vaults, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -213,7 +217,7 @@ func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, pay
 	if err != nil {
 		msg := "Error reading OCI vaults."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -222,7 +226,7 @@ func (d *dataSourceGetOCIVaults) fetchVaults(ctx context.Context, id string, pay
 	if err != nil {
 		msg := "Error reading OCI vaults, invalid data output."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}

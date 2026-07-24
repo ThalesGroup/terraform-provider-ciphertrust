@@ -1,4 +1,4 @@
-package cckm
+﻿package cckm
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -170,8 +169,8 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create registers a new AWS KMS connection in CipherTrust Manager and sets Terraform state.
 func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> Create][" + id + "]")
 	var (
 		plan    KMSModelTFSDK
 		payload KMSModelJSON
@@ -184,14 +183,14 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if connErr != nil {
 		msg := "Error creating AWS KMS, failed to read AWS connection by 'connection_id'."
 		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
 		msg := "Error creating AWS KMS: connection_id must be a resource ID of an AWS connection."
 		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -218,7 +217,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error creating AWS KMS, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "name": payload.Name})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -226,11 +225,11 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error creating AWS KMS"
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_kms.go -> Create][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_kms.go -> Create][response:" + redactAWSResponse(response) + "]")
 	kmsID := gjson.Get(response, "id").String()
 	plan.ID = types.StringValue(kmsID)
 
@@ -239,7 +238,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error reading AWS KMS after create."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -257,8 +256,8 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 // (terraform destroy or removed from config).
 func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> Read][" + id + "]")
 	var state KMSModelTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -269,7 +268,7 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_kms.go -> Read][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_kms.go -> Read][response:" + redactAWSResponse(response) + "]")
 	r.setKmsState(ctx, id, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -280,8 +279,8 @@ func (r *resourceCCKMAWSKMS) Read(ctx context.Context, req resource.ReadRequest,
 // Update applies plan changes (regions, connection, assume-role) to an existing AWS KMS registration.
 func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> Update][" + id + "]")
 	var (
 		plan    KMSModelTFSDK
 		state   KMSModelTFSDK
@@ -300,14 +299,14 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		if connErr != nil {
 			msg := "Error updating AWS KMS, failed to read AWS connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
 			msg := "Error updating AWS KMS: connection_id must be a resource ID of an AWS connection."
 			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -317,7 +316,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_kms.go -> Update][get response:"+redactAWSResponse(kmsResponse)+"]")
+	r.client.Log.Debug("[resource_aws_kms.go -> Update][get response:" + redactAWSResponse(kmsResponse) + "]")
 
 	kmsAccount := gjson.Get(kmsResponse, "account").String()
 	mutexKey := fmt.Sprintf("aws-kms-%s", kmsAccount)
@@ -342,7 +341,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		msg := "Error updating AWS KMS, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -359,7 +358,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		msg := "Error updating AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -377,17 +376,17 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		msg := "Error reading AWS KMS after update."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_aws_kms.go -> Update][response:"+redactAWSResponse(response)+"]")
+	r.client.Log.Debug("[resource_aws_kms.go -> Update][response:" + redactAWSResponse(response) + "]")
 	r.setKmsState(ctx, id, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		msg := "Error updating AWS KMS, failed to set resource state."
 		details := utils.ApiError(msg, map[string]interface{}{"kms id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -399,8 +398,8 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 // removed from state rather than returning an error.
 func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> Delete][" + id + "]")
 	var state KMSModelTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -414,7 +413,7 @@ func (r *resourceCCKMAWSKMS) Delete(ctx context.Context, req resource.DeleteRequ
 	if err != nil {
 		msg := "Error deleting AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 	}
 }
@@ -474,14 +473,14 @@ func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.Modify
 // ImportState imports an existing AWS KMS into Terraform state using its resource ID.
 func (r *resourceCCKMAWSKMS) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 // setKmsState populates the Terraform state for an AWS KMS from an API response JSON string.
 // connection_id and connection_name are resolved via resolveConnectionByIDOrName using the
-// connection field returned in the API response (may be a UUID or a name).
+// connection field returned in the API response (maybe a UUID or a name).
 func (r *resourceCCKMAWSKMS) setKmsState(ctx context.Context, reqID string, response string, state *KMSModelTFSDK, diags *diag.Diagnostics) {
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	acls.SetAclsStateFromJSON(ctx, gjson.Get(response, "acls"), &state.Acls, diags)
@@ -548,35 +547,33 @@ func (r *resourceCCKMAWSKMS) resolveConnectionByIDOrName(ctx context.Context, re
 }
 
 // archiveKMS archives a KMS registration.
-// Used by resourceCCKMAWSKMS Update.
 func archiveKMS(ctx context.Context, id string, client *common.Client, kmsID string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> archiveKMS]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> archiveKMS]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> archiveKMS][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> archiveKMS][" + id + "]")
 	response, err := client.PostNoData(ctx, id, common.URL_AWS_KMS+"/"+kmsID+"/archive")
 	if err != nil {
 		msg := "Error archiving AWS KMS"
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_kms.go -> archiveKMS] KMS archived successfully. kms_id: %s", kmsID))
-	tflog.Debug(ctx, "[resource_aws_kms.go -> archiveKMS][response:"+redactAWSResponse(response)+"]")
+	client.Log.Info(fmt.Sprintf("[resource_aws_kms.go -> archiveKMS] KMS archived successfully. kms_id: %s", kmsID))
+	client.Log.Debug("[resource_aws_kms.go -> archiveKMS][response:" + redactAWSResponse(response) + "]")
 }
 
 // recoverKMS recovers an archived KMS registration.
-// Used by resourceCCKMAWSKMS Update.
 func recoverKMS(ctx context.Context, id string, client *common.Client, kmsID string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_kms.go -> recoverKMS]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_kms.go -> recoverKMS]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_kms.go -> recoverKMS][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_kms.go -> recoverKMS][" + id + "]")
 	response, err := client.PostNoData(ctx, id, common.URL_AWS_KMS+"/"+kmsID+"/recover")
 	if err != nil {
 		msg := "Error recovering AWS KMS"
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_kms.go -> recoverKMS] KMS recovered successfully. kms_id: %s", kmsID))
-	tflog.Debug(ctx, "[resource_aws_kms.go -> recoverKMS][response:"+redactAWSResponse(response)+"]")
+	client.Log.Info(fmt.Sprintf("[resource_aws_kms.go -> recoverKMS] KMS recovered successfully. kms_id: %s", kmsID))
+	client.Log.Debug("[resource_aws_kms.go -> recoverKMS][response:" + redactAWSResponse(response) + "]")
 }

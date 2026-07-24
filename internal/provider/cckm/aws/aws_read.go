@@ -9,7 +9,6 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -27,7 +26,7 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 			if opLabel == "deleting" {
 				msg := "AWS key was not found. It will be removed from state."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else if kmsID != "" {
 				_, kmsErr := client.GetById(ctx, id, kmsID, common.URL_AWS_KMS)
@@ -35,32 +34,32 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 					if strings.Contains(kmsErr.Error(), notFoundError) {
 						msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS")
 						details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID})
-						tflog.Error(ctx, details)
+						client.Log.Error(details)
 						diags.AddError(details, "")
 					} else {
 						msg := "Error reading AWS KMS while " + opLabel + " AWS key."
 						details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID, "error": kmsErr.Error()})
-						tflog.Error(ctx, details)
+						client.Log.Error(details)
 						diags.AddError(details, "")
 					}
 				} else {
 					// KMS is reachable but the key is gone.
 					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS key")
 					details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "key_id": keyID})
-					tflog.Error(ctx, details)
+					client.Log.Error(details)
 					diags.AddError(details, "")
 				}
 			} else {
 				msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS key")
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return "", false
 		}
 		msg := "Error " + opLabel + " AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return "", false
 	}
@@ -77,8 +76,8 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 //
 // Returns the CM UUID string on success, or "" after adding an error diagnostic on failure.
 func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client, awsKeyID string, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_read.go -> findCMKeyIDByAWSKeyID]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_read.go -> findCMKeyIDByAWSKeyID]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_read.go -> findCMKeyIDByAWSKeyID][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_read.go -> findCMKeyIDByAWSKeyID][" + id + "]")
 
 	filters := url.Values{}
 	filters.Add("keyid", awsKeyID)
@@ -91,7 +90,7 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 	if err != nil {
 		msg := "Error looking up AWS key in CipherTrust Manager by AWS key ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": awsKeyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -100,14 +99,14 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 	if total == 0 {
 		msg := "AWS key not found in CipherTrust Manager. Ensure the key has been registered in CM before managing its key material."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
 	if total > 1 {
 		msg := "Multiple AWS keys found in CipherTrust Manager with the same AWS key ID."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID, "count": total})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -116,7 +115,7 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 	if cmKeyID == "" {
 		msg := "CipherTrust Manager key ID was empty in list response."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -127,9 +126,9 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 // awsMrkKeyID is the shared mrk-xxx key ID present on all keys in the set (from aws_param.KeyId).
 // Returns the CCKM UUID on success, or "" after adding a warning diagnostic on failure (non-fatal).
 func findKeyCMIDByRegion(ctx context.Context, id string, client *common.Client, awsMrkKeyID string, region string, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_read.go -> findKeyCMIDByRegion]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_read.go -> findKeyCMIDByRegion]["+id+"]")
-	tflog.Debug(ctx, fmt.Sprintf("findKeyCMIDByRegion: region: %s", region))
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_read.go -> findKeyCMIDByRegion][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_read.go -> findKeyCMIDByRegion][" + id + "]")
+	client.Log.Debug(fmt.Sprintf("findKeyCMIDByRegion: region: %s", region))
 	filters := url.Values{}
 	filters.Add("keyid", awsMrkKeyID)
 	filters.Add("region", region)
@@ -137,7 +136,7 @@ func findKeyCMIDByRegion(ctx context.Context, id string, client *common.Client, 
 	if err != nil {
 		msg := "Error looking up key in CipherTrust Manager by region."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": awsMrkKeyID, "region": region})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -145,7 +144,7 @@ func findKeyCMIDByRegion(ctx context.Context, id string, client *common.Client, 
 	if total == 0 {
 		msg := "Key not found by region in CipherTrust Manager."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsMrkKeyID, "region": region})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -153,7 +152,7 @@ func findKeyCMIDByRegion(ctx context.Context, id string, client *common.Client, 
 	if cmKeyID == "" {
 		msg := "CipherTrust Manager key ID was empty looking up key by region."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsMrkKeyID, "region": region})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -162,13 +161,13 @@ func findKeyCMIDByRegion(ctx context.Context, id string, client *common.Client, 
 
 // getPrimaryKey looks up and returns the primary key JSON for a multi-region AWS key given any key in the set.
 func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_read.go -> getPrimaryKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_read.go -> getPrimaryKey]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_read.go -> getPrimaryKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_read.go -> getPrimaryKey][" + id + "]")
 	response, err := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		msg := "Failed get primary key ID of AWS key " + keyID + ", error reading key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -178,7 +177,7 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 	if len(primaryKeyArnParts) != 6 {
 		msg := "Failed get primary key of AWS key, unexpected primary key ARN format."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "arn": primaryKeyARN})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -186,7 +185,7 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 	if len(kidParts) != 2 {
 		msg := "Failed get primary key of AWS key, unexpected primary key ARN format."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "arn": primaryKeyArnParts[5]})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -197,7 +196,7 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 	if err != nil {
 		msg := "Error reading AWS primary key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kid": kidParts[1], "region": primaryKeyRegion})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -205,14 +204,14 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 	if total == 0 {
 		msg := "Error reading AWS primary key."
 		details := utils.ApiError(msg, map[string]interface{}{"kid": kidParts[1], "region": primaryKeyRegion})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
 	if total != 1 {
 		msg := "Error reading AWS primary key, failed to list just one key."
 		details := utils.ApiError(msg, map[string]interface{}{"kid": kidParts[1], "region": primaryKeyRegion})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -220,7 +219,7 @@ func getPrimaryKey(ctx context.Context, id string, client *common.Client, keyID 
 	for _, keyResourceJSON := range resources {
 		response = keyResourceJSON.Raw
 	}
-	tflog.Debug(ctx, "[aws_read.go -> getPrimaryKey][response:"+redactAWSResponse(response))
+	client.Log.Debug("[aws_read.go -> getPrimaryKey][response:" + redactAWSResponse(response))
 	return response
 }
 
@@ -243,17 +242,17 @@ func getAwsPolicyTemplate(ctx context.Context, id string, client *common.Client,
 			}
 			details := utils.ApiError(msg, map[string]interface{}{"template_id": templateID})
 			if opLabel == "deleting" {
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + opLabel + " AWS policy template, failed to read AWS policy template."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "template_id": templateID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -279,17 +278,17 @@ func getAwsKms(ctx context.Context, id string, client *common.Client, kmsID stri
 			}
 			details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
 			if opLabel == "deleting" {
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + opLabel + " AWS KMS, failed to read AWS KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -320,17 +319,17 @@ func (r *resourceAWSXKSKey) getAwsXksKey(ctx context.Context, id string, keystor
 			}
 			details := utils.ApiError(msg, map[string]interface{}{"keystore_id": keystoreID, "key_id": keyID})
 			if opLabel == "deleting" {
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
-				tflog.Error(ctx, details)
+				r.client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + opLabel + " AWS XKS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -364,19 +363,19 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 				if opLabel == "deleting" {
 					msg := "AWS CloudHSM key (" + terraformID + ") was not found. It will be removed from state."
 					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 				} else {
 					msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS CloudHSM key")
 					details := utils.ApiError(msg, map[string]interface{}{"key_id": terraformID})
-					tflog.Error(ctx, details)
+					r.client.Log.Error(details)
 					diags.AddError(details, "")
 				}
 				return ""
 			}
 			msg := "Error reading AWS CloudHSM key."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": terraformID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			diags.AddError(details, "")
 			return ""
 		}
@@ -390,7 +389,7 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 	if err != nil {
 		msg := "Failed to read AWS CloudHSM key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kid": kid, "region": region})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -404,10 +403,10 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 		}
 		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
 		if opLabel == "deleting" {
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 		} else {
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			diags.AddError(details, "")
 		}
 		return ""
@@ -415,7 +414,7 @@ func (r *resourceAWSCloudHSMKey) getAwsCloudHsmKey(ctx context.Context, id strin
 	if total != 1 {
 		msg := "Error reading AWS CloudHSM key, failed to list just one key."
 		details := utils.ApiError(msg, map[string]interface{}{"kid": kid, "region": region})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}

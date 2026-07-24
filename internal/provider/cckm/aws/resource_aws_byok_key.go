@@ -1,4 +1,4 @@
-package cckm
+﻿package cckm
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -287,11 +286,11 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 //     PendingImport state with no material. Use aws_key_material to import material later.
 //
 // After the key is created the final state is read from the API. If the read fails a warning is
-// added and the create response is used for state instead.
+// added and the creation response is used for state instead.
 func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> Create][" + id + "]")
 	var (
 		plan     AWSByokKeyTFSDK
 		response string
@@ -316,7 +315,7 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 		if _, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS); err != nil {
 			msg := "Error creating AWS BYOK key: kms_id does not resolve to a valid KMS."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -338,7 +337,7 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> Create][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> Create][response:" + redactAWSResponse(response))
 
 	// Don't return errors after this
 
@@ -348,11 +347,11 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		msg := "Error reading AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		response = getResponse
-		tflog.Debug(ctx, "[resource_aws_byok_key.go -> Create][response:"+redactAWSResponse(response))
+		r.client.Log.Debug("[resource_aws_byok_key.go -> Create][response:" + redactAWSResponse(response))
 	}
 
 	var diags diag.Diagnostics
@@ -368,8 +367,8 @@ func (r *resourceAWSByokKey) Create(ctx context.Context, req resource.CreateRequ
 // recovery is possible without manual state surgery. A key pending deletion is kept in state with a warning.
 func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> Read][" + id + "]")
 	var state AWSByokKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -382,14 +381,14 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if gjson.Get(response, "gone").Bool() {
 		msg := "AWS BYOK key is gone - its region is not in the KMS regions list. Key operations will fail until the region is restored to the KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "BYOK key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
@@ -403,8 +402,8 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 // Key material import and rotation are managed separately via the aws_key_material resource.
 func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> Update][" + id + "]")
 	var (
 		plan  AWSByokKeyTFSDK
 		state AWSByokKeyTFSDK
@@ -422,13 +421,13 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> Update][get response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> Update][get response:" + redactAWSResponse(response))
 
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "BYOK key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		// Policy updates are permitted by AWS on keys pending deletion.
 		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
@@ -535,7 +534,7 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		msg := "Error updating AWS BYOK key, failed to read key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -550,7 +549,7 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> Update][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> Update][response:" + redactAWSResponse(response))
 }
 
 // Delete schedules an AWS BYOK key for deletion via the schedule-deletion API. In either case:
@@ -560,8 +559,8 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 //   - If the key is already in PendingDeletion or PendingReplicaDeletion state, a warning is returned and the key is removed from state.
 func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> Delete][" + id + "]")
 	var state AWSByokKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -579,7 +578,7 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 	if keyState == "PendingDeletion" || keyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionDeleteFmt, "AWS", "BYOK key")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		return
 	}
@@ -594,7 +593,7 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 	if err != nil {
 		msg := "Error deleting AWS BYOK key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -603,14 +602,14 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 		msg := "Error deleting AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		if strings.Contains(err.Error(), "is pending deletion") {
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			resp.Diagnostics.AddWarning(details, "")
 		} else {
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 		}
 	}
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> Delete][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> Delete][response:" + redactAWSResponse(response))
 }
 
 // ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource.
@@ -687,7 +686,7 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 			if err != nil && strings.Contains(err.Error(), notFoundError) {
 				msg := "Previous AWS KMS was not found, allowing update."
 				details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				changed = append(changed, "kms_id")
@@ -752,8 +751,8 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 // ImportState imports an existing AWS BYOK key into Terraform state using its resource ID.
 func (r *resourceAWSByokKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -761,8 +760,8 @@ func (r *resourceAWSByokKey) ImportState(ctx context.Context, req resource.Impor
 // The key will be in PendingImport state until material is imported separately.
 // kmsID and commonAwsParams are pre-validated and pre-built by Create before calling this function.
 func (r *resourceAWSByokKey) createByokKey(ctx context.Context, id string, kmsID string, plan *AWSByokKeyTFSDK, commonAwsParams CommonAWSParamsJSON, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> createByokKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> createByokKey]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> createByokKey][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> createByokKey][" + id + "]")
 	keyCreateParams := r.getByokKeyCreateParams(ctx, plan, diags)
 	if diags.HasError() {
 		return ""
@@ -780,7 +779,7 @@ func (r *resourceAWSByokKey) createByokKey(ctx context.Context, id string, kmsID
 	if err != nil {
 		msg := "Error creating AWS BYOK key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -788,19 +787,19 @@ func (r *resourceAWSByokKey) createByokKey(ctx context.Context, id string, kmsID
 	if err != nil {
 		msg := "Error creating AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> createByokKey][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> createByokKey][response:" + redactAWSResponse(response))
 	return response
 }
 
 // uploadByokKey uploads CipherTrust Manager key material to an EXTERNAL AWS key via the upload-key API.
 // kmsID and commonAwsParams are pre-validated and pre-built by Create before calling this function.
 func (r *resourceAWSByokKey) uploadByokKey(ctx context.Context, id string, kmsID string, plan *AWSByokKeyTFSDK, commonAwsParams CommonAWSParamsJSON, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> uploadByokKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> uploadByokKey]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> uploadByokKey][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> uploadByokKey][" + id + "]")
 	keyCreateParams := r.getByokKeyCreateParams(ctx, plan, diags)
 	if diags.HasError() {
 		return ""
@@ -826,7 +825,7 @@ func (r *resourceAWSByokKey) uploadByokKey(ctx context.Context, id string, kmsID
 	if err != nil {
 		msg := "Error creating AWS BYOK key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -834,11 +833,11 @@ func (r *resourceAWSByokKey) uploadByokKey(ctx context.Context, id string, kmsID
 	if err != nil {
 		msg := "Error creating AWS BYOK key, failed to upload key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> uploadByokKey][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_byok_key.go -> uploadByokKey][response:" + redactAWSResponse(response))
 	return response
 }
 
@@ -848,8 +847,8 @@ func (r *resourceAWSByokKey) uploadByokKey(ctx context.Context, id string, kmsID
 // The initial replication API call is a hard error; all subsequent steps are warnings only.
 // commonAwsParams is pre-built by Create before calling this function.
 func (r *resourceAWSByokKey) replicateByokKey(ctx context.Context, id string, plan *AWSByokKeyTFSDK, commonAwsParams CommonAWSParamsJSON, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_byok_key.go -> replicateByokKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_byok_key.go -> replicateByokKey]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_byok_key.go -> replicateByokKey][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_byok_key.go -> replicateByokKey][" + id + "]")
 	if plan.ReplicateKey == nil {
 		return ""
 	}
@@ -928,14 +927,14 @@ func (r *resourceAWSByokKey) setByokKeyState(ctx context.Context, response strin
 	// path below.
 	emptyRotHistory, _ := types.ListValue(rotationHistoryByokSummaryElemType, []attr.Value{})
 	state.RotationHistory = emptyRotHistory
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> setByokKeyState][response:"+redactAWSResponse(response))
-	setNativeAndByokKeyCommonState(ctx, response, &state.AWSNativeAndByokKeyCommonTFSDK, diags)
+	r.client.Log.Debug("[resource_aws_byok_key.go -> setByokKeyState][response:" + redactAWSResponse(response))
+	setNativeAndByokKeyCommonState(ctx, r.client, response, &state.AWSNativeAndByokKeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return
 	}
 	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
 	existing := byokAwsParamFromObject(ctx, state.AWSParam, diags)
-	_ = existing // reserved for future policy-comparison optimisation
+	_ = existing // reserved for future policy-comparison optimization
 	state.MultiRegionConfiguration = setMultiRegionConfig(response, diags)
 	// Only set source key fields from the API when no state value exists yet.
 	// Once set (via upload-key or aws_key_material), preserve the existing state value
@@ -949,7 +948,6 @@ func (r *resourceAWSByokKey) setByokKeyState(ctx context.Context, response strin
 	state.LocalKeyName = types.StringValue(gjson.Get(response, "local_key_name").String())
 	keyID := gjson.Get(response, "id").String()
 	rotID := uuid.New().String()
-	tflog.Debug(ctx, "[resource_aws_byok_key.go -> setByokKeyState] calling fetchRotationHistorySummary")
 	state.RotationHistory, _ = fetchRotationHistoryByokSummary(ctx, rotID, r.client, keyID)
 	// If CurrentKeyMaterialID was not populated by the API,
 	// fall back to the rotation history entry with key_material_state == "CURRENT".

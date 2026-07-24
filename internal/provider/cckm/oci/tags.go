@@ -6,9 +6,9 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -24,14 +24,14 @@ func getFreeformTagsFromPlan(ctx context.Context, planTags *types.Map, diags *di
 	return tags
 }
 
-func getFreeformTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *diag.Diagnostics) map[string]string {
+func getFreeformTagsFromJSON(client *common.Client, tagsJSON gjson.Result, diags *diag.Diagnostics) map[string]string {
 	tags := make(map[string]string)
 	if len(tagsJSON.String()) > 0 {
 		err := json.Unmarshal([]byte(tagsJSON.Raw), &tags)
 		if err != nil {
 			msg := "Error parsing 'freeform_tags', invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "tags": tagsJSON.String()})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return nil
 		}
@@ -73,14 +73,14 @@ func getDefinedTagsFromPlan(ctx context.Context, planTags *types.Set, diags *dia
 	return definedTags
 }
 
-func getDefinedTagsFromJSON(ctx context.Context, tagsJSON gjson.Result, diags *diag.Diagnostics) map[string]map[string]string {
+func getDefinedTagsFromJSON(client *common.Client, tagsJSON gjson.Result, diags *diag.Diagnostics) map[string]map[string]string {
 	tags := make(map[string]map[string]string)
 	if len(tagsJSON.String()) > 0 {
 		err := json.Unmarshal([]byte(tagsJSON.Raw), &tags)
 		if err != nil {
 			msg := "Error parsing 'defined_tags', invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "tags": tagsJSON.String()})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return nil
 		}

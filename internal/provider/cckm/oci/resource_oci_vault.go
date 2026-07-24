@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -125,7 +124,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"defined_tags": schema.SetNestedAttribute{
 				Computed:    true,
-				Description: "The defined tags of the vault.",
+				Description: "The defined tags of the vault. To remove all tags set defined_tags = [].",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"tag": schema.StringAttribute{
@@ -143,7 +142,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"freeform_tags": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "The freeform tags of the vault.",
+				Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -222,8 +221,8 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 // warnings so that the vault is not lost from state.
 func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_vault.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_vault.go -> Create][" + id + "]")
 
 	var plan models.VaultTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -235,14 +234,14 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if connErr != nil {
 		msg := "Error adding OCI vault, failed to read OCI connection by 'connection_id'."
 		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	if gjson.Get(connResponse, "id").String() != plan.ConnectionID.ValueString() {
 		msg := "Error adding OCI vault: connection_id must be a resource ID of an OCI connection."
 		details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -267,7 +266,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		msg := "Error adding OCI vault, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault": payload.VaultIDs[0]})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -276,7 +275,7 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		msg := "Error adding OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault": payload.VaultIDs[0]})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -302,11 +301,11 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 	if err != nil {
 		msg := "Error reading OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": plan.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		var diags diag.Diagnostics
-		tflog.Debug(ctx, "[resource_oci_vault.go -> Create][response:"+redactOCIResponse(getResponse)+"]")
+		r.client.Log.Debug("[resource_oci_vault.go -> Create][response:" + redactOCIResponse(getResponse) + "]")
 		r.setVaultState(ctx, id, getResponse, &plan, &diags)
 		for _, d := range diags {
 			resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
@@ -320,8 +319,8 @@ func (r *resourceCCKMOCIVault) Create(ctx context.Context, req resource.CreateRe
 // removed (terraform destroy or removed from config).
 func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_vault.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_vault.go -> Read][" + id + "]")
 	var state models.VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -343,8 +342,8 @@ func (r *resourceCCKMOCIVault) Read(ctx context.Context, req resource.ReadReques
 // Update patches connection_id, bucket_name, and bucket_namespace via PATCH /oci/vaults/:id.
 func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_vault.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_vault.go -> Update][" + id + "]")
 
 	var plan models.VaultTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -363,14 +362,14 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		if connErr != nil {
 			msg := "Error updating OCI vault, failed to read OCI connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		if gjson.Get(connResp, "id").String() != plan.ConnectionID.ValueString() {
 			msg := "Error updating OCI vault: connection_id must be a resource ID of an OCI connection."
 			details := utils.ApiError(msg, map[string]interface{}{"connection_id": plan.ConnectionID.ValueString()})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -399,7 +398,7 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		if err != nil {
 			msg := "Error updating OCI Vault, invalid data input."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -407,7 +406,7 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		if err != nil {
 			msg := "Error updating OCI Vault."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -415,13 +414,13 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 		if err != nil {
 			msg := "Error reading OCI Vault."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
 		response = updatedResponse
 	}
-	tflog.Debug(ctx, "[resource_oci_vault.go -> Update][response:"+redactOCIResponse(response)+"]")
+	r.client.Log.Debug("[resource_oci_vault.go -> Update][response:" + redactOCIResponse(response) + "]")
 	r.setVaultState(ctx, id, response, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -432,8 +431,8 @@ func (r *resourceCCKMOCIVault) Update(ctx context.Context, req resource.UpdateRe
 // Delete removes the vault from CipherTrust Manager.
 func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_vault.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_vault.go -> Delete][" + id + "]")
 
 	var state models.VaultTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -452,7 +451,7 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 	if err != nil {
 		msg := "Error deleting OCI vault."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 	}
 }
@@ -488,7 +487,7 @@ func (r *resourceCCKMOCIVault) ModifyPlan(ctx context.Context, req resource.Modi
 			if err != nil && strings.Contains(err.Error(), notFoundError) {
 				msg := "Previous OCI connection was not found, allowing vault_id update."
 				details := utils.ApiError(msg, map[string]interface{}{"connection_id": connID})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				changed = append(changed, "vault_id")
@@ -512,8 +511,8 @@ func (r *resourceCCKMOCIVault) ModifyPlan(ctx context.Context, req resource.Modi
 
 func (r *resourceCCKMOCIVault) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_vault.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_vault.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_vault.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_vault.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -524,7 +523,10 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, reqID string, 
 	state.BucketName = types.StringValue(gjson.Get(response, "bucket_name").String())
 	state.BucketNamespace = types.StringValue(gjson.Get(response, "bucket_namespace").String())
 	state.VaultID = types.StringValue(gjson.Get(response, "vault_id").String())
-	freeformTagsJSON := getFreeformTagsFromJSON(ctx, gjson.Get(response, "freeform_tags"), diags)
+	// Capture prior tag values before overwriting, so null-vs-empty corrections can be applied.
+	oldFreeformTags := state.FreeformTags
+	oldDefinedTags := state.DefinedTags
+	freeformTagsJSON := getFreeformTagsFromJSON(r.client, gjson.Get(response, "freeform_tags"), diags)
 	if diags.HasError() {
 		return
 	}
@@ -532,13 +534,25 @@ func (r *resourceCCKMOCIVault) setVaultState(ctx context.Context, reqID string, 
 	if diags.HasError() {
 		return
 	}
-	definedTagsJSON := getDefinedTagsFromJSON(ctx, gjson.Get(response, "defined_tags"), diags)
+	definedTagsJSON := getDefinedTagsFromJSON(r.client, gjson.Get(response, "defined_tags"), diags)
 	if diags.HasError() {
 		return
 	}
 	setDefinedTagsState(ctx, definedTagsJSON, &state.DefinedTags, diags)
 	if diags.HasError() {
 		return
+	}
+	// Correct null-vs-empty mismatches to prevent "Provider produced inconsistent result" errors.
+	// freeform_tags: API returned empty map but prior state had null -> keep null.
+	if !state.FreeformTags.IsNull() && len(state.FreeformTags.Elements()) == 0 && oldFreeformTags.IsNull() {
+		state.FreeformTags = types.MapNull(types.StringType)
+	}
+	// defined_tags: API returned null set but prior state had an explicit empty set -> restore empty set.
+	if state.DefinedTags.IsNull() && !oldDefinedTags.IsNull() {
+		emptySet, dg2 := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: models.DefinedTagAttribs}, []models.DefinedTagTFSDK{})
+		if !dg2.HasError() {
+			state.DefinedTags = emptySet
+		}
 	}
 	r.resolveConnectionByIDOrName(ctx, reqID, gjson.Get(response, "connection").String(), state, diags)
 }

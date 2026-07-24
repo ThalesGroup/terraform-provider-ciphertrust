@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -39,32 +38,6 @@ var rotationHistoryByokSummaryElemType = types.ObjectType{
 		"last_import_status":    types.StringType,
 		"source_key_identifier": types.StringType,
 		"source_key_tier":       types.StringType,
-	},
-}
-
-// rotationHistoryNativeFullElemType matches rotationHistoryNativeFullSchemaAttribute:
-// 18 flat fields for native symmetric key rotation records. No source (BYOK) fields,
-// no uri, no account. Used by the aws_key_rotation resource.
-var rotationHistoryNativeFullElemType = types.ObjectType{
-	AttrTypes: map[string]attr.Type{
-		"id":                       types.StringType,
-		"created_at":               types.StringType,
-		"updated_at":               types.StringType,
-		"local_key_id":             types.StringType,
-		"kms_id":                   types.StringType,
-		"key_material_origin":      types.StringType,
-		"last_import_status":       types.StringType,
-		"last_import_error":        types.StringType,
-		"last_import_at":           types.StringType,
-		"key_id":                   types.StringType,
-		"rotation_date":            types.StringType,
-		"rotation_type":            types.StringType,
-		"key_material_id":          types.StringType,
-		"key_material_description": types.StringType,
-		"valid_to":                 types.StringType,
-		"expiration_model":         types.StringType,
-		"key_material_state":       types.StringType,
-		"import_state":             types.StringType,
 	},
 }
 
@@ -129,7 +102,7 @@ func fetchRotationHistoryByokFull(ctx context.Context, id string, client *common
 	if err != nil {
 		msg := "Warning: could not fetch rotation history for key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		return emptyList, true
 	}
 
@@ -149,7 +122,7 @@ func fetchRotationHistoryByokFull(ctx context.Context, id string, client *common
 			"valid_to":                 types.StringValue(res.Get("aws_param.ValidTo").String()),
 		})
 		if awsParamsDiag.HasError() {
-			tflog.Warn(ctx, "Warning: could not build BYOK full rotation history aws_params object.")
+			client.Log.Warn("Warning: could not build BYOK full rotation history aws_params object.")
 			return emptyList, false
 		}
 		obj, d := types.ObjectValue(rotationHistoryByokFullElemType.AttrTypes, map[string]attr.Value{
@@ -174,73 +147,14 @@ func fetchRotationHistoryByokFull(ctx context.Context, id string, client *common
 			"aws_params": awsParamsObj,
 		})
 		if d.HasError() {
-			tflog.Warn(ctx, "Warning: could not build BYOK full rotation history entry object.")
+			client.Log.Warn("Warning: could not build BYOK full rotation history entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
 	}
 	listVal, d := types.ListValue(rotationHistoryByokFullElemType, elems)
 	if d.HasError() {
-		tflog.Warn(ctx, "Warning: could not build BYOK full rotation history list.")
-		return emptyList, false
-	}
-	return listVal, false
-}
-
-// fetchRotationHistoryNativeFullFetch retrieves the rotation history for a native symmetric key
-// and returns a list using rotationHistoryNativeFullElemType. Used by the aws_key_rotation resource.
-// Returns (list, apiFailed) where apiFailed is true when the API call fails.
-func fetchRotationHistoryNativeFull(ctx context.Context, id string, client *common.Client, keyID string) (types.List, bool) {
-
-	emptyList, _ := types.ListValue(rotationHistoryNativeFullElemType, []attr.Value{})
-
-	filters := url.Values{
-		"skip":  []string{"0"},
-		"limit": []string{"-1"},
-		"sort":  []string{"-RotationDate"},
-	}
-	endpoint := "api/v1/cckm/aws/keys/" + keyID + "/rotations"
-	rotationsJSON, err := client.ListWithFilters(ctx, id, endpoint, filters)
-	if err != nil {
-		msg := "Warning: could not fetch rotation history for key."
-		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
-		return emptyList, true
-	}
-
-	resources := gjson.Get(rotationsJSON, "resources").Array()
-
-	elems := make([]attr.Value, 0, len(resources))
-	for _, res := range resources {
-		obj, d := types.ObjectValue(rotationHistoryNativeFullElemType.AttrTypes, map[string]attr.Value{
-			"id":                       types.StringValue(res.Get("id").String()),
-			"created_at":               types.StringValue(res.Get("createdAt").String()),
-			"updated_at":               types.StringValue(res.Get("updatedAt").String()),
-			"local_key_id":             types.StringValue(res.Get("local_key_id").String()),
-			"kms_id":                   types.StringValue(res.Get("kms_id").String()),
-			"key_material_origin":      types.StringValue(res.Get("key_material_origin").String()),
-			"last_import_status":       types.StringValue(res.Get("last_import_status").String()),
-			"last_import_error":        types.StringValue(res.Get("last_import_error").String()),
-			"last_import_at":           types.StringValue(res.Get("last_import_at").String()),
-			"key_id":                   types.StringValue(res.Get("aws_param.KeyId").String()),
-			"rotation_date":            types.StringValue(res.Get("aws_param.RotationDate").String()),
-			"rotation_type":            types.StringValue(res.Get("aws_param.RotationType").String()),
-			"key_material_id":          types.StringValue(res.Get("aws_param.KeyMaterialId").String()),
-			"key_material_description": types.StringValue(res.Get("aws_param.KeyMaterialDescription").String()),
-			"valid_to":                 types.StringValue(res.Get("aws_param.ValidTo").String()),
-			"expiration_model":         types.StringValue(res.Get("aws_param.ExpirationModel").String()),
-			"key_material_state":       types.StringValue(res.Get("aws_param.KeyMaterialState").String()),
-			"import_state":             types.StringValue(res.Get("aws_param.ImportState").String()),
-		})
-		if d.HasError() {
-			tflog.Warn(ctx, "Warning: could not build native full rotation history entry object.")
-			return emptyList, false
-		}
-		elems = append(elems, obj)
-	}
-	listVal, d := types.ListValue(rotationHistoryNativeFullElemType, elems)
-	if d.HasError() {
-		tflog.Warn(ctx, "Warning: could not build native full rotation history list.")
+		client.Log.Warn("Warning: could not build BYOK full rotation history list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -264,7 +178,7 @@ func fetchRotationHistoryByokSummary(ctx context.Context, id string, client *com
 	if err != nil {
 		msg := "Warning: could not fetch rotation history for key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		return emptyList, true
 	}
 	resources := gjson.Get(rotationsJSON, "resources").Array()
@@ -280,7 +194,7 @@ func fetchRotationHistoryByokSummary(ctx context.Context, id string, client *com
 			"source_key_tier":       types.StringValue(r.Get("source_key_tier").String()),
 		})
 		if d.HasError() {
-			tflog.Warn(ctx, "Warning: could not build BYOK rotation history summary entry object.")
+			client.Log.Warn("Warning: could not build BYOK rotation history summary entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
@@ -289,7 +203,7 @@ func fetchRotationHistoryByokSummary(ctx context.Context, id string, client *com
 	if d.HasError() {
 		var diagWarn diag.Diagnostics
 		diagWarn.Append(d...)
-		tflog.Warn(ctx, "Warning: could not build BYOK rotation history summary list.")
+		client.Log.Warn("Warning: could not build BYOK rotation history summary list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -312,7 +226,7 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 	if err != nil {
 		msg := "Warning: could not fetch rotation history for key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		return emptyList, true
 	}
 	resources := gjson.Get(rotationsJSON, "resources").Array()
@@ -326,7 +240,7 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 			"last_import_status": types.StringValue(r.Get("last_import_status").String()),
 		})
 		if d.HasError() {
-			tflog.Warn(ctx, "Warning: could not build native rotation history summary entry object.")
+			client.Log.Warn("Warning: could not build native rotation history summary entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
@@ -335,7 +249,7 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 	if d.HasError() {
 		var diagWarn diag.Diagnostics
 		diagWarn.Append(d...)
-		tflog.Warn(ctx, "Warning: could not build native rotation history summary list.")
+		client.Log.Warn("Warning: could not build native rotation history summary list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -356,7 +270,7 @@ func fetchFullRotationHistoryJSON(ctx context.Context, id string, client *common
 	if err != nil {
 		msg := "Warning: could not fetch rotation history JSON for key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		return "", true
 	}
 	return rotJSON, false
@@ -370,10 +284,10 @@ func fetchFullRotationHistoryJSON(ctx context.Context, id string, client *common
 // A warning (not an error) is added to diags if the record is never found within the budget,
 // because this function is called after upload-key where errors can no longer be returned.
 func waitForRotationHistoryRecord(ctx context.Context, id string, client *common.Client, keyID string, sourceKeyIdentifier string, sourceKeyTier string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_key_material.go -> waitForRotationHistoryRecord]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_key_material.go -> waitForRotationHistoryRecord]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForRotationHistoryRecord][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForRotationHistoryRecord][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] keyID: %s", keyID))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] keyID: %s", keyID))
 
 	const (
 		maxPolls    = 30
@@ -391,7 +305,7 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 			if convDiags := list.ElementsAs(ctx, &entries, false); !convDiags.HasError() {
 				for _, entry := range entries {
 					if entry.SourceKeyIdentifier.ValueString() == sourceKeyIdentifier {
-						tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
+						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
 						return
 					}
 				}
@@ -403,7 +317,7 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 		}
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] TIMED OUT after %d polls waiting for rotation history record for source_key_identifier: %s", maxPolls, sourceKeyIdentifier))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] TIMED OUT after %d polls waiting for rotation history record for source_key_identifier: %s", maxPolls, sourceKeyIdentifier))
 
 	msg := "Warning: could not confirm import material was successful - rotation history entry for source key not found within timeout."
 	details := utils.ApiError(msg, map[string]interface{}{
@@ -411,7 +325,7 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 		"source_key_identifier": sourceKeyIdentifier,
 		"source_key_tier":       sourceKeyTier,
 	})
-	tflog.Warn(ctx, details)
+	client.Log.Warn(details)
 	diags.AddWarning(details, "")
 }
 
@@ -435,10 +349,10 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 // takes precedence for the success condition, and leavingState is used only in log messages.
 func waitForMaterialStateResolved(ctx context.Context, id string, client *common.Client, keyID string, sourceKeyIdentifier string,
 	stateField string, leavingState string, arrivingState string, diags *diag.Diagnostics) bool {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_key_material.go -> waitForMaterialStateResolved]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_key_material.go -> waitForMaterialStateResolved]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForMaterialStateResolved][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForMaterialStateResolved][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] enter: field: %s leavingState: %s arrivingState: %s keyID: %s srcKey: %s", stateField, leavingState, arrivingState, keyID, sourceKeyIdentifier))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] enter: field: %s leavingState: %s arrivingState: %s keyID: %s srcKey: %s", stateField, leavingState, arrivingState, keyID, sourceKeyIdentifier))
 
 	const (
 		maxPolls    = 30
@@ -460,7 +374,7 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 					if entry.SourceKeyIdentifier.ValueString() != sourceKeyIdentifier {
 						continue
 					}
-					tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d import_state: %s key_material_state: %s", i, entry.AWSParams.ImportState.ValueString(), entry.AWSParams.KeyMaterialState.ValueString()))
+					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d import_state: %s key_material_state: %s", i, entry.AWSParams.ImportState.ValueString(), entry.AWSParams.KeyMaterialState.ValueString()))
 					foundEntry = true
 					var fieldVal string
 					switch stateField {
@@ -478,13 +392,13 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 						resolved = fieldVal != leavingState
 					}
 					if resolved {
-						tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] resolved loop: %d field: %s value: %s keyID: %s srcKey: %s", i, stateField, fieldVal, keyID, sourceKeyIdentifier))
+						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] resolved loop: %d field: %s value: %s keyID: %s srcKey: %s", i, stateField, fieldVal, keyID, sourceKeyIdentifier))
 						return true
 					}
 					// Not yet resolved - keep polling.
 				}
 				if !foundEntry {
-					tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d TIMED OUT waiting for entry in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
+					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d TIMED OUT waiting for entry in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
 				}
 			}
 		}
@@ -501,14 +415,14 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 	} else {
 		waitDesc = "leave " + leavingState
 	}
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] TIMED OUT after %d loops. field: %s lastValue: %s waitDesc: %s keyID: %s sourceKeyID: %s", maxPolls, stateField, lastVal, waitDesc, keyID, sourceKeyIdentifier))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] TIMED OUT after %d loops. field: %s lastValue: %s waitDesc: %s keyID: %s sourceKeyID: %s", maxPolls, stateField, lastVal, waitDesc, keyID, sourceKeyIdentifier))
 	msg := "Warning: could not confirm key material state resolved - rotation history entry for source key did not " + waitDesc + " after timeout."
 	details := utils.ApiError(msg, map[string]interface{}{
 		"key_id":                keyID,
 		"source_key_identifier": sourceKeyIdentifier,
 		"state_field":           stateField,
 	})
-	tflog.Warn(ctx, details)
+	client.Log.Warn(details)
 	diags.AddWarning(details, "")
 	return false
 }
@@ -525,14 +439,14 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 // Replica lookup failures and individual poll timeouts are added as warnings only - the
 // key was already created and rotate-material already called, so we must save state.
 func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *common.Client, primaryKeyID string, sourceKeyID string, primaryKeyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_key_material.go -> waitForReplicasMaterialCurrent]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_key_material.go -> waitForReplicasMaterialCurrent]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForReplicasMaterialCurrent][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForReplicasMaterialCurrent][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] keyID: %s", primaryKeyID))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] keyID: %s", primaryKeyID))
 
 	replicaKeysResult := gjson.Get(primaryKeyJSON, "aws_param.MultiRegionConfiguration.ReplicaKeys")
 	if !replicaKeysResult.Exists() || len(replicaKeysResult.Array()) == 0 {
-		tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] no replica keys found for primary keyID: %s", primaryKeyID))
+		client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] no replica keys found for primary keyID: %s", primaryKeyID))
 		return
 	}
 
@@ -541,7 +455,7 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		replicaARN := replicaResult.Get("Arn").String()
 		replicaRegion := replicaResult.Get("Region").String()
 		if replicaARN == "" || replicaRegion == "" {
-			tflog.Warn(ctx, "waitForReplicasMaterialCurrent: replica entry missing Arn or Region, skipping.")
+			client.Log.Warn("waitForReplicasMaterialCurrent: replica entry missing Arn or Region, skipping.")
 			continue
 		}
 
@@ -549,12 +463,12 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		// ARN format: arn:aws:kms:<region>:<account>:key/<key-id>
 		arnParts := strings.Split(replicaARN, ":")
 		if len(arnParts) < 6 {
-			tflog.Warn(ctx, fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, unexpected replica ARN format: arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, unexpected replica ARN format: arn: %s", replicaARN))
 			continue
 		}
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) < 2 {
-			tflog.Warn(ctx, fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, could not extract key ID from replica ARN. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, could not extract key ID from replica ARN. arn: %s", replicaARN))
 			continue
 		}
 		awsKeyID := kidParts[len(kidParts)-1]
@@ -565,17 +479,17 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		filters.Add("region", replicaRegion)
 		listJSON, listErr := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 		if listErr != nil {
-			tflog.Warn(ctx, fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: error looking up replica key in CipherTrust Manager. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: error looking up replica key in CipherTrust Manager. arn: %s", replicaARN))
 			continue
 		}
 		total := gjson.Get(listJSON, "total").Int()
 		if total == 0 {
-			tflog.Warn(ctx, fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: replica key not found in CipherTrust Manager. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: replica key not found in CipherTrust Manager. arn: %s", replicaARN))
 			continue
 		}
 		replicaCMKeyID := gjson.Get(listJSON, "resources.0.id").String()
 		if replicaCMKeyID == "" {
-			tflog.Warn(ctx, fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: could not determine CipherTrust Manager key ID for replica. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: could not determine CipherTrust Manager key ID for replica. arn: %s", replicaARN))
 			continue
 		}
 
@@ -593,10 +507,10 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 //   - false when overall_status is "failed" and error_details contains
 //     "key material already exists" (a warning is added to diags, not an error)
 func waitForMaterialRotation(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) bool {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_key_material.go -> waitForMaterialRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_key_material.go -> waitForMaterialRotation]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForMaterialRotation][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForMaterialRotation][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] keyID: %s", keyID))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] keyID: %s", keyID))
 
 	const (
 		maxPolls    = 30
@@ -625,13 +539,13 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 				"error":  err.Error(),
 				"key_id": keyID,
 			})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return retryOperation
 		}
 
 		overallStatus = gjson.Get(response, "overall_status").String()
-		tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] loop: %d overallStatus: %s", i, overallStatus))
+		client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] loop: %d overallStatus: %s", i, overallStatus))
 
 		if strings.EqualFold(overallStatus, "success") {
 			return retryOperation
@@ -639,24 +553,24 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 		if strings.EqualFold(overallStatus, "failed") {
 			errorDetails := gjson.Get(response, "error_details").String()
 			if strings.Contains(errorDetails, materialAlreadyExistsError) {
-				tflog.Warn(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] key material already exists. error: %s", errorDetails))
+				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] key material already exists. error: %s", errorDetails))
 				msg := "AWS key material rotation reported failure: key material already exists."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				retryOperation = true
 				return retryOperation
 			}
 			if strings.Contains(errorDetails, materialHasNotBeenImportedError) {
-				tflog.Warn(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] material has not been imported (to replica). error: %s", errorDetails))
+				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] material has not been imported (to replica). error: %s", errorDetails))
 				msg := "AWS key material rotation reported failure: material has not been imported to replica."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				retryOperation = true
 				return retryOperation
 			}
 			msg := "AWS key material rotation failed."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return retryOperation
 		}
@@ -664,10 +578,10 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 			time.Sleep(time.Duration(pollSeconds) * time.Second)
 		}
 	}
-	tflog.Warn(ctx, fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] TIMED OUT waiting for AWS key material rotation to complete after %d loops. Last overall_status: '%s'", maxPolls, overallStatus))
+	client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] TIMED OUT waiting for AWS key material rotation to complete after %d loops. Last overall_status: '%s'", maxPolls, overallStatus))
 	msg := fmt.Sprintf("TIMED OUT waiting for AWS key material rotation to complete after %d loops. Last overall_status: '%s'", maxPolls, overallStatus)
 	details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-	tflog.Warn(ctx, details)
+	client.Log.Warn(details)
 	retryOperation = true
 	return retryOperation
 }
@@ -701,10 +615,10 @@ type keyRefreshTarget struct {
 //
 // POST refresh failure is a hard error. Poll timeouts are warnings only.
 func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, keyID string, keyJSON string, knownSrcIDs []string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[aws_key_material.go -> RefreshKeyAndWait]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[aws_key_material.go -> RefreshKeyAndWait]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> RefreshKeyAndWait][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> RefreshKeyAndWait][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] keyID: %s knownSrcIDs: %v", keyID, knownSrcIDs))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] keyID: %s knownSrcIDs: %v", keyID, knownSrcIDs))
 
 	knownSet := make(map[string]struct{}, len(knownSrcIDs))
 	for _, s := range knownSrcIDs {
@@ -744,7 +658,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 			if listErr != nil {
 				msg := "RefreshKeyAndWait: could not look up replica key - skipping from refresh tracking."
 				details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "key_id": awsKeyID, "region": replicaRegion})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 				continue
 			}
@@ -752,7 +666,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 			if total == 0 {
 				msg := "RefreshKeyAndWait: replica key not found in CM - skipping from refresh tracking."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID, "region": replicaRegion})
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 				continue
 			}
@@ -770,7 +684,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 	if refreshErr != nil {
 		msg := "Error calling refresh on AWS key in CipherTrust Manager."
 		details := utils.ApiError(msg, map[string]interface{}{"error": refreshErr.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -789,7 +703,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 			done[i] = true
 			msg := "RefreshKeyAndWait: key had no rotation history at snapshot time - cannot confirm refresh completed."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": t.cmKeyID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 		}
 	}
@@ -834,13 +748,13 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 				if newUpdatedAt != t.sentinelUpdatedAt {
 					done[ti] = true
 				}
-				tflog.Debug(ctx, fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti]))
+				client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti]))
 				break
 			}
 		}
 
 		if allDone() {
-			tflog.Info(ctx, fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] all keys confirmed refreshed after %d polls", i+1))
+			client.Log.Info(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] all keys confirmed refreshed after %d polls", i+1))
 			return
 		}
 		if i < maxPolls-1 {
@@ -857,7 +771,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 				"sentinel_source_key": t.sentinelSourceKeyID,
 				"sentinel_updated_at": t.sentinelUpdatedAt,
 			})
-			tflog.Warn(ctx, fmt.Sprintf("RefreshKeyAndWait: TIMED OUT after %d polls waiting for rotation history to reflect key refresh.", maxPolls))
+			client.Log.Warn(fmt.Sprintf("RefreshKeyAndWait: TIMED OUT after %d polls waiting for rotation history to reflect key refresh.", maxPolls))
 			diags.AddWarning(details, "")
 		}
 	}

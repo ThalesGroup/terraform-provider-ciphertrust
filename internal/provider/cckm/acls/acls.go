@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -60,12 +60,12 @@ func SetAclsStateFromJSON(ctx context.Context, aclsJSON gjson.Result, aclSet *ty
 }
 
 // GetUnPermittedAcl returns an ACL revocation entry for any actions currently granted that are absent from newActions.
-func GetUnPermittedAcl(ctx context.Context, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
+func GetUnPermittedAcl(client *common.Client, resourceID string, aclsJSON string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -76,7 +76,7 @@ func GetUnPermittedAcl(ctx context.Context, resourceID string, aclsJSON string, 
 		if err != nil {
 			msg := "Error updating ACL list, invalid data output."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return nil
 		}
@@ -122,12 +122,12 @@ func GetUnPermittedAcl(ctx context.Context, resourceID string, aclsJSON string, 
 }
 
 // GetPermittedAcl builds an ACL permit entry granting the supplied actions to the user or group encoded in resourceID.
-func GetPermittedAcl(ctx context.Context, resourceID string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
+func GetPermittedAcl(client *common.Client, resourceID string, newActions []string, diags *diag.Diagnostics) *ContainerAclJSON {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error updating ACL list, invalid resource ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -166,12 +166,12 @@ func AclExistsInResponse(responseJSON string, resourceID string) bool {
 }
 
 // SetAclCommonState populates an AclTFSDK state struct by locating the matching ACL entry within the API response JSON.
-func SetAclCommonState(ctx context.Context, resourceID string, responseJSON string, state *AclTFSDK, diags *diag.Diagnostics) {
+func SetAclCommonState(client *common.Client, resourceID string, responseJSON string, state *AclTFSDK, diags *diag.Diagnostics) {
 	_, aclType, userIDOrGroup, err := DecodeContainerAclID(resourceID)
 	if err != nil {
 		msg := "Error setting state for ACL, invalid resource ID."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "id": resourceID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}

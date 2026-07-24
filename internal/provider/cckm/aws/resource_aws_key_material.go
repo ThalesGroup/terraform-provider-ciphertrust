@@ -1,4 +1,4 @@
-package cckm
+﻿package cckm
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -174,8 +173,8 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 //   - History entry in CURRENT or NON_CURRENT: silently adopted with no API call.
 func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> Create][" + id + "]")
 	var plan AWSKeyMaterialTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -194,7 +193,7 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 	if err != nil {
 		msg := "Error reading AWS key from CipherTrust Manager during key material create."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "cm_key_id": cmKeyID, "aws_key_id": plan.AWSKeyID.ValueString()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -290,8 +289,8 @@ func (r *resourceAWSKeyMaterial) Read(ctx context.Context, req resource.ReadRequ
 //  6. Read final state back from CM.
 func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> Update][" + id + "]")
 	var (
 		plan  AWSKeyMaterialTFSDK
 		state AWSKeyMaterialTFSDK
@@ -322,7 +321,7 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_key_material.go -> Update][get response:"+redactAWSResponse(keyJSON))
+	r.client.Log.Debug("[resource_aws_key_material.go -> Update][get response:" + redactAWSResponse(keyJSON))
 
 	// Step 3: refresh the key from AWS and wait for rotation history to reflect the
 	// refresh. This ensures the provider operates on AWS-current data rather than
@@ -509,8 +508,8 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 // ImportState imports an existing AWS BYOK key into Terraform state using its resource ID.
 func (r *resourceAWSKeyMaterial) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
@@ -520,7 +519,7 @@ func (r *resourceAWSKeyMaterial) ImportState(ctx context.Context, req resource.I
 // responsible for preserving Required/Optional input fields (aws_key_id, key_material) that are
 // not returned by the key API.
 func (r *resourceAWSKeyMaterial) setAwsKeyMaterialState(ctx context.Context, cmKeyID string, state *AWSKeyMaterialTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, "[resource_aws_key_material.go -> setAwsKeyMaterialState] cmKeyID: "+cmKeyID)
+	r.client.Log.Debug("[resource_aws_key_material.go -> setAwsKeyMaterialState] cmKeyID: " + cmKeyID)
 	if cmKeyID == "" {
 		diags.AddError("setAwsKeyMaterialState called with empty cmKeyID", "Internal error: cmKeyID must not be empty.")
 		return
@@ -530,7 +529,7 @@ func (r *resourceAWSKeyMaterial) setAwsKeyMaterialState(ctx context.Context, cmK
 	if err != nil {
 		msg := "Error reading AWS key from CipherTrust Manager in setAwsKeyMaterialState."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "cm_key_id": cmKeyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -555,8 +554,8 @@ func (r *resourceAWSKeyMaterial) setAwsKeyMaterialState(ctx context.Context, cmK
 // no removedMats and no metadataUpdates are produced.
 func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id string, keyID string, plan *AWSKeyMaterialTFSDK, stateKeyMaterial types.Set, keyJSON string, diags *diag.Diagnostics) {
 
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> updateKeyMaterial]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> updateKeyMaterial]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> updateKeyMaterial][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> updateKeyMaterial][" + id + "]")
 
 	// Check for duplicate source_key_identifier values.
 	if !plan.KeyMaterial.IsNull() && !plan.KeyMaterial.IsUnknown() {
@@ -678,7 +677,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 				}
 			}
 		}
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d keyID: %s",
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d keyID: %s",
 			len(pendingMRRepairs), len(pendingImportRepairs), len(pendingRotationRepairs),
 			len(newCandidates), len(removed), keyID))
 	}
@@ -714,9 +713,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 
 		numOperations := len(pendingMRRepairs) + len(pendingImportRepairs) + len(pendingRotationRepairs) +
 			len(newCandidates) + len(removed) + len(metadataUpdates)
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
-			tflog.Debug(ctx, "[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
+			r.client.Log.Debug("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
 			break
 		}
 
@@ -799,7 +798,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			srcID := mat.SourceKeyID.ValueString()
 			if len(historyBySourceKey) == 0 {
 				// No rotation history at all - key is back in PendingImport state.
-				tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey is empty, using import-material (NEW_KEY_MATERIAL). srcID: %s keyID: %s", srcID, keyID))
+				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey is empty, using import-material (NEW_KEY_MATERIAL). srcID: %s keyID: %s", srcID, keyID))
 				ImportByokKeyMaterial(ctx, id, r.client, keyID, srcID,
 					mat.SourceKeyTier.ValueString(),
 					mat.ValidTo.ValueString(),
@@ -814,7 +813,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 					waitForReplicasMaterialCurrent(ctx, id, r.client, keyID, srcID, keyJSON, diags)
 				}
 			} else {
-				tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey has %d entries, rotate to new material.", len(historyBySourceKey)))
+				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey has %d entries, rotate to new material.", len(historyBySourceKey)))
 				rotateToNewMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
 					mat.ValidTo.ValueString(), mat.KeyMaterialDescription.ValueString(), keyJSON, diags)
 			}
@@ -862,11 +861,11 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 // The key material does not enter a pending state during this operation, so no polling
 // is needed after the call.
 func (r *resourceAWSKeyMaterial) updateExistingKeyMaterialMetadata(ctx context.Context, id string, keyID string, mat AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata][" + id + "]")
 
 	srcID := mat.SourceKeyID.ValueString()
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata] srcID: %s keyID: %s validTo: %s desc: %s",
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateExistingKeyMaterialMetadata] srcID: %s keyID: %s validTo: %s desc: %s",
 		srcID, keyID, mat.ValidTo.ValueString(), mat.KeyMaterialDescription.ValueString()))
 
 	ImportByokKeyMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
@@ -892,8 +891,8 @@ func (r *resourceAWSKeyMaterial) updateExistingKeyMaterialMetadata(ctx context.C
 // PENDING_MULTI_REGION_IMPORT_AND_ROTATION; the caller (updateKeyMaterial) is responsible
 // for that pre-filtering.
 func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx context.Context, id string, primaryKeyID string, primaryKeyJSON string, pendingMRRepairs []AWSByokImportMaterialTFSDK, historyBySourceKey map[string]RotationHistoryEntryFullTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation][" + id + "]")
 
 	for _, mat := range pendingMRRepairs {
 		srcID := mat.SourceKeyID.ValueString()
@@ -901,7 +900,7 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		replicaSourceKeyID := entry.SourceKeyIdentifier.ValueString()
 		replicaSourceKeyTier := entry.SourceKeyTier.ValueString()
 
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
 
 		// Step 1: import the existing key material to all replicas that are missing it.
 		// repairMultiRegionReplicas also calls refresh on the primary after all imports so
@@ -937,10 +936,10 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 //  3. Waits for import_state to leave PENDING_IMPORT (i.e. arrive at Imported). A poll
 //     timeout is a warning only because the import call itself succeeded.
 func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id string, keyID string, pendingImportRepairs []AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> repairPendingImport]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> repairPendingImport]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairPendingImport][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairPendingImport][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairPendingImport] keyID: %s", keyID))
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingImport] keyID: %s", keyID))
 
 	for _, mat := range pendingImportRepairs {
 		srcID := mat.SourceKeyID.ValueString()
@@ -956,7 +955,7 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 					"Update valid_to to a future date before Terraform can re-import this material.",
 					srcID, mat.SourceKeyTier.ValueString(),
 				)
-				tflog.Error(ctx, msg)
+				r.client.Log.Error(msg)
 				diags.AddWarning(msg, "")
 				continue
 			}
@@ -967,7 +966,7 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 		ImportByokKeyMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(), validTo, mat.KeyMaterialDescription.ValueString(), "EXISTING_KEY_MATERIAL", &importDiags)
 		diags.Append(importDiags...)
 		if importDiags.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairPendingImport] ImportByokKeyMaterial failed sourceKeyID: %s keyID: %s", srcID, keyID))
+			r.client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingImport] ImportByokKeyMaterial failed sourceKeyID: %s keyID: %s", srcID, keyID))
 			continue
 		}
 
@@ -995,16 +994,16 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //
 // keyJSON is the full CM key record for keyID, used to detect the multi-region case.
 func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> repairKeyMaterialRotations]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> repairKeyMaterialRotations]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] keyID: %s", keyID))
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] keyID: %s", keyID))
 
 	isMRPrimary := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
 
 	for _, mat := range pendingRotationRepairs {
 		srcID := mat.SourceKeyID.ValueString()
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotating keyID: %s to sourceKeyID: %s", keyID, srcID))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotating keyID: %s to sourceKeyID: %s", keyID, srcID))
 
 		// Step 1: call rotate-material with an empty body to activate the pending material.
 		// Hard error - stop the loop immediately if this fails.
@@ -1012,11 +1011,11 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		if rotErr != nil {
 			msg := "Error resuming PENDING_ROTATION for AWS BYOK key material."
 			details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": keyID, "source_key_id": srcID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Info(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
+		r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
 
 		// Step 2: wait for key_material_state to leave PENDING_ROTATION.
 		// The material arrives at CURRENT or NON-CURRENT depending on whether a newer
@@ -1053,14 +1052,14 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 // Errors from individual replica imports are added to diags and the loop continues so the
 // caller receives a full picture of which replicas need attention.
 func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, id string, primaryKeyID string, sourceKeyID string, sourceKeyTier string, validTo string, primaryKeyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> repairMultiRegionReplicas]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> repairMultiRegionReplicas]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairMultiRegionReplicas][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairMultiRegionReplicas][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] keyID: %s sourceKeyID: %s", primaryKeyID, sourceKeyID))
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] keyID: %s sourceKeyID: %s", primaryKeyID, sourceKeyID))
 
 	replicaKeysResult := gjson.Get(primaryKeyJSON, "aws_param.MultiRegionConfiguration.ReplicaKeys")
 	if !replicaKeysResult.Exists() || len(replicaKeysResult.Array()) == 0 {
-		tflog.Debug(ctx, fmt.Sprintf("repairMultiRegionReplicas: no replica keys found in multi-region config for keyID: %s", primaryKeyID))
+		r.client.Log.Debug(fmt.Sprintf("repairMultiRegionReplicas: no replica keys found in multi-region config for keyID: %s", primaryKeyID))
 		return
 	}
 
@@ -1070,7 +1069,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if replicaARN == "" || replicaRegion == "" {
 			msg := "Skipping replica repair: replica entry missing Arn or Region."
 			details := utils.ApiError(msg, map[string]interface{}{"arn": replicaARN, "primary_key_id": primaryKeyID})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
@@ -1081,7 +1080,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if len(arnParts) < 6 {
 			msg := "Skipping replica repair: unexpected replica ARN format."
 			details := utils.ApiError(msg, map[string]interface{}{"arn": replicaARN, "primary_key_id": primaryKeyID})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
@@ -1089,7 +1088,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if len(kidParts) < 2 {
 			msg := "Skipping replica repair: could not extract key ID from replica ARN."
 			details := utils.ApiError(msg, map[string]interface{}{"arn": replicaARN, "primary_key_id": primaryKeyID})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
@@ -1103,7 +1102,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if listErr != nil {
 			msg := "Skipping replica repair: error looking up replica key in CipherTrust Manager."
 			details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "aws_key_id": awsKeyID, "region": replicaRegion})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
@@ -1111,7 +1110,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if total == 0 {
 			msg := "Skipping replica repair: replica key not found in CipherTrust Manager. Import the replica key into CM first."
 			details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
@@ -1119,19 +1118,19 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		if replicaCMKeyID == "" {
 			msg := "Skipping replica repair: could not determine CipherTrust Manager key ID for replica."
 			details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			continue
 		}
 
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replica region: %s replicaKeyID: %s", replicaRegion, replicaCMKeyID))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replica region: %s replicaKeyID: %s", replicaRegion, replicaCMKeyID))
 
 		// Check the replica's rotation history to see whether material already exists.
 		replicaHistory, _ := fetchRotationHistoryByokFull(ctx, id, r.client, replicaCMKeyID)
 		var replicaEntries []RotationHistoryEntryFullTFSDK
 		if hd := replicaHistory.ElementsAs(ctx, &replicaEntries, false); !hd.HasError() {
 			for ri, entry := range replicaEntries {
-				tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] sourceKeyID: %s history[%d] "+
+				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] sourceKeyID: %s history[%d] "+
 					"importState: %s materialState: %v", entry.SourceKeyIdentifier.ValueString(), ri,
 					entry.AWSParams.ImportState.ValueString(), entry.AWSParams.KeyMaterialState.ValueString()))
 			}
@@ -1144,10 +1143,10 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 				}
 			}
 			if alreadyImported {
-				tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replicaCMKeyID: %s already has material for sourceKeyID: %s (not PENDING_IMPORT), skipping", replicaCMKeyID, sourceKeyID))
+				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replicaCMKeyID: %s already has material for sourceKeyID: %s (not PENDING_IMPORT), skipping", replicaCMKeyID, sourceKeyID))
 				continue
 			}
-			tflog.Warn(ctx, fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replicaCMKeyID: %s material for sourceKeyID: %s not found or in PENDING_IMPORT - will import", replicaCMKeyID, sourceKeyID))
+			r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] replicaCMKeyID: %s material for sourceKeyID: %s not found or in PENDING_IMPORT - will import", replicaCMKeyID, sourceKeyID))
 		}
 
 		// Import the material to the replica using EXISTING_KEY_MATERIAL.
@@ -1175,10 +1174,10 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 // validTo is the expiry date string (RFC3339); pass an empty string when no expiry is configured.
 // keyMaterialDescription is optional; pass an empty string to omit it from the request.
 func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client, keyID string, sourceKeyID string, sourceKeyTier string, validTo string, keyMaterialDescription string, importType string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> ImportByokKeyMaterial]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> ImportByokKeyMaterial]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> ImportByokKeyMaterial][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> ImportByokKeyMaterial][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] keyID: %s sourceKeyID: %s", keyID, sourceKeyID))
+	client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] keyID: %s sourceKeyID: %s", keyID, sourceKeyID))
 
 	payload := AWSKeyImportMaterialJSON{
 		SourceKeyID:   sourceKeyID,
@@ -1194,24 +1193,24 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 	if err != nil {
 		msg := "Error importing key material for AWS BYOK key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
 	response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
 	if err != nil {
 		if !strings.Contains(err.Error(), materialAlreadyExistsError) {
-			tflog.Error(ctx, fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, err.Error()))
+			client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, err.Error()))
 			msg := "Error importing key material for AWS BYOK key."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
-		tflog.Warn(ctx, fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] Key material already exists. sourceKeyID: %s error: %s", sourceKeyID, err.Error()))
+		client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] Key material already exists. sourceKeyID: %s error: %s", sourceKeyID, err.Error()))
 		return
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] SUCCESS keyID: %s response: %s", keyID, redactAWSResponse(response)))
+	client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] SUCCESS keyID: %s response: %s", keyID, redactAWSResponse(response)))
 }
 
 // rotateToNewMaterial calls rotate-material on cmKeyID to import new key material and
@@ -1233,10 +1232,10 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 // If rotate-material fails with replica pending import cannot rotate error we need to attempt to fix up
 // Return true to re-calculate material states and try again
 func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> rotateToNewMaterial]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> rotateToNewMaterial]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] primaryKeyID: %s sourceKeyID: %s", cmKeyID, srcID))
+	client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] primaryKeyID: %s sourceKeyID: %s", cmKeyID, srcID))
 
 	rotPayload := RotateMaterialPayloadJSON{
 		SourceKeyID:            srcID,
@@ -1249,7 +1248,7 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	if marshalErr != nil {
 		msg := "Error building rotate-material payload for AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": marshalErr.Error(), "key_id": cmKeyID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -1257,12 +1256,12 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	if rotErr != nil {
 		msg := "Error calling rotate-material on AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": cmKeyID, "source_key_id": srcID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
 
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmKeyID, srcID))
+	client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmKeyID, srcID))
 
 	// Wait for the rotation history record to appear (CCKM creates it during the import step,
 	// before the rotate-material overall_status reaches "success").
@@ -1271,7 +1270,7 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	// Wait for the rotate-material background task to complete.
 	retryOperation := waitForMaterialRotation(ctx, id, client, cmKeyID, diags)
 	if retryOperation {
-		tflog.Debug(ctx, "[resource_aws_key_material.go -> rotateToNewMaterial] waiting for material rotation failed with soft error, continuing.")
+		client.Log.Debug("[resource_aws_key_material.go -> rotateToNewMaterial] waiting for material rotation failed with soft error, continuing.")
 		// Known errors - re-calculate material states and try again - probably should refresh here.
 		return
 	}
@@ -1320,10 +1319,10 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 	keyJSON string,
 	diags *diag.Diagnostics,
 ) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key_material.go -> deleteRemovedKeyMaterial]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key_material.go -> deleteRemovedKeyMaterial]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> deleteRemovedKeyMaterial][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> deleteRemovedKeyMaterial][" + id + "]")
 
-	tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] keyID: %s", keyID))
+	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] keyID: %s", keyID))
 
 	// Determine whether this is a multi-region primary key once, outside the per-mat loop.
 	isMRPrimary := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() &&
@@ -1335,7 +1334,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 		// Step 1: look up the history entry.
 		entry, inHistory := historyBySourceKey[srcID]
 		if !inHistory {
-			tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] sourceKeyID: %s not in rotation history - skipping delete", srcID))
+			r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] sourceKeyID: %s not in rotation history - skipping delete", srcID))
 			continue
 		}
 
@@ -1346,7 +1345,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 		//   - PENDING_ROTATION / PENDING_MULTI_REGION_IMPORT_AND_ROTATION: material exists and is deleted.
 		// The only skip is when the entry is not in rotation history at all (handled above).
 		matState := entry.AWSParams.KeyMaterialState.ValueString()
-		tflog.Debug(ctx, fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] sourceKeyID: %s key_material_state: %s", srcID, matState))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] sourceKeyID: %s key_material_state: %s", srcID, matState))
 
 		// Step 3: build the list of CM key IDs to delete from, together with the
 		// key_material_id to use for each key. Passing the key_material_id ensures
@@ -1365,7 +1364,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				replicaARN := replicaResult.Get("Arn").String()
 				replicaRegion := replicaResult.Get("Region").String()
 				if replicaARN == "" || replicaRegion == "" {
-					tflog.Warn(ctx, fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] replica entry missing Arn or Region for sourceKeyID: %s - skipping replica", srcID))
+					r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] replica entry missing Arn or Region for sourceKeyID: %s - skipping replica", srcID))
 					continue
 				}
 
@@ -1375,7 +1374,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				if len(arnParts) < 6 {
 					msg := "Skipping replica delete: unexpected replica ARN format."
 					details := utils.ApiError(msg, map[string]interface{}{"arn": replicaARN, "source_key_id": srcID})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 					continue
 				}
@@ -1383,7 +1382,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				if len(kidParts) < 2 {
 					msg := "Skipping replica delete: could not extract key ID from replica ARN."
 					details := utils.ApiError(msg, map[string]interface{}{"arn": replicaARN, "source_key_id": srcID})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 					continue
 				}
@@ -1397,14 +1396,14 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				if listErr != nil {
 					msg := "Skipping replica delete: error looking up replica key in CipherTrust Manager."
 					details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "aws_key_id": awsKeyID, "region": replicaRegion})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 					continue
 				}
 				if gjson.Get(listJSON, "total").Int() == 0 {
 					msg := "Skipping replica delete: replica key not found in CipherTrust Manager."
 					details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 					continue
 				}
@@ -1412,7 +1411,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				if replicaCMKeyID == "" {
 					msg := "Skipping replica delete: could not determine CipherTrust Manager key ID for replica."
 					details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
-					tflog.Warn(ctx, details)
+					r.client.Log.Warn(details)
 					diags.AddWarning(details, "")
 					continue
 				}
@@ -1454,11 +1453,11 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 			if delErr != nil {
 				msg := "Error deleting key material from AWS BYOK key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": delErr.Error(), "cm_key_id": cmID, "source_key_id": srcID})
-				tflog.Error(ctx, details)
+				r.client.Log.Error(details)
 				diags.AddError(details, "")
 				// Continue to attempt remaining keys - caller sees all failures.
 			} else {
-				tflog.Info(ctx, fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmID, srcID))
+				r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmID, srcID))
 			}
 		}
 	}

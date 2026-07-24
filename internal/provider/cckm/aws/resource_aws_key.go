@@ -1,4 +1,4 @@
-package cckm
+﻿package cckm
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -279,8 +278,8 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 // applied in a subsequent update. ModifyPlan rejects those attributes at plan time if set during create.
 func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> Create][" + id + "]")
 	var (
 		plan     AWSKeyTFSDK
 		response string
@@ -305,7 +304,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		if _, err := r.client.GetById(ctx, id, kmsID, common.URL_AWS_KMS); err != nil {
 			msg := "Error creating AWS key: kms_id does not resolve to a valid KMS."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "kms_id": kmsID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
@@ -321,7 +320,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	tflog.Debug(ctx, "[resource_aws_key.go -> Create][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> Create][response:" + redactAWSResponse(response))
 
 	// Don't return errors after this
 
@@ -331,11 +330,11 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 	if err != nil {
 		msg := "Error reading AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	} else {
 		response = getResponse
-		tflog.Debug(ctx, "[resource_aws_key.go -> Create][response:"+redactAWSResponse(response))
+		r.client.Log.Debug("[resource_aws_key.go -> Create][response:" + redactAWSResponse(response))
 	}
 
 	var diags diag.Diagnostics
@@ -344,7 +343,7 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Debug(ctx, "[resource_aws_key.go -> Create][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> Create][response:" + redactAWSResponse(response))
 }
 
 // Read refreshes the Terraform state for an AWS key by fetching the latest data from CipherTrust Manager.
@@ -355,8 +354,8 @@ func (r *resourceAWSKey) Create(ctx context.Context, req resource.CreateRequest,
 // is restored to the KMS.
 func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> Read][" + id + "]")
 	var state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -369,14 +368,14 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 	if gjson.Get(response, "gone").Bool() {
 		msg := "AWS key is gone - its region is not in the KMS regions list. Key operations will fail until the region is restored to the KMS."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	readKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 	}
 	r.setKeyState(ctx, response, &state, &resp.Diagnostics)
@@ -391,8 +390,8 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 // Returns an error if the key or KMS is not reachable
 func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> Update][" + id + "]")
 	var (
 		plan  AWSKeyTFSDK
 		state AWSKeyTFSDK
@@ -411,13 +410,13 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	tflog.Debug(ctx, "[resource_aws_key.go -> Update][get response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> Update][get response:" + redactAWSResponse(response))
 
 	updateKeyState := gjson.Get(response, "aws_param.KeyState").String()
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		// Policy updates are permitted by AWS on keys pending deletion.
 		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
@@ -530,7 +529,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	if err != nil {
 		msg := "Error updating AWS key, failed to read key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -539,7 +538,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-	tflog.Debug(ctx, "[resource_aws_key.go -> Update][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> Update][response:" + redactAWSResponse(response))
 }
 
 // Delete schedules an AWS key for deletion via the schedule-deletion API. In either case:
@@ -549,8 +548,8 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 //   - If the key is already in PendingDeletion or PendingReplicaDeletion state, a warning is returned and the key is removed from state.
 func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> Delete][" + id + "]")
 	var state AWSKeyTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -568,7 +567,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	if keyState == "PendingDeletion" || keyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionDeleteFmt, "AWS", "key")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		resp.Diagnostics.AddWarning(details, "")
 		return
 	}
@@ -583,7 +582,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 	if err != nil {
 		msg := "Error deleting AWS key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -592,14 +591,14 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		msg := "Error deleting AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		if strings.Contains(err.Error(), "is pending deletion") {
-			tflog.Warn(ctx, details)
+			r.client.Log.Warn(details)
 			resp.Diagnostics.AddWarning(details, "")
 		} else {
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 		}
 	}
-	tflog.Debug(ctx, "[resource_aws_key.go -> Delete][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> Delete][response:" + redactAWSResponse(response))
 }
 
 // ModifyPlan runs on every plan. During create it rejects attributes that require post-create
@@ -687,7 +686,7 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 			if err != nil && strings.Contains(err.Error(), notFoundError) {
 				msg := "Previous AWS KMS was not found, allowing update."
 				details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID})
-				tflog.Warn(ctx, details)
+				r.client.Log.Warn(details)
 				resp.Diagnostics.AddWarning(details, "")
 			} else {
 				changed = append(changed, "kms_id")
@@ -741,16 +740,16 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 // ImportState imports an existing AWS key into Terraform state using its resource ID.
 func (r *resourceAWSKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 // createNativeKey creates a native or external AWS key and returns the API response JSON.
 // kmsID and commonAwsParams are pre-validated and pre-built by Create before calling this function.
 func (r *resourceAWSKey) createNativeKey(ctx context.Context, id string, kmsID string, plan *AWSKeyTFSDK, commonAwsParams CommonAWSParamsJSON, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> createNativeKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> createNativeKey]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> createNativeKey][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> createNativeKey][" + id + "]")
 	awsParam := AWSKeyParamJSON{
 		CommonAWSParamsJSON: commonAwsParams,
 		Origin:              "AWS_KMS",
@@ -768,7 +767,7 @@ func (r *resourceAWSKey) createNativeKey(ctx context.Context, id string, kmsID s
 	if err != nil {
 		msg := "Error creating AWS key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -776,11 +775,11 @@ func (r *resourceAWSKey) createNativeKey(ctx context.Context, id string, kmsID s
 	if err != nil {
 		msg := "Error creating AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error()})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
-	tflog.Debug(ctx, "[resource_aws_key.go -> createNativeKey][response:"+redactAWSResponse(response))
+	r.client.Log.Debug("[resource_aws_key.go -> createNativeKey][response:" + redactAWSResponse(response))
 	return response
 }
 
@@ -788,8 +787,8 @@ func (r *resourceAWSKey) createNativeKey(ctx context.Context, id string, kmsID s
 // It delegates to replicateKeyCommon which handles all API calls and polling.
 // commonAwsParams is pre-built by Create before calling this function.
 func (r *resourceAWSKey) replicateNativeKey(ctx context.Context, id string, plan *AWSKeyTFSDK, commonAwsParams CommonAWSParamsJSON, diags *diag.Diagnostics) string {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> replicateNativeKey]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> replicateNativeKey]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> replicateNativeKey][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> replicateNativeKey][" + id + "]")
 	if plan.ReplicateKey == nil {
 		return ""
 	}
@@ -819,8 +818,8 @@ func (r *resourceAWSKey) getNativeKeyCreateParams(ctx context.Context, plan *AWS
 
 // enableDisableAutoRotation enables or disables AWS autorotation for a key and polls until the change is confirmed.
 func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableDisableAutoRotation]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> enableDisableAutoRotation][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> enableDisableAutoRotation][" + id + "]")
 	var (
 		err      error
 		response string
@@ -858,7 +857,7 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 		if err != nil {
 			msg := "Error reading AWS key after auto-rotation change."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -893,15 +892,15 @@ func (r *resourceAWSKey) enableDisableAutoRotation(ctx context.Context, id strin
 	if keyAutoRotateEnabled != planAutoRotateEnabled || !daysMatch {
 		msg := "Failed to confirm auto-rotation is configured."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		tflog.Warn(ctx, details)
+		r.client.Log.Warn(details)
 		diags.AddWarning(details, "")
 	}
 }
 
 // enableAutoRotation sends the enable-auto-rotation request to AWS, retrying on transient disabled-key errors.
 func (r *resourceAWSKey) enableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> enableAutoRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> enableAutoRotation]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> enableAutoRotation][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> enableAutoRotation][" + id + "]")
 	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
 	keyID := plan.ID.ValueString()
 	var payload EnableAutoRotationPayloadJSON
@@ -915,7 +914,7 @@ func (r *resourceAWSKey) enableAutoRotation(ctx context.Context, id string, plan
 	if err != nil {
 		msg := "Error enabling auto-rotation for AWS key, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		tflog.Error(ctx, details)
+		r.client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -939,18 +938,18 @@ func (r *resourceAWSKey) enableAutoRotation(ctx context.Context, id string, plan
 			msg := "Error enabling auto-rotation for AWS key."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			diags.AddError(details, "")
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			return
 		}
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_key.go -> enableAutoRotation] auto-rotation enabled successfully. key_id: %s", keyID))
-	tflog.Debug(ctx, "[resource_aws_key.go -> enableAutoRotation][response:"+redactAWSResponse(response))
+	r.client.Log.Info(fmt.Sprintf("[resource_aws_key.go -> enableAutoRotation] auto-rotation enabled successfully. key_id: %s", keyID))
+	r.client.Log.Debug("[resource_aws_key.go -> enableAutoRotation][response:" + redactAWSResponse(response))
 }
 
 // disableAutoRotation sends the disable-auto-rotation request to AWS, retrying on transient disabled-key errors.
 func (r *resourceAWSKey) disableAutoRotation(ctx context.Context, id string, plan *AWSKeyTFSDK, keyJSON string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_aws_key.go -> disableAutoRotation]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_aws_key.go -> disableAutoRotation]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> disableAutoRotation][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key.go -> disableAutoRotation][" + id + "]")
 	keyEnabled := gjson.Get(keyJSON, "aws_param.Enabled").Bool()
 	keyID := plan.ID.ValueString()
 	response, err := r.client.PostNoData(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/disable-auto-rotation")
@@ -973,12 +972,12 @@ func (r *resourceAWSKey) disableAutoRotation(ctx context.Context, id string, pla
 			msg := "Error disabling auto-rotation for AWS key."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 			diags.AddError(details, "")
-			tflog.Error(ctx, details)
+			r.client.Log.Error(details)
 			return
 		}
 	}
-	tflog.Info(ctx, fmt.Sprintf("[resource_aws_key.go -> disableAutoRotation] auto-rotation disabled successfully. key_id: %s", keyID))
-	tflog.Debug(ctx, "[resource_aws_key.go -> disableAutoRotation][response:"+redactAWSResponse(response))
+	r.client.Log.Info(fmt.Sprintf("[resource_aws_key.go -> disableAutoRotation] auto-rotation disabled successfully. key_id: %s", keyID))
+	r.client.Log.Debug("[resource_aws_key.go -> disableAutoRotation][response:" + redactAWSResponse(response))
 }
 
 // getNativeKeyAwsParams builds the common AWS parameter payload including alias, spec, description, tags, and policy.
@@ -1040,8 +1039,8 @@ func (r *resourceAWSKey) getNativeKeyAwsParams(ctx context.Context, plan *AWSKey
 
 // setKeyState populates the full Terraform state for an AWS key from an API response JSON string.
 func (r *resourceAWSKey) setKeyState(ctx context.Context, response string, state *AWSKeyTFSDK, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, "[resource_aws_key.go -> setKeyState][response:"+redactAWSResponse(response))
-	setNativeAndByokKeyCommonState(ctx, response, &state.AWSNativeAndByokKeyCommonTFSDK, diags)
+	r.client.Log.Debug("[resource_aws_key.go -> setKeyState][response:" + redactAWSResponse(response))
+	setNativeAndByokKeyCommonState(ctx, r.client, response, &state.AWSNativeAndByokKeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return
 	}
@@ -1076,7 +1075,7 @@ func (r *resourceAWSKey) setNativeKeyAwsParamState(ctx context.Context, response
 	p.MultiRegion = types.BoolValue(gjson.Get(response, "aws_param.MultiRegion").Bool())
 	// Policy - only update when changed to avoid spurious diffs from equivalent JSON.
 	policy := gjson.Get(response, "aws_param.Policy").String()
-	if p.Policy.IsUnknown() || !getPoliciesAreEqual(ctx, policy, p.Policy.ValueString(), diags) {
+	if p.Policy.IsUnknown() || !getPoliciesAreEqual(r.client, policy, p.Policy.ValueString(), diags) {
 		p.Policy = types.StringValue(policy)
 	}
 	// Computed-only fields from aws_param

@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -45,17 +44,17 @@ func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 			}
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
 			if versionOpLabel == "deleting" {
-				tflog.Warn(ctx, details)
+				client.Log.Warn(details)
 				diags.AddWarning(details, "")
 			} else {
-				tflog.Error(ctx, details)
+				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
 			return ""
 		}
 		msg := "Error " + versionOpLabel + " OCI key version."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return ""
 	}
@@ -76,7 +75,7 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 	if versionState == keyStateScheduledForDeletion || versionState == keyStatePendingDeletion {
 		msg := "OCI key version is already scheduled for or pending deletion, it will be removed from state."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		tflog.Warn(ctx, details)
+		client.Log.Warn(details)
 		diags.AddWarning(details, "")
 		return
 	}
@@ -88,7 +87,7 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 	if err != nil {
 		msg := "Error scheduling OCI key version for deletion, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -97,7 +96,7 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 		if strings.Contains(err.Error(), currentVersionError) {
 			msg := "OCI key version is the current key version and cannot be deleted independently. It will be removed from state but remains active in OCI until the parent key is deleted."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			return
 		}
@@ -106,24 +105,24 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 			// CM's cached state was stale and the pre-check above missed it.
 			msg := "OCI key version is already scheduled for deletion, it will be removed from state."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			return
 		}
 		if strings.Contains(err.Error(), notFoundError) {
 			msg := "OCI key version was not found, it will be removed from state."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-			tflog.Warn(ctx, details)
+			client.Log.Warn(details)
 			diags.AddWarning(details, "")
 			return
 		}
 		msg := "Error scheduling OCI key version for deletion."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
-	tflog.Debug(ctx, "[oci_key_version_common.go -> deleteKeyVersion][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_version_common.go -> deleteKeyVersion][response:" + redactOCIResponse(response) + "]")
 }
 
 // setCommonKeyVersionState populates shared TFSDK state fields from a raw CM API response string.
@@ -188,13 +187,13 @@ func setBYOKKeyVersionParams(ctx context.Context, byokKeyVersionParams *models.D
 
 // waitForKeyVersionState polls until the OCI key version reaches expectedState.
 func waitForKeyVersionState(ctx context.Context, id string, client *common.Client, keyID string, versionID string, expectedState string, diags *diag.Diagnostics) {
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[oci_key_version_common.go -> waitForKeyVersionState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[oci_key_version_common.go -> waitForKeyVersionState]["+id+"]")
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_version_common.go -> waitForKeyVersionState][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_version_common.go -> waitForKeyVersionState][" + id + "]")
 	response, err := client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 	if err != nil {
 		msg := "Error reading OCI key version."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 		return
 	}
@@ -207,7 +206,7 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 		if err != nil {
 			msg := "Error reading OCI key version."
 			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "version_id": versionID})
-			tflog.Error(ctx, details)
+			client.Log.Error(details)
 			diags.AddError(details, "")
 			return
 		}
@@ -216,8 +215,8 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 	if keyVersionState != expectedState {
 		msg := fmt.Sprintf("Failed to confirm OCI key version state is '%s' in the given time. Consider extending provider configuration option 'oci_operation_timeout'.", expectedState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		tflog.Error(ctx, details)
+		client.Log.Error(details)
 		diags.AddError(details, "")
 	}
-	tflog.Debug(ctx, "[oci_key_version_common.go -> waitForKeyVersionState][response:"+redactOCIResponse(response)+"]")
+	client.Log.Debug("[oci_key_version_common.go -> waitForKeyVersionState][response:" + redactOCIResponse(response) + "]")
 }

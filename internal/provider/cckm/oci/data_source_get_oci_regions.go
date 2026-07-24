@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -69,8 +68,8 @@ func (d *dataSourceGetOCIRegions) Schema(_ context.Context, _ datasource.SchemaR
 // CM get-subscribed-regions API and saves the result to state.
 func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_get_oci_regions.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_get_oci_regions.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_regions.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_get_oci_regions.go -> Read][" + id + "]")
 
 	var state models.GetOCIRegionsDataSourceTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -85,7 +84,7 @@ func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadR
 	if err != nil {
 		msg := "Error reading OCI regions, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
@@ -93,7 +92,7 @@ func (d *dataSourceGetOCIRegions) Read(ctx context.Context, req datasource.ReadR
 	if err != nil {
 		msg := "Error reading OCI regions."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
 	}

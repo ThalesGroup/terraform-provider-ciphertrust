@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -134,8 +133,8 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 // (or the optional limit is reached).
 func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_get_oci_compartments.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_get_oci_compartments.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_compartments.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_get_oci_compartments.go -> Read][" + id + "]")
 
 	var state models.GetOCICompartmentsDataSourceModelTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -156,16 +155,21 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data = append(data, compartments.Data...)
-	nextPage := compartments.NextPage
-	for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-		payload.NextPage = &nextPage
-		compartments = d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if compartments != nil {
 		data = append(data, compartments.Data...)
-		nextPage = compartments.NextPage
+		nextPage := compartments.NextPage
+		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
+			payload.NextPage = &nextPage
+			compartments = d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			if compartments == nil {
+				break
+			}
+			data = append(data, compartments.Data...)
+			nextPage = compartments.NextPage
+		}
 	}
 
 	// Provider-side enforcement: the OCI API may ignore the per-request limit and
@@ -208,7 +212,7 @@ func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id
 	if err != nil {
 		msg := "Error reading OCI compartments, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -216,7 +220,7 @@ func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id
 	if err != nil {
 		msg := "Error reading OCI compartments."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -225,7 +229,7 @@ func (d *dataSourceGetOCICompartments) fetchCompartments(ctx context.Context, id
 	if err != nil {
 		msg := "Error reading OCI compartments, invalid data output."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}

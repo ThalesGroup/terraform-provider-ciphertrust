@@ -25,7 +25,7 @@ func NewDataSourceAWSCloudHSMKeys() datasource.DataSource {
 	return &dataSourceAWSCloudHSMKey{}
 }
 
-func (d *dataSourceAWSCloudHSMKey) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *dataSourceAWSCloudHSMKey) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -120,5 +120,5 @@ func (d *dataSourceAWSCloudHSMKey) Read(ctx context.Context, req datasource.Read
 
 // setCloudHSMKeyState populates the Terraform data source state for an AWS CloudHSM key from an API response JSON string.
 func (d *dataSourceAWSCloudHSMKey) setCloudHSMKeyState(ctx context.Context, response string, plan *AWSCloudHSMKeyDataSourceTFSDK, diags *diag.Diagnostics) {
-	setCustomKeyStoreKeyCommonState(ctx, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
+	setCustomKeyStoreKeyCommonState(ctx, d.client, response, &plan.AWSKeyStoreKeyDataSourceCommonTFSDK, diags)
 }

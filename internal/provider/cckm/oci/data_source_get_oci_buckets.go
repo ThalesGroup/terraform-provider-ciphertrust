@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -122,8 +121,8 @@ func (d *dataSourceGetOCIBuckets) Schema(_ context.Context, _ datasource.SchemaR
 // (or the optional limit is reached).
 func (d *dataSourceGetOCIBuckets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_get_oci_buckets.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_get_oci_buckets.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_buckets.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_get_oci_buckets.go -> Read][" + id + "]")
 
 	var state models.ListOCIBucketsTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
@@ -145,35 +144,40 @@ func (d *dataSourceGetOCIBuckets) Read(ctx context.Context, req datasource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data = append(data, page.Data...)
-	nextPage := page.OciNextPage
-	for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-		np := nextPage
-		payload.OciNextPage = &np
-		page = d.fetchBuckets(ctx, id, payload, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if page != nil {
 		data = append(data, page.Data...)
-		nextPage = page.OciNextPage
-	}
+		nextPage := page.OciNextPage
+		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
+			np := nextPage
+			payload.OciNextPage = &np
+			page = d.fetchBuckets(ctx, id, payload, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			if page == nil {
+				break
+			}
+			data = append(data, page.Data...)
+			nextPage = page.OciNextPage
+		}
 
-	for _, b := range data {
-		bucket := models.OCIBucketTFSDK{
-			Namespace:     types.StringValue(b.Namespace),
-			Name:          types.StringValue(b.Name),
-			CompartmentID: types.StringValue(b.CompartmentID),
-			TimeCreated:   types.StringValue(b.TimeCreated),
+		for _, b := range data {
+			bucket := models.OCIBucketTFSDK{
+				Namespace:     types.StringValue(b.Namespace),
+				Name:          types.StringValue(b.Name),
+				CompartmentID: types.StringValue(b.CompartmentID),
+				TimeCreated:   types.StringValue(b.TimeCreated),
+			}
+			setFreeformTagsState(ctx, b.FreeformTags, &bucket.FreeformTags, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			setDefinedTagsState(ctx, b.DefinedTags, &bucket.DefinedTags, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			state.Buckets = append(state.Buckets, bucket)
 		}
-		setFreeformTagsState(ctx, b.FreeformTags, &bucket.FreeformTags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		setDefinedTagsState(ctx, b.DefinedTags, &bucket.DefinedTags, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		state.Buckets = append(state.Buckets, bucket)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -185,7 +189,7 @@ func (d *dataSourceGetOCIBuckets) fetchBuckets(ctx context.Context, id string, p
 	if err != nil {
 		msg := "Error reading OCI buckets, invalid data input."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -193,7 +197,7 @@ func (d *dataSourceGetOCIBuckets) fetchBuckets(ctx context.Context, id string, p
 	if err != nil {
 		msg := "Error reading OCI buckets."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}
@@ -202,7 +206,7 @@ func (d *dataSourceGetOCIBuckets) fetchBuckets(ctx context.Context, id string, p
 	if err != nil {
 		msg := "Error reading OCI buckets, invalid data output."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "connection_id": payload.Connection})
-		tflog.Error(ctx, details)
+		d.client.Log.Error(details)
 		diags.AddError(details, "")
 		return nil
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -292,8 +291,8 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 // Makes one additional API call per key to populate version_summary.
 func (d *dataSourceOCIKeys) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[data_source_oci_keys.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[data_source_oci_keys.go -> Read]["+id+"]")
+	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_oci_keys.go -> Read][" + id + "]")
+	defer d.client.Log.Debug(common.MSG_METHOD_END + "[data_source_oci_keys.go -> Read][" + id + "]")
 	var state KeysDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
@@ -308,7 +307,7 @@ func (d *dataSourceOCIKeys) Read(ctx context.Context, req datasource.ReadRequest
 	}
 	jsonStr, err := d.client.ListWithFilters(ctx, id, common.URL_OCI+"/keys/", filters)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_keys.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_keys.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read OCI keys from CipherTrust Manager",
 			err.Error(),
@@ -319,7 +318,7 @@ func (d *dataSourceOCIKeys) Read(ctx context.Context, req datasource.ReadRequest
 	var keys models.DataSourceKeysJSON
 	err = json.Unmarshal([]byte(jsonStr), &keys)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_keys.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_keys.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read OCI keys from CipherTrust Manager",
 			err.Error(),
