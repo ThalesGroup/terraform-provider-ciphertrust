@@ -19,7 +19,8 @@ import (
 const (
 	ociErrThrottled            = "TooManyRequests"
 	ociVaultStateConflictError = "Vault must be in one of the following states"
-	ociMaxRetries              = 4
+	ociMaxRetries              = 10
+	ociVaultConflictSleep      = 10 * time.Second
 )
 
 // isOCIThrottleError returns true when the OCI error message contains "TooManyRequests",
@@ -57,7 +58,12 @@ func ociPostNoDataWithRetry(
 		if !throttled && !vaultStateConflict {
 			return "", err
 		}
-		sleep := time.Duration(500*(1<<i)) * time.Millisecond
+		var sleep time.Duration
+		if vaultStateConflict {
+			sleep = ociVaultConflictSleep
+		} else {
+			sleep = time.Duration(500*(1<<i)) * time.Millisecond
+		}
 		if throttled {
 			tflog.Warn(ctx, fmt.Sprintf(
 				"[OCI retry] PostNoData throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
@@ -66,7 +72,7 @@ func ociPostNoDataWithRetry(
 		}
 		if vaultStateConflict {
 			tflog.Debug(ctx, fmt.Sprintf(
-				"[OCI retry] PostDataV2 vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
+				"[OCI retry] PostNoData vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
@@ -98,13 +104,17 @@ func ociPostDataV2WithRetry(
 			return resp, nil
 		}
 		lastErr = err
-		lastErr = err
 		throttled := isOCIThrottleError(err)
 		vaultStateConflict := isOCIVaultStateConflictError(err)
 		if !throttled && !vaultStateConflict {
 			return "", err
 		}
-		sleep := time.Duration(500*(1<<i)) * time.Millisecond
+		var sleep time.Duration
+		if vaultStateConflict {
+			sleep = ociVaultConflictSleep
+		} else {
+			sleep = time.Duration(500*(1<<i)) * time.Millisecond
+		}
 		if throttled {
 			tflog.Warn(ctx, fmt.Sprintf(
 				"[OCI retry] PostDataV2 throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
@@ -145,13 +155,17 @@ func ociUpdateDataV2WithRetry(
 			return resp, nil
 		}
 		lastErr = err
-		lastErr = err
 		throttled := isOCIThrottleError(err)
 		vaultStateConflict := isOCIVaultStateConflictError(err)
 		if !throttled && !vaultStateConflict {
 			return "", err
 		}
-		sleep := time.Duration(500*(1<<i)) * time.Millisecond
+		var sleep time.Duration
+		if vaultStateConflict {
+			sleep = ociVaultConflictSleep
+		} else {
+			sleep = time.Duration(500*(1<<i)) * time.Millisecond
+		}
 		if throttled {
 			tflog.Warn(ctx, fmt.Sprintf(
 				"[OCI retry] UpdateDataV2 throttled on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
@@ -160,7 +174,7 @@ func ociUpdateDataV2WithRetry(
 		}
 		if vaultStateConflict {
 			tflog.Debug(ctx, fmt.Sprintf(
-				"[OCI retry] PostDataV2 vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
+				"[OCI retry] UpdateDataV2 vault state conflict on attempt %d/%d, sleeping %s, endpoint: %s, error: %s",
 				i+1, ociMaxRetries, sleep, endpoint, err.Error(),
 			))
 		}
