@@ -40,7 +40,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -53,7 +53,7 @@ provider "ciphertrust" {
 # Define an GCP connection resource with CipherTrust
 resource "ciphertrust_gcp_connection" "gcp_connection" {
   # Name of the GCP connection (unique identifier)
-  name        = "gcp-connection"
+  name = "gcp-connection"
 
   # List of products associated with this GCP connection
   # In this case, it's related to cckm
@@ -62,10 +62,10 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
   ]
 
   # The contents of private key file of a GCP service account.
-  key_file    = "{\"type\":\"service_account\",\"private_key_id\":\"y437c51g956b8ab4908yb41541262a2fa3b0f84f\",\"private_key\":\"-----BEGIN RSA PRIVATE KEY-----\\n.....\\n-----END RSA PRIVATE KEY-----\\n\\n\",\"client_email\":\"test@some-project.iam.gserviceaccount.com\"}"
+  key_file = "{\"type\":\"service_account\",\"private_key_id\":\"y437c51g956b8ab4908yb41541262a2fa3b0f84f\",\"private_key\":\"-----BEGIN RSA PRIVATE KEY-----\\n.....\\n-----END RSA PRIVATE KEY-----\\n\\n\",\"client_email\":\"test@some-project.iam.gserviceaccount.com\"}"
 
   # Name of the cloud. Default value is gcp.
-  cloud_name  = "gcp"
+  cloud_name = "gcp"
 
   # Description of the GCP connection
   description = "connection description"
@@ -78,7 +78,7 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
   # Custom metadata for the GCP connection
   # This can be used to store additional information related to the GCP connection
   meta = {
-    "custom_meta_key1" = "custom_value1"
+    "custom_meta_key1"   = "custom_value1"
     "customer_meta_key2" = "custom_value2"
   }
 

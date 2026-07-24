@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -32,10 +32,10 @@ provider "ciphertrust" {
 resource "ciphertrust_cte_ldtgroupcomms" "lgs" {
   name        = "test_lgs"
   description = "Testing ldt comm group using Terraform"
-  client_list = ["client1","client2"]
+  client_list = ["client1", "client2"]
 }
 
 # Output the unique ID of the created LDT group communication service
 output "lgs_id" {
-    value = ciphertrust_cte_ldtgroupcomms.lgs.id
+  value = ciphertrust_cte_ldtgroupcomms.lgs.id
 }

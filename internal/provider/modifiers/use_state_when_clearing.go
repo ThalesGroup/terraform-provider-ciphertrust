@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package modifiers
 
 // UseStateWhenClearingString and UseStateWhenClearingMap address a CM API

@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -45,38 +45,38 @@ provider "ciphertrust" {
 
 # Create CSI Policy
 resource "ciphertrust_cte_policy" "csi_policy1" {
-  name = "csi_policy1"
+  name        = "csi_policy1"
   policy_type = "CSI"
-  never_deny  = true 
+  never_deny  = true
   key_rules = [{
     key_id = "clear_key"
   }]
-  security_rules = [ {effect = "deny"} ] 
-  description = "Temp CSI policy for testing purpose."
+  security_rules = [{ effect = "deny" }]
+  description    = "Temp CSI policy for testing purpose."
 }
 
 resource "ciphertrust_cte_policy" "csi_policy2" {
-  name = "csi_policy2"
-  policy_type = "CSI"
-  never_deny  = true 
-  security_rules = [ {effect = "permit"} ] 
-  description = "Temp CSI policy for testing purpose."
+  name           = "csi_policy2"
+  policy_type    = "CSI"
+  never_deny     = true
+  security_rules = [{ effect = "permit" }]
+  description    = "Temp CSI policy for testing purpose."
 }
 
 
 # Create CSI Group
 resource "ciphertrust_cte_csigroup" "test_csi_group" {
-  name                     = "TF_CSI_GROUP"
+  name = "TF_CSI_GROUP"
 
-  kubernetes_namespace     = "default"
+  kubernetes_namespace = "default"
 
   kubernetes_storage_class = "standard"
 
-  description    = "tf test csi group.."
- 
+  description = "tf test csi group.."
+
   guard_policies = {
-        (ciphertrust_cte_policy.csi_policy1.name) = {},
-        (ciphertrust_cte_policy.csi_policy2.name) = {},
+    (ciphertrust_cte_policy.csi_policy1.name) = {},
+    (ciphertrust_cte_policy.csi_policy2.name) = {},
   }
 
 
@@ -90,10 +90,10 @@ resource "ciphertrust_cte_csigroup" "test_csi_group" {
   # Supported values:
   # - update                : Update description / client_profile
   # - update-guard-policies : Add/remove/Enable/Disable guard policies
- 
+
   # NOTE:
   # - when op_type = "update-guard-policies" (Using this op_type, we can add new policies or enable/disable/remove existing ones)
-/*
+  /*
  guard_policies = {
         (ciphertrust_cte_policy.csi_policy1.name) = {},
         (ciphertrust_cte_policy.csi_policy2.name) = {guard_enabled = false},
@@ -107,7 +107,7 @@ resource "ciphertrust_cte_csigroup" "test_csi_group" {
   #     op_type = "update"
   # - Only these fields are considered
 
-/*  
+  /*  
   description    = "updated description"
   client_profile = "updated-profile"
 */
@@ -116,7 +116,7 @@ resource "ciphertrust_cte_csigroup" "test_csi_group" {
 
 # Output the unique ID of the created CTE CSIGroup
 output "cte_csigroup_id" {
-    value = ciphertrust_cte_csigroup.test_csi_group.id
+  value = ciphertrust_cte_csigroup.test_csi_group.id
 }
 ```
 

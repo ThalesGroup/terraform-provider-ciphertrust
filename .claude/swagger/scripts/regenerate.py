@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Regenerate .claude/swagger/{index.md, operations.md, definitions.json, areas/*.json}
 from definition-beta.json.

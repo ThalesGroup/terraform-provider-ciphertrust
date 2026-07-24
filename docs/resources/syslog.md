@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -45,13 +45,13 @@ provider "ciphertrust" {
 
 # Add a resource of type Syslog connection with the host example.syslog.com
 resource "ciphertrust_syslog" "syslog_1" {
-    host = "example.syslog.com"
-    transport = "udp"
+  host      = "example.syslog.com"
+  transport = "udp"
 }
 
 # Output the unique ID of the created syslog connection resource
 output "syslog_connection_value" {
-	value = ciphertrust_syslog.syslog_1.host
+  value = ciphertrust_syslog.syslog_1.host
 }
 ```
 

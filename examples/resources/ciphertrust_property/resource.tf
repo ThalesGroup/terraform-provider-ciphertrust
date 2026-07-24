@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -30,11 +30,11 @@ provider "ciphertrust" {
 
 # Add a resource of type CipherTrust Manager property with the name ENABLE_RECORDS_DB_STORE
 resource "ciphertrust_property" "property_1" {
-    name = "ENABLE_RECORDS_DB_STORE"
-    value = "false"
+  name  = "ENABLE_RECORDS_DB_STORE"
+  value = "false"
 }
 
 # Output the name of the updated CM property
 output "cm_property_name" {
-	value = ciphertrust_property.property_1.name
+  value = ciphertrust_property.property_1.name
 }

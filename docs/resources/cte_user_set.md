@@ -34,7 +34,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -46,29 +46,29 @@ provider "ciphertrust" {
 
 # Add a resource of type CTE User Set with the name user_set
 resource "ciphertrust_cte_user_set" "user_set" {
-    name = "user_set_tf"
-    description = "UserSet Terraform"
-    labels = {
-      key1 = "value1"
-      key2 = "value2"
+  name        = "user_set_tf"
+  description = "UserSet Terraform"
+  labels = {
+    key1 = "value1"
+    key2 = "value2"
+  }
+  users = [
+    {
+      uname = "john.doe"
     }
-    users = [
-      {
-        uname = "john.doe"
-      }
-    ]
+  ]
 }
 
 # Output the unique ID of the created CTE UserSet
 output "user_set_id" {
-    # The value will be the ID of the CTE UserSet resource
-    value = ciphertrust_cte_user_set.user_set.id
+  # The value will be the ID of the CTE UserSet resource
+  value = ciphertrust_cte_user_set.user_set.id
 }
 
 # Output the name of the created CTE UserSet
 output "user_set_name" {
-    # The value will be the name of the CTE UserSet resource
-    value = ciphertrust_cte_user_set.user_set.name
+  # The value will be the name of the CTE UserSet resource
+  value = ciphertrust_cte_user_set.user_set.name
 }
 ```
 

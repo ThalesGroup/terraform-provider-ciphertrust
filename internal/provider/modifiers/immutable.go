@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 // Package modifiers provides shared Terraform plan modifiers for the
 // CipherTrust provider. ImmutableString, ImmutableInt64, ImmutableBool,
 // ImmutableList, ImmutableMap, and ImmutableObject each enforce that a

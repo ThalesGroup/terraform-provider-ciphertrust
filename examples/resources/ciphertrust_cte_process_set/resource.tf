@@ -19,7 +19,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -31,28 +31,28 @@ provider "ciphertrust" {
 
 # Add a resource of type CTE Process Set with the name process_set
 resource "ciphertrust_cte_process_set" "process_set" {
-    name = "process_set"
-    description = "Process set test"
-    processes = [
-      {
-        directory = "/opt/temp1"
-        file = "*"
-        signature = "demo"
-        labels = {
-            key1 = "value1"
-        }
+  name        = "process_set"
+  description = "Process set test"
+  processes = [
+    {
+      directory = "/opt/temp1"
+      file      = "*"
+      signature = "demo"
+      labels = {
+        key1 = "value1"
       }
-    ]
+    }
+  ]
 }
 
 # Output the unique ID of the created CTE Process Set
 output "process_set_id" {
-    # The value will be the ID of the CTE Process Set resource
-    value = ciphertrust_cte_process_set.process_set.id
+  # The value will be the ID of the CTE Process Set resource
+  value = ciphertrust_cte_process_set.process_set.id
 }
 
 # Output the name of the created CTE Process Set
 output "process_set_name" {
-    # The value will be the name of the CTE Process Set resource
-    value = ciphertrust_cte_process_set.process_set.name
+  # The value will be the name of the CTE Process Set resource
+  value = ciphertrust_cte_process_set.process_set.name
 }

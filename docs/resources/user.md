@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -46,23 +46,28 @@ provider "ciphertrust" {
 # Add a resource of type CM User with the username frank
 resource "ciphertrust_user" "sample_user" {
   # Full name of the user
-  name="frank"
+  name = "frank"
   # E-mail of the user
-  email="frank@local"
+  email = "frank@local"
   # The login name of the user
-  username="frank"
-  # The password used to secure the users account
-  password="ChangeIt01!"
+  username = "frank"
+  # The password used to secure the users account. Write-only: never stored in
+  # Terraform state or plan artifacts (requires Terraform 1.11+).
+  password = "ChangeIt01!"
+  # password has no state to diff against, so Terraform cannot detect a change
+  # in its value on its own. Increment password_version whenever you want the
+  # current password value re-sent to CipherTrust Manager (e.g. to rotate it).
+  password_version = 1
 }
 
 # Output the unique ID of the created User
 output "user_id" {
-	value = ciphertrust_user.sample_user.id
+  value = ciphertrust_user.sample_user.id
 }
 
 # Output the username
 output "username" {
-    value = ciphertrust_user.sample_user.username
+  value = ciphertrust_user.sample_user.username
 }
 ```
 
@@ -71,7 +76,7 @@ output "username" {
 
 ### Required
 
-- `password` (String, Sensitive) Password for the user account.
+- `password` (String, Sensitive) Password for the user account. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To rotate the password on an existing resource, change `password` and bump `password_version` in the same apply — `password_version` is the only signal Terraform has that the write-only value changed.
 - `username` (String) (Immutable) Username of the user.
 
 ### Optional
@@ -81,6 +86,7 @@ output "username" {
 - `name` (String) Users full name
 - `nickname` (String) (Effectively immutable) Display name / nickname of the user. CM's PATCH /api/v1/usermgmt/users/{id} silently ignores changes to this field (HTTP 200, value unchanged). Set at creation time only; changing this attribute on an existing resource will produce a plan-time error. Destroy and recreate to change nickname.
 - `password_change_required` (Boolean) Whether the user must change their password on next login. Defaults to false.
+- `password_version` (Number) Arbitrary version number stored in state and used to trigger a password update. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent to CipherTrust Manager.
 - `prevent_ui_login` (Boolean) Whether the user is prevented from logging in through the CipherTrust Manager UI. Defaults to false.
 - `user_metadata` (Map of String) Information that can be stored with the user.
 

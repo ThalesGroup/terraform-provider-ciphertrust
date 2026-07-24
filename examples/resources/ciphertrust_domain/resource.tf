@@ -19,7 +19,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -42,11 +42,11 @@ resource "ciphertrust_domain" "domain" {
 
   # Optional end-user or service data stored with the domain.
   meta_data = {
-      "abc": "xyz"
+    "abc" : "xyz"
   }
 }
 
 # Output the unique ID of the created CM domain
 output "domain_id" {
-	value = ciphertrust_domain.domain.id
+  value = ciphertrust_domain.domain.id
 }

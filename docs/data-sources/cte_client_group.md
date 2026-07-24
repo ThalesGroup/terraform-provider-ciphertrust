@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -49,7 +49,7 @@ data "ciphertrust_cte_client_group" "example" {
 
 output "client_groups" {
   # Output the list of CTE Client groups retrieved from the data source
-  value = "${data.ciphertrust_cte_client_group.example.client_groups}"
+  value = data.ciphertrust_cte_client_group.example.client_groups
 }
 ```
 

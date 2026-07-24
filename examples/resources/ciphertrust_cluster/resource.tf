@@ -24,9 +24,9 @@ provider "ciphertrust" {
 # Step 1: Initialize the cluster on the main node
 # This creates a single-node cluster that additional nodes can join
 resource "ciphertrust_cluster" "main" {
-  local_node_host = "10.10.10.11"  # Hostname/IP of this node
-  local_node_port = 5432            # Port (defaults to 5432)
-  public_address  = "10.10.10.11"  # Public IP/FQDN for remote connectors (updatable)
+  local_node_host = "10.10.10.11" # Hostname/IP of this node
+  local_node_port = 5432          # Port (defaults to 5432)
+  public_address  = "10.10.10.11" # Public IP/FQDN for remote connectors (updatable)
 }
 
 # Step 2: Define additional nodes to join the cluster
@@ -59,8 +59,8 @@ resource "ciphertrust_cluster" "main" {
 locals {
   additional_nodes = {
     "node2" = {
-      host           = "10.10.10.12"      # Private IP/hostname (on-premises) or FQDN (AWS)
-      public_address = "10.10.10.12"      # Public IP/FQDN for external access
+      host           = "10.10.10.12" # Private IP/hostname (on-premises) or FQDN (AWS)
+      public_address = "10.10.10.12" # Public IP/FQDN for external access
       password       = "ChangeMe102!"
     }
     "node3" = {
@@ -99,7 +99,7 @@ resource "ciphertrust_cluster_node" "nodes" {
 
   host           = each.value.host
   port           = 5432
-  public_address = each.value.public_address  # Updatable
+  public_address = each.value.public_address # Updatable
 
   # member_host: Existing cluster member to sign CSR and coordinate join
   # Can be any node already in the cluster (not necessarily the first node)

@@ -46,7 +46,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -79,8 +79,8 @@ resource "ciphertrust_cte_client" "cte_client" {
 
 # Output the unique ID of the created CTE Client
 output "cte_client_id" {
-    # The value will be the ID of the CTE client resource
-    value = ciphertrust_cte_client.cte_client.id
+  # The value will be the ID of the CTE client resource
+  value = ciphertrust_cte_client.cte_client.id
 }
 ```
 

@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -46,12 +46,12 @@ provider "ciphertrust" {
 # Data source for retrieving CTE DP set in client group details
 data "ciphertrust_cte_client_group_dp_set" "example" {
   # The name filter to specify for which CTE Group Designated Primary Set to retrieve (replace with actual client group name)
- client_group_name = ""
+  client_group_name = ""
 }
 
 output "client_group_dp_set" {
   # Output the list of DP set of a client group retrieved from the data source
-  value = "${data.ciphertrust_cte_client_group_dp_set.example.client_group_dp_set}"
+  value = data.ciphertrust_cte_client_group_dp_set.example.client_group_dp_set
 }
 ```
 

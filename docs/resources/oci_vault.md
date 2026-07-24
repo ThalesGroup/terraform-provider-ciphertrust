@@ -28,9 +28,9 @@ resource "ciphertrust_oci_connection" "connection" {
 # Define an OCI Vault.
 resource "ciphertrust_oci_vault" "vault" {
   # Required parameters
-  connection_id    = ciphertrust_oci_connection.connection.id
-  region           = "oci-region"
-  vault_id         = "vault-ocid"
+  connection_id = ciphertrust_oci_connection.connection.id
+  region        = "oci-region"
+  vault_id      = "vault-ocid"
   # Optional parameters for Virtual Private Vaults
   bucket_name      = "bucket-name"
   bucket_namespace = "bucket-namespace"

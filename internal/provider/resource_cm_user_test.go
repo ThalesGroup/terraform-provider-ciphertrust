@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MIT
+
 package provider
 
 import (
@@ -956,6 +959,64 @@ resource "ciphertrust_user" "test" {
 	})
 }
 
-// Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
-// CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
-// from state gracefully instead of returning a hard error.
+// Test_CM_AccCMUser_PasswordRotation verifies that ciphertrust_user.password, now
+// write-only, is never present in state and is only re-sent to CipherTrust Manager
+// when password_version changes. A plan with password/password_version unchanged
+// must show no diff; bumping password_version with a new password must apply
+// cleanly and actually rotate the password on CM.
+func Test_CM_AccCMUser_PasswordRotation(t *testing.T) {
+	RequireCM(t)
+	username := fmt.Sprintf("tf-pwdrot-%d", time.Now().Unix())
+
+	cfg := func(password string, version int) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username         = %q
+  password         = %q
+  password_version = %d
+}`, username, password, version)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with initial password/version. password must never
+			// appear in state — confirms WriteOnly is actually taking effect.
+			{
+				Config: cfg("CHAnge012!@#", 1),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_user.test", "password"),
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "password_version", "1"),
+				),
+			},
+			// Step 2: idempotency — same password/version, no diff.
+			{
+				Config:             cfg("CHAnge012!@#", 1),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: bump password_version with a new password — must apply cleanly
+			// and actually rotate the password on CM (verified via login).
+			{
+				Config: cfg("NewChAnge987!@#", 2),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "password_version", "2"),
+					func(s *terraform.State) error {
+						client, ok := createCMClient()
+						if !ok {
+							return fmt.Errorf("could not create CM client to verify rotated password")
+						}
+						verifyClient := *client
+						verifyClient.AuthData.Username = username
+						verifyClient.AuthData.Password = "NewChAnge987!@#"
+						if _, err := verifyClient.SignIn(context.Background(), uuid.New().String()); err != nil {
+							return fmt.Errorf("login with rotated password failed: %w", err)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
