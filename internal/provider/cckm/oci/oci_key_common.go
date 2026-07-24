@@ -292,6 +292,9 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 		VaultName:         types.StringValue(gjson.Get(response, "oci_params.vault_name").String()),
 	}
 	keyParams.CurveID = types.StringValue(gjson.Get(response, "oci_params.curve_id").String())
+	// Capture the plan/prior-state tag values before overwriting, so we can
+	// preserve null-vs-empty semantics (see corrections below).
+	oldKeyParams := state.KeyParams
 	definedTagsJSON := getDefinedTagsFromJSON(ctx, gjson.Get(response, "oci_params.defined_tags"), diags)
 	if diags.HasError() {
 		return
@@ -307,6 +310,25 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 	setFreeformTagsState(ctx, freeformTagsJSON, &keyParams.FreeformTags, diags)
 	if diags.HasError() {
 		return
+	}
+	// Correct null-vs-empty mismatches caused by the API returning an absent/empty
+	// value when the plan or prior state held an explicit empty value (or null).
+	if oldKeyParams != nil {
+		// freeform_tags: API returned empty map but plan/prior-state had null -> keep null.
+		// This prevents "was null, but now cty.MapValEmpty" inconsistency errors.
+		//
+		if !keyParams.FreeformTags.IsNull() && len(keyParams.FreeformTags.Elements()) == 0 && oldKeyParams.FreeformTags.IsNull() {
+			keyParams.FreeformTags = types.MapNull(types.StringType)
+		}
+		// defined_tags: API returned null set (empty map -> nil slice) but plan/prior-state
+		// had an explicit empty set -> restore empty set.
+		// This prevents "was cty.SetValEmpty, but now null" inconsistency errors.
+		if keyParams.DefinedTags.IsNull() && !oldKeyParams.DefinedTags.IsNull() {
+			emptySet, dg2 := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: models.DefinedTagAttribs}, []models.DefinedTagTFSDK{})
+			if !dg2.HasError() {
+				keyParams.DefinedTags = emptySet
+			}
+		}
 	}
 	state.KeyParams = &keyParams
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
@@ -403,7 +425,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 		}
 	}
 
-	if plan.KeyParams != nil && !plan.KeyParams.FreeformTags.IsUnknown() {
+	if plan.KeyParams != nil && !plan.KeyParams.FreeformTags.IsNull() && !plan.KeyParams.FreeformTags.IsUnknown() {
 		planFreeformTags := getFreeformTagsFromPlan(ctx, &plan.KeyParams.FreeformTags, diags)
 		if diags.HasError() {
 			return
@@ -420,7 +442,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 		}
 	}
 
-	if plan.KeyParams != nil && !plan.KeyParams.DefinedTags.IsUnknown() {
+	if plan.KeyParams != nil && !plan.KeyParams.DefinedTags.IsNull() && !plan.KeyParams.DefinedTags.IsUnknown() {
 		planDefinedTags := getDefinedTagsFromPlan(ctx, &plan.KeyParams.DefinedTags, diags)
 		if diags.HasError() {
 			return

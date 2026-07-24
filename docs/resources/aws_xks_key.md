@@ -160,9 +160,9 @@ Optional:
 
 Optional:
 
-- `alias` (Set of String) (Updatable) Alias(es) assigned to the key. Only one alias can be set when creating an unlinked key. Multiple aliases and alias updates are only supported when the key is in a linked state.
+- `alias` (Set of String) (Updatable) Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].
 - `description` (String) (Updatable) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.
-- `tags` (Map of String) (Updatable) Tags assigned to the key. Applicable only for keys in a linked state.
+- `tags` (Map of String) (Updatable) Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.
 
 Read-Only:
 

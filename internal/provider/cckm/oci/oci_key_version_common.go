@@ -101,6 +101,15 @@ func deleteKeyVersion(ctx context.Context, id string, client *common.Client, key
 			diags.AddWarning(details, "")
 			return
 		}
+		if strings.Contains(err.Error(), keyStateScheduledForDeletion) {
+			// OCI returned 409 because the version is already in SCHEDULING_DELETION.
+			// CM's cached state was stale and the pre-check above missed it.
+			msg := "OCI key version is already scheduled for deletion, it will be removed from state."
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
+			tflog.Warn(ctx, details)
+			diags.AddWarning(details, "")
+			return
+		}
 		if strings.Contains(err.Error(), notFoundError) {
 			msg := "OCI key version was not found, it will be removed from state."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})

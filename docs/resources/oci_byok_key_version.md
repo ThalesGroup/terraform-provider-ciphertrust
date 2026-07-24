@@ -3,37 +3,69 @@
 page_title: "ciphertrust_oci_byok_key_version Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager.
+  Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager. A BYOK key version can be added to an oci_key or an oci_byok_key.
 ---
 
 # ciphertrust_oci_byok_key_version (Resource)
 
-Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager.
+Use this resource to create and manage OCI BYOK key versions in CipherTrust Manager. A BYOK key version can be added to an oci_key or an oci_byok_key.
 
 ## Example Usage
 
 ```terraform
-resource "ciphertrust_cm_key" "cm_key_version" {
-  name       = "test-key-name"
+# Pre-requisites for OCI BYOK key versions - OCI connection, OCI Vault, OCI BYOK Key
+
+# Define an OCI connection
+resource "ciphertrust_oci_connection" "connection" {
+  key_file            = "path-to-or-contents-of-oci-key-file"
+  name                = "name"
+  pub_key_fingerprint = "public-key-fingerprint"
+  region              = "region"
+  tenancy_ocid        = "tenancy-ocid"
+  user_ocid           = "user-ocid"
+}
+
+# Define an OCI Vault
+resource "ciphertrust_oci_vault" "vault" {
+  connection_id = ciphertrust_oci_connection.connection.id
+  vault_id      = "vault-ocid"
+  region        = "region"
+}
+
+# Define a CipherTrust Manager source key
+resource "ciphertrust_cm_key" "source_key" {
+  name       = "name"
   algorithm  = "AES"
   usage_mask = 60
 }
 
-# Add a BYOK key version to a native OCI key
-resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
+# Define an OCI BYOK key
+resource "ciphertrust_oci_byok_key" "key" {
   # Required parameters
-  cckm_key_id                = ciphertrust_oci_key.test_key.id
-  source_key_id              = ciphertrust_cm_key.cm_key_version.id
-  # Optional parameters
-  schedule_for_deletion_days = 14
-  source_key_tier            = "local"
+  name          = "name"
+  source_key_id = ciphertrust_cm_key.source_key.id
+  vault         = ciphertrust_oci_vault.vault.id
+  oci_key_params = {
+    compartment_id  = "compartment-ocid"
+    protection_mode = "SOFTWARE"
+  }
 }
 
-# Add a BYOK key version to a BYOK OCI key
-resource "ciphertrust_oci_byok_key_version" "byok_version_0" {
-  cckm_key_id     = ciphertrust_oci_byok_key.test_key.id
-  source_key_id   = ciphertrust_cm_key.cm_key_version.id
-  source_key_tier = "local"
+# Define a CipherTrust Manager source key for the key version
+resource "ciphertrust_cm_key" "version_source_key" {
+  name       = "name"
+  algorithm  = "AES"
+  usage_mask = 60
+}
+
+# Add a BYOK key version
+resource "ciphertrust_oci_byok_key_version" "version" {
+  # Required parameters
+  cckm_key_id                = ciphertrust_oci_byok_key.key.id
+  source_key_id              = ciphertrust_cm_key.version_source_key.id
+  # Optional parameters
+  source_key_tier            = "local"
+  schedule_for_deletion_days = 14
 }
 ```
 
