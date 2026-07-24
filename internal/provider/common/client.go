@@ -13,6 +13,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 // Default CipherTrust Manager URL
@@ -37,7 +38,7 @@ type TLSOptions struct {
 // cannot be read or contains no valid certificates.
 //
 // When CACertPath is supplied the returned pool is the system root pool with
-// the user's certificates appended — system trust anchors are NOT replaced.
+// the user's certificates appended -- system trust anchors are NOT replaced.
 // If the system pool cannot be loaded (e.g. on a platform where it is
 // unavailable) an empty pool is used and only the supplied CAs are trusted.
 func BuildTLSConfig(opts TLSOptions) (*tls.Config, error) {
@@ -89,6 +90,9 @@ type Client struct {
 	// tenant (i.e. AuthData.AuthDomainPath is set). Resources that manage
 	// CipherTrust Manager infrastructure use this to refuse plan-time.
 	IsCDSPaaS bool
+	// IsClustered is true when the CipherTrust Manager instance has more than
+	// one node in the cluster. When false, waitForReplication is a no-op.
+	IsClustered bool
 	// Log is the provider-specific logger that writes to a dedicated log file,
 	// independent of Terraform's TF_LOG output.
 	Log hclog.Logger
@@ -111,7 +115,6 @@ type CMClient interface {
 	PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error)
 	GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error)
 }
-
 
 // AuthStruct
 type AuthStruct struct {
@@ -232,9 +235,27 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 
 	c.Token = ar.Token
 	c.CMRefreshToken = ar.RefreshToken
+	c.IsClustered = c.checkIsClustered(ctx)
 
 	tflog.Trace(ctx, MSG_METHOD_END+" [client.go -> NewClient]["+uuid+"]")
 	return &c, nil
+}
+
+// checkIsClustered calls GET /api/v1/cluster and returns true only when the
+// instance is part of a cluster with more than one node. Any error or a
+// "not clustered" status returns false so provider init is never blocked.
+func (c *Client) checkIsClustered(ctx context.Context) bool {
+	response, err := c.ReadDataByParam(ctx, "cluster-check", "", URL_CLUSTER_INFO)
+	if err != nil {
+		return false
+	}
+	if gjson.Get(response, "status.code").String() == "none" {
+		return false
+	}
+	if gjson.Get(response, "nodeCount").Int() <= 1 {
+		return false
+	}
+	return true
 }
 
 func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, jwt *string) ([]byte, error) {

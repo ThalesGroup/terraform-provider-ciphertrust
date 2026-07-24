@@ -15,24 +15,42 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// waitForReplication waits until ReplicationDelay milliseconds have elapsed,
+// respecting ctx cancellation. It is a no-op when the provider is not running
+// against a cluster or when ReplicationDelay is zero or negative.
+func (c *Client) waitForReplication(ctx context.Context) error {
+	if !c.IsClustered || c.ReplicationDelay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func (c *Client) DeleteByID(ctx context.Context, method string, uuid string, url string, Body []byte) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> DeleteByID]["+uuid+"]")
 	reader := bytes.NewBuffer(Body)
 	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> DeleteByID]["+uuid+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> DeleteByID]["+uuid+"]")
 		return "", err
 	}
 
 	responseJson := gjson.Get(string(body), "resources").String()
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAll]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> DeleteByID]["+uuid+"]")
 	return responseJson, nil
 }
 
@@ -40,19 +58,18 @@ func (c *Client) DeleteByURL(ctx context.Context, uuid string, endpoint string) 
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> DeleteByURL]["+uuid+"]")
 	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> DeleteByURL]["+uuid+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> DeleteByURL]["+uuid+"]")
 		return "", err
 	}
 
 	responseJson := gjson.Get(string(body), "resources").String()
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> DeleteByurl]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> DeleteByURL]["+uuid+"]")
 	return responseJson, nil
 }
 
@@ -175,19 +192,19 @@ func (c *Client) GetAllPaged(ctx context.Context, uuid string, endpoint string) 
 }
 
 func (c *Client) ListWithFilters(ctx context.Context, uuid string, endpoint string, filters url.Values) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAll][Request ID: "+uuid+
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> ListWithFilters][Request ID: "+uuid+
 		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s?%s", c.CipherTrustURL, endpoint, filters.Encode()), nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> ListWithFilters]["+uuid+"]")
 		return "", err
 	}
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAll]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> ListWithFilters]["+uuid+"]")
 		return "", err
 	}
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAll]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> ListWithFilters]["+uuid+"]")
 	return string(body), nil
 }
 
@@ -263,12 +280,14 @@ func (c *Client) PostData(ctx context.Context, uuid string, endpoint string, dat
 	}
 
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return ret, nil
 }
 
 func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, data []byte) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostDataV2]["+uuid+"]")
 	var payload io.Reader
 	if len(data) == 0 {
 		payload = nil
@@ -278,36 +297,40 @@ func (c *Client) PostDataV2(ctx context.Context, uuid string, endpoint string, d
 
 	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataV2]["+uuid+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostDataV2]["+uuid+"]")
 		return "", err
 	}
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostDataV2]["+uuid+"]")
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return string(body), nil
 }
 
 func (c *Client) PostNoData(ctx context.Context, uuid string, endpoint string) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostData]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> PostNoData]["+uuid+"]")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostNoData]["+uuid+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> PostNoData]["+uuid+"]")
 		return "", err
 	}
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostData]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostNoData]["+uuid+"]")
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return string(body), nil
 }
 
@@ -332,7 +355,9 @@ func (c *Client) PutData(ctx context.Context, uuid string, endpoint string, data
 		return "", err
 	}
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PutData]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return string(body), nil
 }
 
@@ -360,12 +385,14 @@ func (c *Client) UpdateData(ctx context.Context, resourceID string, endpoint str
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return ret, nil
 }
 
 func (c *Client) UpdateDataV2(ctx context.Context, resourceID string, endpoint string, data []byte) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateDataV2][resourceID: "+resourceID+"]")
 	var payload io.Reader
 	if len(data) == 0 {
 		payload = nil
@@ -375,22 +402,24 @@ func (c *Client) UpdateDataV2(ctx context.Context, resourceID string, endpoint s
 
 	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s/%s", c.CipherTrustURL, endpoint, resourceID), payload)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateDataV2][resourceID: "+resourceID+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, resourceID, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData][resourceID: "+resourceID+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateDataV2][resourceID: "+resourceID+"]")
 		return "", err
 	}
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateDataV2][resourceID: "+resourceID+"]")
 	return string(body), nil
 }
 
 func (c *Client) UpdateDataFullURL(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error) {
-	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateData]["+uuid+"]")
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> UpdateDataFullURL]["+uuid+"]")
 	var payload io.Reader
 	if len(data) == 0 {
 		payload = nil
@@ -401,19 +430,21 @@ func (c *Client) UpdateDataFullURL(ctx context.Context, uuid string, endpoint st
 
 	req, err := http.NewRequestWithContext(ctx, "PATCH", fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint), payload)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateDataFullURL]["+uuid+"]")
 		return "", err
 	}
 
 	body, err := c.doRequest(ctx, uuid, req, nil)
 	if err != nil {
-		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateData]["+uuid+"]")
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> UpdateDataFullURL]["+uuid+"]")
 		return "", err
 	}
 
 	ret := gjson.Get(string(body), id).String()
-	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateDataFullURL]["+uuid+"]")
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return ret, nil
 }
 
@@ -497,7 +528,9 @@ func (c *Client) PostDataBootstrap(ctx context.Context, uuid string, endpoint st
 
 	ret := gjson.Get(string(body), id).String()
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PostDataBootstrap]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return ret, nil
 }
 
@@ -518,7 +551,9 @@ func (c *Client) PatchDataBootstrap(ctx context.Context, uuid string, endpoint s
 
 	ret := string(body)
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> PatchDataBootstrap]["+uuid+"]")
-	time.Sleep(time.Duration(c.ReplicationDelay) * time.Millisecond)
+	if err := c.waitForReplication(ctx); err != nil {
+		return "", err
+	}
 	return ret, nil
 }
 
