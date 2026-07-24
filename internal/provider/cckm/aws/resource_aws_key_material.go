@@ -977,8 +977,7 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 
 		// Step 3: for multi-region primary keys, import the material to all replica keys
 		// BEFORE waiting for the primary's import_state to clear. AWS will not clear
-		// import_state on the primary until all replicas also have the material - so
-		// waiting before fixing replicas would always time out on a multi-region key.
+		// import_state on the primary until all replicas also have the material.
 		isMRPrimary := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() &&
 			gjson.Get(keyJSON, "aws_param.MultiRegionConfiguration.MultiRegionKeyType").String() == "PRIMARY"
 		if isMRPrimary {
