@@ -312,11 +312,9 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"Log Forwarder Not Found",
-				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+				"Log Forwarder Not Found — State Preserved",
+				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Read]["+id+"]")

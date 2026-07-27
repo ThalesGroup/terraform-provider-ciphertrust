@@ -393,7 +393,7 @@ resource "ciphertrust_password_policy" "oob" {
 }
 `,
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -445,7 +445,7 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
 }
 `, policyName),
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

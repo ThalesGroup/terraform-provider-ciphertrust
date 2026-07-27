@@ -232,10 +232,9 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	if !entry.Exists() {
 		resp.Diagnostics.AddWarning(
-			"NTP Server Not Found",
-			"The NTP server '"+targetHost+"' was not found in the CipherTrust Manager NTP server list. It may have been deleted outside of Terraform. Removing it from state.",
+			"NTP Server Not Found — State Preserved",
+			"The NTP server '"+targetHost+"' was not found in the CipherTrust Manager NTP server list. To prevent accidental data loss, this resource has been kept in state.",
 		)
-		resp.State.RemoveResource(ctx)
 		return
 	}
 

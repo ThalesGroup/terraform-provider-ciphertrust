@@ -339,7 +339,7 @@ resource "ciphertrust_interface" "test" {
 					)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

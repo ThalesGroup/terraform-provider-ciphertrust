@@ -155,7 +155,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_REG_TOKEN+"/"+capturedID)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 			{
 				Config: providerConfig + `
@@ -163,10 +163,10 @@ resource "ciphertrust_cm_reg_token" "test" {
   name_prefix = "test-"
 }
 `,
-				Check: checkStep(t, "deleteOOB: recreated",
+				Check: checkStep(t, "deleteOOB: state preserved",
 					resource.TestCheckResourceAttrWith("ciphertrust_cm_reg_token.test", "id", func(val string) error {
-						if val == capturedID {
-							return fmt.Errorf("expected new id after OOB delete, got same id %s", val)
+						if val != capturedID {
+							return fmt.Errorf("expected state to be preserved (same id), got new id %s", val)
 						}
 						return nil
 					}),
