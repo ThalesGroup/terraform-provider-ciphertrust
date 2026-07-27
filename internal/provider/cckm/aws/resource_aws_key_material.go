@@ -1007,9 +1007,17 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotating keyID: %s to sourceKeyID: %s", keyID, srcID))
 
 		// Step 1: call rotate-material with an empty body to activate the pending material.
-		// Hard error - stop the loop immediately if this fails.
 		_, rotErr := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotate-material", []byte("{}"))
 		if rotErr != nil {
+			errStr := rotErr.Error()
+			if strings.Contains(errStr, materialPendingImportError) {
+				// Key is still in pending import state on AWS - CM classified it as PENDING_ROTATION
+				// but AWS hasn't processed the import yet. Return without error so the outer loop
+				// can refresh state and re-classify (likely to PENDING_IMPORT on next iteration).
+				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] key is still pending import (KMSInvalidStateException). Will refresh and re-classify. error: %s", errStr)
+				r.client.Log.Warn(msg)
+				return
+			}
 			msg := "Error resuming PENDING_ROTATION for AWS BYOK key material."
 			details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": keyID, "source_key_id": srcID})
 			r.client.Log.Error(details)
