@@ -31,6 +31,7 @@ type AWSConnectionModelTFSDK struct {
 	Meta                    types.Map             `tfsdk:"meta"`
 	Products                []types.String        `tfsdk:"products"`
 	SecretAccessKey         types.String          `tfsdk:"secret_access_key"`
+	SecretAccessKeyVersion  types.Int64           `tfsdk:"secret_access_key_version"`
 }
 
 type IAMRoleAnywhereJSON struct {
@@ -59,7 +60,7 @@ type AWSConnectionModelJSON struct {
 	Labels                  map[string]interface{} `json:"labels"`
 	Meta                    interface{}            `json:"meta"`
 	Products                []string               `json:"products"`
-	SecretAccessKey         string                 `json:"secret_access_key"`
+	SecretAccessKey         string                 `json:"secret_access_key,omitempty"`
 }
 
 type CMScpConnectionTFSDK struct {

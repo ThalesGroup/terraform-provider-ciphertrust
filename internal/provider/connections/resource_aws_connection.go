@@ -180,12 +180,13 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"secret_access_key": schema.StringAttribute{
 				Optional:    true,
-				Computed:    true,
 				Sensitive:   true,
-				Description: "Secret associated with the access key ID of the AWS user",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				WriteOnly:   true,
+				Description: "Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.",
+			},
+			"secret_access_key_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number stored in state and used to trigger re-sending `secret_access_key` to CipherTrust Manager. Since `secret_access_key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `secret_access_key` value re-sent.",
 			},
 			//common response parameters
 			"uri": schema.StringAttribute{
@@ -245,6 +246,18 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// secret_access_key is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.SecretAccessKey is always
+	// null here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config AWSConnectionModelTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Name = common.TrimString(plan.Name.String())
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
@@ -293,8 +306,8 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		payload.IsRoleAnywhere = plan.IsRoleAnywhere.ValueBool()
 	}
 
-	if plan.SecretAccessKey.ValueString() != "" && plan.SecretAccessKey.ValueString() != types.StringNull().ValueString() {
-		payload.SecretAccessKey = common.TrimString(plan.SecretAccessKey.String())
+	if v := common.TrimString(config.SecretAccessKey.String()); v != "" {
+		payload.SecretAccessKey = v
 	}
 
 	// Add labels to payload
@@ -318,8 +331,9 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	payload.Products = productsArr
 
 	// Backwards compatibility: fall back to environment variables when credentials are
-	// omitted from HCL config. Write resolved values back into plan so state reflects
-	// the actual credentials sent to CM; this prevents perpetual plan diffs.
+	// omitted from HCL config. access_key_id is Computed, so its resolved value is written
+	// back into plan/state to prevent perpetual plan diffs. secret_access_key is write-only
+	// (never stored in state), so its resolved value is only used for this request's payload.
 	// IAM Roles Anywhere connections authenticate via certificate/trust anchor, so CM
 	// rejects the request outright if access_key_id/secret_access_key are non-null —
 	// never apply this fallback for them.
@@ -327,7 +341,6 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		if payload.SecretAccessKey == "" {
 			if v := os.Getenv("AWS_SECRET_ACCESS_KEY"); v != "" {
 				payload.SecretAccessKey = v
-				plan.SecretAccessKey = types.StringValue(v)
 			}
 		}
 		if payload.AccessKeyID == "" {
@@ -374,10 +387,10 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	plan.LastConnectionError = types.StringValue(gjson.Get(response, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(response, "last_connection_at").String())
 
-	// access_key_id / secret_access_key are Optional+Computed. When neither config nor the
-	// env-var fallback supplied a value (e.g. iam_role_anywhere connections), plan still holds
-	// the Unknown value from req.Plan.Get; resolve it to a known value before State.Set, or
-	// Terraform rejects the apply with "provider returned invalid result object".
+	// access_key_id is Optional+Computed. When neither config nor the env-var fallback
+	// supplied a value (e.g. iam_role_anywhere connections), plan still holds the Unknown
+	// value from req.Plan.Get; resolve it to a known value before State.Set, or Terraform
+	// rejects the apply with "provider returned invalid result object".
 	if plan.AccessKeyID.IsUnknown() {
 		if r := gjson.Get(response, "access_key_id"); r.Exists() {
 			plan.AccessKeyID = types.StringValue(r.String())
@@ -385,13 +398,10 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 			plan.AccessKeyID = types.StringNull()
 		}
 	}
-	if plan.SecretAccessKey.IsUnknown() {
-		if r := gjson.Get(response, "secret_access_key"); r.Exists() {
-			plan.SecretAccessKey = types.StringValue(r.String())
-		} else {
-			plan.SecretAccessKey = types.StringNull()
-		}
-	}
+
+	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.SecretAccessKey = types.StringNull()
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -516,8 +526,8 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 		}
 	}
 
-	// secret_access_key: write-only — CM never returns it in GET responses.
-	// state.SecretAccessKey retains the value loaded by req.State.Get above; no API hydration needed.
+	// secret_access_key: write-only — never stored in state, so there is nothing to
+	// hydrate or preserve here. state.SecretAccessKey is always null.
 
 	// iam_role_anywhere: CM may return an empty block when not configured. Only populate state
 	// when the anywhere_role_arn sub-field (Required) is non-empty, indicating a real configuration.
@@ -611,8 +621,19 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	// Load prior state to preserve write-only fields absent from CM GET responses.
+	// Load prior state to detect a secret_access_key_version bump (see below).
 	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// secret_access_key is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.SecretAccessKey is always
+	// null here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config AWSConnectionModelTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -660,8 +681,11 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
 
-	if plan.SecretAccessKey.ValueString() != "" && plan.SecretAccessKey.ValueString() != types.StringNull().ValueString() {
-		payload.SecretAccessKey = common.TrimString(plan.SecretAccessKey.String())
+	// secret_access_key is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — secret_access_key_version is the explicit, state-tracked
+	// signal that the caller wants the current secret_access_key value re-sent to CM.
+	if !plan.SecretAccessKeyVersion.Equal(state.SecretAccessKeyVersion) {
+		payload.SecretAccessKey = common.TrimString(config.SecretAccessKey.String())
 	}
 
 	// Add labels to payload
@@ -736,12 +760,9 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
 	// Optional fields retain plan values (user intent); Read() on next plan/refresh corrects API-side drift.
 
-	// Preserve write-only field: secret_access_key is never returned by CM GET responses.
-	// When not present in the HCL config, plan.SecretAccessKey is null; restore from prior
-	// state so the key is not silently lost after an update that doesn't re-supply the secret.
-	if plan.SecretAccessKey.IsNull() || plan.SecretAccessKey.ValueString() == "" {
-		plan.SecretAccessKey = state.SecretAccessKey
-	}
+	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.SecretAccessKey = types.StringNull()
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)

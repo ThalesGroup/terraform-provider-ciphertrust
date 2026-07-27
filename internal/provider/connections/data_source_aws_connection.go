@@ -141,6 +141,10 @@ func (d *dataSourceAWSConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Optional:    true,
 							Description: "Secret associated with the access key ID of the AWS user",
 						},
+						"secret_access_key_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — secret_access_key is write-only and resource-only.",
+						},
 						//common response parameters (optional)
 						"uri":                   schema.StringAttribute{Computed: true},
 						"account":               schema.StringAttribute{Computed: true},
@@ -224,6 +228,7 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 			CloudName:               types.StringValue(aws.CloudName),
 			IsRoleAnywhere:          types.BoolValue(aws.IsRoleAnywhere),
 			SecretAccessKey:         types.StringValue(aws.SecretAccessKey),
+			SecretAccessKeyVersion:  types.Int64Null(),
 			Products: func() []types.String {
 				var products []types.String
 				for _, product := range aws.Products {

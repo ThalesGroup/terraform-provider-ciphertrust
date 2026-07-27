@@ -66,6 +66,7 @@ Read-Only:
 - `last_connection_error` (String)
 - `last_connection_ok` (Boolean)
 - `resource_url` (String)
+- `secret_access_key_version` (Number) Not populated by this data source — secret_access_key is write-only and resource-only.
 - `service` (String)
 - `updated_at` (String)
 - `uri` (String)
