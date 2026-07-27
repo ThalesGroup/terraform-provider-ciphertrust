@@ -233,8 +233,10 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"resource removed from CM"+" [resource_cm_reg_token.go -> Read]["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Registration Token Not Found — State Preserved",
+				"The Registration Token resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")

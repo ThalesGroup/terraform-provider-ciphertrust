@@ -246,17 +246,10 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Documented deviation from standard keep-in-state convention:
-			// HSM root-of-trust setup is a destructive, one-way appliance operation.
-			// If the CM record is absent, the appliance state is indeterminate and
-			// cannot be safely reconciled without user intervention. RemoveResource +
-			// AddWarning surfaces the problem immediately. See ticket TFIN-DD-015.
 			resp.Diagnostics.AddWarning(
-				"HSM Root of Trust Not Found",
-				"The HSM Root of Trust resource was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+				"HSM Root of Trust Setup Not Found — State Preserved",
+				"The HSM Root of Trust Setup resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")

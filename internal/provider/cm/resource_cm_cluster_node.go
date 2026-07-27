@@ -613,8 +613,10 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 	// empty id resolves to the list endpoint (".../nodes/"), which succeeds and would
 	// otherwise defeat the member-check below — so handle it directly here.
 	if nodeID == "" {
-		tflog.Debug(ctx, common.ERR_METHOD_END+"node has no nodeID (status.code="+statusCode+"); removing from state [resource_cm_cluster_node.go -> Read]["+id+"]")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddWarning(
+			"Cluster Node Absent — State Preserved",
+			"The Cluster Node has no active nodeID. To prevent accidental data loss, this resource has been kept in state.",
+		)
 		return
 	}
 
@@ -642,9 +644,10 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 		}
 	}
 	if memberErr != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+"node no longer recognized as a cluster member after "+
-			fmt.Sprintf("%d", memberCheckRetries)+" attempts ("+memberErr.Error()+"); removing from state [resource_cm_cluster_node.go -> Read]["+id+"]")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddWarning(
+			"Cluster Node Not Recognized — State Preserved",
+			"The Cluster Node is no longer recognized as a cluster member. To prevent accidental data loss, this resource has been kept in state.",
+		)
 		return
 	}
 

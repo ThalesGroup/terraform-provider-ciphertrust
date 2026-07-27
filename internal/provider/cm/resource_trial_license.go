@@ -250,10 +250,9 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
-				"Trial License Not Found",
-				"The Trial License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"Trial License Not Found — State Preserved",
+				"The Trial License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
@@ -268,10 +267,9 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 	// treat it as missing out-of-band so that Terraform plans a recreation/reactivation.
 	if state.Status.ValueString() != "activated" {
 		resp.Diagnostics.AddWarning(
-			"Trial License Deactivated Out-Of-Band",
-			fmt.Sprintf("The Trial License '%s' has status '%s' on CipherTrust Manager. Removing from state to trigger re-activation.", state.Name.ValueString(), state.Status.ValueString()),
+			"Trial License Deactivated Out-Of-Band — State Preserved",
+			fmt.Sprintf("The Trial License '%s' has status '%s' on CipherTrust Manager. To prevent accidental data loss, this resource has been kept in state.", state.Name.ValueString(), state.Status.ValueString()),
 		)
-		resp.State.RemoveResource(ctx)
 		return
 	}
 

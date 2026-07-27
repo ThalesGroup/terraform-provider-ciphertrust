@@ -611,8 +611,10 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		// A 404 reliably indicates the interface no longer exists on CM. RemoveResource allows
 		// Terraform to plan a clean recreate on the next apply.
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"CM Interface Not Found — State Preserved",
+				"The CM Interface resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
