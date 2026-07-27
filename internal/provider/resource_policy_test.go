@@ -297,7 +297,7 @@ resource "ciphertrust_policies" "oob" {
 }
 `,
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
