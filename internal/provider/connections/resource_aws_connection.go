@@ -306,7 +306,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		payload.IsRoleAnywhere = plan.IsRoleAnywhere.ValueBool()
 	}
 
-	if v := common.TrimString(config.SecretAccessKey.String()); v != "" {
+	if v := config.SecretAccessKey.ValueString(); v != "" {
 		payload.SecretAccessKey = v
 	}
 
@@ -685,7 +685,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	// diffed against a prior value — secret_access_key_version is the explicit, state-tracked
 	// signal that the caller wants the current secret_access_key value re-sent to CM.
 	if !plan.SecretAccessKeyVersion.Equal(state.SecretAccessKeyVersion) {
-		payload.SecretAccessKey = common.TrimString(config.SecretAccessKey.String())
+		payload.SecretAccessKey = config.SecretAccessKey.ValueString()
 	}
 
 	// Add labels to payload

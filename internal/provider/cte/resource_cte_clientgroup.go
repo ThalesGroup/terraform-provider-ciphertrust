@@ -228,7 +228,7 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
 		payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.String())
 	}
-	if v := common.TrimString(config.Password.String()); v != "" {
+	if v := config.Password.ValueString(); v != "" {
 		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
@@ -477,7 +477,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			// state-tracked signal that the caller wants the current password value
 			// re-sent to CM.
 			if !plan.PasswordVersion.Equal(state.PasswordVersion) {
-				payload.Password = common.TrimString(config.Password.String())
+				payload.Password = config.Password.ValueString()
 			}
 			if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 				payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
@@ -680,7 +680,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			// state-tracked signal that the caller wants the current password value
 			// re-sent to CM.
 			if !plan.PasswordVersion.Equal(state.PasswordVersion) {
-				payload.Password = common.TrimString(config.Password.String())
+				payload.Password = config.Password.ValueString()
 			}
 			if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 				payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())

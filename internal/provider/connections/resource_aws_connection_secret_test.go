@@ -161,6 +161,71 @@ func Test_AWSConnectionCreate_SecretAccessKeyReadFromConfigNotPlan(t *testing.T)
 	}
 }
 
+// Test_AWSConnectionCreate_NullConfigSecretNeverSentAsLiteralNullString is a regression
+// test for a real bug caught live against CipherTrust Manager: types.String.String()
+// returns the literal text "<null>" (not "") when the value is null. Code that guards
+// on TrimString(config.Field.String()) != "" therefore treats a null config value as
+// non-empty and sends the literal string "<null>" to CM — exactly what broke IAM
+// Roles Anywhere connections, where CM requires secret_access_key to be absent/null and
+// rejected the literal string with "Secret Access Key should be null". The fix uses
+// config.Field.ValueString() directly, which correctly returns "" for null.
+func Test_AWSConnectionCreate_NullConfigSecretNeverSentAsLiteralNullString(t *testing.T) {
+	var capturedBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id":"conn-id-1"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCCKMAWSConnection{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	// is_role_anywhere=true, secret_access_key left completely unconfigured (null) in
+	// both plan and config — mirrors an IAM Roles Anywhere connection.
+	overrides := map[string]tftypes.Value{
+		"name":              tftypes.NewValue(tftypes.String, "my-conn"),
+		"is_role_anywhere":  tftypes.NewValue(tftypes.Bool, true),
+		"secret_access_key": tftypes.NewValue(tftypes.String, nil),
+	}
+	planValue := newAWSConnectionRawValue(ctx, schemaResp, overrides)
+	configValue := newAWSConnectionRawValue(ctx, schemaResp, overrides)
+
+	req := resource.CreateRequest{
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Create(): %v", resp.Diagnostics)
+	}
+
+	if strings.Contains(capturedBody, "<null>") {
+		t.Errorf("regression: request payload contains the literal string \"<null>\" instead of omitting the field: %s", capturedBody)
+	}
+}
+
 // Test_AWSConnectionUpdate_SecretAccessKeyVersionGatesResend proves that Update() only
 // re-sends secret_access_key to CM when secret_access_key_version changes between state
 // and plan. Since secret_access_key is write-only (never stored in state), it cannot be

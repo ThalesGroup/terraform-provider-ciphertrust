@@ -252,7 +252,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = common.TrimString(plan.Description.String())
 	}
-	if v := common.TrimString(config.Password.String()); v != "" {
+	if v := config.Password.ValueString(); v != "" {
 		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
@@ -425,7 +425,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 	// diffed against a prior value — password_version is the explicit, state-tracked
 	// signal that the caller wants the current password value re-sent to CM.
 	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
-		payload.Password = common.TrimString(config.Password.String())
+		payload.Password = config.Password.ValueString()
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())

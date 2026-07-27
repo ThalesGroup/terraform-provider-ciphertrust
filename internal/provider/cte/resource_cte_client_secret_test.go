@@ -138,6 +138,69 @@ func Test_CteClientCreate_PasswordReadFromConfigNotPlan(t *testing.T) {
 	}
 }
 
+// Test_CteClientCreate_NullConfigPasswordNeverSentAsLiteralNullString is a regression
+// test for a real bug caught live against CipherTrust Manager: types.String.String()
+// returns the literal text "<null>" (not "") when the value is null, so a guard written
+// as TrimString(config.Password.String()) != "" treats an unconfigured (null) password
+// as non-empty and sends the literal string "<null>" to CM. The fix uses
+// config.Password.ValueString() directly, which correctly returns "" for null.
+func Test_CteClientCreate_NullConfigPasswordNeverSentAsLiteralNullString(t *testing.T) {
+	var capturedBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/transparent-encryption/clients", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id":"cte-client-id-1","profile_id":"prof-1","profile_name":"default"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCTEClient{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	// password_creation_method=GENERATE, password left completely unconfigured (null).
+	overrides := map[string]tftypes.Value{
+		"name":                     tftypes.NewValue(tftypes.String, "my-cte-client"),
+		"client_type":              tftypes.NewValue(tftypes.String, "FS"),
+		"password_creation_method": tftypes.NewValue(tftypes.String, "GENERATE"),
+		"password":                 tftypes.NewValue(tftypes.String, nil),
+	}
+	planValue := newCteClientRawValue(ctx, schemaResp, overrides)
+	configValue := newCteClientRawValue(ctx, schemaResp, overrides)
+
+	req := resource.CreateRequest{
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Create(): %v", resp.Diagnostics)
+	}
+
+	if strings.Contains(capturedBody, "<null>") {
+		t.Errorf("regression: request payload contains the literal string \"<null>\" instead of omitting the field: %s", capturedBody)
+	}
+}
+
 // Test_CteClientUpdate_PasswordVersionGatesResend proves that Update() only re-sends
 // password to CM when password_version changes between state and plan. Since password
 // is write-only (never stored in state), it cannot be diffed on its own —

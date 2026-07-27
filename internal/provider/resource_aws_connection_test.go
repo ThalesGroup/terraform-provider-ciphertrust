@@ -641,6 +641,9 @@ func Test_CM_AWSConnection_immutableName(t *testing.T) {
 
 // Test_CM_AWSConnection_envVarFallbackWritesToState verifies that omitting
 // credentials from HCL and supplying via env vars keeps plans idempotent.
+// secret_access_key is write-only (never stored in state — see the
+// security(aws_connection) hardening commit), so only access_key_id, which
+// remains Computed, is expected to be persisted from the env-var fallback.
 func Test_CM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
 	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
 		t.Setenv("AWS_ACCESS_KEY_ID", testGetAWSAccessKeyID())
@@ -661,7 +664,7 @@ func Test_CM_AWSConnection_envVarFallbackWritesToState(t *testing.T) {
 				Check: checkStep(t, "env-var fallback: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "id"),
 					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "access_key_id"),
-					resource.TestCheckResourceAttrSet("ciphertrust_aws_connection.test", "secret_access_key"),
+					resource.TestCheckNoResourceAttr("ciphertrust_aws_connection.test", "secret_access_key"),
 				),
 			},
 			{

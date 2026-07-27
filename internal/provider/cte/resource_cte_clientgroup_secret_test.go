@@ -138,6 +138,70 @@ func Test_CteClientGroupCreate_PasswordReadFromConfigNotPlan(t *testing.T) {
 	}
 }
 
+// Test_CteClientGroupCreate_NullConfigPasswordNeverSentAsLiteralNullString is a
+// regression test for a real bug caught live against CipherTrust Manager:
+// types.String.String() returns the literal text "<null>" (not "") when the value is
+// null, so a guard written as TrimString(config.Password.String()) != "" treats an
+// unconfigured (null) password as non-empty and sends the literal string "<null>" to
+// CM. The fix uses config.Password.ValueString() directly, which correctly returns ""
+// for null.
+func Test_CteClientGroupCreate_NullConfigPasswordNeverSentAsLiteralNullString(t *testing.T) {
+	var capturedBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/transparent-encryption/clientgroups", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id":"cte-cg-id-1"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCTEClientGroup{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	// password_creation_method=GENERATE, password left completely unconfigured (null).
+	overrides := map[string]tftypes.Value{
+		"name":                     tftypes.NewValue(tftypes.String, "my-cte-cg"),
+		"cluster_type":             tftypes.NewValue(tftypes.String, "NON-CLUSTER"),
+		"password_creation_method": tftypes.NewValue(tftypes.String, "GENERATE"),
+		"password":                 tftypes.NewValue(tftypes.String, nil),
+	}
+	planValue := newCteClientGroupRawValue(ctx, schemaResp, overrides)
+	configValue := newCteClientGroupRawValue(ctx, schemaResp, overrides)
+
+	req := resource.CreateRequest{
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Create(): %v", resp.Diagnostics)
+	}
+
+	if strings.Contains(capturedBody, "<null>") {
+		t.Errorf("regression: request payload contains the literal string \"<null>\" instead of omitting the field: %s", capturedBody)
+	}
+}
+
 // cteClientGroupBaseOverrides returns the attribute overrides shared by plan and state in
 // the Update() tests below: everything equal so that only password_version differs,
 // isolating the specific guard/branch under test.
