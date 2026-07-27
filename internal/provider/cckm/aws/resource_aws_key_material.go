@@ -734,13 +734,17 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			}
 		}
 
-		// Repair PENDING_IMPORT entries.
-		// Re-importing key material for a PENDING_IMPORT entry moves import_state from
-		// PENDING_IMPORT to Imported. key_material_state is unaffected (stays CURRENT or
-		// NON-CURRENT). History is re-fetched and re-classified after all repairs so that
-		// A later step picks up any entries that are now in PENDING_ROTATION.
-		if len(pendingImportRepairs) > 0 {
-			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, diags)
+		// Resume PENDING_ROTATION entries BEFORE repairing PENDING_IMPORT.
+		// When both states exist simultaneously (e.g. material1=PENDING_IMPORT,
+		// material2=PENDING_ROTATION), activating the PENDING_ROTATION material first
+		// (rotate-material) brings the key to Enabled state. Re-importing the
+		// PENDING_IMPORT material on an already-Enabled key avoids the race where
+		// AWS internally resets the key to PendingImport when a new ImportKeyMaterial
+		// call arrives while another material is still in PENDING_ROTATION, which
+		// causes the subsequent rotate-material call to fail with
+		// KMSInvalidStateException: key is pending import.
+		if len(pendingRotationRepairs) > 0 {
+			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
 			if diags.HasError() {
 				return
 			}
@@ -750,12 +754,12 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			}
 		}
 
-		// Resume PENDING_ROTATION entries.
-		// For each entry whose key_material_state is PENDING_ROTATION, call rotate-material
-		// with an empty body to activate the pending material. The material moves to either
-		// CURRENT or NON-CURRENT. History is re-fetched and re-classified after all resumes.
-		if len(pendingRotationRepairs) > 0 {
-			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
+		// Repair PENDING_IMPORT entries.
+		// Re-importing key material for a PENDING_IMPORT entry moves import_state from
+		// PENDING_IMPORT to Imported. key_material_state is unaffected (stays CURRENT or
+		// NON-CURRENT). History is re-fetched and re-classified after all repairs.
+		if len(pendingImportRepairs) > 0 {
+			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, diags)
 			if diags.HasError() {
 				return
 			}
@@ -903,17 +907,24 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
 
 		// Step 1: import the existing key material to all replicas that are missing it.
-		// repairMultiRegionReplicas also calls refresh on the primary after all imports so
-		// that CM re-checks AWS and can transition the primary's state.
 		r.repairMultiRegionReplicas(ctx, id, primaryKeyID, replicaSourceKeyID, replicaSourceKeyTier, mat.ValidTo.ValueString(), primaryKeyJSON, diags)
 
-		// do I need to refresh !
+		// Step 2: refresh the primary key so CM re-checks AWS state. Without this
+		// refresh, CM may return stale rotation-history data during the subsequent poll
+		// and the primary's key_material_state may appear stuck at
+		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION even after all replicas have
+		// received the material.
+		primaryKeyJSONFresh, getErr := r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
+		if getErr == nil {
+			RefreshKeyAndWait(ctx, id, r.client, primaryKeyID, primaryKeyJSONFresh, []string{replicaSourceKeyID}, diags)
+		}
 
-		// Step 2: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
+		// Step 3: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
 		// confirm receipt of the material, AWS moves the primary from
 		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION.
-		// Seems a refresh is required here
-		// waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
+		// Poll up to 30 x 5s = 150s. A timeout adds a warning only - the retry loop
+		// in updateKeyMaterial will re-classify and attempt again.
+		waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
 	}
 }
 
