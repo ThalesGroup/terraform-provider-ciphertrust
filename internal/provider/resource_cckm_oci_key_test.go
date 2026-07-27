@@ -302,6 +302,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, keyNameUpdated)
+	addRotationConfig = applyCDSPAAS(addRotationConfig)
 
 	// changeRotationConfig: switch auto-rotation to scheduler_two.
 	changeRotationConfig := connectionResource + fmt.Sprintf(`
@@ -344,6 +345,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, schedulerTwoName, keyNameUpdated)
+	changeRotationConfig = applyCDSPAAS(changeRotationConfig)
 
 	// removeRotationConfig: omit enable_auto_rotation block. Both schedulers remain in
 	// config and are destroyed in the following afterImmutabilityConfig step.
@@ -383,6 +385,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, schedulerTwoName, keyNameUpdated)
+	removeRotationConfig = applyCDSPAAS(removeRotationConfig)
 
 	// afterImmutabilityConfig: applied after PlanOnly immutability steps to confirm key and
 	// v1 are still ENABLED and immutable attributes are unchanged. Schedulers are omitted so
@@ -863,6 +866,8 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 		}`, keyName)
 
 	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
+	// applyCDSPAAS removes run_on so CDSPaaS does not reject the scheduler before
+	// the OCI key ModifyPlan can produce the expected "Invalid create-time attribute" error.
 	schedulerAtCreateConfig := connectionResource + fmt.Sprintf(`
 		resource "ciphertrust_scheduler" "scheduler" {
 			cckm_key_rotation_params = {
@@ -889,6 +894,7 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 			}
 			vault = ciphertrust_oci_vault.vault.id
 		}`, schedulerAtCreateName, keyName)
+	schedulerAtCreateConfig = applyCDSPAAS(schedulerAtCreateConfig)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmOCIVaults() },
