@@ -125,8 +125,8 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 				Description: "The minimum number of other characters.",
 			},
 			"inclusive_min_total_length": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.Int64{
 					modifiers.UseStateWhenZeroInt64(),
 				},

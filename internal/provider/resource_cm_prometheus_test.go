@@ -256,13 +256,13 @@ func Test_Unit_PrometheusRead_ResilientToEmptyResponse(t *testing.T) {
 	res := cm.NewResourceCMPrometheus()
 
 	client.Log = hclog.NewNullLogger()
-	
+
 	// Set up a mock Configure request
 	confResp := &tfresource.ConfigureResponse{}
 	res.(tfresource.ResourceWithConfigure).Configure(ctx, tfresource.ConfigureRequest{
 		ProviderData: client,
 	}, confResp)
-	
+
 	if confResp.Diagnostics.HasError() {
 		t.Fatalf("Unexpected configuration error: %v", confResp.Diagnostics.Errors())
 	}
@@ -292,4 +292,3 @@ func Test_Unit_PrometheusRead_ResilientToEmptyResponse(t *testing.T) {
 		t.Error("Expected error diagnostic regarding empty 'enabled' key, but got none")
 	}
 }
-

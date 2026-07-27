@@ -417,9 +417,14 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Intentional: a 404 on an AWS connection reliably indicates out-of-band deletion.
-			// Terraform should plan re-creation.
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"AWS Connection Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed AWS connection %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")

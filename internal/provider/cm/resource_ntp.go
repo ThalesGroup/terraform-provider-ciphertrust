@@ -72,7 +72,7 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"key_type": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"MD5",

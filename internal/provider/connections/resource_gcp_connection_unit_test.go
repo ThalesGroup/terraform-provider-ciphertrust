@@ -234,18 +234,19 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	r.Read(ctx, req, resp)
 
 	// Assert 1: Read() must NOT add any error diagnostic on 404.
-	// A non-nil error here means Terraform would surface a hard error instead of
-	// proposing +create — exactly the failure mode described in TFIN-326.
 	if resp.Diagnostics.HasError() {
 		t.Errorf("Read() must not add error diagnostics on OOB-delete 404, got: %v",
 			resp.Diagnostics)
 	}
 
-	// Assert 2: Read() must call resp.State.RemoveResource so the state becomes null.
-	// Terraform uses a null state as the signal to propose a +create on the next plan.
-	if !resp.State.Raw.IsNull() {
-		t.Errorf("Read() must remove the resource from state (state.Raw.IsNull) on 404, "+
-			"got non-null state: %v", resp.State.Raw)
+	// Assert 2: Read() must add a Warning diagnostic on 404 as per the State Preserved standard.
+	if len(resp.Diagnostics) == 0 {
+		t.Error("Read() must add a Warning diagnostic on OOB-delete 404 to notify state preservation")
+	}
+
+	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be false) on 404.
+	if resp.State.Raw.IsNull() {
+		t.Errorf("Read() must preserve the resource in state (state.Raw.IsNull is false) on 404 as per CLAUDE.md convention, got null state")
 	}
 }
 
