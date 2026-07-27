@@ -36,6 +36,7 @@ var (
 const (
 	materialAlreadyExistsError      = "is already associated with KMS key"
 	materialHasNotBeenImportedError = "has not been imported"
+	materialPendingImportError      = "is pending import"
 )
 
 // NewResourceAWSKeyMaterial returns a new ciphertrust_aws_key_material resource instance.
@@ -903,24 +904,17 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
 
 		// Step 1: import the existing key material to all replicas that are missing it.
+		// repairMultiRegionReplicas also calls refresh on the primary after all imports so
+		// that CM re-checks AWS and can transition the primary's state.
 		r.repairMultiRegionReplicas(ctx, id, primaryKeyID, replicaSourceKeyID, replicaSourceKeyTier, mat.ValidTo.ValueString(), primaryKeyJSON, diags)
 
-		// Step 2: refresh the primary key so CM re-checks AWS state. Without this
-		// refresh, CM may return stale rotation-history data during the subsequent poll
-		// and the primary's key_material_state may appear stuck at
-		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION even after all replicas have
-		// received the material.
-		primaryKeyJSONFresh, getErr := r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
-		if getErr == nil {
-			RefreshKeyAndWait(ctx, id, r.client, primaryKeyID, primaryKeyJSONFresh, []string{replicaSourceKeyID}, diags)
-		}
+		// do I need to refresh !
 
-		// Step 3: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
+		// Step 2: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
 		// confirm receipt of the material, AWS moves the primary from
 		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION.
-		// Poll up to 30 x 5s = 150s. A timeout adds a warning only - the retry loop
-		// in updateKeyMaterial will re-classify and attempt again.
-		waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
+		// Seems a refresh is required here
+		// waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
 	}
 }
 
