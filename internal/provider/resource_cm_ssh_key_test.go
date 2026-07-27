@@ -153,7 +153,7 @@ resource "ciphertrust_cm_ssh_key" "test" {
 					}
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

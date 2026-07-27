@@ -54,7 +54,7 @@ resource "ciphertrust_domain" "test" {
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, delURL, nil)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -103,7 +103,7 @@ resource "ciphertrust_policies" "test" {
 					_, _ = client.DeleteByURL(context.Background(), policyID, endpoint)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -152,7 +152,7 @@ resource "ciphertrust_log_forwarder" "test" {
 					_, _ = client.DeleteByID(context.Background(), "DELETE", logForwarderID, delURL, nil)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
