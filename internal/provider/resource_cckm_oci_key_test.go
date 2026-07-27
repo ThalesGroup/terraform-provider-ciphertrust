@@ -302,6 +302,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, keyNameUpdated)
+	addRotationConfig = applyCDSPAAS(addRotationConfig)
 
 	// changeRotationConfig: switch auto-rotation to scheduler_two.
 	changeRotationConfig := connectionResource + fmt.Sprintf(`
@@ -344,6 +345,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, schedulerTwoName, keyNameUpdated)
+	changeRotationConfig = applyCDSPAAS(changeRotationConfig)
 
 	// removeRotationConfig: omit enable_auto_rotation block. Both schedulers remain in
 	// config and are destroyed in the following afterImmutabilityConfig step.
@@ -383,6 +385,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		resource "ciphertrust_oci_key_version" "v1" {
 			cckm_key_id = ciphertrust_oci_key.key.id
 		}`, schedulerOneName, schedulerTwoName, keyNameUpdated)
+	removeRotationConfig = applyCDSPAAS(removeRotationConfig)
 
 	// afterImmutabilityConfig: applied after PlanOnly immutability steps to confirm key and
 	// v1 are still ENABLED and immutable attributes are unchanged. Schedulers are omitted so
