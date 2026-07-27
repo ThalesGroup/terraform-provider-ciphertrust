@@ -866,6 +866,8 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 		}`, keyName)
 
 	// schedulerAtCreateConfig: enable_auto_rotation at create - rejected by ModifyPlan.
+	// applyCDSPAAS removes run_on so CDSPaaS does not reject the scheduler before
+	// the OCI key ModifyPlan can produce the expected "Invalid create-time attribute" error.
 	schedulerAtCreateConfig := connectionResource + fmt.Sprintf(`
 		resource "ciphertrust_scheduler" "scheduler" {
 			cckm_key_rotation_params = {
@@ -892,6 +894,7 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 			}
 			vault = ciphertrust_oci_vault.vault.id
 		}`, schedulerAtCreateName, keyName)
+	schedulerAtCreateConfig = applyCDSPAAS(schedulerAtCreateConfig)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmOCIVaults() },
