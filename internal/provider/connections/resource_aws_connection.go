@@ -23,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const notFoundError = "status: 404"
@@ -235,7 +234,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_aws_connection.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan AWSConnectionModelTFSDK
@@ -353,7 +352,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: AWS Connection Creation",
 			err.Error(),
@@ -363,7 +362,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AWS_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating AWS Connection on CipherTrust Manager: ",
 			"Could not create AWS Connection, unexpected error: "+err.Error(),
@@ -403,7 +402,7 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -415,8 +414,8 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state AWSConnectionModelTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_aws_connection.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -432,7 +431,7 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading AWS Connection on CipherTrust Manager: ",
 			"Could not read AWS Connection id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -613,7 +612,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	var state AWSConnectionModelTFSDK
 	var payload AWSConnectionModelJSON
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_aws_connection.go -> Update][" + id + "]")
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -712,7 +711,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: AWS Connection Update",
 			err.Error(),
@@ -724,7 +723,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	// do a GET read-back below to refresh all Computed fields correctly.
 	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_AWS_CONNECTION, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating AWS Connection on CipherTrust Manager: ",
 			"Could not update AWS Connection, unexpected error: "+err.Error(),
@@ -735,7 +734,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	// GET read-back to refresh all Computed fields after PATCH
 	readResponse, err := r.client.GetById(ctx, uuid.New().String(), plan.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_aws_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_aws_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading AWS Connection after update: ",
 			"Could not read AWS Connection id: "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -764,7 +763,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -776,7 +775,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state AWSConnectionModelTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_aws_connection.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_aws_connection.go -> Delete][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -786,7 +785,7 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_AWS_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_aws_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			// Resource already deleted out-of-band; treat as success.

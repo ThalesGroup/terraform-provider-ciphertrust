@@ -258,20 +258,20 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty string resolves to empty", func(t *testing.T) {
-		if got := getGcpKeyFile(ctx, ""); got != "" {
+		if got := getGcpKeyFile(ctx, "", hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("whitespace-only string resolves to empty", func(t *testing.T) {
-		if got := getGcpKeyFile(ctx, "   \t\n  "); got != "" {
+		if got := getGcpKeyFile(ctx, "   \t\n  ", hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("inline JSON that is not a filesystem path passes through verbatim", func(t *testing.T) {
 		inline := `{"type":"service_account","client_email":"svc@project.iam.gserviceaccount.com"}`
-		if got := getGcpKeyFile(ctx, inline); got != inline {
+		if got := getGcpKeyFile(ctx, inline, hclog.NewNullLogger()); got != inline {
 			t.Errorf("got %q, want %q", got, inline)
 		}
 	})
@@ -283,7 +283,7 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		if got := getGcpKeyFile(ctx, path); got != content {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != content {
 			t.Errorf("got %q, want %q", got, content)
 		}
 	})
@@ -294,14 +294,14 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 		if err := os.WriteFile(path, []byte(""), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		if got := getGcpKeyFile(ctx, path); got != "" {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("path to a nonexistent file passes the raw path through verbatim", func(t *testing.T) {
 		path := "/nonexistent/path/to/key.json"
-		if got := getGcpKeyFile(ctx, path); got != path {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != path {
 			t.Errorf("got %q, want %q", got, path)
 		}
 	})
@@ -315,7 +315,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty string is rejected", func(t *testing.T) {
-		resolved, errMsg := resolveGcpKeyFile(ctx, "")
+		resolved, errMsg := resolveGcpKeyFile(ctx, "", hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -325,7 +325,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 	})
 
 	t.Run("whitespace-only string is rejected", func(t *testing.T) {
-		resolved, errMsg := resolveGcpKeyFile(ctx, "   ")
+		resolved, errMsg := resolveGcpKeyFile(ctx, "   ", hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -340,7 +340,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 		if err := os.WriteFile(path, []byte(""), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		resolved, errMsg := resolveGcpKeyFile(ctx, path)
+		resolved, errMsg := resolveGcpKeyFile(ctx, path, hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -351,7 +351,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 
 	t.Run("non-empty inline JSON resolves without error", func(t *testing.T) {
 		inline := `{"type":"service_account","client_email":"svc@project.iam.gserviceaccount.com"}`
-		resolved, errMsg := resolveGcpKeyFile(ctx, inline)
+		resolved, errMsg := resolveGcpKeyFile(ctx, inline, hclog.NewNullLogger())
 		if errMsg != "" {
 			t.Fatalf("unexpected error message: %q", errMsg)
 		}
@@ -367,7 +367,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		resolved, errMsg := resolveGcpKeyFile(ctx, path)
+		resolved, errMsg := resolveGcpKeyFile(ctx, path, hclog.NewNullLogger())
 		if errMsg != "" {
 			t.Fatalf("unexpected error message: %q", errMsg)
 		}

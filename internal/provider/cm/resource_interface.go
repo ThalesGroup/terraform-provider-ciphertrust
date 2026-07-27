@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -330,7 +329,7 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_interface.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMInterfaceTFSDK
@@ -379,7 +378,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	var metadata CMInterfaceMetadataJSON
 	var metadataNAE CMInterfaceMetadataNAEJSON
 	if !reflect.DeepEqual((*CMInterfaceMetadataTFSDK)(nil), plan.Meta) {
-		tflog.Debug(ctx, "Metadata should not be empty at this point")
+		r.client.Log.Debug("Metadata should not be empty at this point")
 		if !reflect.DeepEqual((*CMInterfaceMetadataNAETFSDK)(nil), plan.Meta.NAE) {
 			if plan.Meta.NAE.MaskSystemGroups.ValueBool() != types.BoolNull().ValueBool() {
 				metadataNAE.MaskSystemGroups = plan.Meta.NAE.MaskSystemGroups.ValueBool()
@@ -409,7 +408,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		payload.RegToken = plan.RegToken.ValueString()
 	}
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
-		tflog.Debug(ctx, "Trusted CAs should not be empty at this point")
+		r.client.Log.Debug("Trusted CAs should not be empty at this point")
 		var trustedCAs CMInterfacTrustedCAsJSON
 		if len(plan.TrustedCAs.External) > 0 {
 			var externalCAs []string
@@ -430,7 +429,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Interface Creation",
 			err.Error(),
@@ -440,7 +439,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_INTERFACE, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating Interface on CipherTrust Manager: ",
 			"Could not create Interface, unexpected error: "+err.Error(),
@@ -582,9 +581,9 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	// registration_token — write-only; plan.RegToken already holds the user's configured value.
 	// certificate — write-only; plan.Certificate already holds the user's configured value.
 
-	tflog.Debug(ctx, "[resource_interface.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_interface.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -596,7 +595,7 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMInterfaceTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_interface.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -611,11 +610,11 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		// A 404 reliably indicates the interface no longer exists on CM. RemoveResource allows
 		// Terraform to plan a clean recreate on the next apply.
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Read][" + id + "]")
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM interface on CipherTrust Manager: ",
 			"Could not read CM interface id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -898,7 +897,7 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 	// registration_token — write-only; state.RegToken already holds prior value.
 	// certificate — write-only; state.Certificate already holds prior value.
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -909,7 +908,7 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_interface.go -> Update][" + id + "]")
 	var plan CMInterfaceTFSDK
 	var state CMInterfaceTFSDK
 
@@ -1154,7 +1153,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: interface Update",
 			err.Error(),
@@ -1165,7 +1164,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// CM interface API uses NAME (not UUID) as the path key — UUID lookup returns 404.
 	response, err := r.client.UpdateData(ctx, state.Name.ValueString(), common.URL_INTERFACE, payloadJSON, "updatedAt")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_interface.go -> Update]["+state.Name.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Update][" + state.Name.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating interface on CipherTrust Manager: ",
 			"Could not update interface, unexpected error: "+err.Error(),
@@ -1181,7 +1180,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		plan.Name = state.Name
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -1193,7 +1192,7 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMInterfaceTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_interface.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_interface.go -> Delete][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -1204,7 +1203,7 @@ func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteReq
 	// CM interface API uses NAME (not UUID) as the path key — UUID lookup returns 404.
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_INTERFACE, state.Name.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_interface.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Delete][" + state.Name.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

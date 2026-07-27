@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -132,7 +131,7 @@ func (r *resourceCMSSHKey) Schema(_ context.Context, _ resource.SchemaRequest, r
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Create]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_ssh_key.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMSSHKeyTFSDK
@@ -150,7 +149,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
+		r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_ssh_key.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: SSH Key Creation",
 			err.Error(),
@@ -162,12 +161,12 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "duplicate") {
-			tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Duplicate detected, attempting exact-match fingerprint recovery")
+			r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create] Duplicate detected, attempting exact-match fingerprint recovery")
 
 			// Compute fingerprint of the planned key
 			targetFingerprint, fpErr := computeSSHFingerprint(plan.Key.ValueString())
 			if fpErr != nil {
-				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Failed to compute fingerprint: "+fpErr.Error())
+				r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create] Failed to compute fingerprint: " + fpErr.Error())
 				resp.Diagnostics.AddError(
 					"Fingerprint Calculation Error",
 					"An SSH key conflict was detected, but the planned key fingerprint could not be computed: "+fpErr.Error(),
@@ -178,7 +177,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 			// Query existing keys to check if any matches the computed fingerprint
 			keysJSON, listErr := r.client.GetByIdBootstrap(ctx, id, "", common.URL_SSH_KEY)
 			if listErr != nil {
-				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Failed to list existing keys: "+listErr.Error())
+				r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create] Failed to list existing keys: " + listErr.Error())
 				resp.Diagnostics.AddError(
 					"Duplicate Recovery Failed",
 					"An SSH key conflict was detected, but existing keys could not be listed for comparison: "+listErr.Error(),
@@ -212,10 +211,10 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 			}
 
 			if foundMatch && matchedID != "" {
-				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] Exact match found! Adopting key ID: "+matchedID)
+				r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create] Exact match found! Adopting key ID: " + matchedID)
 				resourceID = matchedID
 			} else {
-				tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create] No exact fingerprint match found among existing keys")
+				r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create] No exact fingerprint match found among existing keys")
 				resp.Diagnostics.AddError(
 					"Duplicate SSH Key Conflict",
 					"An SSH key with the same name or metadata already exists on CipherTrust Manager, but has a different fingerprint. "+
@@ -224,7 +223,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 				return
 			}
 		} else {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
+			r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_ssh_key.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error creating SSH Key on CipherTrust Manager: ",
 				"Could not create SSH Key, unexpected error: "+err.Error(),
@@ -237,7 +236,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 	// framework does not see Unknown values in state after apply.
 	fullResponse, err := r.client.GetByIdBootstrap(ctx, id, resourceID, common.URL_SSH_KEY)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Create]["+id+"]")
+		r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_ssh_key.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust SSH Key after creation",
 			"Could not read SSH key "+resourceID+": "+err.Error(),
@@ -245,7 +244,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_cm_ssh_key.go -> Create Output]["+fullResponse+"]")
+	r.client.GetLog().Debug("[resource_cm_ssh_key.go -> Create Output][" + fullResponse + "]")
 
 	plan.ID = types.StringValue(gjson.Get(fullResponse, "id").String())
 	plan.Name = types.StringValue(gjson.Get(fullResponse, "name").String())
@@ -276,7 +275,7 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 		plan.PublicKeyEncoding = types.StringNull()
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Create]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_ssh_key.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -287,8 +286,8 @@ func (r *resourceCMSSHKey) Create(ctx context.Context, req resource.CreateReques
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Read]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_ssh_key.go -> Read][" + id + "]")
+	defer r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_ssh_key.go -> Read][" + id + "]")
 
 	var state CMSSHKeyTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -303,7 +302,7 @@ func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, r
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_ssh_key.go -> Read]["+id+"]")
+		r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_ssh_key.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust SSH Key",
 			"Could not read SSH key "+state.ID.ValueString()+": "+err.Error(),
@@ -350,12 +349,12 @@ func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, r
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMSSHKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_ssh_key.go -> Update]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_ssh_key.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_cm_ssh_key is a bootstrap-only resource and does not support updates. The SSH key cannot be modified after initial creation.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Update]")
+	r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_ssh_key.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -367,7 +366,7 @@ func (r *resourceCMSSHKey) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_ssh_key.go -> Delete]["+state.ID.ValueString()+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_ssh_key.go -> Delete][" + state.ID.ValueString() + "]")
 	resp.Diagnostics.AddWarning(
 		"Resource not deleted from CipherTrust Manager",
 		"The CipherTrust API does not support deleting SSH keys. The key will be removed from the Terraform state, but it will remain on the server.",

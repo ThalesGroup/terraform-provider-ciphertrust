@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -63,7 +62,7 @@ func (r *resourceCMPrometheus) Schema(_ context.Context, _ resource.SchemaReques
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Enable/Disable] - Create")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_prometheus.go -> Enable/Disable] - Create")
 
 	// Retrieve values from plan
 	var plan CMPrometheusMetricsConfigTFSDK
@@ -85,7 +84,7 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Create][" + status + "]")
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Invalid data input for Prometheus : %s", status),
 			err.Error(),
@@ -95,7 +94,7 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 
 	response, err := r.client.PostDataV2(ctx, id, url, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Create][" + status + "]")
 		resp.Diagnostics.AddError(
 			fmt.Sprintf("Error occurred during prometheus %s", status),
 			"unexpected error: "+err.Error(),
@@ -104,11 +103,9 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 	}
 	plan.Token = types.StringValue(gjson.Get(response, "token").String())
 
-	tflog.Debug(ctx, "[resource_cm_prometheus.go -> Enable/Disable Create Output] Prometheus state changed successfully", map[string]interface{}{
-		"enabled": plan.Enabled.ValueBool(),
-	})
+	r.client.Log.Debug("[resource_cm_prometheus.go -> Enable/Disable Create Output] Prometheus state changed successfully", "enabled", plan.Enabled.ValueBool())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Create]["+status+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_prometheus.go -> Enable/Disable - Create][" + status + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -118,8 +115,8 @@ func (r *resourceCMPrometheus) Create(ctx context.Context, req resource.CreateRe
 
 func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_prometheus.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_prometheus.go -> Read][" + id + "]")
 
 	// Load prior state to preserve the token when the API returns empty (e.g. Prometheus disabled).
 	var priorState CMPrometheusMetricsConfigTFSDK
@@ -133,7 +130,7 @@ func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadReques
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_PROMETHEUS_STATUS)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"prometheus not found (404) [resource_cm_prometheus.go -> Read]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + "prometheus not found (404) [resource_cm_prometheus.go -> Read][" + id + "]")
 			resp.Diagnostics.AddWarning(
 				"Prometheus Not Found",
 				"The Prometheus resource was not found on CipherTrust Manager (HTTP 404). "+
@@ -142,7 +139,7 @@ func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadReques
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching Prometheus status: "+err.Error())
 		return
 	}
@@ -164,7 +161,7 @@ func (r *resourceCMPrometheus) Read(ctx context.Context, req resource.ReadReques
 
 	enabledResult := gjson.Get(response, "enabled")
 	if !enabledResult.Exists() {
-		tflog.Debug(ctx, common.ERR_METHOD_END+"prometheus status API returned empty enabled field [resource_cm_prometheus.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + "prometheus status API returned empty enabled field [resource_cm_prometheus.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"API Response Error",
 			"Prometheus status response did not contain 'enabled' key. Raw response: "+response,
@@ -189,7 +186,7 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 	// However, it is implemented here to enhance user convenience, allowing seamless enablement
 	// and disablement of Prometheus functionality without requiring the deletion of the Terraform state file.
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Enable/Disable - Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_prometheus.go -> Enable/Disable - Update][" + id + "]")
 
 	var plan CMPrometheusMetricsConfigTFSDK
 	var state CMPrometheusMetricsConfigTFSDK
@@ -216,7 +213,7 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Update]")
 		resp.Diagnostics.AddError(
 			"Invalid data input for disabling Prometheus",
 			err.Error(),
@@ -226,7 +223,7 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 
 	response, err := r.client.PostDataV2(ctx, id, url, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"API Error: Failed to update Prometheus status on CipherTrust Manager",
 			"unexpected error: "+err.Error(),
@@ -249,7 +246,7 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 	}
 	plan.Token = resolvedToken
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_prometheus.go -> Enable/Disable - Update][" + id + "]")
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -260,13 +257,13 @@ func (r *resourceCMPrometheus) Update(ctx context.Context, req resource.UpdateRe
 
 func (r *resourceCMPrometheus) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_prometheus.go -> Enable/Disable - Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_prometheus.go -> Enable/Disable - Delete][" + id + "]")
 
 	var payload CMPrometheusMetricsConfigJSON
 	payload.Enabled = false
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Delete]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Delete][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input for disabling Prometheus",
 			err.Error(),
@@ -276,7 +273,7 @@ func (r *resourceCMPrometheus) Delete(ctx context.Context, req resource.DeleteRe
 
 	_, err = r.client.PostDataV2(ctx, id, common.URL_PROMETHEUS_DISABLE, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_prometheus.go -> Enable/Disable - Delete]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_prometheus.go -> Enable/Disable - Delete][" + id + "]")
 		resp.Diagnostics.AddError(
 			"API Error: Failed to disable Prometheus on CipherTrust Manager",
 			"unexpected error: "+err.Error(),
@@ -284,7 +281,7 @@ func (r *resourceCMPrometheus) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_prometheus.go -> Enable/Disable - Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_prometheus.go -> Enable/Disable - Delete][" + id + "]")
 }
 
 func (d *resourceCMPrometheus) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

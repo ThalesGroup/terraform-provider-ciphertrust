@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -72,7 +71,7 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"key_type": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{
 						"MD5",
@@ -104,7 +103,7 @@ const ntpRetryDelay = 5 * time.Second
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_ntp.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_ntp.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMNTPTFSDK
@@ -126,7 +125,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_ntp.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Add NTP",
 			err.Error(),
@@ -137,7 +136,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 	var response string
 	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
 		if attempt > 0 {
-			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Create] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
+			r.client.Log.Debug(fmt.Sprintf("[resource_ntp.go -> Create] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
 			time.Sleep(ntpRetryDelay)
 		}
 		response, err = r.client.PostDataV2(ctx, id, common.URL_NTP, payloadJSON)
@@ -146,7 +145,7 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		}
 	}
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_ntp.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error adding NTP on CipherTrust Manager: ",
 			"Could not add NTP, unexpected error: "+err.Error(),
@@ -174,9 +173,9 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		plan.KeyType = types.StringNull()
 	}
 
-	tflog.Debug(ctx, "[resource_ntp.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_ntp.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -202,7 +201,7 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	var err error
 	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
 		if attempt > 0 {
-			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Read] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
+			r.client.Log.Debug(fmt.Sprintf("[resource_ntp.go -> Read] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, id))
 			time.Sleep(ntpRetryDelay)
 		}
 		listResponse, err = r.client.GetAll(ctx, id, common.URL_NTP)
@@ -211,7 +210,7 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 	}
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_ntp.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_ntp.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM NTP on CipherTrust Manager",
 			"Could not list NTP servers, unexpected error: "+err.Error(),
@@ -262,7 +261,7 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 		state.KeyType = types.StringNull()
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -273,12 +272,12 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMNTP) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_ntp.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_ntp.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_ntp does not support updates. NTP server configuration is immutable — delete and recreate this resource to change NTP settings.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -296,7 +295,7 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	var err error
 	for attempt := 0; attempt <= ntpMaxRetries; attempt++ {
 		if attempt > 0 {
-			tflog.Debug(ctx, fmt.Sprintf("[resource_ntp.go -> Delete] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, state.ID.ValueString()))
+			r.client.Log.Debug(fmt.Sprintf("[resource_ntp.go -> Delete] NTP daemon busy, retrying (%d/%d) after %s [%s]", attempt, ntpMaxRetries, ntpRetryDelay, state.ID.ValueString()))
 			time.Sleep(ntpRetryDelay)
 		}
 		output, err = r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
@@ -304,7 +303,7 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 			break
 		}
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_ntp.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

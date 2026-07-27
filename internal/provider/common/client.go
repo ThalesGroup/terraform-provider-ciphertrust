@@ -114,6 +114,21 @@ type CMClient interface {
 	PostDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte, id string) (string, error)
 	PatchDataBootstrap(ctx context.Context, uuid string, endpoint string, data []byte) (string, error)
 	GetByIdBootstrap(ctx context.Context, uuid string, id string, endpoint string) (string, error)
+	// GetLog returns the provider-specific logger (writes to a dedicated log
+	// file, independent of Terraform's TF_LOG output). Exposed as a method
+	// rather than the underlying Log field so both concrete client types can
+	// satisfy this interface.
+	GetLog() hclog.Logger
+}
+
+// GetLog returns c's provider-specific logger.
+func (c *Client) GetLog() hclog.Logger {
+	return c.Log
+}
+
+// GetLog returns c's provider-specific logger.
+func (c *CMClientBootstrap) GetLog() hclog.Logger {
+	return c.Log
 }
 
 // AuthStruct

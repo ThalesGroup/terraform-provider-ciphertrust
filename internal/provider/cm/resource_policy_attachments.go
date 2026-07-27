@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -123,8 +122,8 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Create]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy_attachments.go -> Create][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Create][" + id + "]")
 
 	var plan CMPolicyAttachmentTFSDK
 	var payload CMPolicyAttachmentJSON
@@ -165,7 +164,7 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Policy Attachment",
 			err.Error(),
@@ -179,7 +178,7 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		common.URL_CM_POLICY_ATTACHMENTS,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error attaching to policy on CipherTrust Manager: ",
 			"Could not attach to policy "+plan.Policy.ValueString()+", unexpected error: "+err.Error(),
@@ -187,7 +186,7 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_policy_attachments.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_policy_attachments.go -> Create Output][" + response + "]")
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
@@ -262,8 +261,8 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMPolicyAttachmentTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy_attachments.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -273,7 +272,7 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_POLICY_ATTACHMENTS)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Read][" + id + "]")
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				"Policy Attachment Not Found",
@@ -313,7 +312,7 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 		}
 		state.PrincipalSelector = psMap
 	} else {
-		tflog.Warn(ctx, "[resource_policy_attachments.go -> Read]["+id+"] principalSelector absent from CM GET response; preserving prior state value to avoid silent drift masking")
+		r.client.Log.Warn("[resource_policy_attachments.go -> Read][" + id + "] principalSelector absent from CM GET response; preserving prior state value to avoid silent drift masking")
 	}
 
 	// jurisdiction: CM auto-assigns even when unset; only hydrate when state already
@@ -368,12 +367,12 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_policy_attachments.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy_attachments.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_policy_attachment does not support updates. Delete and recreate this resource to change any field.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -387,10 +386,10 @@ func (r *resourceCMPolicyAttachment) Delete(ctx context.Context, req resource.De
 
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_POLICY_ATTACHMENTS, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_policy_attachments.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_policy_attachments.go -> Delete]["+state.ID.ValueString()+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Delete][" + state.ID.ValueString() + "]")
 			return
 		}
 		resp.Diagnostics.AddError(

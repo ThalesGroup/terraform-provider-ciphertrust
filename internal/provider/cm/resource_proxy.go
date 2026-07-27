@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -105,7 +104,7 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_proxy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_proxy.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMProxyTFSDK
@@ -140,7 +139,7 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Proxy Configuration",
 			err.Error(),
@@ -154,7 +153,7 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 		common.URL_CM_PROXY,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error setting proxy information on CipherTrust Manager: ",
 			"Could not set proxy information, unexpected error: "+err.Error(),
@@ -162,10 +161,10 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_proxy.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_proxy.go -> Create Output][" + response + "]")
 
 	plan.ID = types.StringValue("proxy")
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -194,7 +193,7 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Proxy information on CipherTrust Manager: ",
 			"Could not read Proxy information: unexpected error: "+err.Error(),
@@ -248,7 +247,7 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 	state.NoProxy = noProxies
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -315,7 +314,7 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Proxy Update",
 			err.Error(),
@@ -330,7 +329,7 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		common.URL_CM_PROXY,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Proxy information on CipherTrust Manager: ",
 			"Could not update Proxy information, unexpected error: "+err.Error(),
@@ -401,7 +400,7 @@ func (r *resourceCMProxy) Delete(ctx context.Context, req resource.DeleteRequest
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s", r.client.CipherTrustURL, common.URL_CM_PROXY)
 	output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Delete]["+id+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Delete][" + id + "][" + output + "]")
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Proxy",

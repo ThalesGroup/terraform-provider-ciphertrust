@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -204,7 +203,7 @@ func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, r
 
 func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_users.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cm_users.go -> Read][" + id + "]")
 	var state keysDataSourceModel
 
 	req.Config.Get(ctx, &state)
@@ -216,7 +215,7 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	data, err := fetchAllKeys(ctx, d.client, id, userFilters)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_keys.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read keys from CM",
 			err.Error(),
@@ -301,7 +300,7 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		state.Keys = append(state.Keys, keyState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_keys.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cm_keys.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

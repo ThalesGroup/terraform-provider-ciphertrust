@@ -10,10 +10,10 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -222,7 +222,7 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 
 func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Read][" + id + "]")
 	var state DataSourceModelScheduler
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -233,7 +233,7 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read scheduler job configs from CM",
 			err.Error(),
@@ -245,7 +245,7 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 
 	err = json.Unmarshal([]byte(jsonStr), &schedulerJobConfigs)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read scheduler job configs from CM",
 			err.Error(),
@@ -286,18 +286,18 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 
 		switch jobs.Operation {
 		case "database_backup":
-			getDataBaseBackupParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getDataBaseBackupParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		case "cckm_key_rotation":
-			getCCKMKeyRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMKeyRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		case "cckm_synchronization":
-			getCCKMSynchronizationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMSynchronizationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		case "cckm_xks_credential_rotation":
-			getCCKMCredentialRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics)
+			getCCKMCredentialRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		}
 		state.Scheduler = append(state.Scheduler, schedulerJobs)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -323,11 +323,11 @@ func (d *dataSourceScheduler) Configure(_ context.Context, req datasource.Config
 	d.client = client
 }
 
-func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
+func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics, logger hclog.Logger) {
 	var dbBackupParams DatabaseBackupParamsJSON
 	err := json.Unmarshal(jobConfigParams, &dbBackupParams)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
+		logger.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scheduler.go -> Read][" + id + "]")
 		diags.AddError(
 			"Unable to read scheduler database backup params",
 			err.Error(),
@@ -380,11 +380,11 @@ func getDataBaseBackupParams(ctx context.Context, id string, schedulerJobs *JobC
 	}
 }
 
-func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
+func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics, logger hclog.Logger) {
 	var cckmKeyRotationParams CCKMKeyRotationParamsJSON
 	err := json.Unmarshal(jobConfigParams, &cckmKeyRotationParams)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
+		logger.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scheduler.go -> Read][" + id + "]")
 		diags.AddError(
 			"Unable to read scheduler cckm key rotation params",
 			err.Error(),
@@ -414,11 +414,11 @@ func getCCKMKeyRotationParams(ctx context.Context, id string, schedulerJobs *Job
 	schedulerJobs.CCKMKeyRotationParams = keyRotationParams
 }
 
-func getCCKMSynchronizationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
+func getCCKMSynchronizationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics, logger hclog.Logger) {
 	var cckmSyncParams CCKMSynchronizationParamsJSON
 	err := json.Unmarshal(jobConfigParams, &cckmSyncParams)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
+		logger.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scheduler.go -> Read][" + id + "]")
 		diags.AddError(
 			"Unable to read scheduler cckm key synchronization params",
 			err.Error(),
@@ -454,11 +454,11 @@ func getCCKMSynchronizationParams(ctx context.Context, id string, schedulerJobs 
 	schedulerJobs.CCKMSynchronizationParams = synchronizationParams
 }
 
-func getCCKMCredentialRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics) {
+func getCCKMCredentialRotationParams(ctx context.Context, id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics, logger hclog.Logger) {
 	var rotateCredentialsParams CCKMXksRotateCredentialsParamsJSON
 	err := json.Unmarshal(jobConfigParams, &rotateCredentialsParams)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scheduler.go -> Read]["+id+"]")
+		logger.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scheduler.go -> Read][" + id + "]")
 		diags.AddError(
 			"Unable to read scheduler rotate credentials params",
 			err.Error(),

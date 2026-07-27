@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -87,8 +86,8 @@ func (r *resourceCMProperty) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Create]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_property.go -> Create][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_property.go -> Create][" + id + "]")
 
 	var plan CMPropertyTFSDK
 	var payload CMPropertyJSON
@@ -108,20 +107,20 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString()+"/reset",
 			resetPayload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error resetting property on CipherTrust Manager: ",
 				"Could not reset property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_property.go -> Create (reset) -> Response]["+response+"]")
+		r.client.Log.Debug("[resource_property.go -> Create (reset) -> Response][" + response + "]")
 	} else {
 		payload.Value = plan.Value.ValueString()
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Invalid data input: Property Updation",
 				err.Error(),
@@ -136,20 +135,20 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 			payloadJSON,
 			"name")
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error updating property on CipherTrust Manager: ",
 				"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_property.go -> Create Output -> Response]["+response+"]")
+		r.client.Log.Debug("[resource_property.go -> Create Output -> Response][" + response + "]")
 	}
 
 	// Read back the property to get the description and other computed fields.
 	readResponse, err := r.client.ReadDataByParam(ctx, id, plan.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Create -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Create -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Property on CipherTrust Manager after creation: ",
 			"Could not read CM Property: "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
@@ -172,8 +171,8 @@ func (r *resourceCMProperty) Create(ctx context.Context, req resource.CreateRequ
 func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMPropertyTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_property.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_property.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -184,7 +183,7 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"property not found (404) [resource_property.go -> Read]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + "property not found (404) [resource_property.go -> Read][" + id + "]")
 			resp.Diagnostics.AddWarning(
 				"Property Not Found",
 				"The CM Property '"+state.Name.ValueString()+"' was not found on CipherTrust Manager (HTTP 404). "+
@@ -193,7 +192,7 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Property on CipherTrust Manager: ",
 			"Could not read CM Property: "+state.Name.ValueString()+", unexpected error: "+err.Error(),
@@ -222,8 +221,8 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_property.go -> Update][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_property.go -> Update][" + id + "]")
 
 	var plan CMPropertyTFSDK
 	var payload CMPropertyJSON
@@ -243,20 +242,20 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 			common.URL_CM_PROPERTIES+"/"+plan.Name.ValueString()+"/reset",
 			resetPayload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Update][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error resetting property on CipherTrust Manager: ",
 				"Could not reset property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_property.go -> Update (reset) -> Response]["+response+"]")
+		r.client.Log.Debug("[resource_property.go -> Update (reset) -> Response][" + response + "]")
 	} else {
 		payload.Value = plan.Value.ValueString()
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Update][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Invalid data input: Property Updation",
 				err.Error(),
@@ -271,20 +270,20 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 			payloadJSON,
 			"name")
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Update][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error updating property on CipherTrust Manager: ",
 				"Could not update property "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_property.go -> Update -> Response]["+response+"]")
+		r.client.Log.Debug("[resource_property.go -> Update -> Response][" + response + "]")
 	}
 
 	// Read back the property to get the description and other computed fields.
 	readResponse, err := r.client.ReadDataByParam(ctx, id, plan.Name.ValueString(), common.URL_CM_PROPERTIES)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Update -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Update -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Property on CipherTrust Manager after update: ",
 			"Could not read CM Property: "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
@@ -307,8 +306,8 @@ func (r *resourceCMProperty) Update(ctx context.Context, req resource.UpdateRequ
 func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMPropertyTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_property.go -> Delete]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_property.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_property.go -> Delete][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_property.go -> Delete][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -323,14 +322,14 @@ func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequ
 		state.Name.ValueString(),
 		common.URL_CM_PROPERTIES+"/"+state.Name.ValueString()+"/reset",
 		payload)
-	tflog.Debug(ctx, "[resource_property.go -> Delete -> Response]["+response+"]")
+	r.client.Log.Debug("[resource_property.go -> Delete -> Response][" + response + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			// Property was already reset or does not exist as a customisable
 			// property on this CM version — treat as success.
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_property.go -> Delete]["+state.Name.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Delete][" + state.Name.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error resetting property on CipherTrust Manager: ",
 			"Could not reset property "+state.Name.ValueString()+", unexpected error: "+err.Error(),

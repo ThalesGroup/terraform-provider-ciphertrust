@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -296,7 +295,7 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMScpConnectionTFSDK
@@ -376,7 +375,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		diags = plan.Products.ElementsAs(ctx, &scpProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = scpProducts
@@ -388,7 +387,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: SCP connection Creation",
 			err.Error(),
@@ -398,7 +397,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_SCP_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating SCP Connection on CipherTrust Manager: ",
 			"Could not create scp connection, unexpected error: "+err.Error(),
@@ -411,9 +410,9 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.Password = types.StringNull()
 
-	tflog.Debug(ctx, "[resource_scp_connection.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_scp_connection.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -424,7 +423,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMScpConnectionTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -435,18 +434,18 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCP_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_scp_connection.go -> Read] connection not found, removing from state ["+id+"]")
+			r.client.Log.Debug("[resource_scp_connection.go -> Read] connection not found, removing from state [" + id + "]")
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading SCP Connection on CipherTrust Manager: ",
 			"Could not read scp connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Debug(ctx, "resource_scp_connection.go: response :"+response)
+	r.client.Log.Debug("resource_scp_connection.go: response :" + response)
 
 	getParamsFromResponse(response, &resp.Diagnostics, &state)
 	// required parameters are fetched separately
@@ -462,13 +461,13 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Read][" + id + "]")
 	return
 }
 
 func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Update][" + id + "]")
 	var plan CMScpConnectionTFSDK
 	var state CMScpConnectionTFSDK
 	var payload CMScpConnectionJSON
@@ -553,7 +552,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		diags = plan.Products.ElementsAs(ctx, &scpProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = scpProducts
@@ -565,7 +564,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: SCP connection Creation",
 			err.Error(),
@@ -575,7 +574,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_SCP_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating SCP Connection on CipherTrust Manager: ",
 			"Could not update scp connection, unexpected error: "+err.Error(),
@@ -588,7 +587,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.Password = types.StringNull()
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
+	r.client.Log.Debug(fmt.Sprintf("Response: %s", response))
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -599,7 +598,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMScpConnectionTFSDK
 	diags := req.State.Get(ctx, &state)
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "]")
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -609,17 +608,17 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "SCP connection already deleted out-of-band on CM")
+			r.client.Log.Debug("SCP connection already deleted out-of-band on CM")
 			return
 		}
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust SCP Connection",
 			"Could not delete scp connection, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 }
 
 func (d *resourceCMScpConnection) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

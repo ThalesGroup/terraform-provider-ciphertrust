@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 
 	"github.com/google/uuid"
@@ -61,11 +60,11 @@ func (d *dataSourcePrometheus) Schema(_ context.Context, _ datasource.SchemaRequ
 
 func (d *dataSourcePrometheus) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_prometheus.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cm_prometheus.go -> Read][" + id + "]")
 
 	response, err := d.client.ReadDataByParam(ctx, id, "all", common.URL_PROMETHEUS_STATUS)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_prometheus.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_prometheus.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching Prometheus status: "+err.Error())
 		return
 	}
@@ -84,7 +83,7 @@ func (d *dataSourcePrometheus) Read(ctx context.Context, req datasource.ReadRequ
 		Token:   token,
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_prometheus.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cm_prometheus.go -> Read][" + id + "]")
 
 	diags := resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)

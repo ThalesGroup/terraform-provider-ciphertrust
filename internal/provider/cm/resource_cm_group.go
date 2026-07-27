@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -91,7 +90,7 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_group.go -> Create][" + id + "]")
 
 	var plan CMGroupTFSDK
 	var payload CMGroupJSON
@@ -132,7 +131,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Group Creation",
 			err.Error(),
@@ -142,7 +141,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 	response, err := r.client.PostData(ctx, id, common.URL_GROUP, payloadJSON, "name")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Creating CipherTrust Group",
 			"Could not create group, unexpected error: "+err.Error(),
@@ -151,7 +150,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	}
 	plan.ID = plan.Name
 
-	tflog.Debug(ctx, "[resource_cm_group.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_cm_group.go -> Create Output][" + response + "]")
 
 	desiredUsers, diagsUsers := setToStringSlice(ctx, plan.UserIDs)
 	resp.Diagnostics.Append(diagsUsers...)
@@ -169,7 +168,7 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	}
 	plan.UserIDs = stringSliceToSet(desiredUsers)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_group.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -180,8 +179,8 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cm_group.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cm_group.go -> Read][" + id + "]")
 
 	var state CMGroupTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -198,11 +197,11 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	response, err := r.client.GetById(ctx, id, resourceID, common.URL_GROUP)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Warn(ctx, "CipherTrust Group not found, removing from state [resource_cm_group.go -> Read]["+resourceID+"]")
+			r.client.Log.Warn("CipherTrust Group not found, removing from state [resource_cm_group.go -> Read][" + resourceID + "]")
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read]["+resourceID+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Read][" + resourceID + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust Group",
 			"Could not read group "+resourceID+": "+err.Error(),
@@ -269,7 +268,7 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 
 	members, err := r.listGroupMembers(ctx, id, state.Name.ValueString())
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Read members]["+resourceID+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Read members][" + resourceID + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust Group Members",
 			"Could not list members of group "+resourceID+": "+err.Error(),
@@ -284,8 +283,8 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_group.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_group.go -> Update][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_group.go -> Update][" + id + "]")
 	var plan, state CMGroupTFSDK
 	var payload CMGroupJSON
 
@@ -373,7 +372,7 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Group Update",
 			err.Error(),
@@ -383,7 +382,7 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 
 	response, err := r.client.UpdateData(ctx, plan.Name.ValueString(), common.URL_GROUP, payloadJSON, "name")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Update]["+plan.Name.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Update][" + plan.Name.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error Updating CipherTrust Group",
 			"Could not update group, unexpected error: "+err.Error(),
@@ -463,9 +462,9 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 	if readResp.State.Raw.IsNull() || readResp.State.Raw.Type() == nil {
 		// Read() called RemoveResource (transient 404 after successful PATCH).
 		// Retain the seeded plan state; log a warning for operator visibility.
-		tflog.Warn(ctx, "[resource_cm_group.go -> Update] Read() returned empty state after "+
-			"successful PATCH (possible transient 404); retaining seeded plan state. "+
-			"Resource: "+plan.Name.ValueString()+" ["+id+"]")
+		r.client.Log.Warn("[resource_cm_group.go -> Update] Read() returned empty state after " +
+			"successful PATCH (possible transient 404); retaining seeded plan state. " +
+			"Resource: " + plan.Name.ValueString() + " [" + id + "]")
 		return
 	}
 	// Read succeeded — use its hydrated state.
@@ -483,7 +482,7 @@ func (r *resourceCMGroup) Delete(ctx context.Context, req resource.DeleteRequest
 
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_GROUP, state.Name.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.Name.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_group.go -> Delete]["+state.Name.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_group.go -> Delete][" + state.Name.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

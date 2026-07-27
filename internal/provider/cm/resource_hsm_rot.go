@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -121,7 +120,7 @@ func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequ
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_hsm_rot.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_hsm_rot.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan HSMSetupTFSDK
@@ -159,7 +158,7 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 
 	connInfoJSON, err := json.Marshal(connInfoMap)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid conn_info input",
 			"Could not convert conn_info to JSON: "+err.Error(),
@@ -184,7 +183,7 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: HSM Root of trust Setup",
 			err.Error(),
@@ -194,7 +193,7 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_HSM_SETUP, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating HSM Root of trust setup on CipherTrust Manager: ",
 			"Could not create HSM Root of trust setup, unexpected error: "+err.Error(),
@@ -210,9 +209,9 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 	plan.SubType = types.StringValue(gjson.Get(response, "sub_type").String())
 	plan.Config = parseConfig(ctx, response, &resp.Diagnostics)
 
-	tflog.Debug(ctx, "[resource_hsm_rot.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_hsm_rot.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_hsm_rot.go -> Create][" + id + "]")
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -225,8 +224,8 @@ func (r *resourceHSMRootOfTrust) Create(ctx context.Context, req resource.Create
 func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state HSMSetupTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_hsm_rot.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_hsm_rot.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_hsm_rot.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -259,7 +258,7 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading HSM Server on CipherTrust Manager: ",
 			"Could not read HSM Server id : ,"+state.ID.ValueString()+" unexpected error: "+err.Error(),
@@ -282,10 +281,10 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	// Required field: conn_info.
 	// HSMSetupJSON.ConnInfo is a plain string (JSON-encoded object) — use json.Unmarshal,
 	// not gjson.ForEach, to deserialise the nested object.
-	if r := gjson.Get(response, "connInfo"); r.Exists() {
+	if connInfoResult := gjson.Get(response, "connInfo"); connInfoResult.Exists() {
 		connInfoMap := make(map[string]string)
-		if err := json.Unmarshal([]byte(r.String()), &connInfoMap); err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Read]["+id+"]")
+		if err := json.Unmarshal([]byte(connInfoResult.String()), &connInfoMap); err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error parsing conn_info from CM response",
 				"Could not unmarshal connInfo JSON string: "+err.Error(),
@@ -368,7 +367,7 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceHSMRootOfTrust) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_hsm_rot.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_hsm_rot.go -> Update]")
 
 	// update not supported for this resource
 	resp.Diagnostics.AddError(
@@ -376,12 +375,12 @@ func (r *resourceHSMRootOfTrust) Update(ctx context.Context, req resource.Update
 		"This resource does not support updates. You must recreate the resource to apply any changes.",
 	)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_hsm_rot.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_hsm_rot.go -> Delete]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_hsm_rot.go -> Delete]")
 
 	var state HSMSetupTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -411,17 +410,17 @@ func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.Delete
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			// Resource already deleted out-of-band; treat terraform destroy as successful.
-			tflog.Debug(ctx, "[resource_hsm_rot.go -> Delete] resource already absent, skipping ["+state.ID.ValueString()+"]")
+			r.client.Log.Debug("[resource_hsm_rot.go -> Delete] resource already absent, skipping [" + state.ID.ValueString() + "]")
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_hsm_rot.go -> Delete]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Delete][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting HSM Server on CipherTrust Manager: ",
 			"Could not Delete HSM Server : ,"+state.ID.ValueString()+" unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_hsm_rot.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_hsm_rot.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 }
 
 func (d *resourceHSMRootOfTrust) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

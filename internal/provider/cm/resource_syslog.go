@@ -20,7 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -126,7 +125,7 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_syslog.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_syslog.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMSyslogTFSDK
@@ -157,7 +156,7 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Syslog Configuration",
 			err.Error(),
@@ -171,7 +170,7 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		common.URL_CM_SYSLOG,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error adding Syslog configuration on CipherTrust Manager: ",
 			"Could not add Syslog "+plan.Host.ValueString()+", unexpected error: "+err.Error(),
@@ -199,9 +198,9 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		}
 	}
 
-	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_syslog.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -230,7 +229,7 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Syslog configuration on CipherTrust Manager: ",
 			"Could not read Syslog cofiguration : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -262,7 +261,7 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -324,7 +323,7 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Syslog Updation",
 			err.Error(),
@@ -338,7 +337,7 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		common.URL_CM_SYSLOG,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Syslog on CipherTrust Manager: ",
 			"Could not update Syslog "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -380,7 +379,7 @@ func (r *resourceCMSyslog) Delete(ctx context.Context, req resource.DeleteReques
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_SYSLOG, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

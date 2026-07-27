@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -131,7 +130,7 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_user.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMUserTFSDK
@@ -195,7 +194,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: User Creation",
 			err.Error(),
@@ -205,7 +204,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 
 	response, err := r.client.PostData(ctx, id, common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating user on CipherTrust Manager: ",
 			"Could not create user, unexpected error: "+err.Error(),
@@ -242,7 +241,7 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.Password = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -260,7 +259,7 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	}
 
 	userResponse, err := r.client.GetById(ctx, state.ID.ValueString(), state.ID.ValueString(), common.URL_USER_MANAGEMENT)
-	tflog.Trace(ctx, userResponse)
+	r.client.Log.Trace(userResponse)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
@@ -350,8 +349,8 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_user.go -> Update][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user.go -> Update][" + id + "]")
 
 	var plan CMUserTFSDK
 	diags := req.Plan.Get(ctx, &plan)
@@ -472,7 +471,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: User Update",
 			err.Error(),
@@ -482,7 +481,7 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 
 	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_USER_MANAGEMENT, payloadJSON, "user_id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating user on CipherTrust Manager: ",
 			"Could not update user, unexpected error: "+err.Error(),
@@ -574,7 +573,7 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_USER_MANAGEMENT, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Delete]["+state.UserID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user.go -> Delete][" + state.UserID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			// Resource was already deleted outside of Terraform — desired state achieved.
