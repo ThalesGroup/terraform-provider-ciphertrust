@@ -94,6 +94,10 @@ func (d *dataSourceScpConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Sensitive:   true,
 							Description: "Password for SCP/SFTP server. CM never returns this field on GET, so it is not populated by this data source.",
 						},
+						"password_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — password is write-only and resource-only.",
+						},
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
@@ -185,14 +189,15 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 				listValue, _ := types.ListValue(types.StringType, productValues) // Create a ListValue
 				return listValue
 			}(),
-			Description: types.StringValue(scp.Description),
-			Host:        types.StringValue(scp.Host),
-			Port:        types.Int64Value(scp.Port),
-			Username:    types.StringValue(scp.Username),
-			AuthMethod:  types.StringValue(scp.AuthMethod),
-			PathTo:      types.StringValue(scp.PathTo),
-			Protocol:    types.StringValue(scp.Protocol),
-			PublicKey:   types.StringValue(scp.PublicKey),
+			Description:     types.StringValue(scp.Description),
+			Host:            types.StringValue(scp.Host),
+			Port:            types.Int64Value(scp.Port),
+			Username:        types.StringValue(scp.Username),
+			AuthMethod:      types.StringValue(scp.AuthMethod),
+			PathTo:          types.StringValue(scp.PathTo),
+			Protocol:        types.StringValue(scp.Protocol),
+			PublicKey:       types.StringValue(scp.PublicKey),
+			PasswordVersion: types.Int64Null(),
 		}
 
 		if scp.Labels != nil {
