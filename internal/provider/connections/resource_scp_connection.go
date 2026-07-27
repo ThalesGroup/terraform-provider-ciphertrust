@@ -176,7 +176,12 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"password": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Password for SCP/SFTP server.",
+				WriteOnly:   true,
+				Description: "Password for SCP/SFTP server. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.",
+			},
+			"password_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.",
 			},
 			"port": schema.Int64Attribute{
 				Optional:    true,
@@ -303,6 +308,18 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMScpConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if plan.AuthMethod.ValueString() != "" && plan.AuthMethod.ValueString() != types.StringNull().ValueString() {
 		payload.AuthMethod = plan.AuthMethod.ValueString()
 	}
@@ -346,8 +363,8 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		payload.Meta = scpMetadataPayload
 	}
 
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = plan.Password.ValueString()
+	if v := config.Password.ValueString(); v != "" {
+		payload.Password = v
 	}
 
 	if plan.Port.ValueInt64() != types.Int64Null().ValueInt64() {
@@ -389,6 +406,10 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		return
 	}
 	getParamsFromResponse(response, &resp.Diagnostics, &plan)
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
 	tflog.Debug(ctx, "[resource_scp_connection.go -> Create Output]["+response+"]")
 
@@ -449,9 +470,29 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Update]["+id+"]")
 	var plan CMScpConnectionTFSDK
+	var state CMScpConnectionTFSDK
 	var payload CMScpConnectionJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Load prior state to detect a password_version bump (see below).
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMScpConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -496,8 +537,11 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		payload.Meta = scpMetadataPayload
 	}
 
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = plan.Password.ValueString()
+	// password is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — password_version is the explicit, state-tracked
+	// signal that the caller wants the current password value re-sent to CM.
+	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+		payload.Password = config.Password.ValueString()
 	}
 
 	if plan.Port.ValueInt64() != types.Int64Null().ValueInt64() {
@@ -539,6 +583,10 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		return
 	}
 	getParamsFromResponse(response, &resp.Diagnostics, &plan)
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
 	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
 	diags = resp.State.Set(ctx, plan)

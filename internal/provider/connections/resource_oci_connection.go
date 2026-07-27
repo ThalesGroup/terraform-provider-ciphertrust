@@ -82,15 +82,21 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 			"key_file": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
-				Description: "Path to or data of the OCI private key file (PEM format).",
+				WriteOnly:   true,
+				Description: "Path to or data of the OCI private key file (PEM format). Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key (and/or its passphrase), change `key_file`/`key_file_pass_phrase` and bump `key_file_version` in the same apply.",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
 			},
+			"key_file_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number used to trigger re-sending `key_file`/`key_file_pass_phrase` to CipherTrust Manager. Since both are write-only, Terraform cannot detect a change in their values on its own; increment this on every apply where you want the current values re-sent.",
+			},
 			"key_file_pass_phrase": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Passphrase if the OCI key file is encrypted.",
+				WriteOnly:   true,
+				Description: "Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.",
 			},
 			"meta": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -175,14 +181,25 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
+	// key_file / key_file_pass_phrase are write-only: the framework nulls them out of
+	// PlannedState during PlanResourceChange, before Create() ever runs, so
+	// plan.KeyFile/plan.PassPhrase are always null here. req.Config is populated fresh
+	// from the HCL configuration on every RPC (not derived from the nullified plan), so
+	// it reliably carries the actual values.
+	var config OCIConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// User can give path the pem file or pem data.
-	keyFileData := readKeyFileData(ctx, plan.KeyFile.ValueString(), &resp.Diagnostics)
+	keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	credentials := OCIConnectionCredentialsJSON{
-		PassPhrase: plan.PassPhrase.ValueString(),
+		PassPhrase: config.PassPhrase.ValueString(),
 		KeyFile:    keyFileData,
 	}
 
@@ -270,6 +287,11 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	// key_file / key_file_pass_phrase are write-only — the framework nulls them from
+	// outgoing state/plan artifacts automatically, but null them explicitly too for clarity.
+	plan.KeyFile = types.StringNull()
+	plan.PassPhrase = types.StringNull()
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -329,6 +351,17 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
+	// key_file / key_file_pass_phrase are write-only: the framework nulls them out of
+	// PlannedState during PlanResourceChange, before Update() ever runs, so
+	// plan.KeyFile/plan.PassPhrase are always null here. req.Config is populated fresh
+	// from the HCL configuration on every RPC (not derived from the nullified plan), so
+	// it reliably carries the actual values.
+	var config OCIConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
 		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
@@ -340,18 +373,17 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	var payload OCIConnectionUpdateJSON
-	planKeyFileData := readKeyFileData(ctx, plan.KeyFile.ValueString(), &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	stateKeyFileData := readKeyFileData(ctx, state.KeyFile.ValueString(), &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if planKeyFileData != stateKeyFileData {
+	// key_file / key_file_pass_phrase are write-only (never stored in state), so their own
+	// values can never be diffed against a prior value — key_file_version is the explicit,
+	// state-tracked signal that the caller wants the current values re-sent to CM.
+	if !plan.KeyFileVersion.Equal(state.KeyFileVersion) {
+		keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		credentials := OCIConnectionCredentialsJSON{
-			PassPhrase: plan.PassPhrase.ValueString(),
-			KeyFile:    planKeyFileData,
+			PassPhrase: config.PassPhrase.ValueString(),
+			KeyFile:    keyFileData,
 		}
 		payload.Credentials = credentials
 	}
@@ -471,6 +503,11 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// key_file / key_file_pass_phrase are write-only — the framework nulls them from
+	// outgoing state/plan artifacts automatically, but null them explicitly too for clarity.
+	plan.KeyFile = types.StringNull()
+	plan.PassPhrase = types.StringNull()
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }

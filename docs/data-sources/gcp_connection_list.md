@@ -40,6 +40,7 @@ gcp
 - `description` (String) Description about the connection.
 - `id` (String)
 - `key_file` (String, Sensitive) The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. CM never returns this field on GET, so it is not populated by this data source.
+- `key_file_version` (Number) Not populated by this data source — key_file is write-only and resource-only.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 
 To add a label, set the label's value as follows.
