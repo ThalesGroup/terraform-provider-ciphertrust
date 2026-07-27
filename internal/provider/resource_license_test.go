@@ -353,4 +353,3 @@ resource "ciphertrust_license" "bindtype_test" {
 		},
 	})
 }
-

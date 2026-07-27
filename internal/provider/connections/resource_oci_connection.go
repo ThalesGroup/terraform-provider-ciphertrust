@@ -290,8 +290,14 @@ func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_oci_connection.go -> Read] connection not found, removing from state ["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"OCI Connection Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed OCI connection %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
 		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")

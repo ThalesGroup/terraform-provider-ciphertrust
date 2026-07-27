@@ -64,12 +64,12 @@ func Test_CM_DataSourceCMTokensList_CamelCaseFields(t *testing.T) {
 					resource.TestCheckOutput("lifetime_accessible", "true"),
 					resource.TestCheckOutput("client_management_profile_id_accessible", "true"),
 					// dev_account: verify attribute is schema-accessible (value varies by
-				// instance type — empty on non-CDSPaaS, non-empty on CDSPaaS/cloud)
-				resource.TestCheckResourceAttrWith(
-					"data.ciphertrust_cm_tokens_list.all",
-					"tokens.0.dev_account",
-					func(_ string) error { return nil },
-				),
+					// instance type — empty on non-CDSPaaS, non-empty on CDSPaaS/cloud)
+					resource.TestCheckResourceAttrWith(
+						"data.ciphertrust_cm_tokens_list.all",
+						"tokens.0.dev_account",
+						func(_ string) error { return nil },
+					),
 				),
 			},
 		},
