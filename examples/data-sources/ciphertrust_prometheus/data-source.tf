@@ -13,7 +13,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -27,7 +27,7 @@ provider "ciphertrust" {
 resource "ciphertrust_cm_prometheus" "cm_prometheus" {
   # This resource is used to enable or disable the Prometheus integration
   # 'enabled' is a boolean that determines whether Prometheus is enabled or not
-  enabled = true  # Set to 'true' to enable, 'false' to disable
+  enabled = true # Set to 'true' to enable, 'false' to disable
 }
 
 # Data source to fetch the status of the Prometheus configuration

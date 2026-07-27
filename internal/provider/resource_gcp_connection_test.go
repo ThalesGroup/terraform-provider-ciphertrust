@@ -108,7 +108,7 @@ resource "ciphertrust_gcp_connection" "gcp_connection" {
 			// Without this, the cleanup phase uses Step 4's config (gcp-invalid)
 			// which the validator rejects, leaving dangling resources.
 			{
-				Config: providerConfig + fmt.Sprintf(updateConfig),
+				Config: providerConfig + updateConfig,
 			},
 		},
 	})

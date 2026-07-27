@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -43,17 +43,17 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
- # Add Standard policy
+# Add Standard policy
 resource "ciphertrust_cte_policy" "std_policy" {
-    name            = "std_policy"
-    policy_type     = "Standard"
-    description     = "Created via TF"
-    never_deny      = true
-    security_rules  = [{
-        effect               = "permit,audit"
-        action               = "all_ops"
-        partial_match        = false
-    }]
+  name        = "std_policy"
+  policy_type = "Standard"
+  description = "Created via TF"
+  never_deny  = true
+  security_rules = [{
+    effect        = "permit,audit"
+    action        = "all_ops"
+    partial_match = false
+  }]
 }
 
 
@@ -68,11 +68,11 @@ resource "ciphertrust_cte_policy" "idt_policy" {
     current_key_type        = ""
     transformation_key      = "idt_key"
     transformation_key_type = ""
-}]
+  }]
 
   security_rules = [{
-    effect               = "permit"
-    action               = "all_ops"
+    effect = "permit"
+    action = "all_ops"
   }]
 
 }
@@ -97,9 +97,9 @@ resource "ciphertrust_cte_policy" "ldt_policy" {
   }]
 
   security_rules = [{
-    effect               = "permit"
-    action               = "all_ops"
-    partial_match        = false
+    effect        = "permit"
+    action        = "all_ops"
+    partial_match = false
     }
   ]
 
@@ -111,22 +111,22 @@ resource "ciphertrust_cte_policy" "dxt_policy" {
   policy_type = "Standard"
   description = " policy for testing using terrafrom..."
   never_deny  = true
-  key_rules = [{key_id = "clear_key"}]
+  key_rules   = [{ key_id = "clear_key" }]
 
   data_transform_rules = [{
     key_id = "clear_key"
   }]
 
   security_rules = [{
-    effect               = "permit"
-    action               = "key_op"
+    effect = "permit"
+    action = "key_op"
     }
   ]
 }
 
 # Add COS policy
 resource "ciphertrust_cte_policy" "cos_policy" {
-  name = "cos_policy"
+  name        = "cos_policy"
   policy_type = "Cloud_Object_Storage"
   never_deny  = true
 
@@ -139,15 +139,15 @@ resource "ciphertrust_cte_policy" "cos_policy" {
     restrict_update = false
   }
 
- security_rules = [ {effect = "deny"} ] 
-  description = "Temp COS policy for testing purpose."
+  security_rules = [{ effect = "deny" }]
+  description    = "Temp COS policy for testing purpose."
 }
 
 # Add CSI policy
 resource "ciphertrust_cte_policy" "csi_policy" {
-  name = "csi_policy"
+  name        = "csi_policy"
   policy_type = "CSI"
-  never_deny  = true 
+  never_deny  = true
 
   key_rules = [{
     key_id = "clear_key"
@@ -157,15 +157,15 @@ resource "ciphertrust_cte_policy" "csi_policy" {
     restrict_update = false
   }
 
-  security_rules = [ {effect = "deny"} ] 
-  signature_rules = [{signature_set_id = "signset-containerimge-36446638"}]
-  description = "Temp CSI policy for testing purpose."
+  security_rules  = [{ effect = "deny" }]
+  signature_rules = [{ signature_set_id = "signset-containerimge-36446638" }]
+  description     = "Temp CSI policy for testing purpose."
 }
 
 
 # Output the unique ID of the created CTE Policies 
 output "policy_id" {
-    value = ciphertrust_cte_policy.std_policy.id
+  value = ciphertrust_cte_policy.std_policy.id
 }
 ```
 

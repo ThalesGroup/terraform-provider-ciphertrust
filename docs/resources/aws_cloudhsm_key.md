@@ -34,9 +34,9 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
   depends_on = [
     ciphertrust_aws_kms.kms,
   ]
-  name                        = "name"
-  region                      = "region"
-  kms_id                      = ciphertrust_aws_kms.kms.id
+  name   = "name"
+  region = "region"
+  kms_id = ciphertrust_aws_kms.kms.id
   aws_param = {
     custom_key_store_type    = "AWS_CLOUDHSM"
     cloud_hsm_cluster_id     = "cluster-id"

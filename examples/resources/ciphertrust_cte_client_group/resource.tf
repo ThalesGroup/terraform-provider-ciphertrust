@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -30,18 +30,18 @@ provider "ciphertrust" {
 
 # Add a resource of type CTE  Client Group
 resource "ciphertrust_cte_client_group" "test_cg_group_test1" {
-  name = "test_cgp1"                # Name of the client group
+  name = "test_cgp1" # Name of the client group
 
-  cluster_type = "NON-CLUSTER"      # Type of cluster (e.g., CLUSTER / NON-CLUSTER)
+  cluster_type = "NON-CLUSTER" # Type of cluster (e.g., CLUSTER / NON-CLUSTER)
 
-  communication_enabled = true      # Enable/disable communication for this group
+  communication_enabled = true # Enable/disable communication for this group
 
-  description = "tf test cg.."      # Optional description for the client group
+  description = "tf test cg.." # Optional description for the client group
 
   # - List of clients to be added to client group
   client_list = [
-    "client1",  # Client hostname or identifier
-    "client2"      # Client IP address
+    "client1", # Client hostname or identifier
+    "client2"  # Client IP address
   ]
 
   # Operation type to perform on the client group
@@ -58,7 +58,7 @@ resource "ciphertrust_cte_client_group" "test_cg_group_test1" {
   # - reset-password   : Reset client password
   # - auth-binaries    : Configure authorized binaries
 
- # op_type = "add-client/remove-client/update/update-password/reset-password/auth-binaries"
+  # op_type = "add-client/remove-client/update/update-password/reset-password/auth-binaries"
 
   # List of clients to operate on
   #
@@ -89,5 +89,5 @@ resource "ciphertrust_cte_client_group" "test_cg_group_test1" {
 
 # Output the unique ID of the created CTE Client Group
 output "cte_client_group_id" {
-    value = ciphertrust_cte_client_group.test_cg_group_test1.id
+  value = ciphertrust_cte_client_group.test_cg_group_test1.id
 }

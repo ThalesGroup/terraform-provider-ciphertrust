@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -30,11 +30,11 @@ provider "ciphertrust" {
 
 # Data source for retrieving CTE client group guardpoints details
 data "ciphertrust_cte_clientgroup_guardpoint" "example" {
-    # The name filter to specify which CTE client group guardpoints to retrieve (replace with actual client names)
-    clientgroup_name = ""
+  # The name filter to specify which CTE client group guardpoints to retrieve (replace with actual client names)
+  clientgroup_name = ""
 }
 
 output "clientgroup_guardpoint" {
   # Output the list of CTE clientgroup guardpoints retrieved from the data source
-  value = "${data.ciphertrust_cte_clientgroup_guardpoint.example.clientgroup_guardpoint}"
+  value = data.ciphertrust_cte_clientgroup_guardpoint.example.clientgroup_guardpoint
 }

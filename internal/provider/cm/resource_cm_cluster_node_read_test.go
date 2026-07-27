@@ -33,6 +33,18 @@ func Test_CM_ClusterNodeSchema_ComputedFieldsUseStateForUnknown(t *testing.T) {
 		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
 	}
 
+	// nonNullRawState is a minimal non-null tftypes.Value used only to satisfy
+	// UseStateForUnknown()'s req.State.Raw.IsNull() check (added in
+	// terraform-plugin-framework v1.14+; previously it checked req.StateValue.IsNull()
+	// instead). It does not need to match the resource's real schema type — the plan
+	// modifier only tests for "is there any prior state at all" (Create vs. Update).
+	nonNullRawState := tfsdk.State{
+		Raw: tftypes.NewValue(
+			tftypes.Object{AttributeTypes: map[string]tftypes.Type{"placeholder": tftypes.String}},
+			map[string]tftypes.Value{"placeholder": tftypes.NewValue(tftypes.String, "x")},
+		),
+	}
+
 	t.Run("node_count", func(t *testing.T) {
 		attr, ok := schemaResp.Schema.Attributes["node_count"].(schema.Int64Attribute)
 		if !ok {
@@ -44,6 +56,7 @@ func Test_CM_ClusterNodeSchema_ComputedFieldsUseStateForUnknown(t *testing.T) {
 				"non-empty refresh plan even when nothing changed")
 		}
 		req := planmodifier.Int64Request{
+			State:       nonNullRawState,
 			StateValue:  types.Int64Value(2),
 			PlanValue:   types.Int64Unknown(),
 			ConfigValue: types.Int64Null(),
@@ -70,6 +83,7 @@ func Test_CM_ClusterNodeSchema_ComputedFieldsUseStateForUnknown(t *testing.T) {
 					"non-empty refresh plan even when nothing changed", name)
 			}
 			req := planmodifier.StringRequest{
+				State:       nonNullRawState,
 				StateValue:  types.StringValue("r"),
 				PlanValue:   types.StringUnknown(),
 				ConfigValue: types.StringNull(),

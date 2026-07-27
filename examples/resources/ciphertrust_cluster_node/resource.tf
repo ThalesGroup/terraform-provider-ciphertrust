@@ -21,8 +21,8 @@ provider "ciphertrust" {
 resource "ciphertrust_cluster_node" "node3" {
   # host: Internal address sent in CM API payloads (CSR, join request).
   # Must be reachable by other cluster members for internal cluster communication.
-  host           = "10.10.10.13"
-  port           = 5432
+  host = "10.10.10.13"
+  port = 5432
 
   # public_address: Address for external connectors/applications.
   # Can be same as host, or a public IP/FQDN/load balancer.
@@ -70,8 +70,8 @@ resource "ciphertrust_cluster_node" "node4" {
 #   FQDNs resolve to private IPs from inside the VPC and public IPs from outside.
 resource "ciphertrust_cluster_node" "aws_node_external_terraform" {
   # host: Private IP — sent in CM API payloads for internal cluster routing.
-  host           = "172.30.100.184"
-  port           = 5432
+  host = "172.30.100.184"
+  port = 5432
 
   # public_address: Public IP for external connectors.
   public_address = "3.232.96.8"

@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -49,7 +49,7 @@ resource "ciphertrust_cte_client_guardpoint" "dir_auto_gp" {
   client_id = ciphertrust_cte_client.cte_client.id
 
   guard_points = {
-    
+
     # guard_path and its params are sent as a map
     "/test/gp1" = {
       guard_point_params = {
@@ -58,7 +58,7 @@ resource "ciphertrust_cte_client_guardpoint" "dir_auto_gp" {
         guard_point_type = "directory_auto"
 
         # ID of the policy applied with this GuardPoint.
-        policy_id        = ciphertrust_cte_policy.standard_policy.id
+        policy_id = ciphertrust_cte_policy.standard_policy.id
 
         # This field are ignored during intitial apply but can be updated, its default values are set (guard_enabled=true)
         # guard_enabled  = false 
@@ -69,7 +69,7 @@ resource "ciphertrust_cte_client_guardpoint" "dir_auto_gp" {
 
 # Output the unique ID of the created CTE GuardPoint
 output "guardpoint_id" {
-    value = ciphertrust_cte_client_guardpoint.dir_auto_gp.id
+  value = ciphertrust_cte_client_guardpoint.dir_auto_gp.id
 }
 ```
 

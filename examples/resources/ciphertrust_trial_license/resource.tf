@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -35,5 +35,5 @@ resource "ciphertrust_trial_license" "trial_license" {
 
 # Output the unique ID of the created trial license
 output "trial_license_info" {
-	value = ciphertrust_trial_license.trial_license.id
+  value = ciphertrust_trial_license.trial_license.id
 }

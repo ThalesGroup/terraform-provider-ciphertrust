@@ -46,8 +46,8 @@ resource "ciphertrust_cm_key" "version_source_key" {
 # Add a BYOK key version
 resource "ciphertrust_oci_byok_key_version" "version" {
   # Required parameters
-  cckm_key_id                = ciphertrust_oci_byok_key.key.id
-  source_key_id              = ciphertrust_cm_key.version_source_key.id
+  cckm_key_id   = ciphertrust_oci_byok_key.key.id
+  source_key_id = ciphertrust_cm_key.version_source_key.id
   # Optional parameters
   source_key_tier            = "local"
   schedule_for_deletion_days = 14

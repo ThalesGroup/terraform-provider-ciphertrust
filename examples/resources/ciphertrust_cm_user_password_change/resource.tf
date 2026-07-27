@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -32,12 +32,12 @@ provider "ciphertrust" {
 
 # Update a resource of type CM User's password
 resource "ciphertrust_cm_user_password_change" "pwd_change" {
-    # The login name of the current user.
-    username = "frank"
+  # The login name of the current user.
+  username = "frank"
 
-    # The own user's current password
-    password = "ChangeMe101!"
+  # The own user's current password
+  password = "ChangeMe101!"
 
-    # The new password
-    new_password = "ChangeMe201!"
+  # The new password
+  new_password = "ChangeMe201!"
 }

@@ -29,19 +29,19 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 	return func(s *terraform.State) (string, error) {
 		rs, ok := s.RootModule().Resources[keyResourceName]
 		if !ok {
-			return "", fmt.Errorf("not found: " + keyResourceName)
+			return "", fmt.Errorf("not found: %s", keyResourceName)
 		}
 		keyID, ok := rs.Primary.Attributes["id"]
 		if !ok {
-			return "", fmt.Errorf("id not found in state for " + keyResourceName)
+			return "", fmt.Errorf("id not found in state for %s", keyResourceName)
 		}
 		rs, ok = s.RootModule().Resources[versionResourceName]
 		if !ok {
-			return "", fmt.Errorf("not found: " + versionResourceName)
+			return "", fmt.Errorf("not found: %s", versionResourceName)
 		}
 		versionID, ok := rs.Primary.Attributes["id"]
 		if !ok {
-			return "", fmt.Errorf("id not found in state for " + versionResourceName)
+			return "", fmt.Errorf("id not found in state for %s", versionResourceName)
 		}
 		return keyID + "." + versionID, nil
 	}

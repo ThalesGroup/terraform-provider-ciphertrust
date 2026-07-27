@@ -1,6 +1,3 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MIT
-
 package cm
 
 import (
@@ -432,6 +429,7 @@ type CMUserTFSDK struct {
 	Nickname               types.String `tfsdk:"nickname"`
 	Email                  types.String `tfsdk:"email"`
 	Password               types.String `tfsdk:"password"`
+	PasswordVersion        types.Int64  `tfsdk:"password_version"`
 	IsDomainUser           types.Bool   `tfsdk:"is_domain_user"`
 	PreventUILogin         types.Bool   `tfsdk:"prevent_ui_login"`
 	PasswordChangeRequired types.Bool   `tfsdk:"password_change_required"`
@@ -1112,34 +1110,34 @@ type CMProxyJSON struct {
 }
 
 type CMPasswordPolicyTFSDK struct {
-	ID                            types.String  `tfsdk:"id"`
-	Name                          types.String  `tfsdk:"policy_name"`
-	FailedLoginsLockoutThresholds types.List `tfsdk:"failed_logins_lockout_thresholds"`
-	InclusiveMaxTotalLength       types.Int64   `tfsdk:"inclusive_max_total_length"`
-	InclusiveMinDigits            types.Int64   `tfsdk:"inclusive_min_digits"`
-	InclusiveMinLowerCase         types.Int64   `tfsdk:"inclusive_min_lower_case"`
-	InclusiveMinOther             types.Int64   `tfsdk:"inclusive_min_other"`
-	InclusiveMinTotalLength       types.Int64   `tfsdk:"inclusive_min_total_length"`
-	InclusiveMinUpperCase         types.Int64   `tfsdk:"inclusive_min_upper_case"`
-	PasswordChangeMinDays         types.Int64   `tfsdk:"password_change_min_days"`
-	PasswordHistoryThreshold      types.Int64   `tfsdk:"password_history_threshold"`
-	PasswordLifetime              types.Int64   `tfsdk:"password_lifetime"`
+	ID                             types.String `tfsdk:"id"`
+	Name                           types.String `tfsdk:"policy_name"`
+	FailedLoginsLockoutThresholds  types.List   `tfsdk:"failed_logins_lockout_thresholds"`
+	InclusiveMaxTotalLength        types.Int64  `tfsdk:"inclusive_max_total_length"`
+	InclusiveMinDigits             types.Int64  `tfsdk:"inclusive_min_digits"`
+	InclusiveMinLowerCase          types.Int64  `tfsdk:"inclusive_min_lower_case"`
+	InclusiveMinOther              types.Int64  `tfsdk:"inclusive_min_other"`
+	InclusiveMinTotalLength        types.Int64  `tfsdk:"inclusive_min_total_length"`
+	InclusiveMinUpperCase          types.Int64  `tfsdk:"inclusive_min_upper_case"`
+	PasswordChangeMinDays          types.Int64  `tfsdk:"password_change_min_days"`
+	PasswordHistoryThreshold       types.Int64  `tfsdk:"password_history_threshold"`
+	PasswordLifetime               types.Int64  `tfsdk:"password_lifetime"`
 	PasswordExpiryNotificationDays types.Int64  `tfsdk:"password_expiry_notification_days"`
 }
 
 type CMPasswordPolicyJSON struct {
-	Name                          string     `json:"policy_name,omitempty"`
-	FailedLoginsLockoutThresholds *[]int64   `json:"failed_logins_lockout_thresholds,omitempty"`
-	InclusiveMaxTotalLength       *int64     `json:"inclusive_max_total_length,omitempty"`
-	InclusiveMinDigits            *int64     `json:"inclusive_min_digits,omitempty"`
-	InclusiveMinLowerCase         *int64     `json:"inclusive_min_lower_case,omitempty"`
-	InclusiveMinOther             *int64     `json:"inclusive_min_other,omitempty"`
-	InclusiveMinTotalLength       *int64     `json:"inclusive_min_total_length,omitempty"`
-	InclusiveMinUpperCase         *int64     `json:"inclusive_min_upper_case,omitempty"`
-	PasswordChangeMinDays         *int64     `json:"password_change_min_days,omitempty"`
-	PasswordHistoryThreshold      *int64     `json:"password_history_threshold,omitempty"`
-	PasswordLifetime              *int64     `json:"password_lifetime,omitempty"`
-	PasswordExpiryNotificationDays *int64    `json:"password_expiry_notification_days,omitempty"`
+	Name                           string   `json:"policy_name,omitempty"`
+	FailedLoginsLockoutThresholds  *[]int64 `json:"failed_logins_lockout_thresholds,omitempty"`
+	InclusiveMaxTotalLength        *int64   `json:"inclusive_max_total_length,omitempty"`
+	InclusiveMinDigits             *int64   `json:"inclusive_min_digits,omitempty"`
+	InclusiveMinLowerCase          *int64   `json:"inclusive_min_lower_case,omitempty"`
+	InclusiveMinOther              *int64   `json:"inclusive_min_other,omitempty"`
+	InclusiveMinTotalLength        *int64   `json:"inclusive_min_total_length,omitempty"`
+	InclusiveMinUpperCase          *int64   `json:"inclusive_min_upper_case,omitempty"`
+	PasswordChangeMinDays          *int64   `json:"password_change_min_days,omitempty"`
+	PasswordHistoryThreshold       *int64   `json:"password_history_threshold,omitempty"`
+	PasswordLifetime               *int64   `json:"password_lifetime,omitempty"`
+	PasswordExpiryNotificationDays *int64   `json:"password_expiry_notification_days,omitempty"`
 }
 
 type CMLogForwardersESOrLokiParamsTFSDK struct {

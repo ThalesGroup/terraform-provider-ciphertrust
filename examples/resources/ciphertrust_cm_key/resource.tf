@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -38,54 +38,54 @@ data "ciphertrust_cm_users_list" "list" {
 
 resource "ciphertrust_cm_key" "sample_key" {
   # Name of the key
-  name="terraform"
+  name = "terraform"
 
   # Cryptographic algorithm this key is used with. Defaults to 'aes'.
-  algorithm="aes"
+  algorithm = "aes"
 
   # Bit length for the key.
-  size=256
+  size = 256
 
   # Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303.
-  usage_mask=76
+  usage_mask = 76
 
   # Key is deletable
-  undeletable=false
+  undeletable = false
 
   # Key is exportable
-  unexportable=false
+  unexportable = false
 
   # Optional end-user or service data stored with the key
-  meta={
-    owner_id=tolist(data.ciphertrust_cm_users_list.list.users)[0].user_id
-    permissions={
-      decrypt_with_key=["CTE Clients"]
-      encrypt_with_key=["CTE Clients"]
-      export_key=["CTE Clients"]
-      mac_verify_with_key=["CTE Clients"]
-      mac_with_key=["CTE Clients"]
-      read_key=["CTE Clients"]
-      sign_verify_with_key=["CTE Clients"]
-      sign_with_key=["CTE Clients"]
-      use_key=["CTE Clients"]
+  meta = {
+    owner_id = tolist(data.ciphertrust_cm_users_list.list.users)[0].user_id
+    permissions = {
+      decrypt_with_key     = ["CTE Clients"]
+      encrypt_with_key     = ["CTE Clients"]
+      export_key           = ["CTE Clients"]
+      mac_verify_with_key  = ["CTE Clients"]
+      mac_with_key         = ["CTE Clients"]
+      read_key             = ["CTE Clients"]
+      sign_verify_with_key = ["CTE Clients"]
+      sign_with_key        = ["CTE Clients"]
+      use_key              = ["CTE Clients"]
     }
-    cte={
-      persistent_on_client=true
-      encryption_mode="CBC"
-      cte_versioned=false
+    cte = {
+      persistent_on_client = true
+      encryption_mode      = "CBC"
+      cte_versioned        = false
     }
-    xts=false
+    xts = false
   }
 }
 
 # Output the unique ID of the created CM Key
 output "key_id" {
-    # The value will be the ID of the CM Key
-    value = ciphertrust_cm_key.sample_key.id
+  # The value will be the ID of the CM Key
+  value = ciphertrust_cm_key.sample_key.id
 }
 
 # Output the name of the created CM Key
 output "key_name" {
-    # The value will be the name of the CM Key
-    value = ciphertrust_cm_key.sample_key.name
+  # The value will be the name of the CM Key
+  value = ciphertrust_cm_key.sample_key.name
 }
