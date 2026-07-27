@@ -193,13 +193,14 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	stateType := schemaResp.Schema.Type().TerraformType(ctx)
 	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
 		// GCP-specific attributes
-		"id":             tftypes.NewValue(tftypes.String, "nonexistent-gcp-id"),
-		"name":           tftypes.NewValue(tftypes.String, "my-gcp-conn"),
-		"key_file":       tftypes.NewValue(tftypes.String, `{"type":"service_account"}`),
-		"description":    tftypes.NewValue(tftypes.String, ""),
-		"cloud_name":     tftypes.NewValue(tftypes.String, "gcp"),
-		"client_email":   tftypes.NewValue(tftypes.String, ""),
-		"private_key_id": tftypes.NewValue(tftypes.String, ""),
+		"id":               tftypes.NewValue(tftypes.String, "nonexistent-gcp-id"),
+		"name":             tftypes.NewValue(tftypes.String, "my-gcp-conn"),
+		"key_file":         tftypes.NewValue(tftypes.String, nil),
+		"key_file_version": tftypes.NewValue(tftypes.Number, 1),
+		"description":      tftypes.NewValue(tftypes.String, ""),
+		"cloud_name":       tftypes.NewValue(tftypes.String, "gcp"),
+		"client_email":     tftypes.NewValue(tftypes.String, ""),
+		"private_key_id":   tftypes.NewValue(tftypes.String, ""),
 		// Common response attributes (from CMCreateConnectionResponseCommonTFSDK)
 		"uri":                   tftypes.NewValue(tftypes.String, ""),
 		"account":               tftypes.NewValue(tftypes.String, ""),

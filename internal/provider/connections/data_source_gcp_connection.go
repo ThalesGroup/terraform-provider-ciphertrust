@@ -57,6 +57,10 @@ func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Sensitive:   true,
 							Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. CM never returns this field on GET, so it is not populated by this data source.",
 						},
+						"key_file_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — key_file is write-only and resource-only.",
+						},
 						"cloud_name": schema.StringAttribute{
 							Computed:    true,
 							Description: "Name of the cloud. Default value is gcp.\n\nOptions:\n\ngcp",
@@ -169,11 +173,12 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 				listValue, _ := types.ListValue(types.StringType, productValues)
 				return listValue
 			}(),
-			Description:  types.StringValue(gcp.Description),
-			CloudName:    types.StringValue(gcp.CloudName),
-			KeyFile:      types.StringValue(gcp.KeyFile),
-			ClientEmail:  types.StringValue(gcp.ClientEmail),
-			PrivateKeyID: types.StringValue(gcp.PrivateKeyID),
+			Description:    types.StringValue(gcp.Description),
+			CloudName:      types.StringValue(gcp.CloudName),
+			KeyFile:        types.StringValue(gcp.KeyFile),
+			KeyFileVersion: types.Int64Null(),
+			ClientEmail:    types.StringValue(gcp.ClientEmail),
+			PrivateKeyID:   types.StringValue(gcp.PrivateKeyID),
 		}
 
 		if gcp.Labels != nil {

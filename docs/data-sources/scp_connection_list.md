@@ -55,6 +55,7 @@ To remove a key/value pair, pass value null to the particular key
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `name` (String) (Immutable) Unique connection name.
 - `password` (String, Sensitive) Password for SCP/SFTP server. CM never returns this field on GET, so it is not populated by this data source.
+- `password_version` (Number) Not populated by this data source — password is write-only and resource-only.
 - `path_to` (String) A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'
 - `port` (Number) Port where SCP/SFTP service runs on host (usually 22).
 - `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are:

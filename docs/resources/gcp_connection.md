@@ -102,7 +102,7 @@ output "gcp_connection_name" {
 
 ### Required
 
-- `key_file` (String, Sensitive) The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string.
+- `key_file` (String, Sensitive) The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key, change `key_file` and bump `key_file_version` in the same apply.
 - `name` (String) (Immutable) Unique connection name.
 
 ### Optional
@@ -113,6 +113,7 @@ Options:
 
 gcp
 - `description` (String) Description about the connection.
+- `key_file_version` (Number) Arbitrary version number used to trigger re-sending `key_file` to CipherTrust Manager. Since `key_file` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `key_file` value re-sent.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 
 To add a label, set the label's value as follows.

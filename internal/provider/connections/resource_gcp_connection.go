@@ -56,8 +56,13 @@ func (r *resourceGCPConnection) Schema(_ context.Context, _ resource.SchemaReque
 			"key_file": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
-				Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string.",
+				WriteOnly:   true,
+				Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key, change `key_file` and bump `key_file_version` in the same apply.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			},
+			"key_file_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number used to trigger re-sending `key_file` to CipherTrust Manager. Since `key_file` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `key_file` value re-sent.",
 			},
 			"name": schema.StringAttribute{
 				Required:      true,
@@ -175,6 +180,18 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
+	// key_file is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.KeyFile is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config GCPConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
 		payload.Name = plan.Name.ValueString()
 	}
@@ -214,7 +231,7 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
+	keyFile, errMsg := resolveGcpKeyFile(ctx, config.KeyFile.ValueString())
 	if errMsg != "" {
 		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Create]["+id+"]")
 		resp.Diagnostics.AddError(
@@ -247,6 +264,10 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 
 	tflog.Debug(ctx, "[resource_gcp_connection.go -> Create Output]["+response+"]")
 	getGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
+
+	// key_file is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.KeyFile = types.StringNull()
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_gcp_connection.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -309,9 +330,29 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 	id := uuid.New().String()
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_gcp_connection.go -> Update]["+id+"]")
 	var plan GCPConnectionTFSDK
+	var state GCPConnectionTFSDK
 	var payload GCPConnectionJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Load prior state to detect a key_file_version bump (see below).
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// key_file is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.KeyFile is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config GCPConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -352,16 +393,21 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		payload.CloudName = plan.CloudName.ValueString()
 	}
 
-	keyFile, errMsg := resolveGcpKeyFile(ctx, plan.KeyFile.ValueString())
-	if errMsg != "" {
-		tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Update]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Invalid data input: GCP connection update",
-			errMsg,
-		)
-		return
+	// key_file is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — key_file_version is the explicit, state-tracked
+	// signal that the caller wants the current key_file value re-sent to CM.
+	if !plan.KeyFileVersion.Equal(state.KeyFileVersion) {
+		keyFile, errMsg := resolveGcpKeyFile(ctx, config.KeyFile.ValueString())
+		if errMsg != "" {
+			tflog.Debug(ctx, common.ERR_METHOD_END+errMsg+" [resource_gcp_connection.go -> Update]["+id+"]")
+			resp.Diagnostics.AddError(
+				"Invalid data input: GCP connection update",
+				errMsg,
+			)
+			return
+		}
+		payload.KeyFile = keyFile
 	}
-	payload.KeyFile = keyFile
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -383,6 +429,11 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 	getGcpParamsFromResponse(response, &resp.Diagnostics, &plan)
+
+	// key_file is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.KeyFile = types.StringNull()
+
 	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
 
 	diags = resp.State.Set(ctx, plan)

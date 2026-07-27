@@ -92,6 +92,7 @@ type CTEClientTFSDK struct {
 	CommunicationEnabled   types.Bool     `tfsdk:"communication_enabled"`
 	Description            types.String   `tfsdk:"description"`
 	Password               types.String   `tfsdk:"password"`
+	PasswordVersion        types.Int64    `tfsdk:"password_version"`
 	PasswordCreationMethod types.String   `tfsdk:"password_creation_method"`
 	ProfileIdentifier      types.String   `tfsdk:"profile_identifier"`
 	ProfileName            types.String   `tfsdk:"profile_name"`
@@ -940,6 +941,7 @@ type CTEClientGroupTFSDK struct {
 	Description             types.String   `tfsdk:"description"`
 	LDTDesignatedPrimarySet types.String   `tfsdk:"ldt_designated_primary_set"`
 	Password                types.String   `tfsdk:"password"`
+	PasswordVersion         types.Int64    `tfsdk:"password_version"`
 	PasswordCreationMethod  types.String   `tfsdk:"password_creation_method"`
 	ProfileID               types.String   `tfsdk:"profile_id"`
 	ClientLocked            types.Bool     `tfsdk:"client_locked"`

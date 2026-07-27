@@ -97,7 +97,12 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"password": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Password for the client. Required when password_creation_method is MANUAL.",
+				WriteOnly:   true,
+				Description: "Password for the client. Required when password_creation_method is MANUAL. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.",
+			},
+			"password_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.",
 			},
 			"password_creation_method": schema.StringAttribute{
 				Optional:    true,
@@ -214,6 +219,18 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CTEClientTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	payload.ClientType = common.TrimString(plan.ClientType.ValueString())
@@ -235,8 +252,8 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = common.TrimString(plan.Description.String())
 	}
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = common.TrimString(plan.Password.String())
+	if v := config.Password.ValueString(); v != "" {
+		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
@@ -277,6 +294,10 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	plan.ID = types.StringValue(clientData.ID)
 	plan.ProfileID = types.StringValue(clientData.ProfileID)
 	plan.ProfileName = types.StringValue(clientData.ProfileName)
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -362,6 +383,18 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CTEClientTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	//handle immutable fields
 	if state.Name.ValueString() != plan.Name.ValueString() {
 		resp.Diagnostics.AddError("Cannot change client name once client is created", "client name is an immutable field")
@@ -388,8 +421,11 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = common.TrimString(plan.Description.String())
 	}
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = common.TrimString(plan.Password.String())
+	// password is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — password_version is the explicit, state-tracked
+	// signal that the caller wants the current password value re-sent to CM.
+	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+		payload.Password = config.Password.ValueString()
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
@@ -470,6 +506,11 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 	plan.ID = types.StringValue(clientData.ID)
 	plan.ProfileID = types.StringValue(clientData.ProfileID)
 	plan.ProfileName = types.StringValue(clientData.ProfileName)
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
