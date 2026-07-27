@@ -734,17 +734,13 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			}
 		}
 
-		// Resume PENDING_ROTATION entries BEFORE repairing PENDING_IMPORT.
-		// When both states exist simultaneously (e.g. material1=PENDING_IMPORT,
-		// material2=PENDING_ROTATION), activating the PENDING_ROTATION material first
-		// (rotate-material) brings the key to Enabled state. Re-importing the
-		// PENDING_IMPORT material on an already-Enabled key avoids the race where
-		// AWS internally resets the key to PendingImport when a new ImportKeyMaterial
-		// call arrives while another material is still in PENDING_ROTATION, which
-		// causes the subsequent rotate-material call to fail with
-		// KMSInvalidStateException: key is pending import.
-		if len(pendingRotationRepairs) > 0 {
-			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
+		// Repair PENDING_IMPORT entries.
+		// Re-importing key material for a PENDING_IMPORT entry moves import_state from
+		// PENDING_IMPORT to Imported. key_material_state is unaffected (stays CURRENT or
+		// NON-CURRENT). History is re-fetched and re-classified after all repairs so that
+		// A later step picks up any entries that are now in PENDING_ROTATION.
+		if len(pendingImportRepairs) > 0 {
+			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, diags)
 			if diags.HasError() {
 				return
 			}
@@ -754,12 +750,12 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			}
 		}
 
-		// Repair PENDING_IMPORT entries.
-		// Re-importing key material for a PENDING_IMPORT entry moves import_state from
-		// PENDING_IMPORT to Imported. key_material_state is unaffected (stays CURRENT or
-		// NON-CURRENT). History is re-fetched and re-classified after all repairs.
-		if len(pendingImportRepairs) > 0 {
-			r.repairPendingImport(ctx, id, keyID, pendingImportRepairs, diags)
+		// Resume PENDING_ROTATION entries.
+		// For each entry whose key_material_state is PENDING_ROTATION, call rotate-material
+		// with an empty body to activate the pending material. The material moves to either
+		// CURRENT or NON-CURRENT. History is re-fetched and re-classified after all resumes.
+		if len(pendingRotationRepairs) > 0 {
+			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
 			if diags.HasError() {
 				return
 			}
