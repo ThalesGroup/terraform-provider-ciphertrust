@@ -1255,6 +1255,14 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	}
 	_, rotErr := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+cmKeyID+"/rotate-material", payloadBytes)
 	if rotErr != nil {
+		errStr := rotErr.Error()
+		if strings.Contains(errStr, materialAlreadyExistsError) {
+			// The key material is already associated with this KMS key.
+			// Treat as a no-op and let the outer loop refresh state and re-classify.
+			msg := fmt.Sprintf("AWS key material rotate-material: material (source_key_id: %s) is already associated with this KMS key. Treating as no-op and refreshing state.", srcID)
+			client.Log.Warn(msg)
+			return
+		}
 		msg := "Error calling rotate-material on AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": cmKeyID, "source_key_id": srcID})
 		client.Log.Error(details)
