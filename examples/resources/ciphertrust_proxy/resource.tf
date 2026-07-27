@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -30,12 +30,12 @@ provider "ciphertrust" {
 
 # Add a resource of type proxy
 resource "ciphertrust_proxy" "proxie" {
-  http_proxy = "user01:test12345@10.171.18.190:8080"
+  http_proxy  = "user01:test12345@10.171.18.190:8080"
   https_proxy = "user02:Test12345@10.171.18.190:8081"
-  no_proxy = ["127.0.0.1", "localhost"]
+  no_proxy    = ["127.0.0.1", "localhost"]
 }
 
 # Output the unique ID of the created proxy
 output "proxie_id" {
-    value = ciphertrust_proxy.proxie.id
+  value = ciphertrust_proxy.proxie.id
 }

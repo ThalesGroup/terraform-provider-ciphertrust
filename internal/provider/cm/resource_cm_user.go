@@ -85,7 +85,12 @@ func (r *resourceCMUser) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"password": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
-				Description: "Password for the user account.",
+				WriteOnly:   true,
+				Description: "Password for the user account. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To rotate the password on an existing resource, change `password` and bump `password_version` in the same apply — `password_version` is the only signal Terraform has that the write-only value changed.",
+			},
+			"password_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number stored in state and used to trigger a password update. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent to CipherTrust Manager.",
 			},
 			"is_domain_user": schema.BoolAttribute{
 				Optional:    true,
@@ -139,8 +144,20 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMUserTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.UserName = common.TrimString(plan.UserName.ValueString())
-	payload.Password = common.TrimString(plan.Password.ValueString())
+	payload.Password = common.TrimString(config.Password.ValueString())
 
 	if plan.PreventUILogin.ValueBool() != types.BoolNull().ValueBool() {
 		loginFlags.PreventUILogin = plan.PreventUILogin.ValueBool()
@@ -220,6 +237,10 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 			}
 		}
 	}
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user.go -> Create]["+id+"]")
 	diags = resp.State.Set(ctx, plan)
@@ -345,14 +366,20 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMUserTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	plan.ID = state.ID
 	plan.UserID = state.UserID
-
-	// Write-only preservation: if the user removed password from config, preserve
-	// the prior value rather than sending "" to CM.
-	if plan.Password.IsNull() || plan.Password.IsUnknown() {
-		plan.Password = state.Password
-	}
 
 	var loginFlags UserLoginFlagsJSON
 	var payload CMUserJSON
@@ -369,9 +396,11 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 	// nickname is effectively immutable — CM's PATCH silently ignores this field.
 	// ImmutableString() in the schema prevents plan-time changes from reaching Update().
 	// Omit from payload to avoid sending a field that CM will discard.
-	// Only include password in the update if it has changed
-	if plan.Password.ValueString() != state.Password.ValueString() {
-		payload.Password = common.TrimString(plan.Password.ValueString())
+	// password is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — password_version is the explicit, state-tracked
+	// signal that the caller wants the current password value re-sent to CM.
+	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+		payload.Password = common.TrimString(config.Password.ValueString())
 	}
 
 	payload.IsDomainUser = plan.IsDomainUser.ValueBool()
@@ -520,6 +549,10 @@ func (r *resourceCMUser) Update(ctx context.Context, req resource.UpdateRequest,
 			}
 		}
 	}
+
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

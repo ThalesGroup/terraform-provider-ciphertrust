@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -31,7 +31,7 @@ provider "ciphertrust" {
 # Data source for retrieving Scheduler Job Configs
 data "ciphertrust_scheduler_list" "jobs" {
   filters = {
-  # Filters to narrow down the Scheduler Jobs
+    # Filters to narrow down the Scheduler Jobs
     # The unique ID of the Job
     id = "60f04cb1-4a48-4786-8965-39f2031518c4"
   }

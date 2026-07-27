@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -34,5 +34,5 @@ data "ciphertrust_cte_csi_group" "example" {
 
 output "csi_group" {
   # Output the list of CSIGroups  retrieved from the data source
-  value = "${data.ciphertrust_cte_csi_group.example.csi_group}"
+  value = data.ciphertrust_cte_csi_group.example.csi_group
 }

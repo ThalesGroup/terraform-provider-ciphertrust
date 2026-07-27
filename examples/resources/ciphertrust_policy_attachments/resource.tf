@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -34,13 +34,13 @@ resource "ciphertrust_policy_attachments" "policy_attachment" {
   policy = "mypolicy"
 
   # Selects which principals to apply the policy to
-	principal_selector = {
-		acct = "pers-jsmith"
-		user = "apitestuser"
-	}
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
 }
 
 # Output the unique ID of the created CM policy attachment
 output "cm_policy_attachment_id" {
-	value = ciphertrust_policy_attachments.policy_attachment.id
+  value = ciphertrust_policy_attachments.policy_attachment.id
 }

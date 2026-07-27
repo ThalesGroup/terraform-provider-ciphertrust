@@ -19,7 +19,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -35,16 +35,16 @@ resource "ciphertrust_azure_connection" "azure_connection" {
   name = "azure-connection"
 
   # Unique identifier for azure application
-  client_id="3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
+  client_id = "3bf0dbe6-a2c7-431d-9a6f-4843b74c7e12"
 
   # Tenant ID for azure application
-  tenant_id= "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  tenant_id = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
 
   # Secret key for the azure application
-  client_secret="3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
+  client_secret = "3bf0dbe6-a2c7-431d-9a6f-4843b74c71285nfjdu2"
 
   # Name of the azure cloud
-  cloud_name= "AzureCloud"
+  cloud_name = "AzureCloud"
 
   # List of products associated with this azure connection
   # In this case, it's related to backup/restore operations
@@ -63,8 +63,8 @@ resource "ciphertrust_azure_connection" "azure_connection" {
   # Custom metadata for the azure connection
   # This can be used to store additional information related to the azure connection
   meta = {
-    "custom_meta_key1" = "custom_value1"  # Example custom metadata key-value pair
-    "customer_meta_key2" = "custom_value2"  # Another custom metadata entry
+    "custom_meta_key1"   = "custom_value1" # Example custom metadata key-value pair
+    "customer_meta_key2" = "custom_value2" # Another custom metadata entry
   }
 }
 

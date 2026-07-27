@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -36,5 +36,5 @@ data "ciphertrust_ldt_comm_group_svc_list" "example" {
 
 output "ldt_comm_groups" {
   # Output the list of LDTcomm group  retrieved from the data source
-  value = "${data.ciphertrust_ldt_comm_group_svc_list.example.ldt_comm_groups}"
+  value = data.ciphertrust_ldt_comm_group_svc_list.example.ldt_comm_groups
 }

@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -48,5 +48,5 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
 
 # Output the created registration token
 output "reg_token_value" {
-	value = ciphertrust_cm_reg_token.reg_token.token
+  value = ciphertrust_cm_reg_token.reg_token.token
 }

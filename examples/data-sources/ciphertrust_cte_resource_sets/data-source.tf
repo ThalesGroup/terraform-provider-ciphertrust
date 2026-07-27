@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -34,5 +34,5 @@ data "ciphertrust_cte_resource_sets" "example" {
 
 output "resource_sets" {
   # Outputs the ResourceSets retrieved from data-source
-  value = "${data.ciphertrust_cte_resource_sets.example.resource_sets}"
+  value = data.ciphertrust_cte_resource_sets.example.resource_sets
 }

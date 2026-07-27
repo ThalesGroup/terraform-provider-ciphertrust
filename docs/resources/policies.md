@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -45,29 +45,29 @@ provider "ciphertrust" {
 
 # Add a resource of type CM policy with the name my_policy
 resource "ciphertrust_policies" "policy" {
-  	# Name of the policy
-    name    =   "my_policy"
+  # Name of the policy
+  name = "my_policy"
 
-    # Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
-    actions =   ["ReadKey"]
+  # Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
+  actions = ["ReadKey"]
 
-    # Allow is the effect of the policy, either to allow the actions or to deny the actions.
-    allow   =   true
+  # Allow is the effect of the policy, either to allow the actions or to deny the actions.
+  allow = true
 
-    # Specifies the effect of the policy, either to allow or to deny.
-    effect  =   "allow"
+  # Specifies the effect of the policy, either to allow or to deny.
+  effect = "allow"
 
-    # Conditions are rules for matching the other attributes of the operation
-    conditions = [{
-        path   = "context.resource.alg"
-        op     = "equals"
-        values = ["aes","rsa"]
-    }]
+  # Conditions are rules for matching the other attributes of the operation
+  conditions = [{
+    path   = "context.resource.alg"
+    op     = "equals"
+    values = ["aes", "rsa"]
+  }]
 }
 
 # Output the unique ID of the created CM policy
 output "cm_policy_id" {
-	value = ciphertrust_policies.policy.id
+  value = ciphertrust_policies.policy.id
 }
 ```
 

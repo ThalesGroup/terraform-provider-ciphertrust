@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -31,21 +31,26 @@ provider "ciphertrust" {
 # Add a resource of type CM User with the username frank
 resource "ciphertrust_user" "sample_user" {
   # Full name of the user
-  name="frank"
+  name = "frank"
   # E-mail of the user
-  email="frank@local"
+  email = "frank@local"
   # The login name of the user
-  username="frank"
-  # The password used to secure the users account
-  password="ChangeIt01!"
+  username = "frank"
+  # The password used to secure the users account. Write-only: never stored in
+  # Terraform state or plan artifacts (requires Terraform 1.11+).
+  password = "ChangeIt01!"
+  # password has no state to diff against, so Terraform cannot detect a change
+  # in its value on its own. Increment password_version whenever you want the
+  # current password value re-sent to CipherTrust Manager (e.g. to rotate it).
+  password_version = 1
 }
 
 # Output the unique ID of the created User
 output "user_id" {
-	value = ciphertrust_user.sample_user.id
+  value = ciphertrust_user.sample_user.id
 }
 
 # Output the username
 output "username" {
-    value = ciphertrust_user.sample_user.username
+  value = ciphertrust_user.sample_user.username
 }

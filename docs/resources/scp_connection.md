@@ -34,7 +34,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -90,8 +90,8 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   # Custom metadata for the SCP connection
   # This can be used to store additional information related to the SCP connection
   meta = {
-    "custom_meta_key1" = "custom_value1"  # Example custom metadata key-value pair
-    "customer_meta_key2" = "custom_value2"  # Another custom metadata entry
+    "custom_meta_key1"   = "custom_value1" # Example custom metadata key-value pair
+    "customer_meta_key2" = "custom_value2" # Another custom metadata entry
   }
 }
 

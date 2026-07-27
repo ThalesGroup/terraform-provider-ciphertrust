@@ -18,7 +18,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -36,5 +36,5 @@ data "ciphertrust_cte_policy_signature_rules" "example" {
 
 output "rules" {
   # Outputs the Signature rules retrieved from the data source
-  value = "${data.ciphertrust_cte_policy_signature_rules.example.rules}" 
+  value = data.ciphertrust_cte_policy_signature_rules.example.rules
 }

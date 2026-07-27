@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -49,7 +49,7 @@ data "ciphertrust_cte_process_sets" "example" {
 
 output "process_sets" {
   # Outputs the Process Sets retrieved from the data source
-  value = "${data.ciphertrust_cte_process_sets.example.process_sets}"
+  value = data.ciphertrust_cte_process_sets.example.process_sets
 }
 ```
 

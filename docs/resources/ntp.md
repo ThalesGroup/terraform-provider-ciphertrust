@@ -33,7 +33,7 @@ terraform {
 
 # Configure the CipherTrust provider for authentication
 provider "ciphertrust" {
-	# The address of the CipherTrust appliance (replace with the actual address)
+  # The address of the CipherTrust appliance (replace with the actual address)
   address = "https://10.10.10.10"
 
   # Username for authenticating with the CipherTrust appliance
@@ -51,7 +51,7 @@ resource "ciphertrust_ntp" "ntp_server_1" {
 
 # Output the unique ID of the created NTP resource
 output "ntp_server_host" {
-	value = ciphertrust_ntp.ntp_server_1.host
+  value = ciphertrust_ntp.ntp_server_1.host
 }
 ```
 
