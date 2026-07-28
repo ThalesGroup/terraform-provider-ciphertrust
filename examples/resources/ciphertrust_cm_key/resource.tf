@@ -44,7 +44,7 @@ resource "ciphertrust_cm_key" "sample_key" {
   algorithm = "aes"
 
   # Bit length for the key.
-  size = 256
+  key_size = 256
 
   # Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303.
   usage_mask = 76
@@ -74,8 +74,10 @@ resource "ciphertrust_cm_key" "sample_key" {
       encryption_mode      = "CBC"
       cte_versioned        = false
     }
-    xts = false
   }
+
+  # Set the key to be XTS mode capable
+  xts = false
 }
 
 # Output the unique ID of the created CM Key
