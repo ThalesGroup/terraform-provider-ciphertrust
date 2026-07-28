@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/google/uuid"
-	// "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	// "github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -21,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 )
 
 var (
@@ -53,10 +55,16 @@ func (r *resourceLDTGroupCommSvc) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"name": schema.StringAttribute{
 				Required: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._|\-]*$`),
+						"name must start with an alphanumeric character and contain only alphanumeric, period (.), underscore (_), pipe (|), or hyphen (-) characters",
+					),
 				},
-				Description: "Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Changing this value forces the LDT group communication service to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
+				Description: "(Immutable) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Must start with an alphanumeric character and contain only alphanumeric, period (.), underscore (_), pipe (|), or hyphen (-) characters.",
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,

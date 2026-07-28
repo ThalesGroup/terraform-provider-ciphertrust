@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func cteLDTGroupCommsConfig(name, description string) string {
@@ -54,9 +54,11 @@ func TestCTELDTGroupCommResource(t *testing.T) {
 	})
 }
 
-// TestCTELDTGroupCommResource_nameRequiresReplace verifies a name change is
-// planned as a destroy+create rather than an in-place update (TFIN-492).
-func TestCTELDTGroupCommResource_nameRequiresReplace(t *testing.T) {
+// TestCTELDTGroupCommResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the LDT group communication service's id is
+// referenced elsewhere and must not be reminted on rename (TFIN-492).
+func TestCTELDTGroupCommResource_nameImmutable(t *testing.T) {
 	name := "tf-ldtgc-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_ldtgroupcomms.ldt"
 
@@ -65,20 +67,30 @@ func TestCTELDTGroupCommResource_nameRequiresReplace(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: cteLDTGroupCommsConfig(name, "Initial"),
-				Check: checkStep(t, "ldtgroupcomms requires replace: create",
+				Check: checkStep(t, "ldtgroupcomms immutable name: create",
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
-				Config: cteLDTGroupCommsConfig(name+"-renamed", "Initial"),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "ldtgroupcomms requires replace: rename",
-					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
-				),
+				Config:      cteLDTGroupCommsConfig(name+"-renamed", "Initial"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// TestCTELDTGroupCommResource_nameFormatValidator verifies a name with
+// characters the CipherTrust Manager rejects is caught at plan time by the
+// schema validator instead of failing later at apply (TFIN-493).
+func TestCTELDTGroupCommResource_nameFormatValidator(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      cteLDTGroupCommsConfig("invalid name!", "Invalid name format"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Value Match.*must start with an alphanumeric`),
 			},
 		},
 	})
