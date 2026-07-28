@@ -82,22 +82,27 @@ func TestCTEPolicyResource(t *testing.T) {
 	})
 }
 
-// TestCTEPolicyResource_nameImmutable verifies a name change is rejected.
+// TestCTEPolicyResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the policy's id is referenced elsewhere and
+// must not be reminted on rename (TFIN-495).
 func TestCTEPolicyResource_nameImmutable(t *testing.T) {
 	name := "tf-policy-imm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: cteStandardPolicyConfig(name, "Original", "all_ops"),
-				Check: checkStep(t, "policy immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy", "name", name),
+				Check: checkStep(t, "policy immutable name: create",
+					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
 				Config:      cteStandardPolicyConfig(name+"-renamed", "Original", "all_ops"),
-				ExpectError: regexp.MustCompile(`(?i)cannot change name of the policy|immutable`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})

@@ -174,7 +174,7 @@ output "policy_id" {
 
 ### Required
 
-- `name` (String) Name of the policy.
+- `name` (String) (Immutable) Name of the policy.
 - `policy_type` (String) Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI
 
 ### Optional
