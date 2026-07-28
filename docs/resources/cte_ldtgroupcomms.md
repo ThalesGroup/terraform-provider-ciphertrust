@@ -61,7 +61,7 @@ output "lgs_id" {
 
 ### Required
 
-- `name` (String) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager.
+- `name` (String) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Changing this value forces the LDT group communication service to be destroyed and recreated.
 
 ### Optional
 

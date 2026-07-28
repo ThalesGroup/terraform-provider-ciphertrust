@@ -52,8 +52,11 @@ func (r *resourceLDTGroupCommSvc) Schema(_ context.Context, _ resource.SchemaReq
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager.",
+				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+				Description: "Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Changing this value forces the LDT group communication service to be destroyed and recreated.",
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
