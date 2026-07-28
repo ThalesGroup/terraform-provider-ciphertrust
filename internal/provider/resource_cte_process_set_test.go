@@ -82,22 +82,27 @@ func TestCTEProcessSetResource(t *testing.T) {
 	})
 }
 
-// TestCTEProcessSetResource_nameImmutable verifies a name change is rejected.
+// TestCTEProcessSetResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the process set's id is referenced elsewhere
+// and must not be reminted on rename (TFIN-497).
 func TestCTEProcessSetResource_nameImmutable(t *testing.T) {
 	name := "tf-procset-imm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: cteProcessSetConfig(name, "Original", false),
-				Check: checkStep(t, "process_set immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_process_set.process_set", "name", name),
+				Check: checkStep(t, "process_set immutable name: create",
+					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
 				Config:      cteProcessSetConfig(name+"-renamed", "Original", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change process set name|immutable`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})

@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -75,8 +76,11 @@ func (r *resourceCTEProcessSet) Schema(_ context.Context, _ resource.SchemaReque
 				Default:     stringdefault.StaticString(""),
 			},
 			"name": schema.StringAttribute{
-				Description: "Name of the ProcessSet",
+				Description: "(Immutable) Name of the ProcessSet.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the process set.",
