@@ -75,8 +75,11 @@ func (r *resourceCTEProcessSet) Schema(_ context.Context, _ resource.SchemaReque
 				Default:     stringdefault.StaticString(""),
 			},
 			"name": schema.StringAttribute{
-				Description: "Name of the ProcessSet",
+				Description: "Name of the ProcessSet. Changing this value forces the process set to be destroyed and recreated.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the process set.",
