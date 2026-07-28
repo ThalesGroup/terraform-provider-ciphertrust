@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -68,6 +69,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Name to uniquely identify the client. This name will be visible on the CipherTrust Manager.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"client_locked": schema.BoolAttribute{
 				Optional:    true,
@@ -82,6 +86,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "Type of CTE Client. The default value is FS. Valid values are CTE-U and FS.",
 				Validators: []validator.String{
 					stringvalidator.OneOf(CteClientType...),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
 				},
 			},
 			"communication_enabled": schema.BoolAttribute{
@@ -395,15 +402,9 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	//handle immutable fields
-	if state.Name.ValueString() != plan.Name.ValueString() {
-		resp.Diagnostics.AddError("Cannot change client name once client is created", "client name is an immutable field")
-		return
-	}
-	if state.ClientType.ValueString() != plan.ClientType.ValueString() {
-		resp.Diagnostics.AddError("Cannot change client_type once client is created", "client_type is an immutable field")
-		return
-	}
+	// name and client_type immutability is enforced at plan time by
+	// modifiers.ImmutableString() on the schema attributes above, so Update()
+	// never observes a changed value for either field here.
 	if state.ClientType.ValueString() != "CTE-U" {
 		if !plan.ClientLocked.IsNull() && !plan.ClientLocked.IsUnknown() {
 			v := plan.ClientLocked.ValueBool()
