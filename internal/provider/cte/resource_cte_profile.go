@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -57,7 +58,10 @@ func (r *resourceCTEProfile) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the CTE profile.",
+				Description: "(Immutable) Name of the CTE profile.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"cache_settings": schema.SingleNestedAttribute{
 				Optional:    true,

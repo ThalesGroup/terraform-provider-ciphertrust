@@ -95,7 +95,11 @@ func TestCTEProfileResource(t *testing.T) {
 	})
 }
 
-// TestCTEProfileResource_nameImmutable verifies a name change is rejected.
+// TestCTEProfileResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the profile's id is referenced elsewhere
+// (via profile_id on ciphertrust_cte_client/ciphertrust_cte_client_group)
+// and must not be reminted on rename (TFIN-499).
 func TestCTEProfileResource_nameImmutable(t *testing.T) {
 	name := "tf-profile-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
@@ -105,13 +109,14 @@ func TestCTEProfileResource_nameImmutable(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: cteProfileConfig(name, false),
-				Check: checkStep(t, "profile immutable: create",
+				Check: checkStep(t, "profile immutable name: create",
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
 				Config:      cteProfileConfig(name+"-renamed", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change name once the profile|immutable`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
