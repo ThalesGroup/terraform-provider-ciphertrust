@@ -239,7 +239,7 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	// Reading that value back would overwrite state.Reset from true to false,
 	// causing ImmutableBool.PlanModifyBool() to fire 'old: false, new: true'
 	// on every subsequent plan and destroy. Same pattern as priorLicense in
-	// resource_license.go (TFIN-430 fix).
+	// resource_license.go.
 	priorReset := state.Reset
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)

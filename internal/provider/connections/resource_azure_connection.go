@@ -657,8 +657,7 @@ func (d *resourceAzureConnection) Configure(_ context.Context, req resource.Conf
 // clientSecretClearBlocked reports whether the plan is attempting to clear a
 // previously-set client_secret. CM never returns this write-only field on GET, so the
 // provider cannot verify whether a clear PATCH actually took effect. Rather than writing
-// an unverifiable null into state (per TFIN-364-class bug), Update rejects the attempt
-// outright.
+// an unverifiable null into state, Update rejects the attempt outright.
 func clientSecretClearBlocked(state, plan AzureConnectionTFSDK) bool {
 	hadSecret := !state.ClientSecret.IsNull() && state.ClientSecret.ValueString() != ""
 	clearing := plan.ClientSecret.IsNull() || plan.ClientSecret.ValueString() == ""

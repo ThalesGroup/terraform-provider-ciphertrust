@@ -9,7 +9,7 @@ import (
 )
 
 // Test_CM_HsmRot_SchemaAttributesSensitive verifies that conn_info and
-// initial_config carry Sensitive: true (TFIN-433 regression guard).
+// initial_config carry Sensitive: true, so secrets never surface in plan output.
 func Test_CM_HsmRot_SchemaAttributesSensitive(t *testing.T) {
 	r := &resourceHSMRootOfTrust{}
 	schemaReq := resource.SchemaRequest{}
