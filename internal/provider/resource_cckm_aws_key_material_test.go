@@ -359,7 +359,6 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 
 	kmResource := "ciphertrust_aws_key_material.km"
 	var capturedPrimaryKeyID string
-	var capturedCmKeyID string
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
@@ -380,12 +379,6 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
-						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
-						if !ok {
-							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
-							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
-						}
-						capturedCmKeyID = rsCmKey.Primary.ID
 						return nil
 					},
 				),
@@ -395,7 +388,6 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 				// ModifyPlan detects PENDING_IMPORT and marks attrs Unknown -> non-empty plan.
 				PreConfig: func() {
 					deleteByokKeyMaterialAtIndex(capturedPrimaryKeyID, 0)
-					refreshKeyAndWait(capturedPrimaryKeyID, capturedCmKeyID)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -675,7 +667,6 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 						"TestCckmAWSKeyMaterialRepairCombined/OOB-import",
 						capturedPrimaryKeyID, capturedCmKey2ID, "local", "NEW_KEY_MATERIAL",
 					)
-					refreshKeyAndWait(capturedPrimaryKeyID, capturedCmKey2ID)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -2046,7 +2037,28 @@ func deleteByokKeyMaterialAtIndex(keyID string, rotationIndex int) {
 		fmt.Printf("KeyMaterialId not found at rotation index %d\n", rotationIndex)
 		return
 	}
-	fmt.Printf("Deleting key material id=%s (rotation index %d)\n", keyMaterialID, rotationIndex)
+	// Determine whether any OTHER material remains CURRENT+IMPORTED after this deletion.
+	// CCKM's DeleteKeyMaterialAWS always sets KeyState=PendingImport in the DB immediately.
+	// If another CURRENT+IMPORTED material exists, the background sync
+	// (checkForPendingDeletionSlotAfterDeleteMaterial -> syncKeyRotations) will ask AWS,
+	// see the key is still Enabled (active material intact), and restore KeyState=Enabled.
+	// If no other CURRENT+IMPORTED material exists (we deleted the only active material),
+	// AWS also reports PendingImport, so the key never returns to Enabled - don't poll.
+	hasOtherCurrentMaterial := false
+	for i, r := range resources {
+		if i == rotationIndex {
+			continue
+		}
+		if r.Get("aws_param.KeyMaterialState").String() == "CURRENT" &&
+			r.Get("aws_param.ImportState").String() == "IMPORTED" {
+			hasOtherCurrentMaterial = true
+			break
+		}
+	}
+	fmt.Printf("Deleting key material id=%s (rotation index %d, state=%s, hasOtherCurrent=%v)\n",
+		keyMaterialID, rotationIndex,
+		resources[rotationIndex].Get("aws_param.KeyMaterialState").String(),
+		hasOtherCurrentMaterial)
 	payload, _ := json.Marshal(map[string]string{"key_material_id": keyMaterialID})
 	deleteMaterialURL := common.URL_AWS_KEY + "/" + keyID + "/delete-material"
 	_, err = client.PostDataV2(ctx, id, deleteMaterialURL, payload)
@@ -2055,12 +2067,19 @@ func deleteByokKeyMaterialAtIndex(keyID string, rotationIndex int) {
 		return
 	}
 	fmt.Printf("Key material deleted out-of-band\n")
-	// CCKM's DeleteKeyMaterialAWS sets KeyState=PendingImport in the DB immediately
-	// (even when a NON_CURRENT material is deleted), then forks a background task
-	// (checkForPendingDeletionSlotAfterDeleteMaterial) that re-syncs from AWS via
-	// syncKeyRotations. Poll until the key returns to Enabled, which confirms the
-	// background sync has completed and the DB is stable. This avoids a race where
-	// the caller proceeds before the sync finishes and sees PendingImport.
+
+	if !hasOtherCurrentMaterial {
+		// No other CURRENT+IMPORTED material: the key will stay PendingImport until
+		// the caller re-imports material. Background sync confirms PendingImport but
+		// cannot restore Enabled. Return immediately.
+		fmt.Printf("deleteByokKeyMaterialAtIndex: no other CURRENT material - key stays PendingImport, returning\n")
+		return
+	}
+
+	// Another CURRENT+IMPORTED material remains: CCKM sets KeyState=PendingImport in the DB
+	// immediately, but the background sync (checkForPendingDeletionSlotAfterDeleteMaterial)
+	// re-syncs from AWS via syncKeyRotations. AWS reports Enabled (active material intact),
+	// so CCKM restores KeyState=Enabled. Poll until Enabled to confirm sync is complete.
 	const pollInterval = 5 * time.Second
 	const timeout = 90 * time.Second
 	deadline := time.Now().Add(timeout)

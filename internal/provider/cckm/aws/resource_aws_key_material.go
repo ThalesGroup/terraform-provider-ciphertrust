@@ -360,8 +360,16 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	// Re-fetch keyJSON so that updateKeyMaterial sees the AWS-current key state
+	// (KeyState, CurrentKeyMaterialId, etc.) after the refresh sync
+	refreshedKeyJSON, err := r.client.GetById(ctx, id, cmKeyID, common.URL_AWS_KEY)
+	if err == nil {
+		keyJSON = refreshedKeyJSON
+	}
+
 	// Step 5: apply key material operations
 	r.updateKeyMaterial(ctx, id, cmKeyID, &plan, state.KeyMaterial, keyJSON, &resp.Diagnostics)
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
