@@ -717,7 +717,6 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 	}
 
 	maxRetries := 5
-	consecutiveZeros := 0
 
 	// Due to asynchronicity of operations it's necessary to continue to process operations until resolved.
 	for retry := 0; retry < maxRetries; retry++ {
@@ -732,20 +731,13 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 
 		numOperations := len(pendingMRRepairs) + len(pendingImportRepairs) + len(pendingRotationRepairs) +
 			len(newCandidates) + len(removed) + len(metadataUpdates)
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d consecutiveZeros: %d", retry, numOperations, consecutiveZeros))
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
-			consecutiveZeros++
-			r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process. consecutiveZeros: %d", consecutiveZeros))
-			// Require two consecutive zero-operation passes before declaring done.
-			// The first zero may just reflect CCKM's cached state before AWS has
-			// propagated the latest changes. The end-of-loop RefreshKeyAndWait triggers
-			// a fresh sync; if the classify still shows 0 on the next pass we are done.
-			if consecutiveZeros >= 2 {
-				break
-			}
-			// Fall through to the end-of-loop RefreshKeyAndWait, then re-classify.
-		} else {
-			consecutiveZeros = 0
+			// The prior end-of-loop RefreshKeyAndWait already confirmed CM has fresh AWS
+			// data. Re-classifying on that fresh data shows nothing to do, so we are done.
+			// Calling RefreshKeyAndWait again immediately would time out (150s) because CM
+			// cannot advance the rotation-history updatedAt twice in rapid succession.
+			break
 		}
 
 		// Repair PENDING_MULTI_REGION_IMPORT_AND_ROTATION entries.
