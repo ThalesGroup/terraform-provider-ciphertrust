@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -79,6 +80,22 @@ func TestCTELDTGroupCommResource_nameRequiresReplace(t *testing.T) {
 				Check: checkStep(t, "ldtgroupcomms requires replace: rename",
 					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
 				),
+			},
+		},
+	})
+}
+
+// TestCTELDTGroupCommResource_nameFormatValidator verifies a name with
+// characters the CipherTrust Manager rejects is caught at plan time by the
+// schema validator instead of failing later at apply (TFIN-493).
+func TestCTELDTGroupCommResource_nameFormatValidator(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      cteLDTGroupCommsConfig("invalid name!", "Invalid name format"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Value Match.*must start with an alphanumeric`),
 			},
 		},
 	})
