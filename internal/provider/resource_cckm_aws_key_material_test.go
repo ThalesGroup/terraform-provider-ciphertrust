@@ -830,7 +830,6 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 	addNewMaterial3Config := createReplicasConfig + fmt.Sprintf(keyMaterialConfig, material2+","+material3)
 
 	var capturedPrimaryKeyID string
-	var capturedCmKeyID string
 
 	primaryResource := "ciphertrust_aws_byok_key.primary"
 	replica1Resource := "ciphertrust_aws_byok_key.replica_1"
@@ -963,12 +962,6 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 							return fmt.Errorf("resource %s not found in state", kmResource)
 						}
 						capturedPrimaryKeyID = rs.Primary.ID
-						rsCmKey, ok := s.RootModule().Resources["ciphertrust_cm_key.cm_aes_key"]
-						if !ok {
-							fmt.Printf("ciphertrust_cm_key.cm_aes_key2 not found in state\n")
-							return fmt.Errorf("ciphertrust_cm_key.cm_aes_key2 not found in state")
-						}
-						capturedCmKeyID = rsCmKey.Primary.ID
 						return nil
 					},
 				),
@@ -1036,10 +1029,11 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 				// Step 6. Delete material2 (index 1 = second-newest) from primary OOB.
 				// Rotation history order: material3=index 0, material2=index 1, material1=index 2.
 				// Primary key remains Enabled because material3 is still current.
+				// deleteByokKeyMaterialAtIndex polls until the key returns to Enabled, so
+				// CCKM's background sync has completed before the RefreshState runs.
 				// Provider detects missing rotation entry -> non-empty plan.
 				PreConfig: func() {
 					deleteByokKeyMaterialAtIndex(capturedPrimaryKeyID, 1)
-					refreshKeyAndWait(capturedPrimaryKeyID, capturedCmKeyID)
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
@@ -2061,7 +2055,30 @@ func deleteByokKeyMaterialAtIndex(keyID string, rotationIndex int) {
 		return
 	}
 	fmt.Printf("Key material deleted out-of-band\n")
-	time.Sleep(30 * time.Second)
+	// CCKM's DeleteKeyMaterialAWS sets KeyState=PendingImport in the DB immediately
+	// (even when a NON_CURRENT material is deleted), then forks a background task
+	// (checkForPendingDeletionSlotAfterDeleteMaterial) that re-syncs from AWS via
+	// syncKeyRotations. Poll until the key returns to Enabled, which confirms the
+	// background sync has completed and the DB is stable. This avoids a race where
+	// the caller proceeds before the sync finishes and sees PendingImport.
+	const pollInterval = 5 * time.Second
+	const timeout = 90 * time.Second
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+		keyJSON, getErr := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+		if getErr != nil {
+			fmt.Printf("deleteByokKeyMaterialAtIndex: poll GET key failed: %v\n", getErr)
+			continue
+		}
+		keyState := gjson.Get(keyJSON, "aws_param.KeyState").String()
+		if keyState == "Enabled" {
+			fmt.Printf("deleteByokKeyMaterialAtIndex: key is Enabled - background sync complete\n")
+			return
+		}
+		fmt.Printf("deleteByokKeyMaterialAtIndex: key state=%s, polling...\n", keyState)
+	}
+	fmt.Printf("deleteByokKeyMaterialAtIndex: timed out waiting for key to return to Enabled\n")
 }
 
 // callByokImportMaterialOutOfBand calls the import-material API out-of-band for a BYOK key.
