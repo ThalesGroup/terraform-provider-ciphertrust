@@ -2052,7 +2052,7 @@ func deleteByokKeyMaterialAtIndex(keyID string, rotationIndex int) {
 		fmt.Printf("KeyMaterialId not found at rotation index %d\n", rotationIndex)
 		return
 	}
-	fmt.Printf("Ddeleting key material id=%s (rotation index %d)\n", keyMaterialID, rotationIndex)
+	fmt.Printf("Deleting key material id=%s (rotation index %d)\n", keyMaterialID, rotationIndex)
 	payload, _ := json.Marshal(map[string]string{"key_material_id": keyMaterialID})
 	deleteMaterialURL := common.URL_AWS_KEY + "/" + keyID + "/delete-material"
 	_, err = client.PostDataV2(ctx, id, deleteMaterialURL, payload)

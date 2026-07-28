@@ -34,8 +34,24 @@ var (
 )
 
 const (
-	materialAlreadyExistsError      = "is already associated with KMS key"
+	// materialAlreadyExistsError matches the CipherTrust Manager error returned by
+	// import-material or rotate-material when the key material bytes are already
+	// associated with the KMS key. Treated as a no-op (warn and continue).
+	materialAlreadyExistsError = "is already associated with KMS key"
+
+	// materialHasNotBeenImportedError matches the KMSInvalidStateException fragment
+	// returned when rotate-material is attempted before AWS considers the pending
+	// key material fully imported. In practice this can occur while a multi-region
+	// key is still in the PENDING_MULTI_REGION_IMPORT_AND_ROTATION state. The outer
+	// retry loop refreshes, re-classifies, repairs any outstanding replica imports,
+	// and retries the rotation.
 	materialHasNotBeenImportedError = "has not been imported"
+
+	// materialPendingImportError matches the KMSInvalidStateException fragment
+	// returned when the KMS key is still in AWS PendingImport state (the key material
+	// bytes have not yet been delivered to AWS). Can be returned by both rotate-material
+	// and import-material. The outer retry loop refreshes and re-classifies.
+	materialPendingImportError = "is pending import"
 )
 
 // NewResourceAWSKeyMaterial returns a new ciphertrust_aws_key_material resource instance.
@@ -705,7 +721,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 	// Due to asynchronicity of operations it's necessary to continue to process operations until resolved.
 	for retry := 0; retry < maxRetries; retry++ {
 
-		// Initial history fetch and classification.
+		// Re-fetch history and re-classify at the top of every iteration so each phase
+		// operates on AWS-current state (including any async transitions that occurred
+		// during the end-of-previous-iteration RefreshKeyAndWait).
 		fetchHistoryAndClassify()
 		if diags.HasError() {
 			return
@@ -715,7 +733,10 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			len(newCandidates) + len(removed) + len(metadataUpdates)
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
-			r.client.Log.Debug("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
+			// The prior end-of-loop RefreshKeyAndWait already confirmed CM has fresh AWS
+			// data. Re-classifying on that fresh data shows nothing to do, so we are done.
+			// Calling RefreshKeyAndWait again immediately would time out (150s) because CM
+			// cannot advance the rotation-history updatedAt twice in rapid succession.
 			break
 		}
 
@@ -903,17 +924,16 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
 
 		// Step 1: import the existing key material to all replicas that are missing it.
-		// repairMultiRegionReplicas also calls refresh on the primary after all imports so
-		// that CM re-checks AWS and can transition the primary's state.
 		r.repairMultiRegionReplicas(ctx, id, primaryKeyID, replicaSourceKeyID, replicaSourceKeyTier, mat.ValidTo.ValueString(), primaryKeyJSON, diags)
 
-		// do I need to refresh !
-
-		// Step 2: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
-		// confirm receipt of the material, AWS moves the primary from
-		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION.
-		// Seems a refresh is required here
-		// waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
+		// Note: we do NOT refresh or wait for the primary to reach PENDING_ROTATION here.
+		// AWS processes replica imports asynchronously and the transition from
+		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION may not be
+		// visible immediately after the refresh. The outer retry loop re-classifies
+		// and calls this function again on the next iteration (skipping replicas that
+		// are already imported) until AWS confirms receipt and the primary reaches
+		// PENDING_ROTATION. Fix A in repairKeyMaterialRotations handles the case
+		// where rotate-material fires before all replicas are ready.
 	}
 }
 
@@ -986,11 +1006,12 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //  1. Calls POST rotate-material with an empty body to activate the pending material.
 //     This is a hard error that stops the loop immediately on failure - a rotate-material
 //     failure leaves the key in the same PENDING_ROTATION state it started in.
-//  2. Waits for key_material_state to leave PENDING_ROTATION. The material arrives at
-//     either CURRENT (if it is the newest rotation) or NON-CURRENT (if a newer rotation
-//     was subsequently applied). A timeout is a warning only.
-//  3. For multi-region primary keys, also waits for all replica keys to reach CURRENT
-//     state. A timeout is a warning only.
+//  2. Waits 25 seconds for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background
+//     task to complete. The empty-body rotate-material path calls AWS RotateKeyOnDemand
+//     directly and forks syncKeyRotations - no status record is created, so polling
+//     /rotate-material/status returns 404. A short fixed sleep is sufficient because
+//     CCKM's syncKeyRotations task (with addDelay=true) completes within ~20-25s. The
+//     outer loop's end-of-iteration RefreshKeyAndWait then confirms the final state.
 //
 // keyJSON is the full CM key record for keyID, used to detect the multi-region case.
 func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
@@ -999,16 +1020,23 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 
 	r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] keyID: %s", keyID))
 
-	isMRPrimary := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
-
 	for _, mat := range pendingRotationRepairs {
 		srcID := mat.SourceKeyID.ValueString()
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotating keyID: %s to sourceKeyID: %s", keyID, srcID))
 
 		// Step 1: call rotate-material with an empty body to activate the pending material.
-		// Hard error - stop the loop immediately if this fails.
 		_, rotErr := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotate-material", []byte("{}"))
 		if rotErr != nil {
+			errStr := rotErr.Error()
+			if strings.Contains(errStr, materialPendingImportError) ||
+				strings.Contains(errStr, materialHasNotBeenImportedError) {
+				// Key is still in pending import state on AWS, or replicas have not yet received
+				// the material. CM classified the primary as PENDING_ROTATION too early. Return
+				// without error so the outer loop can refresh and re-classify.
+				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Will refresh and re-classify. error: %s", errStr)
+				r.client.Log.Warn(msg)
+				return
+			}
 			msg := "Error resuming PENDING_ROTATION for AWS BYOK key material."
 			details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": keyID, "source_key_id": srcID})
 			r.client.Log.Error(details)
@@ -1017,15 +1045,19 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		}
 		r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
 
-		// Step 2: wait for key_material_state to leave PENDING_ROTATION.
-		// The material arrives at CURRENT or NON-CURRENT depending on whether a newer
-		// rotation has since been applied. Timeout is a warning only.
-		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "key_material_state", "PENDING_ROTATION", "", diags)
-
-		// Step 3: for multi-region primary keys, also wait for all replicas to reach CURRENT.
-		if isMRPrimary {
-			waitForReplicasMaterialCurrent(ctx, id, r.client, keyID, srcID, keyJSON, diags)
-		}
+		// Step 2: wait for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background task
+		// to complete before returning. We do NOT call waitForMaterialRotation here because
+		// that endpoint (/rotate-material/status) only exists when rotate-material is called
+		// WITH source key params (which creates a RotateMaterialStatus record). The empty-body
+		// rotate-material path (used for repair) calls AWS RotateKeyOnDemand directly and forks
+		// syncKeyRotations - no status record is created, so /rotate-material/status returns 404.
+		// Previously this used waitForMaterialStateResolved + waitForReplicasMaterialCurrent
+		// which polled CCKM's stale rotation history cache for up to 10 minutes. A short fixed
+		// sleep is sufficient: CCKM's syncKeyRotations background task (with addDelay=true) runs
+		// within ~20-25s. The outer loop's end-of-iteration RefreshKeyAndWait then confirms the
+		// final state.
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] waiting 25s for AWS RotateKeyOnDemand and CCKM syncKeyRotations to complete keyID: %s sourceKeyID: %s", keyID, srcID))
+		time.Sleep(25 * time.Second)
 	}
 }
 
@@ -1199,15 +1231,23 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 	}
 	response, err := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/import-material", payloadJSON)
 	if err != nil {
-		if !strings.Contains(err.Error(), materialAlreadyExistsError) {
-			client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, err.Error()))
-			msg := "Error importing key material for AWS BYOK key."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			client.Log.Error(details)
-			diags.AddError(details, "")
+		errStr := err.Error()
+		if strings.Contains(errStr, materialAlreadyExistsError) {
+			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] Key material already exists. sourceKeyID: %s error: %s", sourceKeyID, errStr))
 			return
 		}
-		client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] Key material already exists. sourceKeyID: %s error: %s", sourceKeyID, err.Error()))
+		if strings.Contains(errStr, materialPendingImportError) ||
+			strings.Contains(errStr, materialHasNotBeenImportedError) {
+			// Key is in a pending state (PENDING_ROTATION or PENDING_MULTI_REGION_IMPORT_AND_ROTATION).
+			// Warn and return so the outer retry loop can repair the pending state first.
+			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] import-material rejected due to pending state - will re-classify. keyID: %s sourceKeyID: %s error: %s", keyID, sourceKeyID, errStr))
+			return
+		}
+		client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, errStr))
+		msg := "Error importing key material for AWS BYOK key."
+		details := utils.ApiError(msg, map[string]interface{}{"error": errStr, "key_id": keyID})
+		client.Log.Error(details)
+		diags.AddError(details, "")
 		return
 	}
 	client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] SUCCESS keyID: %s response: %s", keyID, redactAWSResponse(response)))
@@ -1254,6 +1294,14 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	}
 	_, rotErr := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+cmKeyID+"/rotate-material", payloadBytes)
 	if rotErr != nil {
+		errStr := rotErr.Error()
+		if strings.Contains(errStr, materialAlreadyExistsError) {
+			// The key material is already associated with this KMS key.
+			// Treat as a no-op and let the outer loop refresh state and re-classify.
+			msg := fmt.Sprintf("AWS key material rotate-material: material (source_key_id: %s) is already associated with this KMS key. Treating as no-op and refreshing state.", srcID)
+			client.Log.Warn(msg)
+			return
+		}
 		msg := "Error calling rotate-material on AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": cmKeyID, "source_key_id": srcID})
 		client.Log.Error(details)
