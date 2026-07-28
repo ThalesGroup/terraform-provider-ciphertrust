@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteProfileConfig renders a ciphertrust_cte_profile. When updated is true the
@@ -95,8 +95,9 @@ func TestCTEProfileResource(t *testing.T) {
 	})
 }
 
-// TestCTEProfileResource_nameImmutable verifies a name change is rejected.
-func TestCTEProfileResource_nameImmutable(t *testing.T) {
+// TestCTEProfileResource_nameRequiresReplace verifies a name change is planned
+// as a destroy+create rather than an in-place update (TFIN-499).
+func TestCTEProfileResource_nameRequiresReplace(t *testing.T) {
 	name := "tf-profile-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
 
@@ -105,13 +106,20 @@ func TestCTEProfileResource_nameImmutable(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: cteProfileConfig(name, false),
-				Check: checkStep(t, "profile immutable: create",
+				Check: checkStep(t, "profile requires replace: create",
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
-				Config:      cteProfileConfig(name+"-renamed", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change name once the profile|immutable`),
+				Config: cteProfileConfig(name+"-renamed", false),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "profile requires replace: rename",
+					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
+				),
 			},
 		},
 	})

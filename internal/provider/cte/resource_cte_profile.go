@@ -57,7 +57,10 @@ func (r *resourceCTEProfile) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the CTE profile.",
+				Description: "Name of the CTE profile. Changing this value forces the profile to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"cache_settings": schema.SingleNestedAttribute{
 				Optional:    true,
