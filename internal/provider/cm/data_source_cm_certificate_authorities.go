@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -108,7 +107,7 @@ func (d *dataSourceCertificateAuthorities) Schema(_ context.Context, _ datasourc
 
 func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_certificate_authorities.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cm_certificate_authorities.go -> Read][" + id + "]")
 	var state certificateAuthoritiesDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -131,7 +130,7 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 
 	jsonStr, total, err := d.client.GetAllWithTotal(ctx, id, fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_LOCAL_CA, strings.Join(kvs, ""), skipVal, limitVal))
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_certificate_authorities.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_certificate_authorities.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CAs from CM",
 			err.Error(),
@@ -150,7 +149,7 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 
 	err = json.Unmarshal([]byte(jsonStr), &cas)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_certificate_authorities.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_certificate_authorities.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CAs from CM",
 			err.Error(),
@@ -176,7 +175,7 @@ func (d *dataSourceCertificateAuthorities) Read(ctx context.Context, req datasou
 
 	state.ID = types.StringValue("local-ca-list")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_certificate_authorities.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cm_certificate_authorities.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

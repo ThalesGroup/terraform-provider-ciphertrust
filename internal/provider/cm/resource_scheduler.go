@@ -14,6 +14,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -22,7 +23,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -352,7 +352,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 
 func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Create][" + id + "]")
 
 	var plan CreateJobConfigParamsTFSDK
 	var payload CreateJobConfigParamsJSON
@@ -386,7 +386,7 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 
 	switch plan.Operation.ValueString() {
 	case "database_backup":
-		dbBackupParams := getDatabaseOperationBackupParams(plan)
+		dbBackupParams := getDatabaseOperationBackupParams(plan, r.client.Log)
 		if dbBackupParams != nil {
 			payload.DatabaseBackupParams = dbBackupParams
 		}
@@ -419,7 +419,7 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Scheduler Job Config creation failure",
 			err.Error(),
@@ -429,7 +429,7 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating Scheduler Job Configs on CipherTrust Manager: ",
 			"Could not create scheduler job configs: "+err.Error(),
@@ -440,19 +440,19 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	response, err = r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_SCHEDULER_JOB_CONFIGS)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching scheduler job configs : "+err.Error())
 		return
 	}
 
-	getParamsFromResponse(ctx, response, &plan, &resp.Diagnostics)
+	getParamsFromResponse(ctx, response, &plan, &resp.Diagnostics, r.client.Log)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_scheduler.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_scheduler.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -462,7 +462,7 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 
 func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Read][" + id + "]")
 
 	var state CreateJobConfigParamsTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -480,11 +480,11 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError("Read Error", "Error fetching scheduler job configs : "+err.Error())
 		return
 	}
-	getParamsFromResponse(ctx, response, &state, &resp.Diagnostics)
+	getParamsFromResponse(ctx, response, &state, &resp.Diagnostics, r.client.Log)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -492,7 +492,7 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 	state.Operation = types.StringValue(gjson.Get(response, "operation").String())
 	state.RunAt = types.StringValue(gjson.Get(response, "run_at").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -503,7 +503,7 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 
 func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Update][" + id + "]")
 
 	var plan CreateJobConfigParamsTFSDK
 	var state CreateJobConfigParamsTFSDK
@@ -537,7 +537,7 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 
 	switch plan.Operation.ValueString() {
 	case "database_backup":
-		dbBackupParams := getDatabaseOperationBackupParams(plan)
+		dbBackupParams := getDatabaseOperationBackupParams(plan, r.client.Log)
 		if dbBackupParams != nil {
 			payload.DatabaseBackupParams = dbBackupParams
 		}
@@ -571,7 +571,7 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Scheduler Job Config update failure",
 			err.Error(),
@@ -581,7 +581,7 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_SCHEDULER_JOB_CONFIGS, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scheduler.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Scheduler Job Configs on CipherTrust Manager: ",
 			"Could not udpate scheduler job configs: "+err.Error(),
@@ -589,14 +589,14 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	getParamsFromResponse(ctx, response, &plan, &resp.Diagnostics)
+	getParamsFromResponse(ctx, response, &plan, &resp.Diagnostics, r.client.Log)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_scheduler.go -> Update Output]["+response+"]")
+	r.client.Log.Debug("[resource_scheduler.go -> Update Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -607,7 +607,7 @@ func (r *resourceScheduler) Update(ctx context.Context, req resource.UpdateReque
 func (r *resourceScheduler) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CreateJobConfigParamsTFSDK
 	diags := req.State.Get(ctx, &state)
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> Delete]["+state.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Delete][" + state.ID.ValueString() + "]")
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -616,20 +616,20 @@ func (r *resourceScheduler) Delete(ctx context.Context, req resource.DeleteReque
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_SCHEDULER_JOB_CONFIGS, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Scheduler Job configs",
 			"Could not delete scheduler job configs, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scheduler.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 
 }
 
 func (r *resourceScheduler) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_scheduler.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_scheduler.go -> ImportState][" + id + "]")
 
 	// Set the resource id so Read() can fetch the full resource.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
@@ -653,7 +653,7 @@ func (r *resourceScheduler) ImportState(ctx context.Context, req resource.Import
 		resp.State.SetAttribute(ctx, path.Root("operation"), gjson.Get(response, "operation").String())...,
 	)
 
-	tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_scheduler.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_END + "[resource_scheduler.go -> ImportState][" + id + "]")
 }
 
 // ModifyPlan blocks plan execution if run_on is set on a CDSPaaS deployment.
@@ -696,7 +696,7 @@ func (r *resourceScheduler) Configure(_ context.Context, req resource.ConfigureR
 	r.client = client
 }
 
-func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK) *DatabaseBackupParamsJSON {
+func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK, logger hclog.Logger) *DatabaseBackupParamsJSON {
 
 	if plan.DatabaseBackupParams != nil {
 		var databaseBackupParams DatabaseBackupParamsJSON
@@ -737,7 +737,7 @@ func getDatabaseOperationBackupParams(plan CreateJobConfigParamsTFSDK) *Database
 						var rq map[string]interface{}
 						err := json.Unmarshal([]byte(resourceQuery), &rq)
 						if err != nil {
-							tflog.Error(context.Background(), "Invalid resource_query JSON: "+err.Error())
+							logger.Error("Invalid resource_query JSON: " + err.Error())
 						}
 						newFilter.ResourceQuery = rq
 					}
@@ -825,7 +825,7 @@ func getCckmXksRotateCredentialsParams(plan CreateJobConfigParamsTFSDK) *CCKMXks
 	return nil
 }
 
-func getParamsFromResponse(ctx context.Context, response string, plan *CreateJobConfigParamsTFSDK, diags *diag.Diagnostics) {
+func getParamsFromResponse(ctx context.Context, response string, plan *CreateJobConfigParamsTFSDK, diags *diag.Diagnostics, logger hclog.Logger) {
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
 	plan.Account = types.StringValue(gjson.Get(response, "account").String())
@@ -881,14 +881,14 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 				"resource_query": types.StringValue(filter.Get("resourceQuery").Raw),
 			})
 			if objDiags.HasError() {
-				tflog.Error(context.Background(), "Error building filters object: "+objDiags[0].Detail())
+				logger.Error("Error building filters object: " + objDiags[0].Detail())
 				continue
 			}
 			filterObjs = append(filterObjs, obj)
 		}
 		filtersList, listDiags := types.ListValue(BackupFilterElemType, filterObjs)
 		if listDiags.HasError() {
-			tflog.Error(context.Background(), "Error building filters list: "+listDiags[0].Detail())
+			logger.Error("Error building filters list: " + listDiags[0].Detail())
 			dbParams.Filters = types.ListValueMust(BackupFilterElemType, []attr.Value{})
 		} else {
 			dbParams.Filters = filtersList

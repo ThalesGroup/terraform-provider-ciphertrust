@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -91,7 +90,7 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Create]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_user_pwd_change.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMPwdChangeTFSDK
@@ -115,7 +114,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_pwd_change.go -> Create]["+id+"]")
+		r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_pwd_change.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Change user password",
 			err.Error(),
@@ -127,7 +126,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 	if err != nil {
 		errStr := strings.ToLower(err.Error())
 		if strings.Contains(errStr, "authentication failed") || strings.Contains(errStr, "invalid credentials") || strings.Contains(errStr, "401") {
-			tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Password change failed with auth error, verifying if password has already been changed")
+			r.client.GetLog().Debug("[resource_cm_user_pwd_change.go -> Create] Password change failed with auth error, verifying if password has already been changed")
 			if c, ok := r.client.(*common.Client); ok {
 				// Shallow copy the client and update password with planned new_password
 				verifyClient := *c
@@ -136,7 +135,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 				// Attempt login verification with new credentials
 				_, verifyErr := verifyClient.SignIn(ctx, id)
 				if verifyErr == nil {
-					tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Verification login with new password succeeded! Reconstructing state.")
+					r.client.GetLog().Debug("[resource_cm_user_pwd_change.go -> Create] Verification login with new password succeeded! Reconstructing state.")
 
 					// Query existing users list to fetch the target user_id
 					usersJSON, listErr := verifyClient.GetByIdBootstrap(ctx, id, "", common.URL_USER_MANAGEMENT)
@@ -168,7 +167,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 						}
 
 						if foundUser && targetUserID != "" {
-							tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Successfully found user_id: "+targetUserID+". Reconstructing state.")
+							r.client.GetLog().Debug("[resource_cm_user_pwd_change.go -> Create] Successfully found user_id: " + targetUserID + ". Reconstructing state.")
 							plan.ID = types.StringValue(targetUserID)
 							diags = resp.State.Set(ctx, plan)
 							resp.Diagnostics.Append(diags...)
@@ -176,12 +175,12 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 						}
 					}
 				} else {
-					tflog.Debug(ctx, "[resource_cm_user_pwd_change.go -> Create] Verification login with new password failed: "+verifyErr.Error())
+					r.client.GetLog().Debug("[resource_cm_user_pwd_change.go -> Create] Verification login with new password failed: " + verifyErr.Error())
 				}
 			}
 		}
 
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_pwd_change.go -> Create]["+id+"]")
+		r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_pwd_change.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error changing user password on CipherTrust Manager: ",
 			"Could not change user password, unexpected error: "+err.Error(),
@@ -225,7 +224,7 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 
 	plan.ID = types.StringValue(targetUserID)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Create]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_user_pwd_change.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -236,8 +235,8 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Read]["+id+"]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_user_pwd_change.go -> Read][" + id + "]")
+	defer r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_user_pwd_change.go -> Read][" + id + "]")
 
 	var state CMPwdChangeTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -259,7 +258,7 @@ func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest
 				)
 				return
 			}
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_pwd_change.go -> Read]["+id+"]")
+			r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_pwd_change.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error Reading CipherTrust User Password Change",
 				"Could not read user "+state.ID.ValueString()+": "+err.Error(),
@@ -281,12 +280,12 @@ func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPwdChange) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_pwd_change.go -> Update]")
+	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_user_pwd_change.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_cm_user_password_change does not support updates. To change the password again, delete and recreate this resource.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_pwd_change.go -> Update]")
+	r.client.GetLog().Trace(common.MSG_METHOD_END + "[resource_cm_user_pwd_change.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

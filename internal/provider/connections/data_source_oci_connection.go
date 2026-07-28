@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 type OCIConnectionDataSourceJSON struct {
@@ -121,7 +120,7 @@ func (d *dataSourceOCIConnection) Schema(_ context.Context, _ datasource.SchemaR
 
 func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_oci_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_oci_connection.go -> Read][" + id + "]")
 	var state OCIConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -134,7 +133,7 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_OCI_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read oci connection from CM",
 			err.Error(),
@@ -145,7 +144,7 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 	var ociConnections []OCIConnectionDataSourceJSON
 	err = json.Unmarshal([]byte(jsonStr), &ociConnections)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_oci_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read oci connection from CM",
 			err.Error(),
@@ -200,7 +199,7 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 		state.Oci = append(state.Oci, ociConn)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_oci_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_oci_connection.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }

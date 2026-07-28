@@ -13,6 +13,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -23,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -172,8 +172,8 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_connection.go -> Create]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_connection.go -> Create]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_connection.go -> Create][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_connection.go -> Create][" + id + "]")
 
 	var plan OCIConnectionTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -193,7 +193,7 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 	}
 
 	// User can give path the pem file or pem data.
-	keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics)
+	keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics, r.client.Log)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -227,7 +227,7 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 		var ociProducts []string
 		resp.Diagnostics.Append(plan.Products.ElementsAs(ctx, &ociProducts, false)...)
 		if resp.Diagnostics.HasError() {
-			tflog.Error(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Error(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = ociProducts
@@ -235,7 +235,7 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Create]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: OCI connection Creation",
 			err.Error(),
@@ -252,7 +252,7 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_OCI_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Create]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating OCI Connection on CipherTrust Manager: ",
 			"Could not create oci connection, unexpected error: "+err.Error(),
@@ -272,7 +272,7 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 	}
 	response, err = r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddWarning(
 			"Error reading OCI Connection on CipherTrust Manager: ",
 			"Could not read oci connection id : ,"+plan.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -299,8 +299,8 @@ func (r *resourceCCKMOCIConnection) Create(ctx context.Context, req resource.Cre
 func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_connection.go -> Read]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_connection.go -> Read]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_connection.go -> Read][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_connection.go -> Read][" + id + "]")
 
 	var state OCIConnectionTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -322,7 +322,7 @@ func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadR
 			)
 			return
 		}
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading OCI Connection on CipherTrust Manager: ",
 			"Could not read oci connection id : ,"+state.ID.ValueString()+" unexpected error: "+err.Error(),
@@ -342,8 +342,8 @@ func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadR
 func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_connection.go -> Update]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_connection.go -> Update]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_connection.go -> Update][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_connection.go -> Update][" + id + "]")
 
 	var plan OCIConnectionTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -370,7 +370,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading OCI Connection on CipherTrust Manager: ",
 			"Could not read oci connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -383,7 +383,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	// values can never be diffed against a prior value — key_file_version is the explicit,
 	// state-tracked signal that the caller wants the current values re-sent to CM.
 	if !plan.KeyFileVersion.Equal(state.KeyFileVersion) {
-		keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics)
+		keyFileData := readKeyFileData(ctx, config.KeyFile.ValueString(), &resp.Diagnostics, r.client.Log)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -449,7 +449,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	var planProducts []string
 	resp.Diagnostics.Append(plan.Products.ElementsAs(ctx, &planProducts, false)...)
 	if resp.Diagnostics.HasError() {
-		tflog.Error(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+		r.client.Log.Error(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 		return
 	}
 	var connectionProducts []string
@@ -476,7 +476,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Update]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: OCI connection update",
 			err.Error(),
@@ -487,7 +487,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	connectionID := gjson.Get(response, "id").String()
 	response, err = r.client.UpdateDataV2(ctx, connectionID, common.URL_OCI_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating OCI Connection on CipherTrust Manager: ",
 			"Could not update oci connection, unexpected error: "+err.Error(),
@@ -497,7 +497,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	response, err = r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Read]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading OCI Connection on CipherTrust Manager: ",
 			"Could not read oci connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -521,8 +521,8 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 // Delete removes an OCI connection resource from CipherTrust Manager.
 func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_connection.go -> Delete]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_connection.go -> Delete]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_connection.go -> Delete][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_connection.go -> Delete][" + id + "]")
 
 	var state OCIConnectionTFSDK
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -532,7 +532,7 @@ func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.Del
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_OCI_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> Delete]["+id+"]["+output+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Delete][" + id + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust OCI Connection",
 			"Could not delete oci connection, unexpected error: "+err.Error(),
@@ -544,12 +544,12 @@ func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.Del
 // ImportState imports an existing OCI connection resource into Terraform state using the connection ID.
 func (r *resourceCCKMOCIConnection) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_oci_connection.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_oci_connection.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_connection.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_connection.go -> ImportState][" + id + "]")
 
 	response, err := r.client.GetById(ctx, id, req.ID, common.URL_OCI_CONNECTION)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> ImportState]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> ImportState][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error importing OCI Connection from CipherTrust Manager: ",
 			"Could not read oci connection id: "+req.ID+", unexpected error: "+err.Error(),
@@ -605,14 +605,14 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 
 // readKeyFileData resolves the key_file attribute: if it is a filesystem path, the file is read
 // and its contents returned; otherwise the raw value is returned as-is (inline PEM data).
-func readKeyFileData(ctx context.Context, inputParam string, diags *diag.Diagnostics) string {
+func readKeyFileData(ctx context.Context, inputParam string, diags *diag.Diagnostics, logger hclog.Logger) string {
 	inputParam = strings.TrimSpace(inputParam)
 	_, err := os.Stat(inputParam)
 	if err == nil {
 		var data []byte
 		data, err = os.ReadFile(inputParam)
 		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Failed to read key file %s,error: %s", inputParam, err.Error()))
+			logger.Error(fmt.Sprintf("Failed to read key file %s,error: %s", inputParam, err.Error()))
 			diags.AddError(
 				"Failed to create OCI connection.",
 				"Error reading 'key_file' parameter, unexpected error: "+err.Error(),
@@ -629,7 +629,7 @@ func readKeyFileData(ctx context.Context, inputParam string, diags *diag.Diagnos
 func (r *resourceCCKMOCIConnection) testConnectionParameters(ctx context.Context, id string, payloadJSON []byte, diags *diag.Diagnostics) {
 	response, err := r.client.PostDataV2(ctx, id, common.URL_OCI_CONNECTION_TEST, payloadJSON)
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> test connection params]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> test connection params][" + id + "]")
 		diags.AddError(
 			"Error testing OCI Connection parameters on CipherTrust Manager: ",
 			"error: "+err.Error(),
@@ -649,7 +649,7 @@ func (r *resourceCCKMOCIConnection) testConnectionParameters(ctx context.Context
 func (r *resourceCCKMOCIConnection) testConnection(ctx context.Context, id string, connectionID string, diags *diag.Diagnostics) {
 	response, err := r.client.PostNoData(ctx, id, common.URL_OCI_CONNECTION+"/"+connectionID+"/test")
 	if err != nil {
-		tflog.Error(ctx, common.ERR_METHOD_END+err.Error()+" [resource_oci_connection.go -> test existing connection]["+id+"]")
+		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> test existing connection][" + id + "]")
 		diags.AddError(
 			"Error testing OCI Connection on CipherTrust Manager: ",
 			"error: "+err.Error(),

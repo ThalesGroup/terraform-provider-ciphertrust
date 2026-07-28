@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -136,7 +135,7 @@ func (d *dataSourceUsers) Schema(_ context.Context, _ datasource.SchemaRequest, 
 
 func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_users.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cm_users.go -> Read][" + id + "]")
 	var state usersDataSourceModel
 	req.Config.Get(ctx, &state)
 
@@ -166,7 +165,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 		fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_USER_MANAGEMENT, strings.Join(kvs, ""), skipVal, limitVal))
 
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_users.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_users.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read users from CM",
 			err.Error(),
@@ -190,7 +189,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	err = json.Unmarshal([]byte(jsonStr), &users)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_users.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_users.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read users from CM",
 			err.Error(),
@@ -215,7 +214,7 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 		state.User = append(state.User, userState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_users.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cm_users.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

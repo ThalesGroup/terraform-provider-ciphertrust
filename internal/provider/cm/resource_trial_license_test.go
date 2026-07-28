@@ -4,13 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 )
 
 // Test_CM_Unit_TrialLicense_UpdateReturnsError verifies that Update() always returns an error
 // diagnostic, regardless of input, since ciphertrust_trial_license does not support updates.
 func Test_CM_Unit_TrialLicense_UpdateReturnsError(t *testing.T) {
-	r := resourceCMTrialLicense{}
+	r := resourceCMTrialLicense{client: &common.Client{Log: hclog.NewNullLogger()}}
 	var resp resource.UpdateResponse
 	r.Update(context.Background(), resource.UpdateRequest{}, &resp)
 

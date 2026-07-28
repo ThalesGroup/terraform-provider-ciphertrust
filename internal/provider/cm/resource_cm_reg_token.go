@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -128,7 +127,7 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMRegTokenTFSDK
@@ -186,7 +185,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: RegToken Creation",
 			err.Error(),
@@ -196,7 +195,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_REG_TOKEN, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating RegToken on CipherTrust Manager: ",
 			"Could not create RegToken, unexpected error: "+err.Error(),
@@ -207,7 +206,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.Token = types.StringValue(gjson.Get(response, "token").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -217,12 +216,10 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// Registration tokens are ephemeral; 404 means expired/deleted → RemoveResource
-	// so Terraform recreates on next apply. Intentional deviation from keep-in-state convention.
 	var state CMRegTokenTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -239,7 +236,7 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading RegToken from CipherTrust Manager",
 			"Could not read RegToken id "+state.ID.ValueString()+": "+err.Error(),
@@ -424,7 +421,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Update][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: RegToken Update",
 			err.Error(),
@@ -435,7 +432,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 	// Fix: URL path must use state.ID (resource UUID from prior state), not plan.ID
 	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_REG_TOKEN, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Update][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating RegToken on CipherTrust Manager: ",
 			"Could not upodate RegToken, unexpected error: "+err.Error(),
@@ -445,7 +442,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	plan.ID = types.StringValue(response)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Update]["+plan.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Update][" + plan.ID.ValueString() + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -457,8 +454,8 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMRegTokenTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Delete]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Delete][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Delete][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -473,7 +470,7 @@ func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequ
 			// Token already deleted out-of-band — treat as success; defer emits MSG_METHOD_END
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Delete]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Delete][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust RegToken",
 			"Could not delete RegToken, unexpected error: "+err.Error(),

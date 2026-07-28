@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -101,7 +100,7 @@ func (r *resourceCMTrialLicense) Schema(_ context.Context, _ resource.SchemaRequ
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_trial_license.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_trial_license.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMTrialLicenseTFSDK
@@ -114,7 +113,7 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 
 	jsonStr, err := r.client.GetAll(ctx, id, common.URL_TRIAL_LICENSE)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read trial licenses from CM",
 			err.Error(),
@@ -125,7 +124,7 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 	licenses := []CMTrialLicenseJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &licenses)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read trial licenses from CM",
 			err.Error(),
@@ -206,19 +205,19 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 		URLActivateLicense := common.URL_TRIAL_LICENSE + "/" + plan.ID.ValueString() + "/activate"
 		response, err := r.client.PostDataV2(ctx, id, URLActivateLicense, nil)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error activating trial license on CipherTrust Manager: ",
 				"Could not activate trial license, unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_trial_license.go -> Create Output]["+response+"]")
+		r.client.Log.Debug("[resource_trial_license.go -> Create Output][" + response + "]")
 	} else if plan.Status.ValueString() == "activated" {
-		tflog.Debug(ctx, "[resource_trial_license.go -> Create Output][Already Activated]")
+		r.client.Log.Debug("[resource_trial_license.go -> Create Output][Already Activated]")
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_trial_license.go -> Create][" + id + "]")
 
 	// Re-fetch the license data to get the updated values after activation
 	if err := r.readTrialLicenseFromAPI(ctx, plan.ID.ValueString(), &plan); err != nil {
@@ -255,7 +254,7 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading trial license on CipherTrust Manager: ",
 			"Could not read trial license id : "+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -273,7 +272,7 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_trial_license.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -284,12 +283,12 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMTrialLicense) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_trial_license.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_trial_license.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_trial_license does not support updates. The trial license state is managed by activation/deactivation via Create and Delete.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_trial_license.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -304,12 +303,12 @@ func (r *resourceCMTrialLicense) Delete(ctx context.Context, req resource.Delete
 	// Deactivate the trial license
 	URLDeactivateLicense := common.URL_TRIAL_LICENSE + "/" + state.ID.ValueString() + "/deactivate"
 	response, err := r.client.PostDataV2(ctx, state.ID.ValueString(), URLDeactivateLicense, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_trial_license.go -> Delete]["+state.ID.ValueString()+"]["+response+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_trial_license.go -> Delete][" + state.ID.ValueString() + "][" + response + "]")
 	if err != nil {
 		// Gracefully handle case where it is already deactivated/expired
 		errStr := err.Error()
 		if strings.Contains(errStr, "status: 400") || strings.Contains(errStr, "status: 404") || strings.Contains(strings.ToLower(errStr), "not activated") || strings.Contains(strings.ToLower(errStr), "already deactivated") {
-			tflog.Warn(ctx, fmt.Sprintf("Ignored error during Trial License deactivation (resource may already be deactivated/expired): %v", err))
+			r.client.Log.Warn(fmt.Sprintf("Ignored error during Trial License deactivation (resource may already be deactivated/expired): %v", err))
 			return
 		}
 		resp.Diagnostics.AddError(
@@ -344,7 +343,7 @@ func (r *resourceCMTrialLicense) readTrialLicenseFromAPI(ctx context.Context, li
 	id := uuid.New().String()
 	response, err := r.client.ReadDataByParam(ctx, id, licenseID, common.URL_TRIAL_LICENSE)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_trial_license.go -> readTrialLicenseFromAPI]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> readTrialLicenseFromAPI][" + id + "]")
 		return err
 	}
 
