@@ -275,11 +275,9 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Read][" + id + "]")
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"Policy Attachment Not Found",
-				"Policy Attachment "+state.ID.ValueString()+" was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+				"Policy Attachments Not Found — State Preserved",
+				"The Policy Attachments resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		resp.Diagnostics.AddError(

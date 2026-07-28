@@ -765,15 +765,14 @@ resource "ciphertrust_user" "test_oob" {
 					resource.TestCheckResourceAttrSet("ciphertrust_user.test_oob", "id"),
 					deleteOutOfBand("ciphertrust_user.test_oob"),
 				),
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
-			// Step 2: Refresh — Read() detects 404, removes from state, no error.
-			// ExpectNonEmptyPlan: true because after removal the plan shows +create.
+			// Step 2: Refresh — Read() detects 404, preserves state.
 			{
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
-			// Step 3: Plan — user gone from state, Terraform proposes + create.
+			// Step 3: Plan — user kept in state.
 			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_user" "test_oob" {
@@ -782,7 +781,7 @@ resource "ciphertrust_user" "test_oob" {
 }
 `, username),
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

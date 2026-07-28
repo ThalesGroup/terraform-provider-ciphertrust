@@ -60,17 +60,17 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   products = ["backup/restore"]
 }
 				`,
-			// verifying the updated field username,port and protocol
-			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "protocol", "sftp"),
-				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "port", "2022"),
-				resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "username", "updated-user"),
-			),
-		},
+				// verifying the updated field username,port and protocol
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "protocol", "sftp"),
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "port", "2022"),
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.scp_connection", "username", "updated-user"),
+				),
+			},
 
-		// Step 3: Attempt to rename — must fail at plan time with a clear error.
-		{
-			Config: providerConfig + `
+			// Step 3: Attempt to rename — must fail at plan time with a clear error.
+			{
+				Config: providerConfig + `
 resource "ciphertrust_scp_connection" "scp_connection" {
   name        = "TestSCPConnection-renamed"
   host        = "test-host"
@@ -81,10 +81,10 @@ resource "ciphertrust_scp_connection" "scp_connection" {
   products    = ["backup/restore"]
 }
 `,
-			ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
-			PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+				PlanOnly:    true,
+			},
 		},
-	},
 	})
 }
 

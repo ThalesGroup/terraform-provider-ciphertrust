@@ -70,8 +70,11 @@ func Test_CM_ClusterRead_NotClusteredRemovesResource(t *testing.T) {
 	if resp.Diagnostics.HasError() {
 		t.Fatalf("unexpected diagnostics from Read(): %v", resp.Diagnostics)
 	}
-	if !resp.State.Raw.IsNull() {
-		t.Fatalf("expected Read() to remove the resource from state when cluster is not clustered, but state is still set: %#v", resp.State.Raw)
+	if resp.State.Raw.IsNull() {
+		t.Fatalf("expected Read() to preserve state, but state is null")
+	}
+	if len(resp.Diagnostics.Warnings()) == 0 {
+		t.Fatalf("expected Read() to raise a warning diagnostic, but got none")
 	}
 }
 

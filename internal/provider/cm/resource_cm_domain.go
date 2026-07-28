@@ -276,8 +276,10 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			r.client.Log.Warn("Domain not found, removing from state [resource_cm_domain.go -> Read][" + id + "]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"CM Domain Not Found — State Preserved",
+				"The CM Domain resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Read][" + id + "]")

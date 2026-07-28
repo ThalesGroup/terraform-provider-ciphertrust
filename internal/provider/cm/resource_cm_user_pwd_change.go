@@ -252,7 +252,10 @@ func (r *resourceCMPwdChange) Read(ctx context.Context, req resource.ReadRequest
 		response, err := r.client.GetByIdBootstrap(ctx, id, state.ID.ValueString(), common.URL_USER_MANAGEMENT)
 		if err != nil {
 			if strings.Contains(err.Error(), notFoundError) {
-				resp.State.RemoveResource(ctx)
+				resp.Diagnostics.AddWarning(
+					"User Password Change Not Found — State Preserved",
+					"The User Password Change resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+				)
 				return
 			}
 			r.client.GetLog().Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_pwd_change.go -> Read][" + id + "]")

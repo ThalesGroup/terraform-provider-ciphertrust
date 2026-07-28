@@ -216,8 +216,6 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// Registration tokens are ephemeral; 404 means expired/deleted → RemoveResource
-	// so Terraform recreates on next apply. Intentional deviation from keep-in-state convention.
 	var state CMRegTokenTFSDK
 	id := uuid.New().String()
 	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Read][" + id + "]")
@@ -232,8 +230,10 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			r.client.Log.Debug(common.ERR_METHOD_END + "resource removed from CM" + " [resource_cm_reg_token.go -> Read][" + id + "]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Registration Token Not Found — State Preserved",
+				"The Registration Token resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Read][" + id + "]")

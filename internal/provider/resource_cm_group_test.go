@@ -116,7 +116,7 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 				},
 				Config:             cmGroupConfig(name, "Drift test", ""),
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

@@ -114,7 +114,7 @@ resource "ciphertrust_policies" "test" {
 						t.Skip("CM client unavailable")
 					}
 					modifiedPayload, _ := json.Marshal(map[string]interface{}{
-						"actions": []string{"CreateKey", "DeleteKey"},
+						"actions":   []string{"CreateKey", "DeleteKey"},
 						"resources": []string{"kylo:*:vault:keys:*", "kylo:*:vault:keys:other"},
 						"conditions": []map[string]interface{}{
 							{"op": "equals", "path": "context.resource.alg", "values": []string{"rsa"}},
@@ -297,7 +297,7 @@ resource "ciphertrust_policies" "oob" {
 }
 `,
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

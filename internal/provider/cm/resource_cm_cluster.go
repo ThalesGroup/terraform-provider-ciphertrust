@@ -198,8 +198,10 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.ReadDataByParam(ctx, id, "", common.URL_CLUSTER_INFO)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			r.client.Log.Debug(common.ERR_METHOD_END + "cluster not found (404); removing from state [resource_cm_cluster.go -> Read][" + id + "]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Cluster Not Found — State Preserved",
+				"The Cluster resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Read][" + id + "]")
@@ -217,8 +219,10 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	nodeID := gjson.Get(response, "nodeID").String()
 	statusCode := gjson.Get(response, "status.code").String()
 	if nodeID == "" || statusCode == "" || statusCode == "none" {
-		r.client.Log.Debug(common.ERR_METHOD_END + "cluster not clustered (status.code=" + statusCode + "); removing from state [resource_cm_cluster.go -> Read][" + id + "]")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddWarning(
+			"Cluster Not Clustered — State Preserved",
+			"The Cluster is no longer active or clustered. To prevent accidental data loss, this resource has been kept in state.",
+		)
 		return
 	}
 

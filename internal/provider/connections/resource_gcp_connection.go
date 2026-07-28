@@ -292,8 +292,14 @@ func (r *resourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_GCP_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			r.client.Log.Debug("[resource_gcp_connection.go -> Read] connection not found, removing from state [" + id + "]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"GCP Connection Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed GCP connection %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_gcp_connection.go -> Read][" + id + "]")

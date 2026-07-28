@@ -263,10 +263,9 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
-				"CipherTrust User Not Found",
-				"The CipherTrust User resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"CM User Not Found — State Preserved",
+				"The CM User resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		resp.Diagnostics.AddError(

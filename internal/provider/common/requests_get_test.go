@@ -12,11 +12,11 @@ import (
 
 func TestGetAllWithTotal_PaginationTruncation(t *testing.T) {
 	tests := []struct {
-		name         string
-		responseBody string
+		name          string
+		responseBody  string
 		wantResources string
-		wantTotal    int64
-		wantErr      bool
+		wantTotal     int64
+		wantErr       bool
 	}{
 		{
 			name:          "Valid paginated response with truncation",

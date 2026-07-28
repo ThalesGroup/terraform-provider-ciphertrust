@@ -185,11 +185,9 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 		if strings.Contains(err.Error(), notFoundError) {
 			r.client.Log.Debug(common.ERR_METHOD_END + "property not found (404) [resource_property.go -> Read][" + id + "]")
 			resp.Diagnostics.AddWarning(
-				"Property Not Found",
-				"The CM Property '"+state.Name.ValueString()+"' was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+				"Property Not Found — State Preserved",
+				"The Property resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Read][" + id + "]")

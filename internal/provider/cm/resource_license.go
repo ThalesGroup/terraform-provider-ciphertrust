@@ -292,10 +292,9 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"License Not Found",
-				"The License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"License Not Found — State Preserved",
+				"The License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Read][" + id + "]")

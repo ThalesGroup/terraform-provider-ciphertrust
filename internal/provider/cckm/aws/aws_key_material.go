@@ -568,6 +568,14 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 				retryOperation = true
 				return retryOperation
 			}
+			if strings.Contains(errorDetails, materialPendingImportError) {
+				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] key is pending import (KMSInvalidStateException). error: %s", errorDetails))
+				msg := "AWS key material rotation reported failure: key is pending import."
+				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
+				client.Log.Warn(details)
+				retryOperation = true
+				return retryOperation
+			}
 			msg := "AWS key material rotation failed."
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
 			client.Log.Error(details)

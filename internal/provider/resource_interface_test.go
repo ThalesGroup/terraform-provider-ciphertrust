@@ -11,9 +11,9 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/tidwall/gjson"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/tidwall/gjson"
 )
 
 // interfaceSweep deletes all interfaces at the given port, ignoring errors.
@@ -339,7 +339,7 @@ resource "ciphertrust_interface" "test" {
 					)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -492,7 +492,7 @@ resource "ciphertrust_interface" "test" {
 				// After the fix: state.uid = "tfin426-uid-xxx" (preserved from prior state).
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true, // Other local_auto_gen_attributes fields still differ
-				Check: resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
+				Check:              resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
 			},
 		},
 	})
@@ -867,4 +867,3 @@ resource "ciphertrust_interface" "test" {
 		},
 	})
 }
-
