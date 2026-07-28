@@ -906,16 +906,7 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		// Step 1: import the existing key material to all replicas that are missing it.
 		r.repairMultiRegionReplicas(ctx, id, primaryKeyID, replicaSourceKeyID, replicaSourceKeyTier, mat.ValidTo.ValueString(), primaryKeyJSON, diags)
 
-		// Step 2: refresh the primary key so CM re-syncs AWS state after replica imports.
-		// This triggers AWS to transition the primary from
-		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION once all replicas
-		// confirm receipt.
-		freshKeyJSON, getErr := r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
-		if getErr == nil {
-			RefreshKeyAndWait(ctx, id, r.client, primaryKeyID, freshKeyJSON, []string{replicaSourceKeyID}, diags)
-		}
-
-		// Note: we do NOT wait for the primary to reach PENDING_ROTATION here.
+		// Note: we do NOT refresh or wait for the primary to reach PENDING_ROTATION here.
 		// AWS processes replica imports asynchronously and the transition from
 		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION may not be
 		// visible immediately after the refresh. The outer retry loop re-classifies
