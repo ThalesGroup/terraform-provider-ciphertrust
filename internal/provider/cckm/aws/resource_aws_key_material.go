@@ -1006,11 +1006,12 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //  1. Calls POST rotate-material with an empty body to activate the pending material.
 //     This is a hard error that stops the loop immediately on failure - a rotate-material
 //     failure leaves the key in the same PENDING_ROTATION state it started in.
-//  2. Waits for key_material_state to leave PENDING_ROTATION. The material arrives at
-//     either CURRENT (if it is the newest rotation) or NON-CURRENT (if a newer rotation
-//     was subsequently applied). A timeout is a warning only.
-//  3. For multi-region primary keys, also waits for all replica keys to reach CURRENT
-//     state. A timeout is a warning only.
+//  2. Waits 25 seconds for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background
+//     task to complete. The empty-body rotate-material path calls AWS RotateKeyOnDemand
+//     directly and forks syncKeyRotations - no status record is created, so polling
+//     /rotate-material/status returns 404. A short fixed sleep is sufficient because
+//     CCKM's syncKeyRotations task (with addDelay=true) completes within ~20-25s. The
+//     outer loop's end-of-iteration RefreshKeyAndWait then confirms the final state.
 //
 // keyJSON is the full CM key record for keyID, used to detect the multi-region case.
 func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
@@ -1043,16 +1044,6 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 			return
 		}
 		r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
-
-		// Futile
-		// Step 2: wait for key_material_state to leave PENDING_ROTATION.
-		// The material arrives at CURRENT or NON-CURRENT depending on whether a newer
-		// rotation has since been applied. Timeout is a warning only.
-		// waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "key_material_state", "PENDING_ROTATION", "", diags)
-		// Step 3: for multi-region primary keys, also wait for all replicas to reach CURRENT.
-		//if isMRPrimary {
-		//	waitForReplicasMaterialCurrent(ctx, id, r.client, keyID, srcID, keyJSON, diags)
-		//}
 
 		// Step 2: wait for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background task
 		// to complete before returning. We do NOT call waitForMaterialRotation here because
