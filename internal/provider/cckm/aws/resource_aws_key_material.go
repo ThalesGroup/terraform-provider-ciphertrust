@@ -904,17 +904,25 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairPendingMultiRegionImportAndRotation] importing material to replicas keyID: %s sourceKeyID: %s", primaryKeyID, replicaSourceKeyID))
 
 		// Step 1: import the existing key material to all replicas that are missing it.
-		// repairMultiRegionReplicas also calls refresh on the primary after all imports so
-		// that CM re-checks AWS and can transition the primary's state.
 		r.repairMultiRegionReplicas(ctx, id, primaryKeyID, replicaSourceKeyID, replicaSourceKeyTier, mat.ValidTo.ValueString(), primaryKeyJSON, diags)
 
-		// do I need to refresh !
+		// Step 2: refresh the primary key so CM re-syncs AWS state after replica imports.
+		// This triggers AWS to transition the primary from
+		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION once all replicas
+		// confirm receipt.
+		freshKeyJSON, getErr := r.client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
+		if getErr == nil {
+			RefreshKeyAndWait(ctx, id, r.client, primaryKeyID, freshKeyJSON, []string{replicaSourceKeyID}, diags)
+		}
 
-		// Step 2: wait for the primary to arrive at PENDING_ROTATION. Once all replicas
-		// confirm receipt of the material, AWS moves the primary from
-		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION.
-		// Seems a refresh is required here
-		// waitForMaterialStateResolved(ctx, id, r.client, primaryKeyID, replicaSourceKeyID, "key_material_state", "PENDING_MULTI_REGION_IMPORT_AND_ROTATION", "PENDING_ROTATION", diags)
+		// Note: we do NOT wait for the primary to reach PENDING_ROTATION here.
+		// AWS processes replica imports asynchronously and the transition from
+		// PENDING_MULTI_REGION_IMPORT_AND_ROTATION to PENDING_ROTATION may not be
+		// visible immediately after the refresh. The outer retry loop re-classifies
+		// and calls this function again on the next iteration (skipping replicas that
+		// are already imported) until AWS confirms receipt and the primary reaches
+		// PENDING_ROTATION. Fix A in repairKeyMaterialRotations handles the case
+		// where rotate-material fires before all replicas are ready.
 	}
 }
 
@@ -1010,11 +1018,12 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		_, rotErr := r.client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotate-material", []byte("{}"))
 		if rotErr != nil {
 			errStr := rotErr.Error()
-			if strings.Contains(errStr, materialPendingImportError) {
-				// Key is still in pending import state on AWS - CM classified it as PENDING_ROTATION
-				// but AWS hasn't processed the import yet. Return without error so the outer loop
-				// can refresh state and re-classify (likely to PENDING_IMPORT on next iteration).
-				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] key is still pending import (KMSInvalidStateException). Will refresh and re-classify. error: %s", errStr)
+			if strings.Contains(errStr, materialPendingImportError) ||
+				strings.Contains(errStr, materialHasNotBeenImportedError) {
+				// Key is still in pending import state on AWS, or replicas have not yet received
+				// the material. CM classified the primary as PENDING_ROTATION too early. Return
+				// without error so the outer loop can refresh and re-classify.
+				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Will refresh and re-classify. error: %s", errStr)
 				r.client.Log.Warn(msg)
 				return
 			}
