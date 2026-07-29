@@ -1386,7 +1386,7 @@ type CTEProfileJSON struct {
 	CacheSettings           *CTEProfileCacheSettingsJSON           `json:"cache_settings,omitempty"`
 	ConciseLogging          bool                                   `json:"concise_logging"`
 	ConnectTimeout          int64                                  `json:"connect_timeout,omitempty"`
-	Description             string                                 `json:"description,omitempty"`
+	Description             string                                 `json:"description"`
 	DuplicateSettings       *CTEProfileDuplicateSettingsJSON       `json:"duplicate_settings,omitempty"`
 	FileSettings            *CTEProfileFileSettingsJSON            `json:"file_settings,omitempty"`
 	Labels                  map[string]interface{}                 `json:"labels,omitempty"`

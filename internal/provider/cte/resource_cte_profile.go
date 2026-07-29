@@ -595,8 +595,8 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	if !plan.Description.IsNull() {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
@@ -942,8 +942,11 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	// Always include description in PATCH body to support clearing it (TFIN-500)
+	if plan.Description.IsNull() {
+		payload.Description = ""
+	} else {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
@@ -1242,6 +1245,7 @@ func setProfileState(
 	apiResp *CTEProfilesListJSON,
 ) {
 	// Simple scalar fields
+	// Normalize empty description to null to prevent plan loops (TFIN-500, TFIN-501)
 	if apiResp.Description != "" {
 		state.Description = types.StringValue(apiResp.Description)
 	} else {
