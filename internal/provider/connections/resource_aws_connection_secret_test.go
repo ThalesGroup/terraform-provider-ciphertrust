@@ -898,4 +898,34 @@ func Test_CM_AWSConnection_ArchitectureValidationScenarios(t *testing.T) {
 	})
 }
 
+// Test_AWSConnectionSchema_PlanModifierRequiresComputed guarantees that any String attribute
+// in the AWS connection schema using UseStateWhenClearingString plan modifier is marked Computed: true.
+// Failing to mark Optional plan-modifier-substituted string attributes as Computed triggers a
+// critical plan contract validation error 'Provider produced invalid plan for a non-computed attribute'
+// under Terraform CLI.
+func Test_AWSConnectionSchema_PlanModifierRequiresComputed(t *testing.T) {
+	ctx := context.Background()
+	r := &resourceCCKMAWSConnection{}
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+	for name, attr := range schemaResp.Schema.Attributes {
+		strAttr, ok := attr.(schema.StringAttribute)
+		if !ok {
+			continue
+		}
+		if len(strAttr.PlanModifiers) > 0 {
+			for _, mod := range strAttr.PlanModifiers {
+				// Identify UseStateWhenClearingString modifier by description text
+				if strings.Contains(mod.Description(ctx), "useStateWhenClearingStringModifier") || strings.Contains(mod.Description(ctx), "Preserves the prior state value") {
+					if !strAttr.Computed {
+						t.Errorf("attribute %q uses UseStateWhenClearingString plan modifier but is NOT marked Computed: true. This will trigger a critical Terraform validation failure on plan clear.", name)
+					}
+				}
+			}
+		}
+	}
+}
+
+
 

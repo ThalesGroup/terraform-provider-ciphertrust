@@ -84,6 +84,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "AWS IAM role ARN",
 				PlanModifiers: []planmodifier.String{
 					modifiers.UseStateWhenClearingString(),
@@ -91,6 +92,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Specify AWS Role external ID",
 				PlanModifiers: []planmodifier.String{
 					modifiers.UseStateWhenClearingString(),
@@ -125,6 +127,7 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Description about the connection",
 				PlanModifiers: []planmodifier.String{
 					modifiers.UseStateWhenClearingString(),
