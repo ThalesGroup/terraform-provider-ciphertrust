@@ -410,6 +410,30 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
@@ -777,6 +801,31 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
+
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(readResponse, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
 	// Optional fields retain plan values (user intent); Read() on next plan/refresh corrects API-side drift.
 
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
