@@ -127,6 +127,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"profile_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the Client Profile to be associated with the client. If not provided, the default profile will be linked.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"registration_allowed": schema.BoolAttribute{
 				Optional:    true,
@@ -197,6 +200,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Computed:    true,
 				Description: "ID of the profile that contains logger, logging, and QOS configuration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"protection_mode": schema.StringAttribute{
 				Optional:    true,
