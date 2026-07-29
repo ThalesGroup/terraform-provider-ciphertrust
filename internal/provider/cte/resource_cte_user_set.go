@@ -77,6 +77,9 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 			"name": schema.StringAttribute{
 				Description: "Name of the user set.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the user set.",
@@ -281,6 +284,8 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload["description"] = common.TrimString(plan.Description.String())
+	} else {
+		payload["description"] = ""
 	}
 	var usersJSONArr []CTEUserJSON
 	for _, user := range plan.Users {
@@ -310,11 +315,15 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	payload["users"] = usersJSONArr
 
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	if len(plan.Labels.Elements()) > 0 {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload["labels"] = labelsPayload
+	} else {
+		payload["labels"] = nil
 	}
-	payload["labels"] = labelsPayload
 
 	payloadJSON, _ := json.Marshal(payload)
 
