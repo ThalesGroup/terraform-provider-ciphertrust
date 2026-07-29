@@ -44,6 +44,7 @@ func (d *dataSourceAWSConnection) Schema(_ context.Context, _ datasource.SchemaR
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Description: "Optional filters passed as query parameters to the CM AWS connections list API. Supported keys: \"id\", \"name\", \"products\", \"meta_contains\", \"cloud_name\", \"createdBefore\", \"createdAfter\", \"last_connection_ok\", \"last_connection_before\", \"last_connection_after\", and \"labels\".",
 			},
 			"aws": schema.ListNestedAttribute{
 				Computed: true,
@@ -114,6 +115,7 @@ func (d *dataSourceAWSConnection) Schema(_ context.Context, _ datasource.SchemaR
 								},
 								"private_key": schema.StringAttribute{
 									Optional:    true,
+									Sensitive:   true,
 									Description: "The private key associated with the certificate",
 								},
 							},
@@ -139,6 +141,7 @@ func (d *dataSourceAWSConnection) Schema(_ context.Context, _ datasource.SchemaR
 						},
 						"secret_access_key": schema.StringAttribute{
 							Optional:    true,
+							Sensitive:   true,
 							Description: "Secret associated with the access key ID of the AWS user",
 						},
 						"secret_access_key_version": schema.Int64Attribute{
@@ -177,9 +180,31 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 	var state AWSConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
-	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
+		var validKeys = map[string]bool{
+			"id":                     true,
+			"name":                   true,
+			"products":               true,
+			"meta_contains":          true,
+			"cloud_name":             true,
+			"createdBefore":          true,
+			"createdAfter":           true,
+			"last_connection_ok":     true,
+			"last_connection_before": true,
+			"last_connection_after":  true,
+			"labels":                 true,
+		}
+		for k, v := range state.Filters.Elements() {
+			if !validKeys[k] {
+				resp.Diagnostics.AddError(
+					"Invalid Filter Key",
+					fmt.Sprintf("The key %q is not supported. Supported keys are: id, name, products, meta_contains, cloud_name, createdBefore, createdAfter, last_connection_ok, last_connection_before, last_connection_after, labels.", k),
+				)
+				return
+			}
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			kvs = append(kvs, kv)
+		}
 	}
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AWS_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")

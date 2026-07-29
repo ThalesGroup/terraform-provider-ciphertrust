@@ -11,6 +11,8 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -357,3 +359,258 @@ func Test_AWSConnectionUpdate_SecretAccessKeyVersionGatesResend(t *testing.T) {
 		})
 	}
 }
+
+// Test_CM_AWSConnection_DescriptionDoubleQuotes verifies that a description containing
+// literal double quotes is sent to CM exactly as a raw string without backslash corruption (TFIN-482).
+func Test_CM_AWSConnection_DescriptionDoubleQuotes(t *testing.T) {
+	const wantDesc = `a "quoted" description`
+	var capturedBody string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		capturedBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id":"conn-id-1"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCCKMAWSConnection{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	overrides := map[string]tftypes.Value{
+		"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+		"description":      tftypes.NewValue(tftypes.String, wantDesc),
+		"is_role_anywhere": tftypes.NewValue(tftypes.Bool, false),
+	}
+	planValue := newAWSConnectionRawValue(ctx, schemaResp, overrides)
+	configValue := newAWSConnectionRawValue(ctx, schemaResp, overrides)
+
+	req := resource.CreateRequest{
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Create(): %v", resp.Diagnostics)
+	}
+
+	// Double quotes should be escaped normally by JSON marshaling, not double-escaped.
+	expectedJSONPart := `"description":"a \"quoted\" description"`
+	if !strings.Contains(capturedBody, expectedJSONPart) {
+		t.Errorf("expected request payload to contain %s, got: %s", expectedJSONPart, capturedBody)
+	}
+}
+
+// Test_CM_AWSConnection_ProductsEmptySliceClearing verifies that when products is cleared
+// (empty list configured in HCL), the PATCH payload carries "products":[] to CM (TFIN-479).
+func Test_CM_AWSConnection_ProductsEmptySliceClearing(t *testing.T) {
+	const connID = "conn-id-1"
+	var capturedPatchBody string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/"+connID, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPatch:
+			body, _ := io.ReadAll(r.Body)
+			capturedPatchBody = string(body)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"id":%q}`, connID)
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"id":%q}`, connID)
+		default:
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	r := &resourceCCKMAWSConnection{client: client}
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	baseOverrides := map[string]tftypes.Value{
+		"id":               tftypes.NewValue(tftypes.String, connID),
+		"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+		"is_role_anywhere": tftypes.NewValue(tftypes.Bool, false),
+	}
+
+	// Prior state had 1 product ["cckm"]
+	stateOverrides := map[string]tftypes.Value{}
+	for k, v := range baseOverrides {
+		stateOverrides[k] = v
+	}
+	stateOverrides["products"] = tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{
+		tftypes.NewValue(tftypes.String, "cckm"),
+	})
+	stateValue := newAWSConnectionRawValue(ctx, schemaResp, stateOverrides)
+
+	// Plan has cleared products: []
+	planOverrides := map[string]tftypes.Value{}
+	for k, v := range baseOverrides {
+		planOverrides[k] = v
+	}
+	planOverrides["products"] = tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{})
+	planValue := newAWSConnectionRawValue(ctx, schemaResp, planOverrides)
+
+	req := resource.UpdateRequest{
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: planValue},
+		State:  tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+
+	r.Update(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Update(): %v", resp.Diagnostics)
+	}
+
+	expectedJSONPart := `"products":[]`
+	if !strings.Contains(capturedPatchBody, expectedJSONPart) {
+		t.Errorf("expected request payload to contain %s, got: %s", expectedJSONPart, capturedPatchBody)
+	}
+}
+
+// Test_CM_AWSConnectionList_InvalidFilterKey verifies that specifying an unsupported key in the
+// data source's filters attribute results in an error diagnostic (TFIN-484).
+func Test_CM_AWSConnectionList_InvalidFilterKey(t *testing.T) {
+	d := NewDataSourceAWSConnection()
+	ctx := context.Background()
+
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	configType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	configValue := tftypes.NewValue(configType, map[string]tftypes.Value{
+		"filters": tftypes.NewValue(tftypes.Map{ElementType: tftypes.String}, map[string]tftypes.Value{
+			"totally_bogus_key": tftypes.NewValue(tftypes.String, "xyz"),
+		}),
+		"aws": tftypes.NewValue(configType.AttributeTypes["aws"], nil),
+	})
+
+	req := datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+	}
+	resp := &datasource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	d.Read(ctx, req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected an error diagnostic when using an invalid filter key, but got none")
+	}
+
+	foundExpectedError := false
+	for _, diag := range resp.Diagnostics.Errors() {
+		if strings.Contains(diag.Summary(), "Invalid Filter Key") {
+			foundExpectedError = true
+			break
+		}
+	}
+
+	if !foundExpectedError {
+		t.Errorf("expected diagnostics error to contain 'Invalid Filter Key', got: %v", resp.Diagnostics)
+	}
+}
+
+// Test_CM_AWSConnectionList_SensitiveFields verifies that credentials-related attributes
+// are marked as Sensitive: true in the AWS connection data source schema (TFIN-485).
+func Test_CM_AWSConnectionList_SensitiveFields(t *testing.T) {
+	d := NewDataSourceAWSConnection()
+	ctx := context.Background()
+
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	awsListAttr, ok := schemaResp.Schema.Attributes["aws"]
+	if !ok {
+		t.Fatal("expected 'aws' attribute in schema")
+	}
+
+	listNestedAttr, ok := awsListAttr.(datasourceschema.ListNestedAttribute)
+	if !ok {
+		t.Fatalf("expected 'aws' to be a ListNestedAttribute, got %T", awsListAttr)
+	}
+
+	secretAccessKeyAttr, ok := listNestedAttr.NestedObject.Attributes["secret_access_key"]
+	if !ok {
+		t.Fatal("expected 'secret_access_key' under 'aws' nested object")
+	}
+
+	strAttr, ok := secretAccessKeyAttr.(datasourceschema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected 'secret_access_key' to be StringAttribute, got %T", secretAccessKeyAttr)
+	}
+
+	if !strAttr.Sensitive {
+		t.Error("expected 'secret_access_key' to be marked Sensitive: true")
+	}
+
+	iamRoleAnywhereAttr, ok := listNestedAttr.NestedObject.Attributes["iam_role_anywhere"]
+	if !ok {
+		t.Fatal("expected 'iam_role_anywhere' under 'aws' nested object")
+	}
+
+	nestedAttr, ok := iamRoleAnywhereAttr.(datasourceschema.SingleNestedAttribute)
+	if !ok {
+		t.Fatalf("expected 'iam_role_anywhere' to be SingleNestedAttribute, got %T", iamRoleAnywhereAttr)
+	}
+
+	privateKeyAttr, ok := nestedAttr.Attributes["private_key"]
+	if !ok {
+		t.Fatal("expected 'private_key' under 'iam_role_anywhere'")
+	}
+
+	pkStrAttr, ok := privateKeyAttr.(datasourceschema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected 'private_key' to be StringAttribute, got %T", privateKeyAttr)
+	}
+
+	if !pkStrAttr.Sensitive {
+		t.Error("expected 'private_key' to be marked Sensitive: true")
+	}
+}
+

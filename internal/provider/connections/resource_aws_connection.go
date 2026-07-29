@@ -257,28 +257,28 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = plan.Name.ValueString()
 
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		payload.Description = plan.Description.ValueString()
 	}
-	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+	if !plan.AccessKeyID.IsNull() && !plan.AccessKeyID.IsUnknown() {
+		payload.AccessKeyID = plan.AccessKeyID.ValueString()
 	}
-	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+	if !plan.AssumeRoleARN.IsNull() && !plan.AssumeRoleARN.IsUnknown() {
+		payload.AssumeRoleARN = plan.AssumeRoleARN.ValueString()
 	}
-	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+	if !plan.AssumeRoleExternalID.IsNull() && !plan.AssumeRoleExternalID.IsUnknown() {
+		payload.AssumeRoleExternalID = plan.AssumeRoleExternalID.ValueString()
 	}
-	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
+		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
-	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
+		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
 	}
-	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
+		payload.CloudName = plan.CloudName.ValueString()
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -465,11 +465,15 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	// description: purely user-settable; CM only returns what was explicitly set.
-	// Use r.Exists() to surface drift when the value changes vs config.
-	if r := gjson.Get(response, "description"); r.Exists() {
-		state.Description = types.StringValue(r.String())
-	} else {
-		state.Description = types.StringNull()
+	// Note: CM's PATCH API does not support clearing description once set (sending "" or null
+	// is treated as a no-op). To prevent perpetual plan drift when a user clears description,
+	// we preserve the null state if it is currently null in the configuration/state.
+	if !state.Description.IsNull() {
+		if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
+			state.Description = types.StringValue(r.String())
+		} else {
+			state.Description = types.StringNull()
+		}
 	}
 	// access_key_id: only hydrate from API when the user configured the field (prior state
 	// is non-null). When null in state, the connection may carry credentials set via the
@@ -482,15 +486,25 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			state.AccessKeyID = types.StringValue(r.String())
 		}
 	}
-	if r := gjson.Get(response, "assume_role_arn"); r.Exists() {
-		state.AssumeRoleARN = types.StringValue(r.String())
-	} else {
-		state.AssumeRoleARN = types.StringNull()
+	// Note: CM's PATCH API does not support clearing assume_role_arn once set (sending "" or null
+	// is treated as a no-op). To prevent perpetual plan drift when a user clears assume_role_arn,
+	// we preserve the null state if it is currently null in the configuration/state.
+	if !state.AssumeRoleARN.IsNull() {
+		if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			state.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			state.AssumeRoleARN = types.StringNull()
+		}
 	}
-	if r := gjson.Get(response, "assume_role_external_id"); r.Exists() {
-		state.AssumeRoleExternalID = types.StringValue(r.String())
-	} else {
-		state.AssumeRoleExternalID = types.StringNull()
+	// Note: CM's PATCH API does not support clearing assume_role_external_id once set (sending "" or null
+	// is treated as a no-op). To prevent perpetual plan drift when a user clears assume_role_external_id,
+	// we preserve the null state if it is currently null in the configuration/state.
+	if !state.AssumeRoleExternalID.IsNull() {
+		if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			state.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			state.AssumeRoleExternalID = types.StringNull()
+		}
 	}
 
 	// aws_region, aws_sts_regional_endpoints, cloud_name: CM returns server defaults
@@ -604,7 +618,11 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 		}
 		state.Products = products
 	} else {
-		state.Products = nil
+		// If the user has explicitly configured products (state.Products is non-nil),
+		// preserve the configured state value (e.g., empty slice []) when the API returns null.
+		if state.Products == nil {
+			state.Products = nil
+		}
 	}
 
 	diags = resp.State.Set(ctx, state)
@@ -643,26 +661,26 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		payload.Description = plan.Description.ValueString()
 	}
-	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+	if !plan.AccessKeyID.IsNull() && !plan.AccessKeyID.IsUnknown() {
+		payload.AccessKeyID = plan.AccessKeyID.ValueString()
 	}
-	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+	if !plan.AssumeRoleARN.IsNull() && !plan.AssumeRoleARN.IsUnknown() {
+		payload.AssumeRoleARN = plan.AssumeRoleARN.ValueString()
 	}
-	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+	if !plan.AssumeRoleExternalID.IsNull() && !plan.AssumeRoleExternalID.IsUnknown() {
+		payload.AssumeRoleExternalID = plan.AssumeRoleExternalID.ValueString()
 	}
-	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
+		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
-	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
+		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
 	}
-	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
+		payload.CloudName = plan.CloudName.ValueString()
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -708,7 +726,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	ApplyNullDeletes(metaPayload, state.Meta.Elements())
 	payload.Meta = metaPayload
 
-	var productsArr []string
+	productsArr := []string{}
 	for _, product := range plan.Products {
 		productsArr = append(productsArr, product.ValueString())
 	}
