@@ -756,7 +756,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 				if newUpdatedAt != t.sentinelUpdatedAt {
 					done[ti] = true
 				}
-				client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti]))
+				client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t importState: %s keyMaterialState: %s", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti], res.Get("aws_param.ImportState").String(), res.Get("aws_param.KeyMaterialState").String()))
 				break
 			}
 		}

@@ -833,7 +833,6 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 					return
 				}
 				waitForRotationHistoryRecord(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(), diags)
-				waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "import_state", "PENDING_IMPORT", "", diags)
 				if gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() {
 					waitForReplicasMaterialCurrent(ctx, id, r.client, keyID, srcID, keyJSON, diags)
 				}
@@ -994,10 +993,6 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 			continue
 		}
 
-		// Step 3: wait for import_state to leave PENDING_IMPORT (move to Imported).
-		// key_material_state is not changed by a re-import - it stays CURRENT or NON-CURRENT.
-		// A timeout is a warning only - the import call already completed successfully.
-		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "import_state", "PENDING_IMPORT", "", diags)
 	}
 }
 
@@ -1010,12 +1005,12 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //  1. Calls POST rotate-material with an empty body to activate the pending material.
 //     This is a hard error that stops the loop immediately on failure - a rotate-material
 //     failure leaves the key in the same PENDING_ROTATION state it started in.
-//  2. Waits 25 seconds for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background
-//     task to complete. The empty-body rotate-material path calls AWS RotateKeyOnDemand
-//     directly and forks syncKeyRotations - no status record is created, so polling
-//     /rotate-material/status returns 404. A short fixed sleep is sufficient because
-//     CCKM's syncKeyRotations task (with addDelay=true) completes within ~20-25s. The
-//     outer loop's end-of-iteration RefreshKeyAndWait then confirms the final state.
+//  2. Polls CCKM rotation history until the entry's key_material_state is no longer
+//     PENDING_ROTATION. Polling is required because the CCKM server forks syncKeyRotations
+//     and returns HTTP 200 before the rotation history cache is updated. Without polling,
+//     the outer retry loop may re-fetch history, still see PENDING_ROTATION (stale cache),
+//     and call rotate-material a second time - which AWS rejects with
+//     "No available key material pending rotation".
 //
 // keyJSON is the full CM key record for keyID, used to detect the multi-region case.
 func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
@@ -1049,19 +1044,20 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		}
 		r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
 
-		// Step 2: wait for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background task
-		// to complete before returning. We do NOT call waitForMaterialRotation here because
-		// that endpoint (/rotate-material/status) only exists when rotate-material is called
-		// WITH source key params (which creates a RotateMaterialStatus record). The empty-body
-		// rotate-material path (used for repair) calls AWS RotateKeyOnDemand directly and forks
-		// syncKeyRotations - no status record is created, so /rotate-material/status returns 404.
-		// Previously this used waitForMaterialStateResolved + waitForReplicasMaterialCurrent
-		// which polled CCKM's stale rotation history cache for up to 10 minutes. A short fixed
-		// sleep is sufficient: CCKM's syncKeyRotations background task (with addDelay=true) runs
-		// within ~20-25s. The outer loop's end-of-iteration RefreshKeyAndWait then confirms the
-		// final state.
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] waiting 25s for AWS RotateKeyOnDemand and CCKM syncKeyRotations to complete keyID: %s sourceKeyID: %s", keyID, srcID))
-		time.Sleep(25 * time.Second)
+		// Step 2: poll CCKM rotation history until the entry's key_material_state is no longer
+		// PENDING_ROTATION. We do NOT call waitForMaterialRotation here because that endpoint
+		// (/rotate-material/status) only exists when rotate-material is called WITH source key
+		// params (which creates a RotateMaterialStatus record). The empty-body rotate-material
+		// path (used for repair) calls AWS RotateKeyOnDemand directly and forks syncKeyRotations
+		// - no status record is created, so /rotate-material/status returns 404.
+		//
+		// Polling is necessary because CCKM's server forks syncKeyRotations and returns HTTP 200
+		// before the rotation history cache is updated. A fixed sleep is unreliable on a loaded
+		// runner: if the forked task has not completed when the sleep ends, the outer retry loop
+		// re-fetches history, still sees PENDING_ROTATION, and calls rotate-material a second
+		// time - which AWS rejects with "No available key material pending rotation".
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] polling until PENDING_ROTATION resolves in CCKM rotation history keyID: %s sourceKeyID: %s", keyID, srcID))
+		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "key_material_state", "PENDING_ROTATION", "", diags)
 	}
 }
 
@@ -1328,14 +1324,6 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	}
 	if diags.HasError() {
 		return
-	}
-
-	// Wait for the (primary) key material to reach CURRENT state.
-	resolved := waitForMaterialStateResolved(ctx, id, client, cmKeyID, srcID, "key_material_state", "", "CURRENT", diags)
-
-	// For multi-region keys, also wait for all replicas to reach CURRENT state.
-	if resolved && gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() {
-		waitForReplicasMaterialCurrent(ctx, id, client, cmKeyID, srcID, keyJSON, diags)
 	}
 
 	return
