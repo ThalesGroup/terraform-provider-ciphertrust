@@ -487,12 +487,15 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		}
 		if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
 			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
-			if plan.PasswordCreationMethod.ValueString() == "MANUAL" && (config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString()) {
-				resp.Diagnostics.AddError(
-					"Error updating CTE Client Group on CipherTrust Manager: ",
-					"Password is required when password_creation_method is MANUAL",
-				)
-				return
+			if plan.PasswordCreationMethod.ValueString() == "MANUAL" {
+				if config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString() {
+					resp.Diagnostics.AddError(
+						"Error updating CTE Client Group on CipherTrust Manager: ",
+						"Password is required when password_creation_method is MANUAL",
+					)
+					return
+				}
+				payload.Password = config.Password.ValueString()
 			}
 		}
 		if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
