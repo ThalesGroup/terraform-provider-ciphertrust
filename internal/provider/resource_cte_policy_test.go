@@ -8,6 +8,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteStandardPolicyConfig renders a Standard ciphertrust_cte_policy with a single
@@ -82,22 +83,31 @@ func TestCTEPolicyResource(t *testing.T) {
 	})
 }
 
-// TestCTEPolicyResource_nameImmutable verifies a name change is rejected.
-func TestCTEPolicyResource_nameImmutable(t *testing.T) {
+// TestCTEPolicyResource_nameRequiresReplace verifies a name change is planned
+// as a destroy+create rather than an in-place update (TFIN-495).
+func TestCTEPolicyResource_nameRequiresReplace(t *testing.T) {
 	name := "tf-policy-imm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: cteStandardPolicyConfig(name, "Original", "all_ops"),
-				Check: checkStep(t, "policy immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy", "name", name),
+				Check: checkStep(t, "policy requires replace: create",
+					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
-				Config:      cteStandardPolicyConfig(name+"-renamed", "Original", "all_ops"),
-				ExpectError: regexp.MustCompile(`(?i)cannot change name of the policy|immutable`),
+				Config: cteStandardPolicyConfig(name+"-renamed", "Original", "all_ops"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "policy requires replace: rename",
+					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
+				),
 			},
 		},
 	})
