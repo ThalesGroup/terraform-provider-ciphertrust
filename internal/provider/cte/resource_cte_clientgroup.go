@@ -431,8 +431,12 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	opType := ""
 	if plan.OpType.ValueString() != "" && plan.OpType.ValueString() != types.StringNull().ValueString() {
-		if plan.OpType.ValueString() == "update" {
+		opType = plan.OpType.ValueString()
+	}
+
+	if opType == "" || opType == "update" {
 
 			// Add error checks for fields we cant change in op_type = update
 			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
@@ -524,7 +528,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				return
 			}
 			plan.ID = types.StringValue(response)
-		} else if plan.OpType.ValueString() == "auth-binaries" {
+		} else if opType == "auth-binaries" {
 			// Add error checks for fields we cant change in op_type = auth-binaries
 			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
 				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "client_list cannot be changed with op_type 'auth-binaries'")
@@ -617,7 +621,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				return
 			}
 			plan.ID = types.StringValue(response)
-		} else if plan.OpType.ValueString() == "update-password" {
+		} else if opType == "update-password" {
 			// Add error checks for fields we cant change in op_type = update-password
 			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
 				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "client_list cannot be changed with op_type 'update-password'")
@@ -721,7 +725,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				return
 			}
 			plan.ID = types.StringValue(response)
-		} else if plan.OpType.ValueString() == "reset-password" {
+		} else if opType == "reset-password" {
 			// Add error checks for fields we cant change in op_type = reset-password
 			if !stringSlicesEqual(plan.ClientList, state.ClientList) {
 				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Reset Password", "client_list cannot be changed with op_type 'reset-password'")
@@ -803,7 +807,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				return
 			}
 			plan.ID = types.StringValue(response)
-		} else if plan.OpType.ValueString() == "remove-client" {
+		} else if opType == "remove-client" {
 			// Add error checks for fields we cant change in op_type = remove-client
 			if !plan.InheritAttributes.IsNull() {
 				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Remove Client", "inherit_attributes must not be set with op_type 'remove-client'")
@@ -899,7 +903,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			diags = resp.State.Set(ctx, state)
 			resp.Diagnostics.Append(diags...)
 			return
-		} else if plan.OpType.ValueString() == "add-client" {
+		} else if opType == "add-client" {
 			// Add error checks for fields we cant change in op_type = add-client
 			if plan.AuthBinaries != state.AuthBinaries {
 				resp.Diagnostics.AddError("Invalid data input: CTE Client Group Add Clients", "auth_binaries cannot be changed with op_type 'add-client'")
@@ -1002,7 +1006,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				return
 			}
 			plan.ID = types.StringValue(response + plan.ID.ValueString())
-		} else if plan.OpType.ValueString() == "ldt-pause" {
+		} else if opType == "ldt-pause" {
 			if plan.Paused.ValueBool() != types.BoolNull().ValueBool() {
 				payload.Paused = plan.Paused.ValueBool()
 			}
@@ -1039,12 +1043,6 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			)
 			return
 		}
-	} else {
-		resp.Diagnostics.AddError(
-			"op_type is a required",
-			"The 'op_type' attribute must be provided during update.",
-		)
-		return
 	}
 
 	// password is write-only — the framework nulls it from outgoing state/plan
