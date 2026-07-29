@@ -942,7 +942,10 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if !plan.Description.IsNull() {
+	// Always include description in PATCH body to support clearing it (TFIN-500)
+	if plan.Description.IsNull() {
+		payload.Description = ""
+	} else {
 		payload.Description = plan.Description.ValueString()
 	}
 
@@ -1242,7 +1245,12 @@ func setProfileState(
 	apiResp *CTEProfilesListJSON,
 ) {
 	// Simple scalar fields
-	state.Description = types.StringValue(apiResp.Description)
+	// Normalize empty description to null to prevent plan loops (TFIN-500, TFIN-501)
+	if apiResp.Description != "" {
+		state.Description = types.StringValue(apiResp.Description)
+	} else {
+		state.Description = types.StringNull()
+	}
 
 	state.Name = types.StringValue(apiResp.Name)
 	state.ConciseLogging = types.BoolValue(apiResp.ConciseLogging)

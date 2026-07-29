@@ -153,3 +153,40 @@ func TestCTEProfileResource_drift(t *testing.T) {
 		},
 	})
 }
+
+// TestCTEProfileResource_removingDescriptionConverges verifies that removing
+// description from config and applying converges to no changes (TFIN-500).
+func TestCTEProfileResource_removingDescriptionConverges(t *testing.T) {
+	name := "tf-profile-rem-desc-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_profile.profile"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with description
+			{
+				Config: cteProfileConfig(name, false),
+				Check: checkStep(t, "profile: create with description",
+					resource.TestCheckResourceAttr(rn, "description", "Initial profile"),
+				),
+			},
+			// Remove description from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_profile" "profile" {
+  name = %q
+}
+`, name),
+				Check: checkStep(t, "profile: remove description",
+					resource.TestCheckNoResourceAttr(rn, "description"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-500)
+			{
+				Config:          providerConfig + fmt.Sprintf(`resource "ciphertrust_cte_profile" "profile" { name = %q }`, name),
+				PlanOnly:        true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
