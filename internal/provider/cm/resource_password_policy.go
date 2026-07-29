@@ -100,33 +100,27 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 				ElementType: types.Int64Type,
 			},
 			"inclusive_max_total_length": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The maximum length of the password. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
 			},
 			"inclusive_min_digits": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The minimum number of digits.",
 			},
 			"inclusive_min_lower_case": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The minimum number of lower cases.",
 			},
 			"inclusive_min_other": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The minimum number of other characters.",
 			},
 			"inclusive_min_total_length": schema.Int64Attribute{
 				Optional: true,
-				Computed: true,
 				PlanModifiers: []planmodifier.Int64{
 					modifiers.UseStateWhenZeroInt64(),
 				},
@@ -134,22 +128,18 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"inclusive_min_upper_case": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The minimum number of upper cases.",
 			},
 			"password_change_min_days": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The minimum period in days between password changes. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
 			},
 			"password_history_threshold": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "Determines the number of past passwords a user cannot reuse. Even with value 0, the user will not be able to change their password to the same password.",
 			},
 			"password_lifetime": schema.Int64Attribute{
 				Optional:    true,
-				Computed:    true,
 				Description: "The maximum lifetime of the password in days. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
 			},
 			"password_expiry_notification_days": schema.Int64Attribute{
@@ -397,21 +387,23 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 		}
 	}
 
-	result := gjson.Get(response, "failed_logins_lockout_thresholds")
-	if !result.Exists() {
-		plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
-	} else {
-		thresholds := []attr.Value{}
-		result.ForEach(func(_, v gjson.Result) bool {
-			thresholds = append(thresholds, types.Int64Value(v.Int()))
-			return true
-		})
-		listValue, listDiags := types.ListValue(types.Int64Type, thresholds)
-		resp.Diagnostics.Append(listDiags...)
-		if resp.Diagnostics.HasError() {
-			return
+	if !plan.FailedLoginsLockoutThresholds.IsNull() {
+		result := gjson.Get(response, "failed_logins_lockout_thresholds")
+		if !result.Exists() {
+			plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
+		} else {
+			thresholds := []attr.Value{}
+			result.ForEach(func(_, v gjson.Result) bool {
+				thresholds = append(thresholds, types.Int64Value(v.Int()))
+				return true
+			})
+			listValue, listDiags := types.ListValue(types.Int64Type, thresholds)
+			resp.Diagnostics.Append(listDiags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			plan.FailedLoginsLockoutThresholds = listValue
 		}
-		plan.FailedLoginsLockoutThresholds = listValue
 	}
 
 	diags = resp.State.Set(ctx, plan)
@@ -642,72 +634,93 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 	plan.ID = types.StringValue(passwordPolicyName)
 	plan.Name = types.StringValue(passwordPolicyName)
 
-	if r := gjson.Get(responseUPD, "inclusive_max_total_length"); r.Exists() {
-		plan.InclusiveMaxTotalLength = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMaxTotalLength = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "inclusive_min_digits"); r.Exists() {
-		plan.InclusiveMinDigits = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMinDigits = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "inclusive_min_lower_case"); r.Exists() {
-		plan.InclusiveMinLowerCase = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMinLowerCase = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "inclusive_min_other"); r.Exists() {
-		plan.InclusiveMinOther = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMinOther = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "inclusive_min_total_length"); r.Exists() {
-		plan.InclusiveMinTotalLength = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMinTotalLength = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "inclusive_min_upper_case"); r.Exists() {
-		plan.InclusiveMinUpperCase = types.Int64Value(r.Int())
-	} else {
-		plan.InclusiveMinUpperCase = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "password_change_min_days"); r.Exists() {
-		plan.PasswordChangeMinDays = types.Int64Value(r.Int())
-	} else {
-		plan.PasswordChangeMinDays = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "password_history_threshold"); r.Exists() {
-		plan.PasswordHistoryThreshold = types.Int64Value(r.Int())
-	} else {
-		plan.PasswordHistoryThreshold = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "password_lifetime"); r.Exists() {
-		plan.PasswordLifetime = types.Int64Value(r.Int())
-	} else {
-		plan.PasswordLifetime = types.Int64Null()
-	}
-	if r := gjson.Get(responseUPD, "password_expiry_notification_days"); r.Exists() {
-		plan.PasswordExpiryNotificationDays = types.Int64Value(r.Int())
-	} else {
-		plan.PasswordExpiryNotificationDays = types.Int64Null()
-	}
-
-	thresholdsResult := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
-	if !thresholdsResult.Exists() {
-		plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
-	} else {
-		thresholds := []attr.Value{}
-		thresholdsResult.ForEach(func(_, v gjson.Result) bool {
-			thresholds = append(thresholds, types.Int64Value(v.Int()))
-			return true
-		})
-		listValue, listDiags := types.ListValue(types.Int64Type, thresholds)
-		resp.Diagnostics.Append(listDiags...)
-		if resp.Diagnostics.HasError() {
-			return
+	if !plan.InclusiveMaxTotalLength.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_max_total_length"); r.Exists() {
+			plan.InclusiveMaxTotalLength = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMaxTotalLength = types.Int64Null()
 		}
-		plan.FailedLoginsLockoutThresholds = listValue
+	}
+	if !plan.InclusiveMinDigits.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_min_digits"); r.Exists() {
+			plan.InclusiveMinDigits = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinDigits = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinLowerCase.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_min_lower_case"); r.Exists() {
+			plan.InclusiveMinLowerCase = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinLowerCase = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinOther.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_min_other"); r.Exists() {
+			plan.InclusiveMinOther = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinOther = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinTotalLength.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_min_total_length"); r.Exists() {
+			plan.InclusiveMinTotalLength = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinTotalLength = types.Int64Null()
+		}
+	}
+	if !plan.InclusiveMinUpperCase.IsNull() {
+		if r := gjson.Get(responseUPD, "inclusive_min_upper_case"); r.Exists() {
+			plan.InclusiveMinUpperCase = types.Int64Value(r.Int())
+		} else {
+			plan.InclusiveMinUpperCase = types.Int64Null()
+		}
+	}
+	if !plan.PasswordChangeMinDays.IsNull() {
+		if r := gjson.Get(responseUPD, "password_change_min_days"); r.Exists() {
+			plan.PasswordChangeMinDays = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordChangeMinDays = types.Int64Null()
+		}
+	}
+	if !plan.PasswordHistoryThreshold.IsNull() {
+		if r := gjson.Get(responseUPD, "password_history_threshold"); r.Exists() {
+			plan.PasswordHistoryThreshold = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordHistoryThreshold = types.Int64Null()
+		}
+	}
+	if !plan.PasswordLifetime.IsNull() {
+		if r := gjson.Get(responseUPD, "password_lifetime"); r.Exists() {
+			plan.PasswordLifetime = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordLifetime = types.Int64Null()
+		}
+	}
+	if !plan.PasswordExpiryNotificationDays.IsNull() {
+		if r := gjson.Get(responseUPD, "password_expiry_notification_days"); r.Exists() {
+			plan.PasswordExpiryNotificationDays = types.Int64Value(r.Int())
+		} else {
+			plan.PasswordExpiryNotificationDays = types.Int64Null()
+		}
+	}
+	if !plan.FailedLoginsLockoutThresholds.IsNull() {
+		thresholdsResult := gjson.Get(responseUPD, "failed_logins_lockout_thresholds")
+		if !thresholdsResult.Exists() {
+			plan.FailedLoginsLockoutThresholds = types.ListNull(types.Int64Type)
+		} else {
+			thresholds := []attr.Value{}
+			thresholdsResult.ForEach(func(_, v gjson.Result) bool {
+				thresholds = append(thresholds, types.Int64Value(v.Int()))
+				return true
+			})
+			listValue, listDiags := types.ListValue(types.Int64Type, thresholds)
+			resp.Diagnostics.Append(listDiags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+			plan.FailedLoginsLockoutThresholds = listValue
+		}
 	}
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
 	diags = resp.State.Set(ctx, plan)

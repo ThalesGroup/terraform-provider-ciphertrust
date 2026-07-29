@@ -36,7 +36,7 @@ fmt:
 	gofmt -s -w -e .
 
 test:
-	$(if $(TERRAFORM_BIN),TF_ACC_TERRAFORM_PATH=$(TERRAFORM_BIN) )TF_ACC= go test -v -cover -timeout=200s -parallel=10 ./...
+	$(if $(TERRAFORM_BIN),TF_ACC_TERRAFORM_PATH=$(TERRAFORM_BIN) )TF_ACC= go test -v -timeout=200s -parallel=10 ./...
 
 JUNIT_FILE ?=
 
