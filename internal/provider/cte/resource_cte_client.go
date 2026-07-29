@@ -441,16 +441,16 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		payload.DelClient = plan.DelClient.ValueBool()
 	}
 	if plan.DisableCapability.ValueString() != "" && plan.DisableCapability.ValueString() != types.StringNull().ValueString() {
-		payload.DisableCapability = common.TrimString(plan.DisableCapability.String())
+		payload.DisableCapability = common.TrimString(plan.DisableCapability.ValueString())
 	}
 	if plan.DynamicParameters.ValueString() != "" && plan.DynamicParameters.ValueString() != types.StringNull().ValueString() {
-		payload.DynamicParameters = common.TrimString(plan.DynamicParameters.String())
+		payload.DynamicParameters = common.TrimString(plan.DynamicParameters.ValueString())
 	}
 	if plan.EnableDomainSharing.ValueBool() != types.BoolNull().ValueBool() {
 		payload.EnableDomainSharing = plan.EnableDomainSharing.ValueBool()
 	}
 	if plan.EnabledCapabilities.ValueString() != "" && plan.EnabledCapabilities.ValueString() != types.StringNull().ValueString() {
-		payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.String())
+		payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.ValueString())
 	}
 	if plan.LGCSAccessOnly.ValueBool() != types.BoolNull().ValueBool() {
 		payload.LGCSAccessOnly = plan.LGCSAccessOnly.ValueBool()
