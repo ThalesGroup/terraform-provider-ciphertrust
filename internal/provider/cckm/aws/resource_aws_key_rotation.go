@@ -430,6 +430,8 @@ func waitForNativeRotation(
 		pollInterval = shortAwsKeyOpSleep
 	)
 
+	// TODO: retry if not confirmed  after refreshing aws key at bottom of loop. /refresh
+
 	rotListFilters := url.Values{"limit": []string{"-1"}}
 
 	for i := 0; i < maxPolls; i++ {

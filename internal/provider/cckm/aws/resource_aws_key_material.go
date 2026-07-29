@@ -369,7 +369,6 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 
 	// Step 5: apply key material operations
 	r.updateKeyMaterial(ctx, id, cmKeyID, &plan, state.KeyMaterial, keyJSON, &resp.Diagnostics)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -741,10 +740,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			len(newCandidates) + len(removed) + len(metadataUpdates)
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
-			// The prior end-of-loop RefreshKeyAndWait already confirmed CM has fresh AWS
-			// data. Re-classifying on that fresh data shows nothing to do, so we are done.
-			// Calling RefreshKeyAndWait again immediately would time out (150s) because CM
-			// cannot advance the rotation-history updatedAt twice in rapid succession.
+			r.client.Log.Debug("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
 			break
 		}
 
@@ -1041,7 +1037,7 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 				// Key is still in pending import state on AWS, or replicas have not yet received
 				// the material. CM classified the primary as PENDING_ROTATION too early. Return
 				// without error so the outer loop can refresh and re-classify.
-				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Will refresh and re-classify. error: %s", errStr)
+				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Refreshing key and retrying.. error: %s", errStr)
 				r.client.Log.Warn(msg)
 				return
 			}
@@ -1248,7 +1244,7 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 			strings.Contains(errStr, materialHasNotBeenImportedError) {
 			// Key is in a pending state (PENDING_ROTATION or PENDING_MULTI_REGION_IMPORT_AND_ROTATION).
 			// Warn and return so the outer retry loop can repair the pending state first.
-			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] import-material rejected due to pending state - will re-classify. keyID: %s sourceKeyID: %s error: %s", keyID, sourceKeyID, errStr))
+			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] import-material rejected due to pending state. Refreshing key and retrying.. keyID: %s sourceKeyID: %s error: %s", keyID, sourceKeyID, errStr))
 			return
 		}
 		client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, errStr))
