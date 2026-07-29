@@ -8,6 +8,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 // cteClientConfig renders a ciphertrust_cte_client. When updated is true the
@@ -43,8 +46,25 @@ func TestCTEClientResource(t *testing.T) {
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
+			// Unrelated change (description/client_locked/registration_allowed). The
+			// PreApply checks assert the computed profile_id/profile_name stay known
+			// values in the plan instead of flipping to "(known after apply)".
 			{
 				Config: cteClientConfig(name, true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("profile_id"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("profile_name"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+					},
+				},
 				Check: checkStep(t, "client: update",
 					resource.TestCheckResourceAttr(rn, "description", "Updated via TF"),
 					resource.TestCheckResourceAttr(rn, "client_locked", "true"),
