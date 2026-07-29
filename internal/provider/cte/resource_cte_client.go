@@ -641,7 +641,19 @@ func setCTEClientState(
 	state.EnabledCapabilities = types.StringValue(apiResp.EnabledCapabilities)
 	state.ProfileID = types.StringValue(apiResp.ProfileID)
 	state.ProfileName = types.StringValue(apiResp.ProfileName)
-	//state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
+
+	// protection_mode is refreshed from the live response only when state already
+	// holds a value, i.e. the configuration actually asked for a protection mode.
+	// CipherTrust Manager reports protection_mode = "CTE" for every client that has
+	// never had its protection mode changed, so populating it unconditionally would
+	// put a value in state for configurations that never set this Optional (not
+	// Computed) attribute and produce a plan diff that can never be resolved. The
+	// non-empty check on the response guards against a client whose payload omits
+	// the field, which would otherwise blank out a configured value.
+	if !state.ProtectionMode.IsNull() && state.ProtectionMode.ValueString() != "" &&
+		apiResp.ProtectionMode != "" {
+		state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
+	}
 
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
