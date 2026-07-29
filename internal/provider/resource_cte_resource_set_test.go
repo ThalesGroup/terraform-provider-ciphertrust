@@ -88,7 +88,11 @@ func TestCTEResourceSetResource(t *testing.T) {
 	})
 }
 
-// TestCTEResourceSetResource_nameImmutable verifies a name change is rejected.
+// TestCTEResourceSetResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the resource set's id is referenced elsewhere
+// (via resource_set_id on ciphertrust_cte_policy security/key/data_tx rules)
+// and must not be reminted on rename (TFIN-504).
 func TestCTEResourceSetResource_nameImmutable(t *testing.T) {
 	name := "tf-resset-imm-" + uuid.New().String()[:8]
 
@@ -103,7 +107,8 @@ func TestCTEResourceSetResource_nameImmutable(t *testing.T) {
 			},
 			{
 				Config:      cteResourceSetConfig(name+"-renamed", "Original", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change resource set name|immutable`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
@@ -132,6 +137,80 @@ func TestCTEResourceSetResource_drift(t *testing.T) {
 				Config:             cteResourceSetConfig(name, "Drift original", false),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCTEResourceSetResource_labelsClearing verifies that removing labels from config
+// actually clears them in CM and does not create a permanent plan loop (TFIN-506).
+func TestCTEResourceSetResource_labelsClearing(t *testing.T) {
+	name := "tf-resset-labels-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with labels
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  labels = {
+    env = "drift-test"
+  }
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				Check: checkStep(t, "resource_set labels: create with labels",
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "labels.env", "drift-test"),
+				),
+			},
+			// Remove labels from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				Check: checkStep(t, "resource_set labels: remove labels",
+					resource.TestCheckNoResourceAttr("ciphertrust_cte_resource_set.resource_set", "labels.env"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-506)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

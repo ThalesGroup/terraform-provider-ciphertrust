@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -77,8 +78,11 @@ func (r *resourceCTEResourceSet) Schema(_ context.Context, _ resource.SchemaRequ
 				Default:     stringdefault.StaticString(""),
 			},
 			"name": schema.StringAttribute{
-				Description: "Name of the resource set.",
+				Description: "(Immutable) Name of the resource set.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the resource set.",
@@ -151,8 +155,8 @@ func (r *resourceCTEResourceSet) Create(ctx context.Context, req resource.Create
 	}
 
 	payload.Name = common.TrimString(plan.Name.String())
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+	if !plan.Description.IsNull() && plan.Description.ValueString() != "" {
+		payload.Description = plan.Description.ValueString()
 	}
 	if plan.Type.ValueString() != "" && plan.Type.ValueString() != types.StringNull().ValueString() {
 		payload.Type = common.TrimString(plan.Type.String())
@@ -160,7 +164,7 @@ func (r *resourceCTEResourceSet) Create(ctx context.Context, req resource.Create
 		payload.Type = "Directory"
 	}
 
-	var resources []CTEResourceJSON
+	resources := []CTEResourceJSON{}
 	for _, resource := range plan.Resources {
 		var resourceJSON CTEResourceJSON
 		if resource.Directory.ValueString() != "" && resource.Directory.ValueString() != types.StringNull().ValueString() {
@@ -297,9 +301,14 @@ func (r *resourceCTEResourceSet) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	payload.Description = common.TrimString(plan.Description.String())
+	// Always include description in PATCH body to support clearing it (TFIN-505)
+	if plan.Description.IsNull() {
+		payload.Description = ""
+	} else {
+		payload.Description = plan.Description.ValueString()
+	}
 
-	var resources []CTEResourceJSON
+	resources := []CTEResourceJSON{}
 	for _, resource := range plan.Resources {
 		var resourceJSON CTEResourceJSON
 		if resource.Directory.ValueString() != "" && resource.Directory.ValueString() != types.StringNull().ValueString() {
@@ -318,11 +327,16 @@ func (r *resourceCTEResourceSet) Update(ctx context.Context, req resource.Update
 	}
 	payload.Resources = resources
 
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Handle labels: send nil when empty to clear labels in CM (TFIN-506)
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -408,7 +422,9 @@ func setCTEResourceSetState(
 	state.Name = types.StringValue(apiResp.Name)
 	state.Type = types.StringValue(apiResp.Type)
 
-	if apiResp.Description != "" {
+	// Normalize empty description to null to prevent plan loops (TFIN-505)
+	// Also normalize the literal string "<null>" which CM stores when JSON null is sent
+	if apiResp.Description != "" && apiResp.Description != "<null>" {
 		state.Description = types.StringValue(apiResp.Description)
 	} else {
 		state.Description = types.StringNull()
