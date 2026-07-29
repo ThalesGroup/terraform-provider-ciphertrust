@@ -8,6 +8,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 // cteClientConfig renders a ciphertrust_cte_client. When updated is true the
@@ -43,8 +46,25 @@ func TestCTEClientResource(t *testing.T) {
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
+			// Unrelated change (description/client_locked/registration_allowed). The
+			// PreApply checks assert the computed profile_id/profile_name stay known
+			// values in the plan instead of flipping to "(known after apply)".
 			{
 				Config: cteClientConfig(name, true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("profile_id"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("profile_name"),
+							knownvalue.StringRegexp(regexp.MustCompile(`.+`)),
+						),
+					},
+				},
 				Check: checkStep(t, "client: update",
 					resource.TestCheckResourceAttr(rn, "description", "Updated via TF"),
 					resource.TestCheckResourceAttr(rn, "client_locked", "true"),
@@ -119,6 +139,50 @@ func TestCTEClientResource_typeImmutable(t *testing.T) {
 			{
 				Config:      cteClientTypedConfig(name, "CTE-U"),
 				ExpectError: regexp.MustCompile(`(?i)cannot change client_type|immutable`),
+			},
+		},
+	})
+}
+
+// cteClientProtectionModeConfig renders a client whose config asks for a
+// protection mode.
+func cteClientProtectionModeConfig(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  protection_mode          = "CTE RWP"
+}
+`, name)
+}
+
+// TestCTEClientResource_protectionModeReadBack asserts protection_mode is refreshed
+// from the live client instead of being trusted from config. Create never sends
+// protection_mode to CipherTrust Manager, so a client created with
+// protection_mode = "CTE RWP" in its config is really still in CM's default "CTE"
+// mode, and Read must report that.
+func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
+	name := "tfin464-pm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientProtectionModeConfig(name),
+				Check: checkStep(t, "client protection_mode: create",
+					resource.TestCheckResourceAttr(rn, "protection_mode", "CTE RWP"),
+				),
+				// The post-apply refresh replaces the configured value with the live
+				// one, so the follow-up plan is legitimately non-empty here.
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client protection_mode: refresh",
+					resource.TestCheckResourceAttr(rn, "protection_mode", "CTE"),
+				),
 			},
 		},
 	})
