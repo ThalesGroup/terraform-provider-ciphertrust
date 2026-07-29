@@ -10,12 +10,15 @@ import (
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
@@ -613,4 +616,286 @@ func Test_CM_AWSConnectionList_SensitiveFields(t *testing.T) {
 		t.Error("expected 'private_key' to be marked Sensitive: true")
 	}
 }
+
+// Test_CM_AWSConnection_ArchitectureValidationScenarios validates all four required architectural scenarios:
+// 1. Updating each of the three string attributes still works as expected.
+// 2. Attempting to clear each attribute no longer produces plan drift (using plan modifier).
+// 3. Out-of-band modifications to those attributes are unconditionally detected after refresh/plan.
+// 4. products = [] continues to clear the products list successfully and remains stable.
+func Test_CM_AWSConnection_ArchitectureValidationScenarios(t *testing.T) {
+	ctx := context.Background()
+
+	// =========================================================================
+	// Scenario 1: Updating each of the three string attributes works as expected.
+	// =========================================================================
+	t.Run("Scenario 1: Updating un-clearable attributes passes new values to CM", func(t *testing.T) {
+		const connID = "conn-id-1"
+		var capturedPatchBody string
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/"+connID, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPatch {
+				body, _ := io.ReadAll(r.Body)
+				capturedPatchBody = string(body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, `{"id":%q}`, connID)
+			}
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := &common.Client{
+			CipherTrustURL: server.URL,
+			HTTPClient:     server.Client(),
+			Log:            hclog.NewNullLogger(),
+		}
+
+		r := &resourceCCKMAWSConnection{client: client}
+		var schemaResp resource.SchemaResponse
+		r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+		baseOverrides := map[string]tftypes.Value{
+			"id":               tftypes.NewValue(tftypes.String, connID),
+			"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+			"is_role_anywhere": tftypes.NewValue(tftypes.Bool, false),
+		}
+
+		// Prior state: old values
+		stateOverrides := map[string]tftypes.Value{}
+		for k, v := range baseOverrides {
+			stateOverrides[k] = v
+		}
+		stateOverrides["description"] = tftypes.NewValue(tftypes.String, "old-desc")
+		stateOverrides["assume_role_arn"] = tftypes.NewValue(tftypes.String, "old-arn")
+		stateOverrides["assume_role_external_id"] = tftypes.NewValue(tftypes.String, "old-ext")
+		stateValue := newAWSConnectionRawValue(ctx, schemaResp, stateOverrides)
+
+		// Plan: new values
+		planOverrides := map[string]tftypes.Value{}
+		for k, v := range baseOverrides {
+			planOverrides[k] = v
+		}
+		planOverrides["description"] = tftypes.NewValue(tftypes.String, "new-desc")
+		planOverrides["assume_role_arn"] = tftypes.NewValue(tftypes.String, "new-arn")
+		planOverrides["assume_role_external_id"] = tftypes.NewValue(tftypes.String, "new-ext")
+		planValue := newAWSConnectionRawValue(ctx, schemaResp, planOverrides)
+
+		req := resource.UpdateRequest{
+			Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+			Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: planValue},
+			State:  tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+		resp := &resource.UpdateResponse{
+			State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+
+		r.Update(ctx, req, resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+		}
+
+		// Verify update payload carries all updated values
+		if !strings.Contains(capturedPatchBody, `"description":"new-desc"`) {
+			t.Errorf("expected updated description, got: %s", capturedPatchBody)
+		}
+		if !strings.Contains(capturedPatchBody, `"assume_role_arn":"new-arn"`) {
+			t.Errorf("expected updated assume_role_arn, got: %s", capturedPatchBody)
+		}
+		if !strings.Contains(capturedPatchBody, `"assume_role_external_id":"new-ext"`) {
+			t.Errorf("expected updated assume_role_external_id, got: %s", capturedPatchBody)
+		}
+	})
+
+	// =========================================================================
+	// Scenario 2: Attempting to clear each attribute no longer produces perpetual plan drift.
+	// =========================================================================
+	t.Run("Scenario 2: Clearing un-clearable fields is intercepted by plan modifier", func(t *testing.T) {
+		r := &resourceCCKMAWSConnection{}
+		var schemaResp resource.SchemaResponse
+		r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+		// Verify that description, assume_role_arn, and assume_role_external_id all have plan modifiers
+		attrs := []string{"description", "assume_role_arn", "assume_role_external_id"}
+		for _, name := range attrs {
+			attr, ok := schemaResp.Schema.Attributes[name]
+			if !ok {
+				t.Fatalf("attribute %s not found in schema", name)
+			}
+			strAttr, ok := attr.(schema.StringAttribute)
+			if !ok {
+				t.Fatalf("attribute %s is not a StringAttribute", name)
+			}
+			if len(strAttr.PlanModifiers) == 0 {
+				t.Errorf("expected attribute %s to have at least one plan modifier", name)
+			}
+		}
+
+		// Run plan-modifier validation
+		mod := modifiers.UseStateWhenClearingString()
+		stateRaw := tfsdk.State{Raw: tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{}}, map[string]tftypes.Value{})}
+
+		req := planmodifier.StringRequest{
+			State:      stateRaw,
+			StateValue: types.StringValue("prior-val"),
+			PlanValue:  types.StringNull(), // User attempted to clear the value
+		}
+		resp := &planmodifier.StringResponse{PlanValue: types.StringNull()}
+		mod.PlanModifyString(ctx, req, resp)
+
+		if resp.PlanValue.ValueString() != "prior-val" {
+			t.Errorf("expected plan-modifier to substitute prior state value 'prior-val' when user attempts to clear, got: %v", resp.PlanValue)
+		}
+	})
+
+	// =========================================================================
+	// Scenario 3: Out-of-band modifications to those attributes are detected after refresh/plan.
+	// =========================================================================
+	t.Run("Scenario 3: Out-of-band modifications are unconditionally detected in Read()", func(t *testing.T) {
+		const connID = "conn-id-1"
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/"+connID, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Return out-of-band updated values from CM
+			fmt.Fprintf(w, `{
+				"id": %q,
+				"name": "my-conn",
+				"description": "oob-desc",
+				"assume_role_arn": "oob-arn",
+				"assume_role_external_id": "oob-ext"
+			}`, connID)
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := &common.Client{
+			CipherTrustURL: server.URL,
+			HTTPClient:     server.Client(),
+			Log:            hclog.NewNullLogger(),
+		}
+
+		r := &resourceCCKMAWSConnection{client: client}
+		var schemaResp resource.SchemaResponse
+		r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+		baseOverrides := map[string]tftypes.Value{
+			"id":               tftypes.NewValue(tftypes.String, connID),
+			"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+			"is_role_anywhere": tftypes.NewValue(tftypes.Bool, false),
+		}
+
+		// Prior state: old values
+		stateOverrides := map[string]tftypes.Value{}
+		for k, v := range baseOverrides {
+			stateOverrides[k] = v
+		}
+		stateOverrides["description"] = tftypes.NewValue(tftypes.String, "old-desc")
+		stateOverrides["assume_role_arn"] = tftypes.NewValue(tftypes.String, "old-arn")
+		stateOverrides["assume_role_external_id"] = tftypes.NewValue(tftypes.String, "old-ext")
+		stateValue := newAWSConnectionRawValue(ctx, schemaResp, stateOverrides)
+
+		req := resource.ReadRequest{
+			State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+		resp := &resource.ReadResponse{
+			State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+
+		r.Read(ctx, req, resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("unexpected diagnostics in Read(): %v", resp.Diagnostics)
+		}
+
+		var updatedState AWSConnectionModelTFSDK
+		resp.State.Get(ctx, &updatedState)
+
+		// Assert that Read unconditionally updated state to the new out-of-band CM values!
+		if updatedState.Description.ValueString() != "oob-desc" {
+			t.Errorf("expected state to reflect out-of-band description 'oob-desc', got: %s", updatedState.Description.ValueString())
+		}
+		if updatedState.AssumeRoleARN.ValueString() != "oob-arn" {
+			t.Errorf("expected state to reflect out-of-band assume_role_arn 'oob-arn', got: %s", updatedState.AssumeRoleARN.ValueString())
+		}
+		if updatedState.AssumeRoleExternalID.ValueString() != "oob-ext" {
+			t.Errorf("expected state to reflect out-of-band assume_role_external_id 'oob-ext', got: %s", updatedState.AssumeRoleExternalID.ValueString())
+		}
+	})
+
+	// =========================================================================
+	// Scenario 4: products = [] continues to clear products list successfully and remains stable.
+	// =========================================================================
+	t.Run("Scenario 4: products = [] sends literal empty list to CM", func(t *testing.T) {
+		const connID = "conn-id-1"
+		var capturedPatchBody string
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/"+connID, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPatch {
+				body, _ := io.ReadAll(r.Body)
+				capturedPatchBody = string(body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, `{"id":%q}`, connID)
+			}
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := &common.Client{
+			CipherTrustURL: server.URL,
+			HTTPClient:     server.Client(),
+			Log:            hclog.NewNullLogger(),
+		}
+
+		r := &resourceCCKMAWSConnection{client: client}
+		var schemaResp resource.SchemaResponse
+		r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+		baseOverrides := map[string]tftypes.Value{
+			"id":               tftypes.NewValue(tftypes.String, connID),
+			"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+			"is_role_anywhere": tftypes.NewValue(tftypes.Bool, false),
+		}
+
+		// Prior state had 1 product ["cckm"]
+		stateOverrides := map[string]tftypes.Value{}
+		for k, v := range baseOverrides {
+			stateOverrides[k] = v
+		}
+		stateOverrides["products"] = tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{
+			tftypes.NewValue(tftypes.String, "cckm"),
+		})
+		stateValue := newAWSConnectionRawValue(ctx, schemaResp, stateOverrides)
+
+		// Plan has cleared products: []
+		planOverrides := map[string]tftypes.Value{}
+		for k, v := range baseOverrides {
+			planOverrides[k] = v
+		}
+		planOverrides["products"] = tftypes.NewValue(tftypes.List{ElementType: tftypes.String}, []tftypes.Value{})
+		planValue := newAWSConnectionRawValue(ctx, schemaResp, planOverrides)
+
+		req := resource.UpdateRequest{
+			Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+			Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: planValue},
+			State:  tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+		resp := &resource.UpdateResponse{
+			State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		}
+
+		r.Update(ctx, req, resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+		}
+
+		// Assert that the PATCH request payload carries a literal "products":[]
+		if !strings.Contains(capturedPatchBody, `"products":[]`) {
+			t.Errorf("expected request payload to contain 'products':[], got: %s", capturedPatchBody)
+		}
+	})
+}
+
 
