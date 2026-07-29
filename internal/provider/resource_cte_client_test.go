@@ -124,6 +124,50 @@ func TestCTEClientResource_typeImmutable(t *testing.T) {
 	})
 }
 
+// cteClientProtectionModeConfig renders a client whose config asks for a
+// protection mode.
+func cteClientProtectionModeConfig(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  protection_mode          = "CTE RWP"
+}
+`, name)
+}
+
+// TestCTEClientResource_protectionModeReadBack asserts protection_mode is refreshed
+// from the live client instead of being trusted from config. Create never sends
+// protection_mode to CipherTrust Manager, so a client created with
+// protection_mode = "CTE RWP" in its config is really still in CM's default "CTE"
+// mode, and Read must report that.
+func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
+	name := "tfin464-pm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientProtectionModeConfig(name),
+				Check: checkStep(t, "client protection_mode: create",
+					resource.TestCheckResourceAttr(rn, "protection_mode", "CTE RWP"),
+				),
+				// The post-apply refresh replaces the configured value with the live
+				// one, so the follow-up plan is legitimately non-empty here.
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client protection_mode: refresh",
+					resource.TestCheckResourceAttr(rn, "protection_mode", "CTE"),
+				),
+			},
+		},
+	})
+}
+
 // TestCTEClientResource_drift mutates the description out-of-band and asserts the
 // next plan is non-empty.
 func TestCTEClientResource_drift(t *testing.T) {
