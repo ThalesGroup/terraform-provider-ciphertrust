@@ -595,8 +595,8 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	if !plan.Description.IsNull() {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
@@ -942,8 +942,8 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	if !plan.Description.IsNull() {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
@@ -1242,11 +1242,7 @@ func setProfileState(
 	apiResp *CTEProfilesListJSON,
 ) {
 	// Simple scalar fields
-	if apiResp.Description != "" {
-		state.Description = types.StringValue(apiResp.Description)
-	} else {
-		state.Description = types.StringNull()
-	}
+	state.Description = types.StringValue(apiResp.Description)
 
 	state.Name = types.StringValue(apiResp.Name)
 	state.ConciseLogging = types.BoolValue(apiResp.ConciseLogging)
