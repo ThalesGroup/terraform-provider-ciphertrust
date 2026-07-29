@@ -8,6 +8,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // TestCTEClientGroupResource walks a client group through create -> attribute
@@ -122,8 +123,9 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
-// TestCTEClientGroupResource_nameImmutable verifies a name change is rejected.
-func TestCTEClientGroupResource_nameImmutable(t *testing.T) {
+// TestCTEClientGroupResource_nameRequiresReplace verifies a name change is
+// planned as a destroy+create rather than an in-place update (TFIN-489).
+func TestCTEClientGroupResource_nameRequiresReplace(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-imm-" + suffix
 	const rn = "ciphertrust_cte_client_group.cg"
@@ -150,13 +152,20 @@ resource "ciphertrust_cte_client_group" "cg" {
   description  = "Initial create"
 }
 `, cgName),
-				Check: checkStep(t, "client_group immutable: create",
+				Check: checkStep(t, "client_group requires replace: create",
 					resource.TestCheckResourceAttr(rn, "name", cgName),
 				),
 			},
 			{
-				Config:      renamed(cgName + "-renamed"),
-				ExpectError: regexp.MustCompile(`(?i)cannot change client group name|immutable`),
+				Config: renamed(cgName + "-renamed"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "client_group requires replace: rename",
+					resource.TestCheckResourceAttr(rn, "name", cgName+"-renamed"),
+				),
 			},
 		},
 	})

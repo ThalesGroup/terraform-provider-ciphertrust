@@ -66,8 +66,11 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 				},
 			},
 			"name": schema.StringAttribute{
-				Required:    true,
-				Description: "Name of the ClientGroup.",
+				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+				Description: "Name of the ClientGroup. Changing this value forces the client group to be destroyed and recreated.",
 			},
 			"communication_enabled": schema.BoolAttribute{
 				Optional:    true,
