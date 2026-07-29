@@ -78,7 +78,7 @@ output "process_set_name" {
 
 ### Required
 
-- `name` (String) Name of the ProcessSet
+- `name` (String) Name of the ProcessSet. Changing this value forces the process set to be destroyed and recreated.
 
 ### Optional
 
