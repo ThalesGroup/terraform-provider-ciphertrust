@@ -373,3 +373,73 @@ resource "ciphertrust_proxy" "invalid" {
 		},
 	})
 }
+
+// Test_CM_Proxy_SchemelessURLAccepted verifies that schemeless proxy addresses
+// (CM documented "Scenario 3") are accepted at plan time. (TFIN-526)
+func Test_CM_Proxy_SchemelessURLAccepted(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Schemeless with credentials — CM documents this as valid Scenario 3.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy  = "proxy-user:ssl12345@10.171.30.20:3300"
+  https_proxy = "cckmdev-proxy.example.com:443"
+}`,
+				PlanOnly: true,
+				// No ExpectError — plan must succeed (no validator rejection).
+			},
+		},
+	})
+}
+
+// Test_CM_Proxy_UpdateCredentialedProxy verifies that updating http_proxy to a new
+// credentialed URL does not crash with "Provider produced inconsistent result after
+// apply" due to CM's corrupted masked response. (TFIN-527)
+func Test_CM_Proxy_UpdateCredentialedProxy(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with credentialed proxy.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://u:pass1@10.171.30.20:3300"
+}`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://u:pass1@10.171.30.20:3300"),
+				),
+			},
+			// Step 2: Update to a different credentialed URL. CM's masked response
+			// corrupts the scheme/username; the provider must preserve the plan value
+			// to avoid "inconsistent result after apply".
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://proxyuser:p@10.171.30.20:3300"
+}`,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_proxy.test", "http_proxy", "http://proxyuser:p@10.171.30.20:3300"),
+				),
+			},
+			// Step 3: Immediately plan after update — must show no drift.
+			// Validates that preserving the plan value prevents perpetual drift.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://proxyuser:p@10.171.30.20:3300"
+}`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Clear proxy config.
+			{
+				Config:  providerConfig + `resource "ciphertrust_proxy" "test" {}`,
+				Destroy: false,
+			},
+		},
+	})
+}
