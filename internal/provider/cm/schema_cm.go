@@ -1202,7 +1202,7 @@ type CMLogForwardersSyslogParamsJSON struct {
 }
 
 type CMLogForwardersSyslogJSON struct {
-	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"syslog_params"`
+	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"forward_logs"`
 }
 
 type CMLogForwardersJSON struct {
