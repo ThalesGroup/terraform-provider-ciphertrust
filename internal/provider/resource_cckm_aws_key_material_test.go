@@ -703,7 +703,7 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 	})
 }
 
-// TestCckmAWSKeyMaterialMultiRegion tests the full key material lifecycle for a
+// TestCckmAWSKeyMaterialMR tests the full key material lifecycle for a
 // multi-region EXTERNAL key with three replica keys. Each rotation imports material to
 // the primary, propagates it to all replicas, and then activates it. An out-of-band
 // delete of a non-current material entry is repaired by re-apply.
@@ -728,7 +728,7 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 //     rotation history and re-imports it via import-material with EXISTING_KEY_MATERIAL.
 //     rotation_history.#=3 restored.
 //  7. RefreshState - confirm plan is stable.
-func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
+func TestCckmAWSKeyMaterialMROOBDeleteMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1125,7 +1125,7 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 	})
 }
 
-// TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation verifies that the provider
+// TestCckmAWSKeyMaterialMRRepairPendingImportAndRotation verifies that the provider
 // correctly repairs a primary EXTERNAL multi-region key stuck in
 // PENDING_MULTI_REGION_IMPORT_AND_ROTATION state with 3 replica keys.
 //
@@ -1145,7 +1145,7 @@ func TestCckmAWSKeyMaterialMultiRegionOOBDeleteMaterial(t *testing.T) {
 //     Call rotate-material on primary.
 //     Verify rotation_history.#=2 and all keys Enabled.
 //  6. RefreshState - confirm plan stable.
-func TestCckmAWSKeyMaterialRepairMultiRegionPendingImportAndRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialMRRepairPendingImportAndRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
@@ -1460,7 +1460,7 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 	})
 }
 
-// TestCckmAWSKeyMaterialAdoptPendingMRRotation verifies that the provider correctly adopts
+// TestCckmAWSKeyMaterialMRAdoptPendingRotation verifies that the provider correctly adopts
 // key material on the Create path when the material was imported out-of-band to the primary
 // and one of two replicas, leaving the primary in PENDING_MULTI_REGION_IMPORT_AND_ROTATION
 // state (because the second replica is still missing the material).
@@ -1487,7 +1487,7 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 //  3. Verify enabled=true, rotation_history.#=2 (cm_aes_key initial + cm_aes_key2 current),
 //     rotation_history.0.key_material_state=CURRENT.
 //  4. RefreshState confirms plan is stable.
-func TestCckmAWSKeyMaterialAdoptPendingMRRotation(t *testing.T) {
+func TestCckmAWSKeyMaterialMRAdoptPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
