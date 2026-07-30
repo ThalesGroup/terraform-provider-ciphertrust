@@ -954,8 +954,6 @@ resource "ciphertrust_aws_connection" "test" {
 func Test_CM_AWSConnection_ResetToDefault(t *testing.T) {
 	RequireCM(t)
 	name := "tftest-aws-reset-" + uuid.New().String()[:8]
-	var resourceID string
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -965,10 +963,6 @@ func Test_CM_AWSConnection_ResetToDefault(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "cloud_name", "aws-us-gov"),
 					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_sts_regional_endpoints", "regional"),
-					func(s *terraform.State) error {
-						resourceID = s.RootModule().Resources["ciphertrust_aws_connection.test"].Primary.ID
-						return nil
-					},
 				),
 			},
 			// Step 2: Remove cloud_name and aws_sts_regional_endpoints. Provider sends
