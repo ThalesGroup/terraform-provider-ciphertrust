@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -97,6 +98,18 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 			"users": schema.ListNestedAttribute{
 				Description: "List of users to be added to the user set.",
 				Optional:    true,
+				Default: listdefault.StaticValue(
+					types.ListValueMust(types.ObjectType{
+						AttrTypes: map[string]attr.Type{
+							"gid":       types.Int64Type,
+							"gname":     types.StringType,
+							"os_domain": types.StringType,
+							"uid":       types.Int64Type,
+							"uname":     types.StringType,
+						},
+					}, []attr.Value{}),
+				),
+				Computed:     true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"gid": schema.Int64Attribute{
@@ -147,7 +160,7 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload["description"] = common.TrimString(plan.Description.String())
 	}
-	var usersJSONArr []CTEUserJSON
+	usersJSONArr := []CTEUserJSON{}
 	for _, user := range plan.Users {
 		var userJSON CTEUserJSON
 
@@ -175,11 +188,15 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 	}
 	payload["users"] = usersJSONArr
 
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	if len(plan.Labels.Elements()) > 0 {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload["labels"] = labelsPayload
+	} else {
+		payload["labels"] = map[string]interface{}{}
 	}
-	payload["labels"] = labelsPayload
 
 	payloadJSON, _ := json.Marshal(payload)
 
@@ -287,7 +304,7 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 	} else {
 		payload["description"] = ""
 	}
-	var usersJSONArr []CTEUserJSON
+	usersJSONArr := []CTEUserJSON{}
 	for _, user := range plan.Users {
 		var userJSON CTEUserJSON
 
@@ -422,7 +439,7 @@ func setCTEUserSetState(
 	state.Labels = labelsValue
 
 	// Users
-	var users []CTEUserTFSDK
+	users := []CTEUserTFSDK{}
 	for _, user := range apiResp.Users {
 		userObj := CTEUserTFSDK{
 			OSDomain: types.StringValue(user.OSDomain),

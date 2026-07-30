@@ -279,7 +279,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	//
 	// Restoring the prior state value prevents ImmutableString() from seeing a
 	// spurious "" → <license> transition on every plan/refresh cycle after the
-	// initial create (TFIN-430 fix).
+	// initial create.
 	//
 	// During terraform destroy, Terraform computes the plan value for a Required
 	// attribute as the current state value (no config change is being applied).
@@ -334,7 +334,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	// Note: `feature` is present in the Swagger Licenses definition but absent from
 	// CMLicenseTFSDK. CM-side changes to feature are invisible to drift detection.
-	// Pre-existing gap; out of scope for TFIN-430.
+	// Pre-existing gap; out of scope here.
 
 	// Set refreshed state.
 	diags = resp.State.Set(ctx, &state)

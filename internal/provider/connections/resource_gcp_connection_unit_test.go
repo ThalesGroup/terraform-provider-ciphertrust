@@ -163,8 +163,8 @@ func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 // Test_CM_GCPRead_OOBDelete_GracefulStateRemoval is an end-to-end unit test that
 // proves Read() silently removes the resource from state — instead of returning an
 // error diagnostic — when CM responds with 404.  This is the out-of-band deletion
-// scenario described in TFIN-326: after an OOB delete the next terraform plan must
-// propose a clean +create rather than hard-erroring.
+// scenario: after an OOB delete the next terraform plan must propose a clean
+// +create rather than hard-erroring.
 //
 // The test uses net/http/httptest as a drop-in fake CM so no live endpoint is needed.
 func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
