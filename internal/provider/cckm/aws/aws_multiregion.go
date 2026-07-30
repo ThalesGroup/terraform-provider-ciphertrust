@@ -111,36 +111,33 @@ func replicateKeyCommon(
 		return initialReplicaKeyResponse
 	}
 
-	// For EXTERNAL/BYOK keys, CCKM pre-sets key_state to Enabled in the DB before the background
-	// goroutine has done its first real AWS DescribeKey poll.  That goroutine overwrites the state
-	// to PendingImport once it gets the real AWS status.  Waiting for PendingImport ensures we are
-	// past the premature Enabled and that CCKM has started the real import work, so subsequent
-	// calls to waitForReplicatedKeyIsEnabled see genuine state transitions.
-	if origin == "EXTERNAL" {
-		var pendingDiags diag.Diagnostics
-		waitForReplicatedKeyPendingImport(ctx, id, client, replicaKeyID, &pendingDiags)
-		// Only emit as warnings - if it times out we still attempt the Enabled wait.
-		for _, d := range pendingDiags {
-			diags.AddWarning(d.Summary(), d.Detail())
-		}
-	}
-
-	waitForKeyEnabledDiags := diag.Diagnostics{}
-	var enabledDiags diag.Diagnostics
-	waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &enabledDiags)
-	for _, d := range waitForKeyEnabledDiags {
-		diags.AddWarning(d.Summary(), d.Detail())
-	}
-
 	sourceKeyID := gjson.Get(primaryKeyJSON, "local_key_id").String()
 	sourceKeyTier := gjson.Get(primaryKeyJSON, "source_key_tier").String()
-	if sourceKeyID != "" {
-		// Make sure record is written
+
+	if origin == "EXTERNAL" && sourceKeyID != "" {
+		// For BYOK replicas, import_state == IMPORTED is the definitive completion signal:
+		// CCKM always uses the primary's existing material, and AWS transitions the key to
+		// Enabled only after accepting that material. KeyState == Enabled is therefore
+		// implied by IMPORTED - no need to poll it separately.
 		var historyDiags diag.Diagnostics
 		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
-		if enabledDiags.WarningsCount() > 0 {
-			// And key really is enabled
-			waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, diags)
+		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
+		for _, d := range historyDiags {
+			diags.AddWarning(d.Summary(), d.Detail())
+		}
+	} else {
+		// For native (AWS_KMS) replica keys there is no material import; just wait for Enabled.
+		var enabledDiags diag.Diagnostics
+		waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &enabledDiags)
+		for _, d := range enabledDiags {
+			diags.AddWarning(d.Summary(), d.Detail())
+		}
+		if sourceKeyID != "" {
+			var historyDiags diag.Diagnostics
+			waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
+			for _, d := range historyDiags {
+				diags.AddWarning(d.Summary(), d.Detail())
+			}
 		}
 	}
 
@@ -242,55 +239,6 @@ func waitForReplication(ctx context.Context, id string, client *common.Client, r
 	diags.AddWarning(details, "")
 	client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
 	return response
-}
-
-// waitForReplicatedKeyPendingImport polls an EXTERNAL/BYOK replica key until its state reaches
-// "PendingImport" or a timeout is reached.
-//
-// CCKM pre-sets key_state to "Enabled" in its DB before the background import goroutine runs.
-// That goroutine overwrites the state to "PendingImport" once it receives the real AWS DescribeKey
-// response.  By waiting here we ensure the goroutine has started genuine import work before
-// waitForReplicatedKeyIsEnabled begins polling for the final "Enabled" state.
-//
-// If the timeout expires (key never left "Enabled") a warning is added and the caller continues
-// to waitForReplicatedKeyIsEnabled anyway.
-func waitForReplicatedKeyPendingImport(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) {
-	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplicatedKeyPendingImport][" + id + "]")
-	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplicatedKeyPendingImport][" + id + "]")
-
-	// time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second) // commented out to observe initial states
-	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
-	defer ticker.Stop()
-	// 30 s is generous: the CCKM background goroutine's first AWS poll runs within a few seconds.
-	deadline := time.Now().Add(30 * time.Second)
-	loop := 0
-	for range ticker.C {
-		if time.Now().After(deadline) {
-			break
-		}
-		response, err := client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
-		if err != nil {
-			msg := "Error waiting for PendingImport state on replica key."
-			details := utils.ApiError(msg, map[string]interface{}{
-				"error":          err.Error(),
-				"replica_key_id": replicaKeyID,
-			})
-			client.Log.Error(details)
-			diags.AddWarning(details, "")
-			return
-		}
-		keyState := gjson.Get(response, "aws_param.KeyState").String()
-		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] loop: %d Key state: %s", loop, keyState))
-		if keyState == "PendingImport" {
-			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] resolved loop: %d key is PendingImport", loop))
-			return
-		}
-		loop++
-	}
-	msg := "[aws_multiregion.go -> waitForReplicatedKeyPendingImport] TIMED OUT waiting for PendingImport state; proceeding anyway."
-	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
-	client.Log.Warn(details)
-	diags.AddWarning(details, "")
 }
 
 // waitForReplicatedKeyIsEnabled polls the replica key until its state reaches "Enabled" or a timeout is
