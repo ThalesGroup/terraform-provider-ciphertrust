@@ -366,9 +366,9 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy_attachments.go -> Update]")
-	resp.Diagnostics.AddError(
-		"Update Not Supported",
-		"ciphertrust_policy_attachment does not support updates. Delete and recreate this resource to change any field.",
+	resp.Diagnostics.AddWarning(
+		"Cannot update a CM policy attachment.",
+		"The policy attachment cannot be updated once set.",
 	)
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Update]")
 }

@@ -27,6 +27,13 @@ import (
 
 const notFoundError = "status: 404"
 
+// awsDefaultCloudName and awsDefaultSTSEndpoints are the documented CM server defaults.
+// When the user removes cloud_name or aws_sts_regional_endpoints from their Terraform config,
+// the provider sends the explicit default value in the PATCH so CM resets the field.
+// aws_region has no universal default and uses UseStateWhenClearingString() instead.
+const awsDefaultCloudName = "aws"
+const awsDefaultSTSEndpoints = "legacy"
+
 var (
 	_ resource.Resource              = &resourceCCKMAWSConnection{}
 	_ resource.ResourceWithConfigure = &resourceCCKMAWSConnection{}
@@ -98,14 +105,35 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					modifiers.UseStateWhenClearingString(),
 				},
 			},
+			// aws_region: Optional+Computed. CM supports changing between valid regions but
+			// has no mechanism to unset the value once configured (omission, null, and "" are
+			// all treated as no-change by the PATCH endpoint). UseStateWhenClearingString()
+			// preserves the existing value when the user removes this attribute from config
+			// and emits a warning that clearing is unsupported. Updates between valid regions
+			// are fully supported (CM accepts the new value).
 			"aws_region": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given." +
 					"Default values are: \n" +
 					"for aws, default region will be \"us-east-1\" \n" +
 					"for aws-us-gov, default region will be \"us-gov-east-1\" \n" +
-					"for aws-cn, default region will be \"cn-north-1\"",
+					"for aws-cn, default region will be \"cn-north-1\"\n" +
+					"Note: once set, this field cannot be cleared back to unset via Terraform " +
+					"(the CM API provides no reset mechanism), but it can be updated to any valid region.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
+			// last_connection_ok/error/at: retain UseStateForUnknown() — these are Computed-only
+			// status fields. Without the modifier the plan value is Unknown after an update,
+			// causing "provider produced inconsistent result after apply" when CM hasn't run
+			// a connectivity test yet (fields absent from response → null, but plan expects
+			// the prior state value). UseStateForUnknown() preserves the prior value in the
+			// plan, and the post-PATCH r.Exists() hydration overwrites it with the real value.
+			// aws_sts_regional_endpoints: CM default is "legacy". When removed from config,
+			// the provider sends the explicit default value in the PATCH so CM resets the field.
+			// This differs from aws_region which has no universal default.
 			"aws_sts_regional_endpoints": schema.StringAttribute{
 				Optional: true,
 				Description: "By default, AWS Security Token Service (AWS STS) is available as a global service, and all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints instead of the global endpoint to reduce latency, build in redundancy, and increase session token validity. valid values are: \n" +
@@ -115,6 +143,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					stringvalidator.OneOf("legacy", "regional"),
 				},
 			},
+			// cloud_name: CM default is "aws". When removed from config, the provider sends
+			// the explicit default value in the PATCH so CM resets the field. This differs
+			// from aws_region which has no universal default.
 			"cloud_name": schema.StringAttribute{
 				Optional: true,
 				Description: "Name of the cloud. Options are: \n" +
@@ -286,11 +317,18 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
+	// aws_sts_regional_endpoints: send explicit default when cleared so CM resets the field.
+	// CM treats omission and empty string as no-op; the explicit default is the only reset mechanism.
 	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
 		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
+	} else if plan.AWSSTSRegionalEndpoints.IsNull() {
+		payload.AWSSTSRegionalEndpoints = awsDefaultSTSEndpoints
 	}
+	// cloud_name: same pattern — send explicit default when cleared.
 	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
 		payload.CloudName = plan.CloudName.ValueString()
+	} else if plan.CloudName.IsNull() {
+		payload.CloudName = awsDefaultCloudName
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -434,6 +472,17 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	// aws_region is Optional+Computed (Computed added for UseStateWhenClearingString()).
+	// When the user omits aws_region from config, plan holds Unknown; resolve to a known
+	// value from the CREATE response to prevent "provider returned invalid result object".
+	if plan.AWSRegion.IsUnknown() {
+		if r := gjson.Get(response, "aws_region"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+			plan.AWSRegion = types.StringValue(r.String())
+		} else {
+			plan.AWSRegion = types.StringNull()
+		}
+	}
+
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
@@ -532,26 +581,37 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	// (e.g. cloud_name="aws", aws_sts_regional_endpoints="legacy", aws_region="us-east-1")
 	// even when the user did not configure them. Guard with IsNull to prevent perpetual
 	// drift for users who never set these fields (same pattern as is_role_anywhere).
-	if !state.AWSRegion.IsNull() {
-		if r := gjson.Get(response, "aws_region"); r.Exists() {
-			state.AWSRegion = types.StringValue(r.String())
-		} else {
-			state.AWSRegion = types.StringNull()
-		}
+	// aws_region: UseStateWhenClearingString() handles the "clear" case at plan time.
+	// Read() unconditionally observes the live CM value so drift is always visible.
+	if r := gjson.Get(response, "aws_region"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		state.AWSRegion = types.StringValue(r.String())
+	} else {
+		state.AWSRegion = types.StringNull()
 	}
-	if !state.AWSSTSRegionalEndpoints.IsNull() {
-		if r := gjson.Get(response, "aws_sts_regional_endpoints"); r.Exists() {
-			state.AWSSTSRegionalEndpoints = types.StringValue(r.String())
-		} else {
+	// aws_sts_regional_endpoints: !IsNull() guard removed. Default-suppression prevents
+	// false drift for connections that never configured this field (CM always returns
+	// "legacy" as a server default). When state was previously configured (non-null),
+	// the live CM value is stored unconditionally so drift is visible.
+	if r := gjson.Get(response, "aws_sts_regional_endpoints"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		apiVal := r.String()
+		if apiVal == awsDefaultSTSEndpoints && state.AWSSTSRegionalEndpoints.IsNull() {
 			state.AWSSTSRegionalEndpoints = types.StringNull()
-		}
-	}
-	if !state.CloudName.IsNull() {
-		if r := gjson.Get(response, "cloud_name"); r.Exists() {
-			state.CloudName = types.StringValue(r.String())
 		} else {
-			state.CloudName = types.StringNull()
+			state.AWSSTSRegionalEndpoints = types.StringValue(apiVal)
 		}
+	} else {
+		state.AWSSTSRegionalEndpoints = types.StringNull()
+	}
+	// cloud_name: same default-suppression pattern. CM default is "aws".
+	if r := gjson.Get(response, "cloud_name"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		apiVal := r.String()
+		if apiVal == awsDefaultCloudName && state.CloudName.IsNull() {
+			state.CloudName = types.StringNull()
+		} else {
+			state.CloudName = types.StringValue(apiVal)
+		}
+	} else {
+		state.CloudName = types.StringNull()
 	}
 
 	// is_role_anywhere: CM always returns this field (default false).
@@ -697,11 +757,18 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
 		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
+	// aws_sts_regional_endpoints: send explicit default when cleared so CM resets the field.
+	// CM treats omission and empty string as no-op; the explicit default is the only reset mechanism.
 	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
 		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
+	} else if plan.AWSSTSRegionalEndpoints.IsNull() {
+		payload.AWSSTSRegionalEndpoints = awsDefaultSTSEndpoints
 	}
+	// cloud_name: same pattern — send explicit default when cleared.
 	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
 		payload.CloudName = plan.CloudName.ValueString()
+	} else if plan.CloudName.IsNull() {
+		payload.CloudName = awsDefaultCloudName
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -797,10 +864,28 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.Service = types.StringValue(gjson.Get(readResponse, "service").String())
 	plan.Category = types.StringValue(gjson.Get(readResponse, "category").String())
 	plan.ResourceURL = types.StringValue(gjson.Get(readResponse, "resource_url").String())
-	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent.
+	// UseStateForUnknown() in schema ensures these remain stable in the plan.
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
+	// aws_region: retain plan value — UseStateWhenClearingString() already handled clearing
+	// at plan time; the post-PATCH value reflects the user's intent (either new region or
+	// preserved old region). No CM read-back override needed.
+	// cloud_name: when plan was null (user cleared), we sent the default to CM. Set plan to
+	// null (matching config intent) rather than reading "aws" back from CM — avoids
+	// "Provider produced inconsistent result" since plan was null but CM returns "aws".
+	if plan.CloudName.IsNull() {
+		// already null — keep it; the default was sent to CM successfully
+	} else if r := gjson.Get(readResponse, "cloud_name"); r.Exists() && r.Type != gjson.Null {
+		plan.CloudName = types.StringValue(r.String())
+	}
+	// aws_sts_regional_endpoints: same pattern as cloud_name.
+	if plan.AWSSTSRegionalEndpoints.IsNull() {
+		// already null — keep it; the default was sent to CM successfully
+	} else if r := gjson.Get(readResponse, "aws_sts_regional_endpoints"); r.Exists() && r.Type != gjson.Null {
+		plan.AWSSTSRegionalEndpoints = types.StringValue(r.String())
+	}
 
 	if plan.Description.IsUnknown() {
 		if r := gjson.Get(readResponse, "description"); r.Exists() && r.Type != gjson.Null {
