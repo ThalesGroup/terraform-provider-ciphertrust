@@ -300,16 +300,8 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Check if there are actual changes - if not, skip the update
-	if plan.Transport.Equal(state.Transport) &&
-		plan.CACert.Equal(state.CACert) &&
-		plan.MessageFormat.Equal(state.MessageFormat) {
-		// No changes, just set the state and return
-		diags = resp.State.Set(ctx, plan)
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
+	// host is Required; always include it so CM persists the correct value.
+	payload.Host = plan.Host.ValueString()
 	payload.Transport = plan.Transport.ValueString()
 
 	// 3-Way State-Transition Comparison for ca_cert:
