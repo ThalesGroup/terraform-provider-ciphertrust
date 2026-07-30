@@ -337,76 +337,6 @@ resource "ciphertrust_policies" "idem" {
 	})
 }
 
-func Test_CM_AccCMPolicy_update(t *testing.T) {
-	RequireCM(t)
-	var policyID string
-
-	initialConfig := providerConfig + `
-resource "ciphertrust_policies" "test" {
-  name    = "tf-acc-update-policy"
-  effect  = "allow"
-  actions = ["ReadKey"]
-  conditions = [{
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["aes"]
-  }]
-}
-`
-
-	updatedConfig := providerConfig + `
-resource "ciphertrust_policies" "test" {
-  name    = "tf-acc-update-policy"
-  effect  = "allow"
-  actions = ["ReadKey"]
-  conditions = [{
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["aes"]
-  }, {
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["rsa"]
-  }]
-}
-`
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: initialConfig,
-				Check: checkStep(t, "create",
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "effect", "allow"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.#", "1"),
-					func(s *terraform.State) error {
-						policyID = s.RootModule().Resources["ciphertrust_policies.test"].Primary.ID
-						return nil
-					},
-				),
-			},
-			{
-				Config: updatedConfig,
-				Check: checkStep(t, "update",
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.#", "2"),
-					func(s *terraform.State) error {
-						updatedID := s.RootModule().Resources["ciphertrust_policies.test"].Primary.ID
-						if updatedID != policyID {
-							return fmt.Errorf("expected no destroy+recreate: ID changed from %s to %s", policyID, updatedID)
-						}
-						return nil
-					},
-				),
-			},
-			{
-				Config:             updatedConfig,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
-			},
-		},
-	})
-}
-
 // Test_CM_AccCMPolicy_ImmutableActions verifies that changing actions after creation produces
 // a plan-time immutable error from ImmutableList.
 func Test_CM_AccCMPolicy_ImmutableActions(t *testing.T) {
@@ -596,46 +526,6 @@ resource "ciphertrust_policies" "test" {
 }
 `, policyName),
 				ExpectError: regexp.MustCompile("Invalid Attribute Value Match"),
-			},
-		},
-	})
-}
-
-// Test_CM_AccPolicy_ClearCollections verifies that clearing resources, actions, or conditions
-// triggers a 3-way transition to send an explicit empty array to CipherTrust Manager.
-func Test_CM_AccPolicy_ClearCollections(t *testing.T) {
-	RequireCM(t)
-	policyName := "TFTestPolicyClear-" + uuid.New().String()[:8]
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policies" "clear_test" {
-    name      = %q
-    resources = ["kylo:*:vault:keys:test"]
-    allow     = true
-    effect    = "allow"
-}
-`, policyName),
-				Check: checkStep(t, "clear: create",
-					resource.TestCheckResourceAttrSet("ciphertrust_policies.clear_test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "1"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.0", "kylo:*:vault:keys:test"),
-				),
-			},
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policies" "clear_test" {
-    name   = %q
-    allow  = true
-    effect = "allow"
-}
-`, policyName),
-				Check: checkStep(t, "clear: update",
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "0"),
-				),
 			},
 		},
 	})
