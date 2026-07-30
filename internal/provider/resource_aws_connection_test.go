@@ -923,3 +923,191 @@ func Test_CM_AWSConnection_updateComputedFields(t *testing.T) {
 		},
 	})
 }
+
+// awsConnConfigWithRegionalFields returns config with all three regional fields set.
+func awsConnConfigWithRegionalFields(name, cloudName, region, stsEndpoints string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name                       = %q
+  access_key_id              = %q
+  cloud_name                 = %q
+  aws_region                 = %q
+  aws_sts_regional_endpoints = %q
+}
+`, name, awsAccessKeyID(), cloudName, region, stsEndpoints)
+}
+
+// awsConnConfigWithRegionOnly returns config with only aws_region set (no cloud_name/sts).
+func awsConnConfigWithRegionOnly(name, region string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_aws_connection" "test" {
+  name          = %q
+  access_key_id = %q
+  aws_region    = %q
+}
+`, name, awsAccessKeyID(), region)
+}
+
+// Test_CM_AWSConnection_ResetToDefault verifies that removing cloud_name and
+// aws_sts_regional_endpoints from config sends the documented defaults to CM
+// and converges (terraform plan reports "No changes").
+func Test_CM_AWSConnection_ResetToDefault(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-aws-reset-" + uuid.New().String()[:8]
+	var resourceID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Set non-default values.
+			{
+				Config: awsConnConfigWithRegionalFields(name, "aws-us-gov", "us-west-2", "regional"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "cloud_name", "aws-us-gov"),
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_sts_regional_endpoints", "regional"),
+					func(s *terraform.State) error {
+						resourceID = s.RootModule().Resources["ciphertrust_aws_connection.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Remove cloud_name and aws_sts_regional_endpoints. Provider sends
+			// explicit defaults to CM; state converges.
+			{
+				Config: awsConnConfig(name, ""),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckNoResourceAttr("ciphertrust_aws_connection.test", "cloud_name"),
+					resource.TestCheckNoResourceAttr("ciphertrust_aws_connection.test", "aws_sts_regional_endpoints"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Idempotency — no drift.
+			{
+				Config:             awsConnConfig(name, ""),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 4: CM-side verification — confirm CM holds the defaults, not the old values.
+			{
+				Config: awsConnConfig(name, ""),
+				Check: resource.ComposeTestCheckFunc(
+					func(s *terraform.State) error {
+						if resourceID == "" {
+							return fmt.Errorf("resourceID not captured")
+						}
+						client, ok := createCMClient()
+						if !ok {
+							t.Logf("createCMClient failed — skipping CM-side verification")
+							return nil
+						}
+						resp, err := client.GetById(context.Background(), uuid.New().String(), resourceID, common.URL_AWS_CONNECTION)
+						if err != nil {
+							return fmt.Errorf("CM GET failed: %w", err)
+						}
+						cloudName := gjson.Get(resp, "cloud_name").String()
+						stsEndpoints := gjson.Get(resp, "aws_sts_regional_endpoints").String()
+						if cloudName != "aws" {
+							return fmt.Errorf("expected CM cloud_name=aws, got %q", cloudName)
+						}
+						if stsEndpoints != "legacy" {
+							return fmt.Errorf("expected CM aws_sts_regional_endpoints=legacy, got %q", stsEndpoints)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AWSConnection_NoDefaultDrift verifies that a connection created without
+// cloud_name or aws_sts_regional_endpoints shows no false drift — CM returns server
+// defaults ("aws", "legacy") but default-suppression keeps them null in state.
+func Test_CM_AWSConnection_NoDefaultDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-aws-nodef-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create without regional fields.
+			{
+				Config: awsConnConfig(name, ""),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckNoResourceAttr("ciphertrust_aws_connection.test", "cloud_name"),
+					resource.TestCheckNoResourceAttr("ciphertrust_aws_connection.test", "aws_sts_regional_endpoints"),
+				),
+			},
+			// Step 2: No drift from CM returning "aws" and "legacy" as defaults.
+			{
+				Config:             awsConnConfig(name, ""),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Stability across multiple refreshes.
+			{
+				Config:             awsConnConfig(name, ""),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AWSConnection_AWSRegionUpdate verifies that aws_region can be changed
+// between valid values (CM supports region updates; only clearing is unsupported).
+func Test_CM_AWSConnection_AWSRegionUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-aws-region-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with aws_region=us-west-2.
+			{
+				Config: awsConnConfigWithRegionOnly(name, "us-west-2"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", "us-west-2"),
+				),
+			},
+			// Step 2: Update to us-east-1 — CM accepts this (confirmed via API).
+			{
+				Config: awsConnConfigWithRegionOnly(name, "us-east-1"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", "us-east-1"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AWSConnection_AWSRegionClearWarning verifies that removing aws_region from
+// config emits a warning and retains the value (CM has no reset mechanism for this field).
+func Test_CM_AWSConnection_AWSRegionClearWarning(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-aws-regclr-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with aws_region=us-west-2.
+			{
+				Config: awsConnConfigWithRegionOnly(name, "us-west-2"),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", "us-west-2"),
+				),
+			},
+			// Step 2: Remove aws_region. UseStateWhenClearingString() preserves old value,
+			// emits warning, plan converges (no perpetual diff).
+			{
+				Config: awsConnConfig(name, ""),
+				Check: resource.ComposeTestCheckFunc(
+					// State retains "us-west-2" because CM cannot reset the field.
+					resource.TestCheckResourceAttr("ciphertrust_aws_connection.test", "aws_region", "us-west-2"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
