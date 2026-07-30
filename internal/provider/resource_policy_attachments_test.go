@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -108,16 +109,20 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 	})
 }
 
-func Test_CM_AccCMPolicyAttachment_drift(t *testing.T) {
+// Test_CM_AccCMPolicyAttachment_ComputedActionsResources verifies that actions/resources on
+// ciphertrust_policy_attachments are derived from the linked policy (not independently
+// settable), and that re-applying the same config produces no drift.
+func Test_CM_AccCMPolicyAttachment_ComputedActionsResources(t *testing.T) {
 	RequireCM(t)
-	policyName := fmt.Sprintf("tf-acc-attach-drift-pol-%d", time.Now().Unix())
+	policyName := fmt.Sprintf("tf-acc-attach-computed-pol-%d", time.Now().Unix())
 
-	initialConfig := providerConfig + fmt.Sprintf(`
+	config := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_policies" "test" {
-  name    = %q
-  actions = ["CreateKey"]
-  allow   = true
-  effect  = "allow"
+  name      = %q
+  actions   = ["CreateKey"]
+  resources = ["kylo://"]
+  allow     = true
+  effect    = "allow"
 }
 
 resource "ciphertrust_policy_attachments" "test" {
@@ -126,8 +131,6 @@ resource "ciphertrust_policy_attachments" "test" {
     acct = "pers-jsmith"
     user = "apitestuser"
   }
-  actions    = ["CreateKey"]
-  resources  = ["kylo://"]
   depends_on = [ciphertrust_policies.test]
 }
 `, policyName, policyName)
@@ -136,16 +139,35 @@ resource "ciphertrust_policy_attachments" "test" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: initialConfig,
+				Config: config,
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "actions.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "actions.0", "CreateKey"),
 					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "resources.#", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_policy_attachments.test", "resources.0", "kylo://"),
 				),
 			},
 			{
-				// ciphertrust_policy_attachments has no PATCH endpoint so OOB updates cannot
-				// be applied. Instead, verify that changing 'actions' in Terraform config
-				// triggers ImmutableList() at plan time — no API call is made.
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicyAttachment_ActionsNotConfigurable verifies that setting actions or
+// resources directly on ciphertrust_policy_attachments is rejected at plan time with a
+// Read-Only Attribute error, instead of being silently discarded by CM and causing a
+// "provider produced inconsistent result after apply" crash.
+func Test_CM_AccCMPolicyAttachment_ActionsNotConfigurable(t *testing.T) {
+	RequireCM(t)
+	policyName := fmt.Sprintf("tf-acc-attach-notcfg-pol-%d", time.Now().Unix())
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_policies" "test" {
   name    = %q
@@ -160,13 +182,11 @@ resource "ciphertrust_policy_attachments" "test" {
     acct = "pers-jsmith"
     user = "apitestuser"
   }
-  actions    = ["CreateKey", "DeleteKey"]
-  resources  = ["kylo://"]
+  actions    = ["CreateKey"]
   depends_on = [ciphertrust_policies.test]
 }
 `, policyName, policyName),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectError: regexp.MustCompile(`(?i)read-only attribute`),
 			},
 		},
 	})
@@ -401,10 +421,10 @@ resource "ciphertrust_policy_attachments" "test" {
 	})
 }
 
-// Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull verifies that adding actions
-// to an attachment where it was null in prior state fires the ImmutableList modifier at plan
-// time after the IsNull→IsUnknown fix.
-func Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *testing.T) {
+// Test_CM_AccCMPolicyAttachment_ResourcesNotConfigurable verifies that setting resources
+// directly on ciphertrust_policy_attachments is rejected at plan time with a Read-Only
+// Attribute error, same as actions.
+func Test_CM_AccCMPolicyAttachment_ResourcesNotConfigurable(t *testing.T) {
 	RequireCM(t)
 
 	policyID := os.Getenv("CM_POLICY_ID")
@@ -413,34 +433,18 @@ func Test_CM_CipherTrust_PolicyAttachment_ImmutableActions_NullToNonNull(t *test
 		t.Skip("Skipping: CM_POLICY_ID and CM_PRINCIPAL_USER must be set")
 	}
 
-	step1Config := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policy_attachments" "test_actions" {
-  policy             = %q
-  principal_selector = { user = %q }
-}
-`, policyID, principalUser)
-
-	step2Config := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policy_attachments" "test_actions" {
-  policy             = %q
-  principal_selector = { user = %q }
-  actions            = ["CreateKey"]
-}
-`, policyID, principalUser)
-
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: step1Config,
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrSet("ciphertrust_policy_attachments.test_actions", "id"),
-				),
-			},
-			{
-				Config:             step2Config,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test_resources" {
+  policy             = %q
+  principal_selector = { user = %q }
+  resources          = ["kylo://"]
+}
+`, policyID, principalUser),
+				ExpectError: regexp.MustCompile(`(?i)read-only attribute`),
 			},
 		},
 	})
