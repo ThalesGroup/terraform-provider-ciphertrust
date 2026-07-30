@@ -115,7 +115,7 @@ data "ciphertrust_cm_tokens_list" "test" {}
 // an out-of-band deletion: after the token is deleted outside Terraform, the next
 // apply no longer surfaces that token in the data source list.
 func Test_CM_AccDataSourceCMRegTokensList_staleData(t *testing.T) {
-	t.Skip("pre-existing failure unrelated to TFIN-371 — tracked separately")
+	t.Skip("pre-existing failure unrelated to this change — tracked separately")
 	RequireCM(t)
 	var tokenID string
 

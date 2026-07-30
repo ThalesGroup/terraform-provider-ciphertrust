@@ -265,8 +265,8 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	// TFIN-415: Hydrate unconditionally — remove the !IsNull() guard on state.
-	// Without this guard, out-of-band changes (external PATCH) and CM-side no-ops
+	// Hydrate unconditionally — do not gate this on an !IsNull() check of state.
+	// Without unconditional hydration, out-of-band changes (external PATCH) and CM-side no-ops
 	// on TF-driven "clear" attempts are both visible on the next plan/refresh.
 	// r.Type != gjson.Null guards against explicit JSON null in the response body.
 	if r := gjson.Get(response, "client_management_profile_id"); r.Exists() && r.Type != gjson.Null {
@@ -387,11 +387,11 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 		certDur := plan.CertDuration.ValueInt64()
 		payload.CertDuration = &certDur
 	}
-	// TFIN-415: Always include client_management_profile_id in the PATCH body.
+	// Always include client_management_profile_id in the PATCH body.
 	// When the user removes the field from config (plan value is null/empty), send ""
-	// so CM receives an explicit clear attempt. CM-side behaviour note: as of the
-	// ticket investigation, CM does not honour "" as a clear for this field (the value
-	// is retained server-side). The subsequent Read() will hydrate the CM-held value
+	// so CM receives an explicit clear attempt. CM-side behaviour note: CM does not
+	// honour "" as a clear for this field (the value is retained server-side).
+	// The subsequent Read() will hydrate the CM-held value
 	// into state, surfacing the CM-side retention as drift on the next plan.
 	// This is the correct Terraform behaviour: state reflects CM reality, not config intent.
 	cmpID := plan.ClientManagementProfileID.ValueString()

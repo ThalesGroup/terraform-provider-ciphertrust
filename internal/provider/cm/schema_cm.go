@@ -639,7 +639,7 @@ type TLSCiphersJSON struct {
 // CMInterfaceJSON is the JSON payload for CM interface create/update API calls.
 // Meta, TrustedCAs, LocalAutogenAttributes, and Certificate are pointer types so that
 // encoding/json omitempty correctly suppresses them when nil — non-pointer structs are
-// never omitted by omitempty even when zero-valued (TFIN-429).
+// never omitted by omitempty even when zero-valued.
 type CMInterfaceJSON struct {
 	ID                      string                           `json:"id,omitempty"`
 	Port                    int64                            `json:"port"`

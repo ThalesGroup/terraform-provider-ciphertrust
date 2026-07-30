@@ -1454,7 +1454,7 @@ resource "ciphertrust_cm_key" "test" {
 }
 
 // Test_CM_CMKey_AlgorithmKnownAfterApply verifies that algorithm and key_size are concrete
-// known values in state after apply (not "known after apply"). Catches TFIN-382.
+// known values in state after apply, not "known after apply".
 func Test_CM_CMKey_AlgorithmKnownAfterApply(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -1489,7 +1489,7 @@ resource "ciphertrust_cm_key" "test" {
 }
 
 // Test_CM_CMKey_EmptyMaterialHydration verifies that empty_material = true is preserved
-// in state after apply and that a second plan produces no diff. Catches TFIN-383.
+// in state after apply and that a second plan produces no diff.
 func Test_CM_CMKey_EmptyMaterialHydration(t *testing.T) {
 	RequireCM(t)
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
@@ -1521,9 +1521,9 @@ resource "ciphertrust_cm_key" "test" {
 }
 
 // Test_CM_CMKey_MetaOwnerIdConvergence verifies meta.owner_id lifecycle and documents
-// the known CM PATCH-merge limitation (TFIN-386).
+// the known CM PATCH-merge limitation.
 //
-// DEVIATION from TFIN-400 req #7: CM PATCH-merge retains meta.ownerId server-side after
+// DEVIATION: CM PATCH-merge retains meta.ownerId server-side after
 // a PATCH with meta omitted. Read() hydrates meta.ownerId unconditionally when the server
 // returns it, creating a permanent diff between nil-config and non-nil-state.
 // Step 2 is PlanOnly + ExpectNonEmptyPlan:true to document this limitation without applying.
@@ -1554,7 +1554,7 @@ resource "ciphertrust_cm_key" "test" {
 				),
 			},
 			{
-				// DEVIATION from TFIN-400 req #7: CM PATCH-merge prevents meta convergence.
+				// DEVIATION: CM PATCH-merge prevents meta convergence.
 				// After clearing meta from config, server still returns meta.ownerId so Read()
 				// produces a diff. Document as known limitation: PlanOnly+ExpectNonEmptyPlan:true.
 				Config: providerConfig + fmt.Sprintf(`
@@ -1609,7 +1609,7 @@ resource "ciphertrust_cm_key" "test" {
 }
 
 // Test_CM_CMKey_DescriptionDrift verifies that an out-of-band description change is
-// detected as drift (RefreshState: true, ExpectNonEmptyPlan: true). Satisfies TFIN-400 req #1.
+// detected as drift (RefreshState: true, ExpectNonEmptyPlan: true).
 func Test_CM_CMKey_DescriptionDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
@@ -1703,7 +1703,7 @@ resource "ciphertrust_cm_key" "test" {
 
 // TestAccCMKey_EmptyMaterialReadback verifies that empty_material = true is
 // preserved in Terraform state after apply and that a second plan with identical
-// config produces no spurious drift. Covers TFIN-383.
+// config produces no spurious drift.
 func Test_CM_AccCMKey_EmptyMaterialReadback(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-em-" + uuid.New().String()[:8]
