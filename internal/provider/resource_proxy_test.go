@@ -184,6 +184,9 @@ func Test_CM_Proxy_Idempotency(t *testing.T) {
 // reports no changes (no perpetual cleartext→masked diff).
 func Test_CM_CipherTrustProxy_NoSpuriousDiffAfterApply(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 
 	resource.Test(t, resource.TestCase{
@@ -213,6 +216,9 @@ resource "ciphertrust_proxy" "test" {
 // host/port change on http_proxy is surfaced by terraform plan -refresh-only.
 func Test_CM_CipherTrustProxy_HTTPProxyHostPortDriftDetection(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 	var capturedResourceID string
 
@@ -274,6 +280,9 @@ resource "ciphertrust_proxy" "test" {
 // host/port change on https_proxy is surfaced by terraform plan -refresh-only.
 func Test_CM_CipherTrustProxy_HTTPSProxyHostPortDriftDetection(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 	var capturedResourceID string
 
