@@ -1088,7 +1088,7 @@ type CMSyslogJSON struct {
 	Transport     string  `json:"transport"`
 	CACert        *string `json:"caCert,omitempty"`
 	MessageFormat *string `json:"messageFormat,omitempty"`
-	Port          int64   `json:"port,omitempty"`
+	Port          *int64  `json:"port,omitempty"` // pointer so nil omits the field; 514 sends explicit default
 	Account       string  `json:"account"`
 	CreatedAt     string  `json:"createdAt"`
 	UpdatedAt     string  `json:"updatedAt"`
