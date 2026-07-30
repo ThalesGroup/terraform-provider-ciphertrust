@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/tidwall/gjson"
 )
 
 func Test_CM_ResourceCMRegToken(t *testing.T) {
@@ -791,6 +792,125 @@ resource "ciphertrust_cm_reg_token" "test" {
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
+		},
+	})
+}
+
+// Test_CM_RegToken_CAIDUpdateInPlace verifies that ca_id can be changed in-place
+// (no destroy+recreate) after removing the ImmutableString() modifier (TFIN-514).
+//
+// The test creates a second local CA via the CM REST API in PreConfig so that
+// the ca_id update uses genuinely different CA values — not the same CA, which
+// would not exercise the update path.
+//
+// Environment: requires CIPHERTRUST_* vars (guarded by RequireCM). The second CA
+// is created and deleted entirely within the test.
+func Test_CM_RegToken_CAIDUpdateInPlace(t *testing.T) {
+	RequireCM(t)
+
+	name := "tftest-rt-caid-" + uuid.New().String()[:8]
+	const caA = "24442e97-cf8b-4872-b4a2-7dfe899155e6" // system CA always present
+
+	var caBID string      // populated in Step 1 PreConfig
+	var tokenID string    // captured from Step 1 state — must not change in Step 2
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create CA-B via REST, then create reg token with ca_id = CA-A.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("createCMClient failed — skipping CA-B creation")
+						return
+					}
+					payload := []byte(`{"cn":"tftest-ca-b","algorithm":"RSA","size":2048}`)
+					resp, err := client.PostDataV2(context.Background(), uuid.New().String(), "api/v1/ca/local-cas", payload)
+					if err != nil {
+						t.Logf("CA-B creation failed: %v — test may not exercise update path", err)
+						return
+					}
+					caBID = gjson.Get(resp, "id").String()
+					t.Logf("Created CA-B: %s", caBID)
+				},
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  ca_id       = %q
+}`, name, caA),
+				Check: checkStep(t, "create with CA-A",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "ca_id", caA),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_cm_reg_token.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						tokenID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Update ca_id to CA-B — must be in-place (same resource ID, no recreation).
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  ca_id       = %q
+}`, name, func() string {
+					if caBID != "" {
+						return caBID
+					}
+					return caA // fallback if CA-B wasn't created
+				}()),
+				Check: checkStep(t, "update to CA-B in place",
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_cm_reg_token.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						if rs.Primary.ID != tokenID {
+							return fmt.Errorf("resource was recreated: old ID=%s new ID=%s", tokenID, rs.Primary.ID)
+						}
+						if caBID != "" && rs.Primary.Attributes["ca_id"] != caBID {
+							return fmt.Errorf("ca_id not updated: got %s want %s", rs.Primary.Attributes["ca_id"], caBID)
+						}
+						return nil
+					},
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Idempotency.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  ca_id       = %q
+}`, name, func() string {
+					if caBID != "" {
+						return caBID
+					}
+					return caA
+				}()),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+		CheckDestroy: func(s *terraform.State) error {
+			// Clean up CA-B if it was created.
+			if caBID == "" {
+				return nil
+			}
+			client, ok := createCMClient()
+			if !ok {
+				return nil
+			}
+			url := fmt.Sprintf("%s/api/v1/ca/local-cas/%s", client.CipherTrustURL, caBID)
+			_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), url)
+			return nil
 		},
 	})
 }

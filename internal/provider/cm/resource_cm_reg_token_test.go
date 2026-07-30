@@ -1,10 +1,14 @@
 package cm
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -76,3 +80,30 @@ func Test_CM_RegToken_buildLabelsPatch_NeverConfigured(t *testing.T) {
 
 // Compile-time check: CMRegTokenTFSDK must have a Labels field of types.Map.
 var _ attr.Value = CMRegTokenTFSDK{}.Labels
+
+// Test_CM_RegToken_CAIDImmutableRemoved verifies that the ca_id schema attribute
+// does NOT carry ImmutableString() in its PlanModifiers. This acts as a regression
+// guard: if ImmutableString() is accidentally re-added, this test fails immediately,
+// preventing a silent rollback to the incorrect destroy+recreate behavior.
+func Test_CM_RegToken_CAIDImmutableRemoved(t *testing.T) {
+	r := &resourceCMRegToken{}
+	var resp resource.SchemaResponse
+	r.Schema(context.Background(), resource.SchemaRequest{}, &resp)
+
+	caIDAttr, ok := resp.Schema.Attributes["ca_id"]
+	if !ok {
+		t.Fatal("ca_id attribute not found in schema")
+	}
+
+	strAttr, ok := caIDAttr.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("ca_id is not a StringAttribute, got %T", caIDAttr)
+	}
+
+	for _, mod := range strAttr.PlanModifiers {
+		desc := mod.Description(context.Background())
+		if strings.Contains(strings.ToLower(desc), "immutable") {
+			t.Fatalf("ca_id still has an immutability plan modifier: %q — remove it (TFIN-514)", desc)
+		}
+	}
+}
