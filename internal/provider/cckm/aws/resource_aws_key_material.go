@@ -700,9 +700,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 				}
 			}
 		}
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d keyID: %s",
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d metadataUpdates: %d keyID: %s",
 			len(pendingMRRepairs), len(pendingImportRepairs), len(pendingRotationRepairs),
-			len(newCandidates), len(removed), keyID))
+			len(newCandidates), len(removed), len(metadataUpdates), keyID))
 	}
 
 	// Initial history fetch and classification.
