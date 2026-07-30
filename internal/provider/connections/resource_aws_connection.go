@@ -466,6 +466,17 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	// aws_region is Optional+Computed (Computed added for UseStateWhenClearingString()).
+	// When the user omits aws_region from config, plan holds Unknown; resolve to a known
+	// value from the CREATE response to prevent "provider returned invalid result object".
+	if plan.AWSRegion.IsUnknown() {
+		if r := gjson.Get(response, "aws_region"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+			plan.AWSRegion = types.StringValue(r.String())
+		} else {
+			plan.AWSRegion = types.StringNull()
+		}
+	}
+
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
