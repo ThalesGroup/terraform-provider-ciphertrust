@@ -125,6 +125,12 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					modifiers.UseStateWhenClearingString(),
 				},
 			},
+			// last_connection_ok/error/at: retain UseStateForUnknown() — these are Computed-only
+			// status fields. Without the modifier the plan value is Unknown after an update,
+			// causing "provider produced inconsistent result after apply" when CM hasn't run
+			// a connectivity test yet (fields absent from response → null, but plan expects
+			// the prior state value). UseStateForUnknown() preserves the prior value in the
+			// plan, and the post-PATCH r.Exists() hydration overwrites it with the real value.
 			// aws_sts_regional_endpoints: CM default is "legacy". When removed from config,
 			// the provider sends the explicit default value in the PATCH so CM resets the field.
 			// This differs from aws_region which has no universal default.
@@ -858,22 +864,11 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.Service = types.StringValue(gjson.Get(readResponse, "service").String())
 	plan.Category = types.StringValue(gjson.Get(readResponse, "category").String())
 	plan.ResourceURL = types.StringValue(gjson.Get(readResponse, "resource_url").String())
-	// Computed-only status fields — use r.Exists() guard; absent means not yet tested.
-	if r := gjson.Get(readResponse, "last_connection_ok"); r.Exists() {
-		plan.LastConnectionOK = types.BoolValue(r.Bool())
-	} else {
-		plan.LastConnectionOK = types.BoolNull()
-	}
-	if r := gjson.Get(readResponse, "last_connection_error"); r.Exists() && r.Type != gjson.Null {
-		plan.LastConnectionError = types.StringValue(r.String())
-	} else {
-		plan.LastConnectionError = types.StringNull()
-	}
-	if r := gjson.Get(readResponse, "last_connection_at"); r.Exists() && r.Type != gjson.Null {
-		plan.LastConnectionAt = types.StringValue(r.String())
-	} else {
-		plan.LastConnectionAt = types.StringNull()
-	}
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent.
+	// UseStateForUnknown() in schema ensures these remain stable in the plan.
+	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
+	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
+	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
 	// aws_region: retain plan value — UseStateWhenClearingString() already handled clearing
 	// at plan time; the post-PATCH value reflects the user's intent (either new region or
 	// preserved old region). No CM read-back override needed.
