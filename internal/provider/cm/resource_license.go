@@ -132,20 +132,22 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-// findLicenseIDByString retrieves all licenses and finds the ID of the license with the matching license string
-func (r *resourceCMLicense) findLicenseIDByString(ctx context.Context, id, licenseStr string) (string, error) {
+// getLicenseIDs retrieves the set of all current license IDs from CM.
+// Used to take a before/after snapshot so Create() can identify the newly
+// added license by set-difference — the POST response contains no ID, and
+// the GET list endpoint does not return the raw license string for matching.
+func (r *resourceCMLicense) getLicenseIDs(ctx context.Context, id string) (map[string]bool, error) {
 	response, err := r.client.GetAll(ctx, id, common.URL_LICENSE)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	licenses := gjson.Parse(response).Array()
-	for _, license := range licenses {
-		if license.Get("license").String() == licenseStr {
-			return license.Get("id").String(), nil
+	licenseIDs := make(map[string]bool)
+	for _, license := range gjson.Parse(response).Array() {
+		if licID := license.Get("id").String(); licID != "" {
+			licenseIDs[licID] = true
 		}
 	}
-	return "", nil
+	return licenseIDs, nil
 }
 
 // Create creates the resource and sets the initial Terraform state.
@@ -178,6 +180,22 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// Snapshot existing license IDs before POST. The CM POST /licenses endpoint
+	// returns HTTP 201 with an empty body — no resource ID is included. The GET
+	// list endpoint does not return the raw license string for matching. The only
+	// reliable way to identify the newly created license is set-difference: IDs
+	// present after POST but absent before POST is the new license.
+	existingIDs, err := r.getLicenseIDs(ctx, id)
+	if err != nil {
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error listing licenses before create: ",
+			"Could not list existing licenses, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	r.client.Log.Debug(fmt.Sprintf("[resource_license.go -> Create] Found %d existing licenses before POST", len(existingIDs)))
+
 	response, err := r.client.PostDataV2(ctx, id, common.URL_LICENSE, payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
@@ -188,15 +206,15 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// Check if the response contains an ID
+	// Check if the response contains an ID (unlikely per swagger, but handle defensively).
 	responseID := gjson.Get(response, "id").String()
 	if responseID != "" {
 		plan.ID = types.StringValue(responseID)
 	} else {
-		// ID not in response, determine it by finding matching license string
-		r.client.Log.Debug("[resource_license.go -> Create] ID not in response, determining by finding matching license string")
+		// POST returned no ID — use set-difference to find the newly added license.
+		r.client.Log.Debug("[resource_license.go -> Create] ID not in POST response; using set-difference to identify new license")
 
-		newLicenseID, err := r.findLicenseIDByString(ctx, id, plan.License.ValueString())
+		newIDs, err := r.getLicenseIDs(ctx, id)
 		if err != nil {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
@@ -206,10 +224,18 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 
+		var newLicenseID string
+		for licID := range newIDs {
+			if !existingIDs[licID] {
+				newLicenseID = licID
+				break
+			}
+		}
+
 		if newLicenseID == "" {
 			resp.Diagnostics.AddError(
 				"Error determining license ID: ",
-				"Could not find the newly created license with the matching license string",
+				"Could not determine the ID of the newly created license",
 			)
 			return
 		}
@@ -217,7 +243,7 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		r.client.Log.Debug("[resource_license.go -> Create] Determined new license ID: " + newLicenseID)
 		plan.ID = types.StringValue(newLicenseID)
 
-		// Fetch the license details to populate computed attributes
+		// Fetch the license details to populate computed attributes.
 		response, err = r.client.ReadDataByParam(ctx, id, newLicenseID, common.URL_LICENSE)
 		if err != nil {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
