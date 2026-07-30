@@ -268,7 +268,6 @@ func waitForReplicatedKeyPendingImport(ctx context.Context, id string, client *c
 		if time.Now().After(deadline) {
 			break
 		}
-		loop++
 		response, err := client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error waiting for PendingImport state on replica key."
@@ -283,16 +282,12 @@ func waitForReplicatedKeyPendingImport(ctx context.Context, id string, client *c
 		keyState := gjson.Get(response, "aws_param.KeyState").String()
 		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] loop: %d Key state: %s", loop, keyState))
 		if keyState == "PendingImport" {
-			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] loop: %d key is PendingImport, proceeding", loop))
+			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] resolved loop: %d key is PendingImport", loop))
 			return
 		}
-		// If already Enabled (real import completed before we even checked) there is nothing to wait for.
-		if keyState == "Enabled" && loop > 1 {
-			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyPendingImport] loop: %d key already Enabled, skipping PendingImport wait", loop))
-			return
-		}
+		loop++
 	}
-	msg := "Timed out waiting for replica key to reach PendingImport state; proceeding anyway."
+	msg := "[aws_multiregion.go -> waitForReplicatedKeyPendingImport] TIMED OUT waiting for PendingImport state; proceeding anyway."
 	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
 	client.Log.Warn(details)
 	diags.AddWarning(details, "")
@@ -314,12 +309,11 @@ func waitForReplicatedKeyIsEnabled(ctx context.Context, id string, client *commo
 	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
 	defer ticker.Stop()
 	deadline := time.Now().Add(time.Duration(60) * time.Second)
-	loop := 1
+	loop := 0
 	for range ticker.C {
 		if time.Now().After(deadline) {
 			break
 		}
-		loop += 1
 		response, err = client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 		if err != nil {
 			msg := "Error creating AWS key. Error reading replicated key."
@@ -334,11 +328,12 @@ func waitForReplicatedKeyIsEnabled(ctx context.Context, id string, client *commo
 		keyState = gjson.Get(response, "aws_param.KeyState").String()
 		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] loop: %d Key state: %s", loop, keyState))
 		if keyState == "Enabled" {
-			client.Log.Info("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] Key is enabled. response:" + redactAWSResponse(response))
+			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] resolved loop: %d key is Enabled", loop))
 			return response
 		}
+		loop++
 	}
-	msg := fmt.Sprintf("Error replicating AWS key, keystate is '%s' instead of 'Enabled'.", keyState)
+	msg := fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] TIMED OUT waiting for Enabled, last state: '%s'.", keyState)
 	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
 	client.Log.Warn(details)
 	diags.AddWarning(details, "")
