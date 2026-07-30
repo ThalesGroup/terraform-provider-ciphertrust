@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -53,9 +52,6 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "connection id of log-forwarder connection (elasticsearch, loki, syslog).",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -182,7 +178,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_log_forwarder.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMLogForwardersTFSDK
@@ -197,7 +193,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	var esParamIndices CMLogForwardersESOrLokiParamsJSON
 	var esParams CMLogForwardersESJSON
 	if !reflect.DeepEqual((*CMLogForwardersESTFSDK)(nil), plan.ElasticsearchParams) {
-		tflog.Debug(ctx, "ElasticsearchParams should not be empty at this point")
+		r.client.Log.Debug("ElasticsearchParams should not be empty at this point")
 		if plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != "" && plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
 			esParamIndices.ActivityKMIP = plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString()
 		}
@@ -217,7 +213,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	var lokiParamLabels CMLogForwardersESOrLokiParamsJSON
 	var lokiParams CMLogForwardersLokiJSON
 	if !reflect.DeepEqual((*CMLogForwardersLokiTFSDK)(nil), plan.LokiParams) {
-		tflog.Debug(ctx, "LokiParams should not be empty at this point")
+		r.client.Log.Debug("LokiParams should not be empty at this point")
 		if plan.LokiParams.Labels.ActivityKMIP.ValueString() != "" && plan.LokiParams.Labels.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
 			lokiParamLabels.ActivityKMIP = plan.LokiParams.Labels.ActivityKMIP.ValueString()
 		}
@@ -237,7 +233,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	var syslogParamLabels CMLogForwardersSyslogParamsJSON
 	var syslogParams CMLogForwardersSyslogJSON
 	if !reflect.DeepEqual((*CMLogForwardersSyslogTFSDK)(nil), plan.SyslogParams) {
-		tflog.Debug(ctx, "SyslogParams should not be empty at this point")
+		r.client.Log.Debug("SyslogParams should not be empty at this point")
 		if plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool() != types.BoolNull().ValueBool() {
 			syslogParamLabels.ActivityKMIP = plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool()
 		}
@@ -260,7 +256,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Log Forwarder Creation",
 			err.Error(),
@@ -274,7 +270,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 		common.URL_CM_LOG_FORWARDS,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating Log Forwarder on CipherTrust Manager: ",
 			"Could not create Log Forwarder "+plan.Name.ValueString()+", unexpected error: "+err.Error(),
@@ -286,9 +282,9 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	tflog.Debug(ctx, "[resource_log_forwarder.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_log_forwarder.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_log_forwarder.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -300,7 +296,7 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMLogForwardersTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_log_forwarder.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -312,14 +308,12 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"Log Forwarder Not Found",
-				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). "+
-					"It may have been deleted outside of Terraform. Removing it from state.",
+				"Log Forwarder Not Found — State Preserved",
+				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust Log Forwarder",
 			"Could not read Log Forwarder: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -395,28 +389,25 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.LokiParams = nil
 	}
 
-	// Hydrate syslog_params.
-	// CMLogForwardersSyslogTFSDK.SyslogParams has tfsdk tag "forward_logs".
-	// gjson path follows json:"syslog_params" on CMLogForwardersSyslogJSON.SyslogParams,
-	// so the nested path is "syslog_params.syslog_params.*".
+	// Hydrate syslog_params. CM returns {"syslog_params": {"forward_logs": {...}}}.
 	if gjson.Get(response, "syslog_params").Exists() {
 		var syslogInner CMLogForwardersSyslogParamsTFSDK
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_kmip"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_kmip"); r.Exists() {
 			syslogInner.ActivityKMIP = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityKMIP = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_nae"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_nae"); r.Exists() {
 			syslogInner.ActivityNAE = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityNAE = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.client_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.client_audit_records"); r.Exists() {
 			syslogInner.ClientAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ClientAuditRecords = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.server_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.server_audit_records"); r.Exists() {
 			syslogInner.ServerAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ServerAuditRecords = types.BoolNull()
@@ -428,7 +419,7 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.SyslogParams = nil
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_log_forwarder.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -449,7 +440,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 	}
 
 	if !reflect.DeepEqual((*CMLogForwardersESTFSDK)(nil), plan.ElasticsearchParams) {
-		tflog.Debug(ctx, "ElasticsearchParams should not be empty at this point")
+		r.client.Log.Debug("ElasticsearchParams should not be empty at this point")
 		esParams := make(map[string]interface{})
 		esParamIndices := make(map[string]interface{})
 		if plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != "" && plan.ElasticsearchParams.Indices.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
@@ -471,7 +462,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 	}
 
 	if !reflect.DeepEqual((*CMLogForwardersLokiTFSDK)(nil), plan.LokiParams) {
-		tflog.Debug(ctx, "LokiParams should not be empty at this point")
+		r.client.Log.Debug("LokiParams should not be empty at this point")
 		lokiParams := make(map[string]interface{})
 		lokiParamLabels := make(map[string]interface{})
 		if plan.LokiParams.Labels.ActivityKMIP.ValueString() != "" && plan.LokiParams.Labels.ActivityKMIP.ValueString() != types.StringNull().ValueString() {
@@ -493,7 +484,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 	}
 
 	if !reflect.DeepEqual((*CMLogForwardersSyslogTFSDK)(nil), plan.SyslogParams) {
-		tflog.Debug(ctx, "SyslogParams should not be empty at this point")
+		r.client.Log.Debug("SyslogParams should not be empty at this point")
 		syslogParams := make(map[string]interface{})
 		syslogParamLabels := make(map[string]interface{})
 		if plan.SyslogParams.SyslogParams.ActivityKMIP.ValueBool() != types.BoolNull().ValueBool() {
@@ -509,7 +500,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 			syslogParamLabels["server_audit_records"] = plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool()
 		}
 		if len(syslogParamLabels) > 0 {
-			syslogParams["syslog_params"] = syslogParamLabels
+			syslogParams["forward_logs"] = syslogParamLabels
 			payload["syslog_params"] = syslogParams
 		}
 	}
@@ -523,7 +514,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Log Forwarder Updation",
 			err.Error(),
@@ -533,11 +524,11 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 
 	response, err := r.client.UpdateDataV2(
 		ctx,
-		id,
-		common.URL_CM_LOG_FORWARDS+"/"+plan.ID.ValueString(),
+		plan.ID.ValueString(),
+		common.URL_CM_LOG_FORWARDS,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Log Forwarder on CipherTrust Manager: ",
 			"Could not update Log Forwarder, unexpected error: "+err.Error(),
@@ -560,7 +551,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_log_forwarder.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Delete][" + id + "]")
 
 	var state CMLogForwardersTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -571,12 +562,12 @@ func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.Delet
 
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_LOG_FORWARDS, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_log_forwarder.go -> Delete]["+id+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Delete][" + id + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_log_forwarder.go -> Delete]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Delete][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Log Forwarder",
 			"Could not delete Log Forwarder, unexpected error: "+err.Error(),

@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -60,7 +59,7 @@ func (d *dataSourceGroups) Schema(_ context.Context, _ datasource.SchemaRequest,
 
 func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cm_groups.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cm_groups.go -> Read][" + id + "]")
 	var state CMGroupsDataSourceModelTFSDK
 
 	diags := req.Config.Get(ctx, &state)
@@ -83,7 +82,7 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 	if filters.Get("skip") != "" || filters.Get("limit") != "" {
 		rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_groups.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Unable to read groups from CM",
 				err.Error(),
@@ -92,7 +91,7 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 		}
 		jsonStr := gjson.Get(rawBody, "resources").String()
 		if err := json.Unmarshal([]byte(jsonStr), &groups); err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read]["+id+"]")
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_groups.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
 			return
 		}
@@ -105,7 +104,7 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 
 			rawBody, err := d.client.ListWithFilters(ctx, id, common.URL_GROUP, filters)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read paginated]["+id+"]")
+				d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_groups.go -> Read paginated][" + id + "]")
 				resp.Diagnostics.AddError(
 					"Unable to read groups from CM",
 					err.Error(),
@@ -121,7 +120,7 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 			var pageGroups []CMGroupJSON
 			jsonStr := gjson.Get(rawBody, "resources").String()
 			if err := json.Unmarshal([]byte(jsonStr), &pageGroups); err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cm_groups.go -> Read paginated unmarshal]["+id+"]")
+				d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_groups.go -> Read paginated unmarshal][" + id + "]")
 				resp.Diagnostics.AddError("Unable to read groups from CM", err.Error())
 				return
 			}
@@ -141,7 +140,7 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 		})
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cm_groups.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cm_groups.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }

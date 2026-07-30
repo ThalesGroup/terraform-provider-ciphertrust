@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -56,6 +55,10 @@ func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Computed:    true,
 							Sensitive:   true,
 							Description: "The private key JSON file of a Google Cloud Platform (GCP) service account can be provided either as a JSON file or as a string. CM never returns this field on GET, so it is not populated by this data source.",
+						},
+						"key_file_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — key_file is write-only and resource-only.",
 						},
 						"cloud_name": schema.StringAttribute{
 							Computed:    true,
@@ -113,7 +116,7 @@ func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaR
 
 func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_gcp_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_gcp_connection.go -> Read][" + id + "]")
 	var state GCPConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -126,7 +129,7 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_GCP_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_gcp_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_gcp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read gcp connection from CM",
 			err.Error(),
@@ -137,7 +140,7 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 	gcpConnections := []GCPConnectionJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &gcpConnections)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_gcp_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_gcp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read gcp connection from CM",
 			err.Error(),
@@ -169,11 +172,12 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 				listValue, _ := types.ListValue(types.StringType, productValues)
 				return listValue
 			}(),
-			Description:  types.StringValue(gcp.Description),
-			CloudName:    types.StringValue(gcp.CloudName),
-			KeyFile:      types.StringValue(gcp.KeyFile),
-			ClientEmail:  types.StringValue(gcp.ClientEmail),
-			PrivateKeyID: types.StringValue(gcp.PrivateKeyID),
+			Description:    types.StringValue(gcp.Description),
+			CloudName:      types.StringValue(gcp.CloudName),
+			KeyFile:        types.StringValue(gcp.KeyFile),
+			KeyFileVersion: types.Int64Null(),
+			ClientEmail:    types.StringValue(gcp.ClientEmail),
+			PrivateKeyID:   types.StringValue(gcp.PrivateKeyID),
 		}
 
 		if gcp.Labels != nil {
@@ -205,7 +209,7 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 		state.Gcp = append(state.Gcp, gcpConn)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_gcp_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_gcp_connection.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -40,7 +41,7 @@ func Test_CM_GetParamsFromResponse_CCKMKeyRotation_HydratedFromResponse(t *testi
 	plan.Operation = types.StringNull()
 
 	var diags diag.Diagnostics
-	getParamsFromResponse(context.Background(), response, plan, &diags)
+	getParamsFromResponse(context.Background(), response, plan, &diags, hclog.NewNullLogger())
 
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
@@ -96,7 +97,7 @@ func Test_CM_GetParamsFromResponse_CCKMKeyRotation_OperationAlreadyInState(t *te
 	plan.Operation = types.StringValue("cckm_key_rotation") // pre-populated from state
 
 	var diags diag.Diagnostics
-	getParamsFromResponse(context.Background(), response, plan, &diags)
+	getParamsFromResponse(context.Background(), response, plan, &diags, hclog.NewNullLogger())
 
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
@@ -130,7 +131,7 @@ func Test_CM_GetParamsFromResponse_DatabaseBackup(t *testing.T) {
 	plan.Operation = types.StringNull() // empty, fixed by reading from response
 
 	var diags diag.Diagnostics
-	getParamsFromResponse(context.Background(), response, plan, &diags)
+	getParamsFromResponse(context.Background(), response, plan, &diags, hclog.NewNullLogger())
 
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
@@ -167,7 +168,7 @@ func Test_CM_GetParamsFromResponse_CCKMXKSCredentialRotation(t *testing.T) {
 	plan.Operation = types.StringNull()
 
 	var diags diag.Diagnostics
-	getParamsFromResponse(context.Background(), response, plan, &diags)
+	getParamsFromResponse(context.Background(), response, plan, &diags, hclog.NewNullLogger())
 
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
@@ -190,7 +191,7 @@ func Test_CM_GetParamsFromResponse_NoOperationInResponse(t *testing.T) {
 	plan.Operation = types.StringValue("cckm_key_rotation")
 
 	var diags diag.Diagnostics
-	getParamsFromResponse(context.Background(), response, plan, &diags)
+	getParamsFromResponse(context.Background(), response, plan, &diags, hclog.NewNullLogger())
 
 	// operation should remain as whatever was in plan (fallback)
 	if plan.Operation.ValueString() != "cckm_key_rotation" {

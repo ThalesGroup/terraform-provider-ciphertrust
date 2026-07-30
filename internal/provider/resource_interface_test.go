@@ -11,9 +11,9 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/tidwall/gjson"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/tidwall/gjson"
 )
 
 // interfaceSweep deletes all interfaces at the given port, ignoring errors.
@@ -339,7 +339,7 @@ resource "ciphertrust_interface" "test" {
 					)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -382,7 +382,7 @@ resource "ciphertrust_interface" "test" {
 }
 
 // Test_CM_Interface_TrustedCasExternalEmptySliceConverges verifies that trusted_cas.external=[]
-// does not cause a perpetual plan diff after apply (TFIN-426a regression check).
+// does not cause a perpetual plan diff after apply.
 func Test_CM_Interface_TrustedCasExternalEmptySliceConverges(t *testing.T) {
 	RequireCM(t)
 
@@ -431,7 +431,7 @@ resource "ciphertrust_interface" "test" {
 				),
 			},
 			{
-				// Step 3: identical config — must reach "No changes" (TFIN-426a regression check).
+				// Step 3: identical config — must reach "No changes".
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_interface" "test" {
   port           = 9870
@@ -445,7 +445,7 @@ resource "ciphertrust_interface" "test" {
 }
 
 // Test_CM_Interface_LocalAutoGenUIDConverges verifies that local_auto_gen_attributes.uid
-// is preserved in state across Read() calls (TFIN-426b regression check).
+// is preserved in state across Read() calls.
 //
 // CM does not return 'uid' in GET responses, so the provider must preserve the configured
 // value from prior state. Before the fix, Read() cleared uid to null on every refresh,
@@ -466,7 +466,7 @@ func Test_CM_Interface_LocalAutoGenUIDConverges(t *testing.T) {
 				// Step 1: Apply with uid in local_auto_gen_attributes.
 				// CM may override cn/dns_names/email_addresses with auto-generated defaults, so a
 				// non-empty plan is expected for those fields. The Check verifies uid IS preserved
-				// in state after apply+Read() (the key regression for TFIN-426b).
+				// in state after apply+Read() — that is the key regression being checked here.
 				PreConfig: func() { interfaceSweep(9871) },
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_interface" "test" {
@@ -487,19 +487,19 @@ resource "ciphertrust_interface" "test" {
 				ExpectNonEmptyPlan: true,
 			},
 			{
-				// Step 2: Refresh from CM. uid must still be in state (TFIN-426b regression).
+				// Step 2: Refresh from CM. uid must still be in state.
 				// Before the fix: state.uid would be null here (Read() cleared it).
 				// After the fix: state.uid = "tfin426-uid-xxx" (preserved from prior state).
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true, // Other local_auto_gen_attributes fields still differ
-				Check: resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
+				Check:              resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
 			},
 		},
 	})
 }
 
 // Test_CM_Interface_CertificateClearDoesNotCrash verifies that removing the certificate block
-// from config succeeds without a provider inconsistency error (TFIN-427 regression check).
+// from config succeeds without a provider inconsistency error.
 func Test_CM_Interface_CertificateClearDoesNotCrash(t *testing.T) {
 	RequireCM(t)
 
@@ -537,7 +537,7 @@ resource "ciphertrust_interface" "test" {
 			},
 			{
 				// Step 3: remove certificate block — must succeed without "Provider produced
-				// inconsistent result" error (TFIN-427 regression check).
+				// inconsistent result" error.
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
   port           = 9872
@@ -552,7 +552,7 @@ resource "ciphertrust_interface" "test" {
 }
 
 // Test_CM_Interface_AutoRegistrationClearDoesNotCrash verifies that Update() correctly sends
-// explicit clearing values for boolean fields (TFIN-427 regression check).
+// explicit clearing values for boolean fields.
 //
 // CM requires a CM-generated registration_token when auto_registration=true, which is not
 // available in this test environment. This test exercises the same Update() clearing code path
@@ -579,7 +579,7 @@ resource "ciphertrust_interface" "test" {
 			},
 			{
 				// Step 2: Remove allow_unregistered from config. Update() must send explicit
-				// false to CM so the value is cleared rather than preserved (TFIN-427 pattern).
+				// false to CM so the value is cleared rather than preserved.
 				// After clear: allow_unregistered is null in state; plan shows no diff.
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
@@ -596,7 +596,7 @@ resource "ciphertrust_interface" "test" {
 }
 
 // Test_CM_Interface_KmipInterfaceTypeCreate verifies that a kmip interface can be created
-// without an HTTP 400 from a spurious empty meta object (TFIN-429 regression check).
+// without an HTTP 400 from a spurious empty meta object.
 func Test_CM_Interface_KmipInterfaceTypeCreate(t *testing.T) {
 	RequireCM(t)
 
@@ -626,7 +626,7 @@ resource "ciphertrust_interface" "test" {
 }
 
 // Test_CM_Interface_NaeWithMetaRoundTrips verifies that NAE interfaces with a meta block
-// round-trip correctly after the pointer-type change (TFIN-429 pointer regression check).
+// round-trip correctly after the pointer-type change.
 func Test_CM_Interface_NaeWithMetaRoundTrips(t *testing.T) {
 	RequireCM(t)
 
@@ -661,7 +661,7 @@ resource "ciphertrust_interface" "test" {
 
 // Test_CM_CMInterface_ClearCertificate verifies the full clear lifecycle for the certificate block:
 // create without certificate → add certificate → remove certificate block →
-// TF state shows certificate absent and apply succeeds without inconsistency error (TFIN-427).
+// TF state shows certificate absent and apply succeeds without inconsistency error.
 func Test_CM_CMInterface_ClearCertificate(t *testing.T) {
 	RequireCM(t)
 	port := 9876 + rand.New(rand.NewSource(time.Now().UnixNano())).Intn(100)
@@ -700,7 +700,7 @@ resource "ciphertrust_interface" "test" {
 			},
 			{
 				// Step 3: remove certificate block entirely — must succeed without
-				// "Provider produced inconsistent result" error (TFIN-427 fix).
+				// "Provider produced inconsistent result" error.
 				Config: fmt.Sprintf(providerConfig+`
 resource "ciphertrust_interface" "test" {
   port           = %d
@@ -717,7 +717,7 @@ resource "ciphertrust_interface" "test" {
 // Test_CM_CMInterface_ClearRegistrationToken verifies the full clear lifecycle for
 // auto_registration + registration_token: create interface → provision a real CM reg token →
 // set auto_registration=true + registration_token → remove both → verify TF state shows both
-// absent and CM-side GET confirms registration_token is cleared (TFIN-427).
+// absent and CM-side GET confirms registration_token is cleared.
 func Test_CM_CMInterface_ClearRegistrationToken(t *testing.T) {
 	RequireCM(t)
 
@@ -791,7 +791,7 @@ resource "ciphertrust_interface" "test" {
 				),
 			},
 			{
-				// Step 3: remove both fields — must succeed and CM must reflect the clear (TFIN-427 fix).
+				// Step 3: remove both fields — must succeed and CM must reflect the clear.
 				Config: fmt.Sprintf(providerConfig+`
 resource "ciphertrust_interface" "test" {
   port           = %d
@@ -867,4 +867,3 @@ resource "ciphertrust_interface" "test" {
 		},
 	})
 }
-

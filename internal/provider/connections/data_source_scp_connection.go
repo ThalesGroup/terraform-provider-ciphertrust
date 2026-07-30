@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -94,6 +93,10 @@ func (d *dataSourceScpConnection) Schema(_ context.Context, _ datasource.SchemaR
 							Sensitive:   true,
 							Description: "Password for SCP/SFTP server. CM never returns this field on GET, so it is not populated by this data source.",
 						},
+						"password_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — password is write-only and resource-only.",
+						},
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
@@ -128,7 +131,7 @@ func (d *dataSourceScpConnection) Schema(_ context.Context, _ datasource.SchemaR
 
 func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_scp_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_scp_connection.go -> Read][" + id + "]")
 	var state ScpConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
 	var kvs []string
@@ -141,7 +144,7 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 
 	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCP_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scp_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read scp connection from CM",
 			err.Error(),
@@ -153,7 +156,7 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 
 	err = json.Unmarshal([]byte(jsonStr), &scpConnections)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_scp_connection.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read scp connection from CM",
 			err.Error(),
@@ -185,14 +188,15 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 				listValue, _ := types.ListValue(types.StringType, productValues) // Create a ListValue
 				return listValue
 			}(),
-			Description: types.StringValue(scp.Description),
-			Host:        types.StringValue(scp.Host),
-			Port:        types.Int64Value(scp.Port),
-			Username:    types.StringValue(scp.Username),
-			AuthMethod:  types.StringValue(scp.AuthMethod),
-			PathTo:      types.StringValue(scp.PathTo),
-			Protocol:    types.StringValue(scp.Protocol),
-			PublicKey:   types.StringValue(scp.PublicKey),
+			Description:     types.StringValue(scp.Description),
+			Host:            types.StringValue(scp.Host),
+			Port:            types.Int64Value(scp.Port),
+			Username:        types.StringValue(scp.Username),
+			AuthMethod:      types.StringValue(scp.AuthMethod),
+			PathTo:          types.StringValue(scp.PathTo),
+			Protocol:        types.StringValue(scp.Protocol),
+			PublicKey:       types.StringValue(scp.PublicKey),
+			PasswordVersion: types.Int64Null(),
 		}
 
 		if scp.Labels != nil {
@@ -224,7 +228,7 @@ func (d *dataSourceScpConnection) Read(ctx context.Context, req datasource.ReadR
 		state.Scp = append(state.Scp, scpConn)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_scp_connection.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_scp_connection.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

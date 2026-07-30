@@ -114,7 +114,7 @@ output "cte_client_group_id" {
 ### Required
 
 - `cluster_type` (String) Cluster type of the ClientGroup, valid values are NON-CLUSTER and HDFS.
-- `name` (String) Name of the ClientGroup.
+- `name` (String) Name of the ClientGroup. Changing this value forces the client group to be destroyed and recreated.
 
 ### Optional
 
@@ -129,8 +129,9 @@ output "cte_client_group_id" {
 - `inherit_attributes` (Boolean) Whether the client should inherit attributes from the ClientGroup.
 - `ldt_designated_primary_set` (String) ID of the Designated Primary Set.
 - `op_type` (String) Operation specifying weather to remove or add the provided client list to the GroupComm Service being updated.
-- `password` (String, Sensitive) User supplied password if password_creation_method is MANUAL. The password MUST be minimum 8 characters and MUST contain one alphabet, one number, and one of the !@#$%^&*(){}[] special characters.
+- `password` (String, Sensitive) User supplied password if password_creation_method is MANUAL. The password MUST be minimum 8 characters and MUST contain one alphabet, one number, and one of the !@#$%^&*(){}[] special characters. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password (with op_type 'update' or 'update-password'), change `password` and bump `password_version` in the same apply.
 - `password_creation_method` (String) Password creation method, GENERATE or MANUAL.
+- `password_version` (Number) Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.
 - `paused` (Boolean) Suspend/resume the rekey operation on an LDT GuardPoint. Set the value to true to pause (suspend) the rekey. Set the value to false to resume rekey.
 - `profile_id` (String) ID of the client group profile that is used to schedule custom configuration for logger, logging, and Quality of Service (QoS).
 - `re_sign` (Boolean) Whether to re-sign the client settings.

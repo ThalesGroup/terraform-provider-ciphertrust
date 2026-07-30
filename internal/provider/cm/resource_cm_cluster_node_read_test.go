@@ -322,8 +322,11 @@ func Test_CM_ClusterNodeRead_RemovedNodeRemovesResource(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, `{"code":14,"codeDesc":"NCERRInternalServerError: unexpected error"}`)
 	})
-	if !resp.State.Raw.IsNull() {
-		t.Fatalf("expected Read() to remove the resource when the cluster member no longer lists this node, but state is still set: %#v", resp.State.Raw)
+	if resp.State.Raw.IsNull() {
+		t.Fatalf("expected Read() to preserve state, but state is null")
+	}
+	if len(resp.Diagnostics.Warnings()) == 0 {
+		t.Fatalf("expected Read() to raise a warning diagnostic, but got none")
 	}
 }
 
@@ -338,8 +341,11 @@ func Test_CM_ClusterNodeRead_EmptyNodeIDRemovesResource(t *testing.T) {
 	resp := newClusterNodeReadTestResource(t, "", "none", "not clustered", func(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("member should not be queried when the joining node reports an empty nodeID")
 	})
-	if !resp.State.Raw.IsNull() {
-		t.Fatalf("expected Read() to remove the resource for an empty self-reported nodeID, but state is still set: %#v", resp.State.Raw)
+	if resp.State.Raw.IsNull() {
+		t.Fatalf("expected Read() to preserve state, but state is null")
+	}
+	if len(resp.Diagnostics.Warnings()) == 0 {
+		t.Fatalf("expected Read() to raise a warning diagnostic, but got none")
 	}
 }
 

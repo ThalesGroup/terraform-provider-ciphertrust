@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -62,12 +61,13 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			// ca_id: ImmutableString() removed (TFIN-514). CM's PATCH endpoint accepts
+			// and persists in-place ca_id changes (confirmed live: HTTP 200, value
+			// updated on GET). The prior ImmutableString() modifier was based on an
+			// incorrect assumption from TFIN-370 that CM's PATCH schema excludes ca_id.
 			"ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				Description: "DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.",
 			},
 			"cert_duration": schema.Int64Attribute{
 				Optional:    true,
@@ -128,7 +128,7 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMRegTokenTFSDK
@@ -186,7 +186,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: RegToken Creation",
 			err.Error(),
@@ -196,7 +196,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_REG_TOKEN, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating RegToken on CipherTrust Manager: ",
 			"Could not create RegToken, unexpected error: "+err.Error(),
@@ -207,7 +207,7 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	plan.Token = types.StringValue(gjson.Get(response, "token").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -217,12 +217,10 @@ func (r *resourceCMRegToken) Create(ctx context.Context, req resource.CreateRequ
 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// Registration tokens are ephemeral; 404 means expired/deleted → RemoveResource
-	// so Terraform recreates on next apply. Intentional deviation from keep-in-state convention.
 	var state CMRegTokenTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -233,11 +231,13 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_REG_TOKEN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"resource removed from CM"+" [resource_cm_reg_token.go -> Read]["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Registration Token Not Found — State Preserved",
+				"The Registration Token resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading RegToken from CipherTrust Manager",
 			"Could not read RegToken id "+state.ID.ValueString()+": "+err.Error(),
@@ -266,8 +266,8 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	// TFIN-415: Hydrate unconditionally — remove the !IsNull() guard on state.
-	// Without this guard, out-of-band changes (external PATCH) and CM-side no-ops
+	// Hydrate unconditionally — do not gate this on an !IsNull() check of state.
+	// Without unconditional hydration, out-of-band changes (external PATCH) and CM-side no-ops
 	// on TF-driven "clear" attempts are both visible on the next plan/refresh.
 	// r.Type != gjson.Null guards against explicit JSON null in the response body.
 	if r := gjson.Get(response, "client_management_profile_id"); r.Exists() && r.Type != gjson.Null {
@@ -331,16 +331,28 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 		}
 	}
 
-	// labels: only hydrate when the user has configured this field (state non-null).
-	// When config omits labels (state null), CM returns labels:{} after PATCH.
-	// Without this guard, Read() writes an empty map into state, causing perpetual
-	// null→{} drift. When state is non-null, the inner three-branch logic applies.
-	if !state.Labels.IsNull() {
+	// labels: !IsNull() guard removed — always hydrate from CM response so drift
+	// is always observable. When labels were never configured (state null) and CM
+	// returns {} as a default, the inner len==0 branch writes MapValueMust(empty)
+	// which keeps null in state only if both sides are truly absent; a subsequent
+	// plan sees null (config) vs null (state) → no diff. If state was previously
+	// non-null (labels were configured then cleared), the three-branch logic will
+	// surface the real post-clear CM value.
+	{
 		labelsResult := gjson.Get(response, "labels")
 		if !labelsResult.Exists() || labelsResult.Type == gjson.Null {
 			state.Labels = types.MapNull(types.StringType)
 		} else if len(labelsResult.Map()) == 0 {
-			state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+			// CM returned {} — treat as null when the field was never configured
+			// (state was null before this Read call). This prevents perpetual null→{}
+			// false drift for reg tokens that have never had labels set.
+			// When state was non-null (labels were configured and then cleared),
+			// write the empty map so the next plan reflects the cleared state.
+			if state.Labels.IsNull() {
+				state.Labels = types.MapNull(types.StringType)
+			} else {
+				state.Labels = types.MapValueMust(types.StringType, map[string]attr.Value{})
+			}
 		} else {
 			labelsMap := make(map[string]string)
 			labelsResult.ForEach(func(k, v gjson.Result) bool {
@@ -359,11 +371,46 @@ func (r *resourceCMRegToken) Read(ctx context.Context, req resource.ReadRequest,
 	resp.Diagnostics.Append(diags...)
 }
 
+// buildLabelsPatch returns the value to set for the "labels" key in a PATCH
+// request. Three cases:
+//   - plan null, state non-null (user cleared labels): returns nil → marshals
+//     as JSON null, which CM interprets as "remove all labels".
+//   - plan non-null: returns a populated map with the configured key-value pairs.
+//   - plan null, state also null (labels were never set): returns the sentinel
+//     value skipLabels so the caller can omit the key entirely.
+var skipLabels = struct{}{}
+
+func buildLabelsPatch(plan, state CMRegTokenTFSDK) any {
+	if plan.Labels.IsNull() || plan.Labels.IsUnknown() {
+		if !state.Labels.IsNull() {
+			// User cleared labels — send null so CM removes them.
+			return nil
+		}
+		// Labels were never configured — omit the key entirely.
+		return skipLabels
+	}
+	// Build the new label values.
+	labelsMap := make(map[string]any, len(plan.Labels.Elements()))
+	for k, v := range plan.Labels.Elements() {
+		labelsMap[k] = v.(types.String).ValueString()
+	}
+	// Null out keys present in prior state but absent from plan (partial removal).
+	// CM uses merge-patch semantics: omitting a key leaves it unchanged; only an
+	// explicit null value removes it.
+	if !state.Labels.IsNull() && !state.Labels.IsUnknown() {
+		for k := range state.Labels.Elements() {
+			if _, exists := labelsMap[k]; !exists {
+				labelsMap[k] = nil
+			}
+		}
+	}
+	return labelsMap
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMRegTokenTFSDK
 	var state CMRegTokenTFSDK
-	var payload CMRegTokenJSON
 
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -380,49 +427,39 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	plan.Token = state.Token
 
+	// Use map[string]any for the PATCH body so we can emit "labels": null explicitly
+	// when the user clears labels. A typed struct with omitempty cannot express null
+	// for a map field — omitempty silently drops nil maps, which CM treats as no-op.
+	patchMap := map[string]any{}
+
 	if !plan.CAID.IsNull() && !plan.CAID.IsUnknown() && plan.CAID.ValueString() != "" {
-		caID := plan.CAID.ValueString()
-		payload.CAID = &caID
+		patchMap["ca_id"] = plan.CAID.ValueString()
 	}
 	if !plan.CertDuration.IsNull() && !plan.CertDuration.IsUnknown() {
-		certDur := plan.CertDuration.ValueInt64()
-		payload.CertDuration = &certDur
+		patchMap["cert_duration"] = plan.CertDuration.ValueInt64()
 	}
 	// TFIN-415: Always include client_management_profile_id in the PATCH body.
-	// When the user removes the field from config (plan value is null/empty), send ""
-	// so CM receives an explicit clear attempt. CM-side behaviour note: as of the
-	// ticket investigation, CM does not honour "" as a clear for this field (the value
-	// is retained server-side). The subsequent Read() will hydrate the CM-held value
-	// into state, surfacing the CM-side retention as drift on the next plan.
-	// This is the correct Terraform behaviour: state reflects CM reality, not config intent.
-	cmpID := plan.ClientManagementProfileID.ValueString()
-	payload.ClientManagementProfileID = &cmpID
+	patchMap["client_management_profile_id"] = plan.ClientManagementProfileID.ValueString()
 
-	// Add labels to payload — null guard prevents sending {} when unconfigured
-	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
-		labelsPayload := make(map[string]interface{})
-		for k, v := range plan.Labels.Elements() {
-			labelsPayload[k] = v.(types.String).ValueString()
-		}
-		payload.Labels = labelsPayload
+	// labels: use buildLabelsPatch() to emit null (clear), a map (update), or omit (never configured).
+	lp := buildLabelsPatch(plan, state)
+	if lp != skipLabels {
+		patchMap["labels"] = lp
 	}
 
 	// REG-02 Expiry Unsetability: explicitly pass empty string "" if lifetime is unset/null/empty in plan
 	if plan.Lifetime.IsNull() || plan.Lifetime.IsUnknown() || plan.Lifetime.ValueString() == "" {
-		lifetime := ""
-		payload.Lifetime = &lifetime
+		patchMap["lifetime"] = ""
 	} else {
-		lifetime := plan.Lifetime.ValueString()
-		payload.Lifetime = &lifetime
+		patchMap["lifetime"] = plan.Lifetime.ValueString()
 	}
 	if !plan.MaxClients.IsNull() && !plan.MaxClients.IsUnknown() {
-		maxClients := plan.MaxClients.ValueInt64()
-		payload.MaxClients = &maxClients
+		patchMap["max_clients"] = plan.MaxClients.ValueInt64()
 	}
 
-	payloadJSON, err := json.Marshal(payload)
+	payloadJSON, err := json.Marshal(patchMap)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Update][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: RegToken Update",
 			err.Error(),
@@ -433,7 +470,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 	// Fix: URL path must use state.ID (resource UUID from prior state), not plan.ID
 	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_REG_TOKEN, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Update]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Update][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating RegToken on CipherTrust Manager: ",
 			"Could not upodate RegToken, unexpected error: "+err.Error(),
@@ -443,7 +480,7 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 
 	plan.ID = types.StringValue(response)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Update]["+plan.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Update][" + plan.ID.ValueString() + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -455,8 +492,8 @@ func (r *resourceCMRegToken) Update(ctx context.Context, req resource.UpdateRequ
 func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMRegTokenTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_reg_token.go -> Delete]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_reg_token.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_reg_token.go -> Delete][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_reg_token.go -> Delete][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -471,7 +508,7 @@ func (r *resourceCMRegToken) Delete(ctx context.Context, req resource.DeleteRequ
 			// Token already deleted out-of-band — treat as success; defer emits MSG_METHOD_END
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_reg_token.go -> Delete]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_reg_token.go -> Delete][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust RegToken",
 			"Could not delete RegToken, unexpected error: "+err.Error(),

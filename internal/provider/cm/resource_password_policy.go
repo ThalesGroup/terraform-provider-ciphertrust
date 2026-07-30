@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -125,8 +124,8 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 				Description: "The minimum number of other characters.",
 			},
 			"inclusive_min_total_length": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.Int64{
 					modifiers.UseStateWhenZeroInt64(),
 				},
@@ -164,7 +163,7 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_password_policy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_password_policy.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMPasswordPolicyTFSDK
@@ -251,7 +250,7 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_password_policy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_password_policy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Password Policy Update",
 			err.Error(),
@@ -265,16 +264,16 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 		passwordPolicyName,
 		common.URL_CM_PASSWORD_POLICY,
 		payloadJSON)
-	tflog.Debug(ctx, "[resource_password_policy.go -> Create][Payload and URL]"+
-		common.URL_CM_PASSWORD_POLICY+"/"+passwordPolicyName+
+	r.client.Log.Debug("[resource_password_policy.go -> Create][Payload and URL]" +
+		common.URL_CM_PASSWORD_POLICY + "/" + passwordPolicyName +
 		string(payloadJSON))
 	if errUPD != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+errUPD.Error()+" [resource_password_policy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + errUPD.Error() + " [resource_password_policy.go -> Create][" + id + "]")
 		if strings.Contains(errUPD.Error(), "404") {
 			var payloadMarshal CMPasswordPolicyJSON
 			errUnmarshal := json.Unmarshal(payloadJSON, &payloadMarshal)
 			if errUnmarshal != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+errUnmarshal.Error()+" [resource_password_policy.go -> Create]["+id+"]")
+				r.client.Log.Debug(common.ERR_METHOD_END + errUnmarshal.Error() + " [resource_password_policy.go -> Create][" + id + "]")
 				resp.Diagnostics.AddError(
 					"Unable to unmarshal payload JSON",
 					errUnmarshal.Error(),
@@ -285,7 +284,7 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 
 			payloadMarshalJSON, errMarshal := json.Marshal(payloadMarshal)
 			if errMarshal != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+errMarshal.Error()+" [resource_password_policy.go -> Create]["+id+"]")
+				r.client.Log.Debug(common.ERR_METHOD_END + errMarshal.Error() + " [resource_password_policy.go -> Create][" + id + "]")
 				resp.Diagnostics.AddError(
 					"Invalid data input: Password Policy Update",
 					errMarshal.Error(),
@@ -299,7 +298,7 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 				common.URL_CM_PASSWORD_POLICY,
 				payloadMarshalJSON)
 			if errCreate != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+errCreate.Error()+" [resource_password_policy.go -> Create]["+id+"]")
+				r.client.Log.Debug(common.ERR_METHOD_END + errCreate.Error() + " [resource_password_policy.go -> Create][" + id + "]")
 				resp.Diagnostics.AddError(
 					"Error creating User's password policy on CipherTrust Manager: ",
 					"Could not create User's password policy, unexpected error: "+errCreate.Error(),
@@ -319,9 +318,9 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 		response = responseUPD
 	}
 
-	tflog.Debug(ctx, "[resource_password_policy.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_password_policy.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_password_policy.go -> Create][" + id + "]")
 
 	plan.ID = types.StringValue(passwordPolicyName)
 	plan.Name = types.StringValue(passwordPolicyName)
@@ -425,8 +424,8 @@ func (r *resourceCMPasswordPolicy) Create(ctx context.Context, req resource.Crea
 func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMPasswordPolicyTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_password_policy.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_password_policy.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_password_policy.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -438,13 +437,12 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"Password Policy Not Found",
-				"The Password Policy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"Password Policy Not Found — State Preserved",
+				"The Password Policy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_password_policy.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_password_policy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading User's password policy from CipherTrust Manager: ",
 			"Could not read User's password policy: unexpected error: "+err.Error(),
@@ -533,7 +531,7 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_password_policy.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_password_policy.go -> Update][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMPasswordPolicyTFSDK
@@ -612,7 +610,7 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_password_policy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_password_policy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Password Policy Update",
 			err.Error(),
@@ -625,11 +623,11 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		passwordPolicyName,
 		common.URL_CM_PASSWORD_POLICY,
 		payloadJSON)
-	tflog.Debug(ctx, "[resource_password_policy.go -> Update][Payload and URL]"+
-		common.URL_CM_PASSWORD_POLICY+"/"+passwordPolicyName+
+	r.client.Log.Debug("[resource_password_policy.go -> Update][Payload and URL]" +
+		common.URL_CM_PASSWORD_POLICY + "/" + passwordPolicyName +
 		string(payloadJSON))
 	if errUPD != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+errUPD.Error()+" [resource_password_policy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + errUPD.Error() + " [resource_password_policy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error patching User's password policy on CipherTrust Manager: ",
 			"Could not patch User's password policy, unexpected error: "+errUPD.Error(),
@@ -637,7 +635,7 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_password_policy.go -> Update Output]["+responseUPD+"]")
+	r.client.Log.Debug("[resource_password_policy.go -> Update Output][" + responseUPD + "]")
 
 	plan.ID = types.StringValue(passwordPolicyName)
 	plan.Name = types.StringValue(passwordPolicyName)
@@ -709,7 +707,7 @@ func (r *resourceCMPasswordPolicy) Update(ctx context.Context, req resource.Upda
 		}
 		plan.FailedLoginsLockoutThresholds = listValue
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_password_policy.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -731,7 +729,7 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 	if state.Name.ValueString() != "global" {
 		url := fmt.Sprintf("%s/%s", r.client.CipherTrustURL, common.URL_CM_PASSWORD_POLICY+"/"+state.Name.ValueString())
 		output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_password_policy.go -> Delete]["+id+"]["+output+"]")
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_password_policy.go -> Delete][" + id + "][" + output + "]")
 		if err != nil {
 			if strings.Contains(err.Error(), notFoundError) {
 				return

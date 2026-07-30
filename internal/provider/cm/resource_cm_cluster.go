@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -126,7 +125,7 @@ func (r *resourceCMCluster) Schema(_ context.Context, _ resource.SchemaRequest, 
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_cluster.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_cluster.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMClusterTFSDK
@@ -147,7 +146,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid payload for cluster creation",
 			err.Error(),
@@ -158,7 +157,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 	// POST /v1/cluster/new
 	response, err := r.client.PostDataV2(ctx, id, common.URL_NEW_CLUSTER, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating cluster on CipherTrust Manager",
 			"Could not create cluster, unexpected error: "+err.Error(),
@@ -177,7 +176,7 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 	// gjson returns "" — acceptable for Computed-only. Read() will populate the real value on next refresh.
 	plan.RaftStatus = types.StringValue(gjson.Get(response, "raftStatus").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 }
@@ -186,8 +185,8 @@ func (r *resourceCMCluster) Create(ctx context.Context, req resource.CreateReque
 func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMClusterTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_cluster.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_cluster.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -199,11 +198,13 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.ReadDataByParam(ctx, id, "", common.URL_CLUSTER_INFO)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not found (404); removing from state [resource_cm_cluster.go -> Read]["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Cluster Not Found — State Preserved",
+				"The Cluster resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading cluster information from CipherTrust Manager",
 			"Could not read cluster info, unexpected error: "+err.Error(),
@@ -218,8 +219,10 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	nodeID := gjson.Get(response, "nodeID").String()
 	statusCode := gjson.Get(response, "status.code").String()
 	if nodeID == "" || statusCode == "" || statusCode == "none" {
-		tflog.Debug(ctx, common.ERR_METHOD_END+"cluster not clustered (status.code="+statusCode+"); removing from state [resource_cm_cluster.go -> Read]["+id+"]")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddWarning(
+			"Cluster Not Clustered — State Preserved",
+			"The Cluster is no longer active or clustered. To prevent accidental data loss, this resource has been kept in state.",
+		)
 		return
 	}
 
@@ -255,7 +258,7 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMCluster) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_cluster.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_cluster.go -> Update][" + id + "]")
 
 	var plan, state CMClusterTFSDK
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -279,7 +282,7 @@ func (r *resourceCMCluster) Update(ctx context.Context, req resource.UpdateReque
 
 		payloadJSON, err := json.Marshal(updatePayload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Update]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Update][" + id + "]")
 			resp.Diagnostics.AddError("Invalid update payload", err.Error())
 			return
 		}
@@ -287,7 +290,7 @@ func (r *resourceCMCluster) Update(ctx context.Context, req resource.UpdateReque
 		// PATCH /v1/nodes/{id}
 		_, err = r.client.UpdateDataV2(ctx, nodeID, common.URL_NODES, payloadJSON)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster.go -> Update]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_cluster.go -> Update][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error updating public_address",
 				"Could not update public_address for node "+nodeID+": "+err.Error(),
@@ -295,13 +298,13 @@ func (r *resourceCMCluster) Update(ctx context.Context, req resource.UpdateReque
 			return
 		}
 
-		tflog.Debug(ctx, "[resource_cm_cluster.go -> Update] Successfully updated public_address for node "+nodeID)
+		r.client.Log.Debug("[resource_cm_cluster.go -> Update] Successfully updated public_address for node " + nodeID)
 	}
 
 	// Copy plan to state
 	state.PublicAddress = plan.PublicAddress
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Update][" + id + "]")
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -330,7 +333,7 @@ func (r *resourceCMCluster) Delete(ctx context.Context, req resource.DeleteReque
 				nodeID := gjson.Get(verifyResponse, "nodeID").String()
 				statusCode := gjson.Get(verifyResponse, "status.code").String()
 				if nodeID == "" || statusCode == "" || statusCode == "none" {
-					tflog.Debug(ctx, "[resource_cm_cluster.go -> Delete] DELETE /cluster errored ("+err.Error()+") but node is confirmed not clustered; treating as deleted")
+					r.client.Log.Debug("[resource_cm_cluster.go -> Delete] DELETE /cluster errored (" + err.Error() + ") but node is confirmed not clustered; treating as deleted")
 					return
 				}
 				break
@@ -345,7 +348,7 @@ func (r *resourceCMCluster) Delete(ctx context.Context, req resource.DeleteReque
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 }
 
 func (d *resourceCMCluster) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

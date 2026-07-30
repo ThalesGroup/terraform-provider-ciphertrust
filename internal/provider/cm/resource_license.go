@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -133,26 +132,28 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-// findLicenseIDByString retrieves all licenses and finds the ID of the license with the matching license string
-func (r *resourceCMLicense) findLicenseIDByString(ctx context.Context, id, licenseStr string) (string, error) {
+// getLicenseIDs retrieves the set of all current license IDs from CM.
+// Used to take a before/after snapshot so Create() can identify the newly
+// added license by set-difference — the POST response contains no ID, and
+// the GET list endpoint does not return the raw license string for matching.
+func (r *resourceCMLicense) getLicenseIDs(ctx context.Context, id string) (map[string]bool, error) {
 	response, err := r.client.GetAll(ctx, id, common.URL_LICENSE)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	licenses := gjson.Parse(response).Array()
-	for _, license := range licenses {
-		if license.Get("license").String() == licenseStr {
-			return license.Get("id").String(), nil
+	licenseIDs := make(map[string]bool)
+	for _, license := range gjson.Parse(response).Array() {
+		if licID := license.Get("id").String(); licID != "" {
+			licenseIDs[licID] = true
 		}
 	}
-	return "", nil
+	return licenseIDs, nil
 }
 
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_license.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_license.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMLicenseTFSDK
@@ -171,7 +172,7 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Add License",
 			err.Error(),
@@ -179,9 +180,25 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// Snapshot existing license IDs before POST. The CM POST /licenses endpoint
+	// returns HTTP 201 with an empty body — no resource ID is included. The GET
+	// list endpoint does not return the raw license string for matching. The only
+	// reliable way to identify the newly created license is set-difference: IDs
+	// present after POST but absent before POST is the new license.
+	existingIDs, err := r.getLicenseIDs(ctx, id)
+	if err != nil {
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error listing licenses before create: ",
+			"Could not list existing licenses, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	r.client.Log.Debug(fmt.Sprintf("[resource_license.go -> Create] Found %d existing licenses before POST", len(existingIDs)))
+
 	response, err := r.client.PostDataV2(ctx, id, common.URL_LICENSE, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error adding license on CipherTrust Manager: ",
 			"Could not add license, unexpected error: "+err.Error(),
@@ -189,17 +206,17 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// Check if the response contains an ID
+	// Check if the response contains an ID (unlikely per swagger, but handle defensively).
 	responseID := gjson.Get(response, "id").String()
 	if responseID != "" {
 		plan.ID = types.StringValue(responseID)
 	} else {
-		// ID not in response, determine it by finding matching license string
-		tflog.Debug(ctx, "[resource_license.go -> Create] ID not in response, determining by finding matching license string")
+		// POST returned no ID — use set-difference to find the newly added license.
+		r.client.Log.Debug("[resource_license.go -> Create] ID not in POST response; using set-difference to identify new license")
 
-		newLicenseID, err := r.findLicenseIDByString(ctx, id, plan.License.ValueString())
+		newIDs, err := r.getLicenseIDs(ctx, id)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error listing licenses after create: ",
 				"Could not list licenses, unexpected error: "+err.Error(),
@@ -207,28 +224,36 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 
+		var newLicenseID string
+		for licID := range newIDs {
+			if !existingIDs[licID] {
+				newLicenseID = licID
+				break
+			}
+		}
+
 		if newLicenseID == "" {
 			resp.Diagnostics.AddError(
 				"Error determining license ID: ",
-				"Could not find the newly created license with the matching license string",
+				"Could not determine the ID of the newly created license",
 			)
 			return
 		}
 
-		tflog.Debug(ctx, "[resource_license.go -> Create] Determined new license ID: "+newLicenseID)
+		r.client.Log.Debug("[resource_license.go -> Create] Determined new license ID: " + newLicenseID)
 		plan.ID = types.StringValue(newLicenseID)
 
-		// Fetch the license details to populate computed attributes
+		// Fetch the license details to populate computed attributes.
 		response, err = r.client.ReadDataByParam(ctx, id, newLicenseID, common.URL_LICENSE)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error reading license details after create: ",
 				"Could not read license details, unexpected error: "+err.Error(),
 			)
 			return
 		}
-		tflog.Debug(ctx, "[resource_license.go -> Create] Fetched license details for ID: "+newLicenseID)
+		r.client.Log.Debug("[resource_license.go -> Create] Fetched license details for ID: " + newLicenseID)
 	}
 
 	// Computed-only — unconditional hydration.
@@ -248,9 +273,9 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	}
 	// If plan.BindType already has a value from the user's config, keep it
 
-	tflog.Debug(ctx, "[resource_license.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_license.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -262,10 +287,10 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMLicenseTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_license.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_license.go -> Read][" + id + "]")
 	// defer ensures MSG_METHOD_END fires on ALL return paths: 404 early return,
 	// error early return, and normal return.
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Read]["+id+"]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -280,7 +305,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	//
 	// Restoring the prior state value prevents ImmutableString() from seeing a
 	// spurious "" → <license> transition on every plan/refresh cycle after the
-	// initial create (TFIN-430 fix).
+	// initial create.
 	//
 	// During terraform destroy, Terraform computes the plan value for a Required
 	// attribute as the current state value (no config change is being applied).
@@ -293,13 +318,12 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
-				"License Not Found",
-				"The License resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"License Not Found — State Preserved",
+				"The License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_license.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Licenses on CipherTrust Manager: ",
 			"Could not read CM License id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -336,7 +360,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	// Note: `feature` is present in the Swagger Licenses definition but absent from
 	// CMLicenseTFSDK. CM-side changes to feature are invisible to drift detection.
-	// Pre-existing gap; out of scope for TFIN-430.
+	// Pre-existing gap; out of scope here.
 
 	// Set refreshed state.
 	diags = resp.State.Set(ctx, &state)
@@ -348,12 +372,12 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMLicense) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_license.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_license.go -> Update]")
 	resp.Diagnostics.AddError(
 		"Update Not Supported",
 		"ciphertrust_license does not support updates. Delete and recreate this resource to change any field.",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Update]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -368,7 +392,7 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete existing license
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_LICENSE, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_license.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

@@ -31,6 +31,7 @@ type AWSConnectionModelTFSDK struct {
 	Meta                    types.Map             `tfsdk:"meta"`
 	Products                []types.String        `tfsdk:"products"`
 	SecretAccessKey         types.String          `tfsdk:"secret_access_key"`
+	SecretAccessKeyVersion  types.Int64           `tfsdk:"secret_access_key_version"`
 }
 
 type IAMRoleAnywhereJSON struct {
@@ -59,25 +60,26 @@ type AWSConnectionModelJSON struct {
 	Labels                  map[string]interface{} `json:"labels"`
 	Meta                    interface{}            `json:"meta"`
 	Products                []string               `json:"products"`
-	SecretAccessKey         string                 `json:"secret_access_key"`
+	SecretAccessKey         string                 `json:"secret_access_key,omitempty"`
 }
 
 type CMScpConnectionTFSDK struct {
 	CMCreateConnectionResponseCommonTFSDK
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	Products    types.List   `tfsdk:"products"`
-	Meta        types.Map    `tfsdk:"meta"`
-	Description types.String `tfsdk:"description"`
-	Labels      types.Map    `tfsdk:"labels"`
-	Host        types.String `tfsdk:"host"`
-	Port        types.Int64  `tfsdk:"port"`
-	Username    types.String `tfsdk:"username"`
-	AuthMethod  types.String `tfsdk:"auth_method"`
-	PathTo      types.String `tfsdk:"path_to"`
-	Protocol    types.String `tfsdk:"protocol"`
-	Password    types.String `tfsdk:"password"`
-	PublicKey   types.String `tfsdk:"public_key"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	Products        types.List   `tfsdk:"products"`
+	Meta            types.Map    `tfsdk:"meta"`
+	Description     types.String `tfsdk:"description"`
+	Labels          types.Map    `tfsdk:"labels"`
+	Host            types.String `tfsdk:"host"`
+	Port            types.Int64  `tfsdk:"port"`
+	Username        types.String `tfsdk:"username"`
+	AuthMethod      types.String `tfsdk:"auth_method"`
+	PathTo          types.String `tfsdk:"path_to"`
+	Protocol        types.String `tfsdk:"protocol"`
+	Password        types.String `tfsdk:"password"`
+	PasswordVersion types.Int64  `tfsdk:"password_version"`
+	PublicKey       types.String `tfsdk:"public_key"`
 }
 
 type CMScpConnectionJSON struct {
@@ -94,7 +96,7 @@ type CMScpConnectionJSON struct {
 	AuthMethod  string                 `json:"auth_method"`
 	PathTo      string                 `json:"path_to"`
 	Protocol    string                 `json:"protocol"`
-	Password    string                 `json:"password"`
+	Password    string                 `json:"password,omitempty"`
 	PublicKey   string                 `json:"public_key"`
 }
 
@@ -178,16 +180,17 @@ type AzureConnectionJSON struct {
 
 type GCPConnectionTFSDK struct {
 	CMCreateConnectionResponseCommonTFSDK
-	ID           types.String `tfsdk:"id"`
-	Name         types.String `tfsdk:"name"`
-	Products     types.List   `tfsdk:"products"`
-	Meta         types.Map    `tfsdk:"meta"`
-	Description  types.String `tfsdk:"description"`
-	Labels       types.Map    `tfsdk:"labels"`
-	CloudName    types.String `tfsdk:"cloud_name"`
-	KeyFile      types.String `tfsdk:"key_file"`
-	ClientEmail  types.String `tfsdk:"client_email"`
-	PrivateKeyID types.String `tfsdk:"private_key_id"`
+	ID             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	Products       types.List   `tfsdk:"products"`
+	Meta           types.Map    `tfsdk:"meta"`
+	Description    types.String `tfsdk:"description"`
+	Labels         types.Map    `tfsdk:"labels"`
+	CloudName      types.String `tfsdk:"cloud_name"`
+	KeyFile        types.String `tfsdk:"key_file"`
+	KeyFileVersion types.Int64  `tfsdk:"key_file_version"`
+	ClientEmail    types.String `tfsdk:"client_email"`
+	PrivateKeyID   types.String `tfsdk:"private_key_id"`
 }
 
 type GCPConnectionJSON struct {
@@ -199,7 +202,7 @@ type GCPConnectionJSON struct {
 	Description  string                 `json:"description"`
 	Labels       map[string]interface{} `json:"labels"`
 	CloudName    string                 `json:"cloud_name"`
-	KeyFile      string                 `json:"key_file"`
+	KeyFile      string                 `json:"key_file,omitempty"`
 	ClientEmail  string                 `json:"client_email"`
 	PrivateKeyID string                 `json:"private_key_id"`
 }
@@ -220,6 +223,7 @@ type OCIConnectionCommonTFSDK struct {
 type OCIConnectionTFSDK struct {
 	OCIConnectionCommonTFSDK
 	KeyFile                  types.String `tfsdk:"key_file"`
+	KeyFileVersion           types.Int64  `tfsdk:"key_file_version"`
 	PassPhrase               types.String `tfsdk:"key_file_pass_phrase"`
 	SkipConnectionParamsTest types.Bool   `tfsdk:"skip_connection_params_test"`
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -176,7 +175,12 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"password": schema.StringAttribute{
 				Optional:    true,
 				Sensitive:   true,
-				Description: "Password for SCP/SFTP server.",
+				WriteOnly:   true,
+				Description: "Password for SCP/SFTP server. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.",
+			},
+			"password_version": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.",
 			},
 			"port": schema.Int64Attribute{
 				Optional:    true,
@@ -291,13 +295,25 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMScpConnectionTFSDK
 	var payload CMScpConnectionJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMScpConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -346,8 +362,8 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		payload.Meta = scpMetadataPayload
 	}
 
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = plan.Password.ValueString()
+	if v := config.Password.ValueString(); v != "" {
+		payload.Password = v
 	}
 
 	if plan.Port.ValueInt64() != types.Int64Null().ValueInt64() {
@@ -359,7 +375,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 		diags = plan.Products.ElementsAs(ctx, &scpProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = scpProducts
@@ -371,7 +387,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: SCP connection Creation",
 			err.Error(),
@@ -381,7 +397,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_SCP_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating SCP Connection on CipherTrust Manager: ",
 			"Could not create scp connection, unexpected error: "+err.Error(),
@@ -390,9 +406,13 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 	}
 	getParamsFromResponse(response, &resp.Diagnostics, &plan)
 
-	tflog.Debug(ctx, "[resource_scp_connection.go -> Create Output]["+response+"]")
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Create]["+id+"]")
+	r.client.Log.Debug("[resource_scp_connection.go -> Create Output][" + response + "]")
+
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -403,7 +423,7 @@ func (r *resourceCMScpConnection) Create(ctx context.Context, req resource.Creat
 func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state CMScpConnectionTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -414,18 +434,24 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCP_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_scp_connection.go -> Read] connection not found, removing from state ["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"SCP Connection Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed SCP connection %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading SCP Connection on CipherTrust Manager: ",
 			"Could not read scp connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Debug(ctx, "resource_scp_connection.go: response :"+response)
+	r.client.Log.Debug("resource_scp_connection.go: response :" + response)
 
 	getParamsFromResponse(response, &resp.Diagnostics, &state)
 	// required parameters are fetched separately
@@ -441,17 +467,37 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Read][" + id + "]")
 	return
 }
 
 func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Update][" + id + "]")
 	var plan CMScpConnectionTFSDK
+	var state CMScpConnectionTFSDK
 	var payload CMScpConnectionJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Load prior state to detect a password_version bump (see below).
+	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.Password is always
+	// null here. req.Config is populated fresh from the HCL configuration on
+	// every RPC (not derived from the nullified plan), so it reliably carries
+	// the actual value.
+	var config CMScpConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -496,8 +542,11 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		payload.Meta = scpMetadataPayload
 	}
 
-	if plan.Password.ValueString() != "" && plan.Password.ValueString() != types.StringNull().ValueString() {
-		payload.Password = plan.Password.ValueString()
+	// password is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — password_version is the explicit, state-tracked
+	// signal that the caller wants the current password value re-sent to CM.
+	if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+		payload.Password = config.Password.ValueString()
 	}
 
 	if plan.Port.ValueInt64() != types.Int64Null().ValueInt64() {
@@ -509,7 +558,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 		diags = plan.Products.ElementsAs(ctx, &scpProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = scpProducts
@@ -521,7 +570,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: SCP connection Creation",
 			err.Error(),
@@ -531,7 +580,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_SCP_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_scp_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scp_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating SCP Connection on CipherTrust Manager: ",
 			"Could not update scp connection, unexpected error: "+err.Error(),
@@ -540,7 +589,11 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 	}
 	getParamsFromResponse(response, &resp.Diagnostics, &plan)
 
-	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
+
+	r.client.Log.Debug(fmt.Sprintf("Response: %s", response))
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -551,7 +604,7 @@ func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.Updat
 func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state CMScpConnectionTFSDK
 	diags := req.State.Get(ctx, &state)
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "]")
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -561,17 +614,17 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "SCP connection already deleted out-of-band on CM")
+			r.client.Log.Debug("SCP connection already deleted out-of-band on CM")
 			return
 		}
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust SCP Connection",
 			"Could not delete scp connection, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_scp_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 }
 
 func (d *resourceCMScpConnection) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

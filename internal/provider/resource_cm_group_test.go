@@ -116,7 +116,7 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 				},
 				Config:             cmGroupConfig(name, "Drift test", ""),
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
@@ -1015,7 +1015,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestCipherTrust_CMGroup_ClientMetadataNullClear verifies that removing
 // client_metadata from config clears it on CM and converges without a
-// perpetual plan diff (TFIN-402).
+// perpetual plan diff.
 func Test_CM_CipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 

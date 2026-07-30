@@ -184,14 +184,19 @@ func (r *resourceCTEPolicyKeyRule) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
-	// Refresh all mutable rule fields
-	state.KeyRule = KeyRuleTFSDK{
-		ID:            types.StringValue(apiResp.ID),
-		OrderNumber:   types.Int64Value(*apiResp.OrderNumber),
-		KeyID:         types.StringValue(apiResp.KeyID),
-		KeyType:       types.StringValue(apiResp.KeyType),
-		ResourceSetID: types.StringValue(apiResp.ResourceSetID),
-	}
+	// TFIN-470: CM normalizes resource_set_id from the UUID the user configured
+	// to the resource set's name when storing the rule, so GET returns a
+	// different representation than the config. TFIN-472: CM's GET response
+	// for this endpoint never includes key_type at all (write-only at the API
+	// level), so it always unmarshals as "". Overwriting state from the API
+	// response for either field caused a perpetual plan diff against the
+	// user's configured value on every refresh. Preserve the existing
+	// (config-sourced) state values for key_type/resource_set_id instead of
+	// blindly overwriting them from the API response; still refresh the
+	// fields CM does return correctly.
+	state.KeyRule.ID = types.StringValue(apiResp.ID)
+	state.KeyRule.OrderNumber = types.Int64Value(*apiResp.OrderNumber)
+	state.KeyRule.KeyID = types.StringValue(apiResp.KeyID)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_keyrules.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
@@ -224,9 +229,6 @@ func (r *resourceCTEPolicyKeyRule) Update(ctx context.Context, req resource.Upda
 	if plan.KeyRule.KeyType.ValueString() != "" && plan.KeyRule.KeyType.ValueString() != types.StringNull().ValueString() {
 		payload.KeyType = string(plan.KeyRule.KeyType.ValueString())
 	}
-	if plan.KeyRule.ResourceSetID.ValueString() != "" && plan.KeyRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ResourceSetID = string(plan.KeyRule.ResourceSetID.ValueString())
-	}
 	if !plan.KeyRule.OrderNumber.IsNull() && !plan.KeyRule.OrderNumber.IsUnknown() {
 		OrderNumber := plan.KeyRule.OrderNumber.ValueInt64()
 		payload.OrderNumber = &OrderNumber
@@ -239,6 +241,31 @@ func (r *resourceCTEPolicyKeyRule) Update(ctx context.Context, req resource.Upda
 			err.Error(),
 		)
 		return
+	}
+
+	// TFIN-471: KeyRuleJSON.ResourceSetID carries `omitempty` (needed so
+	// Create() can omit it entirely when unset), which also silently drops an
+	// explicit empty string -- the exact value CM requires to clear a
+	// previously-set resource set. Re-inject resource_set_id directly into the
+	// marshaled payload so Update() can always send CM's clear instruction.
+	if !plan.KeyRule.ResourceSetID.IsNull() && !plan.KeyRule.ResourceSetID.IsUnknown() {
+		var payloadMap map[string]interface{}
+		if err := json.Unmarshal(payloadJSON, &payloadMap); err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid data input: CTE Policy Key Rule Update",
+				err.Error(),
+			)
+			return
+		}
+		payloadMap["resource_set_id"] = plan.KeyRule.ResourceSetID.ValueString()
+		payloadJSON, err = json.Marshal(payloadMap)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid data input: CTE Policy Key Rule Update",
+				err.Error(),
+			)
+			return
+		}
 	}
 
 	response, err := r.client.UpdateDataV2(

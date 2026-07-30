@@ -639,7 +639,7 @@ type TLSCiphersJSON struct {
 // CMInterfaceJSON is the JSON payload for CM interface create/update API calls.
 // Meta, TrustedCAs, LocalAutogenAttributes, and Certificate are pointer types so that
 // encoding/json omitempty correctly suppresses them when nil — non-pointer structs are
-// never omitted by omitempty even when zero-valued (TFIN-429).
+// never omitted by omitempty even when zero-valued.
 type CMInterfaceJSON struct {
 	ID                      string                           `json:"id,omitempty"`
 	Port                    int64                            `json:"port"`
@@ -1088,7 +1088,7 @@ type CMSyslogJSON struct {
 	Transport     string  `json:"transport"`
 	CACert        *string `json:"caCert,omitempty"`
 	MessageFormat *string `json:"messageFormat,omitempty"`
-	Port          int64   `json:"port,omitempty"`
+	Port          *int64  `json:"port,omitempty"` // pointer so nil omits the field; 514 sends explicit default
 	Account       string  `json:"account"`
 	CreatedAt     string  `json:"createdAt"`
 	UpdatedAt     string  `json:"updatedAt"`
@@ -1202,7 +1202,7 @@ type CMLogForwardersSyslogParamsJSON struct {
 }
 
 type CMLogForwardersSyslogJSON struct {
-	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"syslog_params"`
+	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"forward_logs"`
 }
 
 type CMLogForwardersJSON struct {

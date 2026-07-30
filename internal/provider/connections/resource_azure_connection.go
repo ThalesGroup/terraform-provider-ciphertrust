@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 )
 
@@ -253,7 +252,7 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceAzureConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_azure_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_azure_connection.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan AzureConnectionTFSDK
@@ -342,7 +341,7 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		diags = plan.Products.ElementsAs(ctx, &azureProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = azureProducts
@@ -358,7 +357,7 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Azure connection Creation",
 			err.Error(),
@@ -368,7 +367,7 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_AZURE_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating Azure Connection on CipherTrust Manager: ",
 			"Could not create azure connection, unexpected error: "+err.Error(),
@@ -379,10 +378,10 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 	// Re-fetch the resource via GET so that state reflects what CM actually stored,
 	// rather than relying on the POST response body which may omit fields like labels.
 	newID := gjson.Get(response, "id").String()
-	tflog.Debug(ctx, "[resource_azure_connection.go -> Create] fetching created resource id="+newID)
+	r.client.Log.Debug("[resource_azure_connection.go -> Create] fetching created resource id=" + newID)
 	response, err = r.client.GetById(ctx, id, newID, common.URL_AZURE_CONNECTION)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Azure Connection after creation: ",
 			"Could not read back azure connection id: "+newID+", unexpected error: "+err.Error(),
@@ -390,10 +389,10 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_azure_connection.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_azure_connection.go -> Create Output][" + response + "]")
 	getAzureParamsFromResponse(response, &resp.Diagnostics, &plan)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_azure_connection.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_azure_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -404,7 +403,7 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 func (r *resourceAzureConnection) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state AzureConnectionTFSDK
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_azure_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_azure_connection.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -415,18 +414,24 @@ func (r *resourceAzureConnection) Read(ctx context.Context, req resource.ReadReq
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AZURE_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_azure_connection.go -> Read] connection not found, removing from state ["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"Azure Connection Not Found on CipherTrust Manager — State Preserved",
+				fmt.Sprintf("The managed Azure connection %q was not found during refresh.\n\n"+
+					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
+					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
+					"manually remove it from state: 'terraform state rm <resource-address>'",
+					state.ID.ValueString()),
+			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Azure Connection on CipherTrust Manager: ",
 			"Could not read azure connection id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Debug(ctx, "resource_azure_connection.go: response :"+response)
+	r.client.Log.Debug("resource_azure_connection.go: response :" + response)
 
 	getAzureParamsFromResponse(response, &resp.Diagnostics, &state)
 	// required parameters are fetched separately
@@ -438,13 +443,13 @@ func (r *resourceAzureConnection) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_azure_connection.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_azure_connection.go -> Read][" + id + "]")
 	return
 }
 
 func (r *resourceAzureConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_azure_connection.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_azure_connection.go -> Update][" + id + "]")
 	var plan AzureConnectionTFSDK
 	var state AzureConnectionTFSDK
 	var payload AzureConnectionJSON
@@ -545,7 +550,7 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		diags = plan.Products.ElementsAs(ctx, &azureProducts, false)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
-			tflog.Debug(ctx, fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
+			r.client.Log.Debug(fmt.Sprintf("Error converting products: %v", resp.Diagnostics.Errors()))
 			return
 		}
 		payload.Products = azureProducts
@@ -564,7 +569,7 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Azure connection update",
 			err.Error(),
@@ -574,7 +579,7 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 
 	_, err = r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_AZURE_CONNECTION, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Azure Connection on CipherTrust Manager: ",
 			"Could not update azure connection, unexpected error: "+err.Error(),
@@ -584,17 +589,17 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 
 	// Re-fetch the resource via GET so that state reflects what CM actually stored,
 	// rather than relying on the PATCH response body which may omit fields like labels.
-	tflog.Debug(ctx, "[resource_azure_connection.go -> Update] fetching updated resource id="+plan.ID.ValueString())
+	r.client.Log.Debug("[resource_azure_connection.go -> Update] fetching updated resource id=" + plan.ID.ValueString())
 	response, err := r.client.GetById(ctx, id, plan.ID.ValueString(), common.URL_AZURE_CONNECTION)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_azure_connection.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_azure_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Azure Connection after update: ",
 			"Could not read back azure connection id: "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Debug(ctx, fmt.Sprintf("Response: %s", response))
+	r.client.Log.Debug(fmt.Sprintf("Response: %s", response))
 	getAzureParamsFromResponse(response, &resp.Diagnostics, &plan)
 
 	diags = resp.State.Set(ctx, plan)
@@ -606,7 +611,7 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 
 func (r *resourceAzureConnection) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state AzureConnectionTFSDK
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_azure_connection.go -> Delete]["+state.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_azure_connection.go -> Delete][" + state.ID.ValueString() + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -618,17 +623,17 @@ func (r *resourceAzureConnection) Delete(ctx context.Context, req resource.Delet
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "Azure connection already deleted out-of-band on CM")
+			r.client.Log.Debug("Azure connection already deleted out-of-band on CM")
 			return
 		}
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_azure_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_azure_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust Azure Connection",
 			"Could not delete azure connection, unexpected error: "+err.Error(),
 		)
 		return
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_azure_connection.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_azure_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 }
 
 func (d *resourceAzureConnection) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -652,8 +657,7 @@ func (d *resourceAzureConnection) Configure(_ context.Context, req resource.Conf
 // clientSecretClearBlocked reports whether the plan is attempting to clear a
 // previously-set client_secret. CM never returns this write-only field on GET, so the
 // provider cannot verify whether a clear PATCH actually took effect. Rather than writing
-// an unverifiable null into state (per TFIN-364-class bug), Update rejects the attempt
-// outright.
+// an unverifiable null into state, Update rejects the attempt outright.
 func clientSecretClearBlocked(state, plan AzureConnectionTFSDK) bool {
 	hadSecret := !state.ClientSecret.IsNull() && state.ClientSecret.ValueString() != ""
 	clearing := plan.ClientSecret.IsNull() || plan.ClientSecret.ValueString() == ""

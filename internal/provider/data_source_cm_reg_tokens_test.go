@@ -64,12 +64,12 @@ func Test_CM_DataSourceCMTokensList_CamelCaseFields(t *testing.T) {
 					resource.TestCheckOutput("lifetime_accessible", "true"),
 					resource.TestCheckOutput("client_management_profile_id_accessible", "true"),
 					// dev_account: verify attribute is schema-accessible (value varies by
-				// instance type — empty on non-CDSPaaS, non-empty on CDSPaaS/cloud)
-				resource.TestCheckResourceAttrWith(
-					"data.ciphertrust_cm_tokens_list.all",
-					"tokens.0.dev_account",
-					func(_ string) error { return nil },
-				),
+					// instance type — empty on non-CDSPaaS, non-empty on CDSPaaS/cloud)
+					resource.TestCheckResourceAttrWith(
+						"data.ciphertrust_cm_tokens_list.all",
+						"tokens.0.dev_account",
+						func(_ string) error { return nil },
+					),
 				),
 			},
 		},
@@ -115,7 +115,7 @@ data "ciphertrust_cm_tokens_list" "test" {}
 // an out-of-band deletion: after the token is deleted outside Terraform, the next
 // apply no longer surfaces that token in the data source list.
 func Test_CM_AccDataSourceCMRegTokensList_staleData(t *testing.T) {
-	t.Skip("pre-existing failure unrelated to TFIN-371 — tracked separately")
+	t.Skip("pre-existing failure unrelated to this change — tracked separately")
 	RequireCM(t)
 	var tokenID string
 

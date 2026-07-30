@@ -111,7 +111,7 @@ func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 func TestRoundTrip_SkipsRefreshForAuthEndpoint(t *testing.T) {
 	base := &countingTransport{}
 	client := &Client{
-		Token: makeJWT(time.Now().Add(-1 * time.Minute).Unix()), // expired token
+		Token:    makeJWT(time.Now().Add(-1 * time.Minute).Unix()), // expired token
 		AuthData: AuthStruct{Username: "admin", Password: "pass"},
 	}
 	tr := &TokenRefreshTransport{Base: base, client: client}

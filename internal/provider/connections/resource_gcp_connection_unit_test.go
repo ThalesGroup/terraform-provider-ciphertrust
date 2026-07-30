@@ -163,8 +163,8 @@ func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 // Test_CM_GCPRead_OOBDelete_GracefulStateRemoval is an end-to-end unit test that
 // proves Read() silently removes the resource from state — instead of returning an
 // error diagnostic — when CM responds with 404.  This is the out-of-band deletion
-// scenario described in TFIN-326: after an OOB delete the next terraform plan must
-// propose a clean +create rather than hard-erroring.
+// scenario: after an OOB delete the next terraform plan must propose a clean
+// +create rather than hard-erroring.
 //
 // The test uses net/http/httptest as a drop-in fake CM so no live endpoint is needed.
 func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
@@ -193,13 +193,14 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	stateType := schemaResp.Schema.Type().TerraformType(ctx)
 	rawState := tftypes.NewValue(stateType, map[string]tftypes.Value{
 		// GCP-specific attributes
-		"id":             tftypes.NewValue(tftypes.String, "nonexistent-gcp-id"),
-		"name":           tftypes.NewValue(tftypes.String, "my-gcp-conn"),
-		"key_file":       tftypes.NewValue(tftypes.String, `{"type":"service_account"}`),
-		"description":    tftypes.NewValue(tftypes.String, ""),
-		"cloud_name":     tftypes.NewValue(tftypes.String, "gcp"),
-		"client_email":   tftypes.NewValue(tftypes.String, ""),
-		"private_key_id": tftypes.NewValue(tftypes.String, ""),
+		"id":               tftypes.NewValue(tftypes.String, "nonexistent-gcp-id"),
+		"name":             tftypes.NewValue(tftypes.String, "my-gcp-conn"),
+		"key_file":         tftypes.NewValue(tftypes.String, nil),
+		"key_file_version": tftypes.NewValue(tftypes.Number, 1),
+		"description":      tftypes.NewValue(tftypes.String, ""),
+		"cloud_name":       tftypes.NewValue(tftypes.String, "gcp"),
+		"client_email":     tftypes.NewValue(tftypes.String, ""),
+		"private_key_id":   tftypes.NewValue(tftypes.String, ""),
 		// Common response attributes (from CMCreateConnectionResponseCommonTFSDK)
 		"uri":                   tftypes.NewValue(tftypes.String, ""),
 		"account":               tftypes.NewValue(tftypes.String, ""),
@@ -234,18 +235,19 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	r.Read(ctx, req, resp)
 
 	// Assert 1: Read() must NOT add any error diagnostic on 404.
-	// A non-nil error here means Terraform would surface a hard error instead of
-	// proposing +create — exactly the failure mode described in TFIN-326.
 	if resp.Diagnostics.HasError() {
 		t.Errorf("Read() must not add error diagnostics on OOB-delete 404, got: %v",
 			resp.Diagnostics)
 	}
 
-	// Assert 2: Read() must call resp.State.RemoveResource so the state becomes null.
-	// Terraform uses a null state as the signal to propose a +create on the next plan.
-	if !resp.State.Raw.IsNull() {
-		t.Errorf("Read() must remove the resource from state (state.Raw.IsNull) on 404, "+
-			"got non-null state: %v", resp.State.Raw)
+	// Assert 2: Read() must add a Warning diagnostic on 404 as per the State Preserved standard.
+	if len(resp.Diagnostics) == 0 {
+		t.Error("Read() must add a Warning diagnostic on OOB-delete 404 to notify state preservation")
+	}
+
+	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be false) on 404.
+	if resp.State.Raw.IsNull() {
+		t.Errorf("Read() must preserve the resource in state (state.Raw.IsNull is false) on 404 as per CLAUDE.md convention, got null state")
 	}
 }
 
@@ -257,20 +259,20 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty string resolves to empty", func(t *testing.T) {
-		if got := getGcpKeyFile(ctx, ""); got != "" {
+		if got := getGcpKeyFile(ctx, "", hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("whitespace-only string resolves to empty", func(t *testing.T) {
-		if got := getGcpKeyFile(ctx, "   \t\n  "); got != "" {
+		if got := getGcpKeyFile(ctx, "   \t\n  ", hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("inline JSON that is not a filesystem path passes through verbatim", func(t *testing.T) {
 		inline := `{"type":"service_account","client_email":"svc@project.iam.gserviceaccount.com"}`
-		if got := getGcpKeyFile(ctx, inline); got != inline {
+		if got := getGcpKeyFile(ctx, inline, hclog.NewNullLogger()); got != inline {
 			t.Errorf("got %q, want %q", got, inline)
 		}
 	})
@@ -282,7 +284,7 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		if got := getGcpKeyFile(ctx, path); got != content {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != content {
 			t.Errorf("got %q, want %q", got, content)
 		}
 	})
@@ -293,14 +295,14 @@ func Test_CM_GetGcpKeyFile_ResolvesInlineOrFileContent(t *testing.T) {
 		if err := os.WriteFile(path, []byte(""), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		if got := getGcpKeyFile(ctx, path); got != "" {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("path to a nonexistent file passes the raw path through verbatim", func(t *testing.T) {
 		path := "/nonexistent/path/to/key.json"
-		if got := getGcpKeyFile(ctx, path); got != path {
+		if got := getGcpKeyFile(ctx, path, hclog.NewNullLogger()); got != path {
 			t.Errorf("got %q, want %q", got, path)
 		}
 	})
@@ -314,7 +316,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty string is rejected", func(t *testing.T) {
-		resolved, errMsg := resolveGcpKeyFile(ctx, "")
+		resolved, errMsg := resolveGcpKeyFile(ctx, "", hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -324,7 +326,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 	})
 
 	t.Run("whitespace-only string is rejected", func(t *testing.T) {
-		resolved, errMsg := resolveGcpKeyFile(ctx, "   ")
+		resolved, errMsg := resolveGcpKeyFile(ctx, "   ", hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -339,7 +341,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 		if err := os.WriteFile(path, []byte(""), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		resolved, errMsg := resolveGcpKeyFile(ctx, path)
+		resolved, errMsg := resolveGcpKeyFile(ctx, path, hclog.NewNullLogger())
 		if errMsg == "" {
 			t.Fatalf("expected an error message, got none (resolved=%q)", resolved)
 		}
@@ -350,7 +352,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 
 	t.Run("non-empty inline JSON resolves without error", func(t *testing.T) {
 		inline := `{"type":"service_account","client_email":"svc@project.iam.gserviceaccount.com"}`
-		resolved, errMsg := resolveGcpKeyFile(ctx, inline)
+		resolved, errMsg := resolveGcpKeyFile(ctx, inline, hclog.NewNullLogger())
 		if errMsg != "" {
 			t.Fatalf("unexpected error message: %q", errMsg)
 		}
@@ -366,7 +368,7 @@ func Test_CM_ResolveGcpKeyFile_RejectsEmptyResolvedValue(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("failed to write test key file: %v", err)
 		}
-		resolved, errMsg := resolveGcpKeyFile(ctx, path)
+		resolved, errMsg := resolveGcpKeyFile(ctx, path, hclog.NewNullLogger())
 		if errMsg != "" {
 			t.Fatalf("unexpected error message: %q", errMsg)
 		}

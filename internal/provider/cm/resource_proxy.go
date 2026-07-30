@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -59,38 +58,44 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 					validators.PEMCertificate(),
 				},
 			},
+			// http_proxy: uses ProxyURL() instead of URL() to accept the schemeless
+			// proxy format (e.g. "user:pass@host:port") that CM's own documentation
+			// describes as valid (Scenario 3 — protocol not specified explicitly).
+			// validators.URL() was too strict: it enforced RFC URL semantics and
+			// rejected valid CM-accepted values. (TFIN-526)
 			"http_proxy": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				Description: "HTTP proxy URL for proxy configurations. Include the scheme (e.g. " +
-					"`http://username:password@proxy.example.com:8080`). If the proxy server's password " +
-					"contains any special character replace it with percent-encoded values. " +
+				Description: "HTTP proxy address. Accepts a full URL (e.g. " +
+					"`http://username:password@proxy.example.com:8080`), a schemeless address " +
+					"(e.g. `username:password@host:port` or `host:port`), or a bare hostname. " +
+					"If the proxy password contains special characters, percent-encode them. " +
 					"**Known limitation**: CipherTrust Manager always returns this value with the password " +
 					"masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform " +
 					"state holds the cleartext value from your configuration. A password-only out-of-band " +
-					"change (same scheme, host, port, and username; different password only) is " +
-					"undetectable by `terraform plan -refresh-only` because the masked URL is structurally " +
-					"identical before and after. Changes to scheme, host, port, or username are fully " +
-					"detectable and will surface as drift.",
+					"change is undetectable by `terraform plan -refresh-only` because the masked URL is " +
+					"structurally identical before and after. Changes to scheme, host, port, or username " +
+					"are fully detectable and will surface as drift.",
 				Validators: []validator.String{
-					validators.URL(),
+					validators.ProxyURL(),
 				},
 			},
+			// https_proxy: same validator relaxation as http_proxy. (TFIN-526)
 			"https_proxy": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				Description: "HTTPS proxy URL for proxy configurations. Include the scheme (e.g. " +
-					"`https://username:password@proxy.example.com:8080`). If the proxy server's password " +
-					"contains any special character replace it with percent-encoded values. " +
+				Description: "HTTPS proxy address. Accepts a full URL (e.g. " +
+					"`https://username:password@proxy.example.com:8080`), a schemeless address " +
+					"(e.g. `username:password@host:port` or `host:port`), or a bare hostname. " +
+					"If the proxy password contains special characters, percent-encode them. " +
 					"**Known limitation**: CipherTrust Manager always returns this value with the password " +
 					"masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform " +
 					"state holds the cleartext value from your configuration. A password-only out-of-band " +
-					"change (same scheme, host, port, and username; different password only) is " +
-					"undetectable by `terraform plan -refresh-only` because the masked URL is structurally " +
-					"identical before and after. Changes to scheme, host, port, or username are fully " +
-					"detectable and will surface as drift.",
+					"change is undetectable by `terraform plan -refresh-only` because the masked URL is " +
+					"structurally identical before and after. Changes to scheme, host, port, or username " +
+					"are fully detectable and will surface as drift.",
 				Validators: []validator.String{
-					validators.URL(),
+					validators.ProxyURL(),
 				},
 			},
 			"no_proxy": schema.ListAttribute{
@@ -105,7 +110,7 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_proxy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_proxy.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMProxyTFSDK
@@ -140,7 +145,7 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Proxy Configuration",
 			err.Error(),
@@ -154,7 +159,7 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 		common.URL_CM_PROXY,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error setting proxy information on CipherTrust Manager: ",
 			"Could not set proxy information, unexpected error: "+err.Error(),
@@ -162,10 +167,10 @@ func (r *resourceCMProxy) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	tflog.Debug(ctx, "[resource_proxy.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_proxy.go -> Create Output][" + response + "]")
 
 	plan.ID = types.StringValue("proxy")
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -188,13 +193,12 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
-				"Proxy Not Found",
-				"The Proxy resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"Proxy Not Found — State Preserved",
+				"The Proxy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Proxy information on CipherTrust Manager: ",
 			"Could not read Proxy information: unexpected error: "+err.Error(),
@@ -248,7 +252,7 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 	state.NoProxy = noProxies
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -315,7 +319,7 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Proxy Update",
 			err.Error(),
@@ -330,7 +334,7 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		common.URL_CM_PROXY,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_proxy.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_proxy.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Proxy information on CipherTrust Manager: ",
 			"Could not update Proxy information, unexpected error: "+err.Error(),
@@ -346,28 +350,32 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		plan.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// http_proxy: apply same structural-drift logic as Read().
-	// plan.HTTPProxy holds the desired cleartext value from Terraform config.
-	// If non-password portions are equal (including a password-only config change),
-	// plan.HTTPProxy retains the cleartext plan value in state.
+	// http_proxy / https_proxy: TFIN-527 — preserve the plan value after a successful
+	// update. CM's password-masking implementation corrupts the non-password portion of
+	// the proxy URL in its PUT response (e.g. "http://proxyuser:p@host" comes back as
+	// "httxxxxxx://xxxxxxroxyuser:xxxxxx@host" — scheme and username partially overwritten
+	// by mask characters). This corruption is non-deterministic and depends on the byte
+	// length of the previous and new credentials. Passing CM's corrupted response to
+	// proxyNonPasswordPart() produces a structural mismatch against the plan value, which
+	// causes the provider to write the corrupted masked string to state — and
+	// terraform-plugin-framework then rejects the state as inconsistent with the plan.
+	//
+	// Since the PUT returned 200 (success), the planned value IS now the server state.
+	// Preserve the plan value unconditionally. The API response is lossy/corrupted for
+	// this specific field; it must not be used to hydrate state after an update.
+	// (Read() uses proxyNonPasswordPart() for structural drift detection and is unaffected.)
 	if !plan.HTTPProxy.IsNull() {
 		if r := gjson.Get(response, "http_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPProxy.ValueString()) {
-				// Structural mismatch — store the CM-authoritative masked value.
-				plan.HTTPProxy = types.StringValue(r.String())
-			}
-			// else: CM confirms the non-password portion matches — preserve cleartext plan value in state.
+			// Preserve the cleartext plan value — do not use CM's masked/corrupted response.
+			// plan.HTTPProxy already holds the correct post-update state.
 		} else {
 			plan.HTTPProxy = types.StringNull()
 		}
 	}
 
-	// https_proxy: same pattern.
 	if !plan.HTTPSProxy.IsNull() {
 		if r := gjson.Get(response, "https_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPSProxy.ValueString()) {
-				plan.HTTPSProxy = types.StringValue(r.String())
-			}
+			// Preserve the cleartext plan value — do not use CM's masked/corrupted response.
 		} else {
 			plan.HTTPSProxy = types.StringNull()
 		}
@@ -401,7 +409,7 @@ func (r *resourceCMProxy) Delete(ctx context.Context, req resource.DeleteRequest
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s", r.client.CipherTrustURL, common.URL_CM_PROXY)
 	output, err := r.client.DeleteByID(ctx, "DELETE", id, url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_proxy.go -> Delete]["+id+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_proxy.go -> Delete][" + id + "][" + output + "]")
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Deleting Proxy",

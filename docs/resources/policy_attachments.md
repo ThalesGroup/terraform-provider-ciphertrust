@@ -71,13 +71,13 @@ output "cm_policy_attachment_id" {
 
 ### Optional
 
-- `actions` (List of String) (Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey
 - `jurisdiction` (String) (Immutable) Jurisdiction to which the policy applies.
-- `resources` (List of String) (Immutable) Resources is a list of URI strings, which must be in URI format.
 
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
+- `actions` (List of String) (Read-only) Actions carried by this attachment. CM always derives these from the linked policy's own actions — they cannot be set independently on the attachment.
 - `created_at` (String) Date/time the resource was created.
 - `id` (String) The ID of this resource.
+- `resources` (List of String) (Read-only) Resources carried by this attachment. CM always derives these from the linked policy's own resources — they cannot be set independently on the attachment.
 - `uri` (String) A human readable unique identifier of the resource.

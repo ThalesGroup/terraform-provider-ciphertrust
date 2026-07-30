@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -151,7 +150,7 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_domain.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_domain.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMDomainTFSDK
@@ -201,7 +200,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Domain Creation",
 			err.Error(),
@@ -211,7 +210,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_DOMAIN, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_group.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating domain on CipherTrust Manager: ",
 			"Could not create domain, unexpected error: "+err.Error(),
@@ -253,9 +252,9 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 		plan.ParentCAId = types.StringValue(parentCaIdResp)
 	}
 
-	tflog.Debug(ctx, "[resource_cm_domain.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_cm_domain.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_domain.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -277,11 +276,13 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			tflog.Warn(ctx, "Domain not found, removing from state [resource_cm_domain.go -> Read]["+id+"]")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddWarning(
+				"CM Domain Not Found — State Preserved",
+				"The CM Domain resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager: ",
 			"Could not read CM Domain id : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -369,7 +370,7 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_domain.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -381,8 +382,8 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_domain.go -> Update]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Update]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_domain.go -> Update][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_domain.go -> Update][" + id + "]")
 	var plan CMDomainTFSDK
 	var state CMDomainTFSDK
 
@@ -424,7 +425,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	// If no changes detected, preserve existing state and return
 	if !hasChanges {
-		tflog.Debug(ctx, "[resource_cm_domain.go -> Update] No changes detected, preserving state")
+		r.client.Log.Debug("[resource_cm_domain.go -> Update] No changes detected, preserving state")
 		diags = resp.State.Set(ctx, plan)
 		resp.Diagnostics.Append(diags...)
 		return
@@ -473,7 +474,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	payloadJSON, err := json.Marshal(patchMap)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Update][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Domain Update",
 			err.Error(),
@@ -483,7 +484,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	_, err = r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_DOMAIN, payloadJSON, "updatedAt")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update]["+state.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Update][" + state.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating domain on CipherTrust Manager: ",
 			"Could not update domain, unexpected error: "+err.Error(),
@@ -493,7 +494,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 
 	readResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_domain.go -> Update -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Update -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CM Domain on CipherTrust Manager after update: ",
 			"Could not read CM Domain id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -597,7 +598,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_domain.go -> Delete]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_domain.go -> Delete][" + id + "]")
 
 	var state CMDomainTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -609,7 +610,7 @@ func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteReques
 	// Delete existing domain
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_DOMAIN, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_domain.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_domain.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

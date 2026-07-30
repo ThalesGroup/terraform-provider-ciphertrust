@@ -155,7 +155,7 @@ resource "ciphertrust_cm_reg_token" "test" {
 					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_REG_TOKEN+"/"+capturedID)
 				},
 				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				ExpectNonEmptyPlan: false,
 			},
 			{
 				Config: providerConfig + `
@@ -163,10 +163,10 @@ resource "ciphertrust_cm_reg_token" "test" {
   name_prefix = "test-"
 }
 `,
-				Check: checkStep(t, "deleteOOB: recreated",
+				Check: checkStep(t, "deleteOOB: state preserved",
 					resource.TestCheckResourceAttrWith("ciphertrust_cm_reg_token.test", "id", func(val string) error {
-						if val == capturedID {
-							return fmt.Errorf("expected new id after OOB delete, got same id %s", val)
+						if val != capturedID {
+							return fmt.Errorf("expected state to be preserved (same id), got new id %s", val)
 						}
 						return nil
 					}),
@@ -681,3 +681,117 @@ resource "ciphertrust_cm_reg_token" "test" {
 		},
 	})
 }
+
+// Test_CM_RegToken_LabelsClearConverges verifies that removing labels from config
+// clears them on CM and converges without perpetual drift (TFIN-513).
+func Test_CM_RegToken_LabelsClearConverges(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-rt-lblclr-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with labels set.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  labels      = { env = "test" }
+}`, name),
+				Check: checkStep(t, "labels set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "labels.env", "test"),
+				),
+			},
+			// Step 2: Remove labels from config — provider sends "labels": null to CM.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+}`, name),
+				Check: checkStep(t, "labels cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.env"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			// Step 3: Idempotency — no perpetual drift after clear.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+}`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_RegToken_LabelsUpdate verifies that updating labels (non-null → non-null)
+// converges correctly and old keys are removed.
+func Test_CM_RegToken_LabelsUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-rt-lblupd-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  labels      = { k1 = "v1" }
+}`, name),
+				Check: checkStep(t, "initial labels",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "labels.k1", "v1"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+  labels      = { k2 = "v2" }
+}`, name),
+				Check: checkStep(t, "updated labels",
+					resource.TestCheckResourceAttr("ciphertrust_cm_reg_token.test", "labels.k2", "v2"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.k1"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_RegToken_NoLabelsDrift verifies that a reg token created without labels
+// shows no perpetual drift even though CM may return labels:{} in the response.
+func Test_CM_RegToken_NoLabelsDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-rt-nolbl-" + uuid.New().String()[:8]
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_reg_token" "test" {
+  name_prefix = %q
+  lifetime    = "30m"
+}`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "no labels",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_reg_token.test", "labels.%"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+

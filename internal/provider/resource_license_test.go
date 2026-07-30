@@ -227,7 +227,7 @@ resource "ciphertrust_license" "test" {
 	})
 }
 
-// Test_CM_License_NoChangeAfterApply is a regression test for TFIN-430.
+// Test_CM_License_NoChangeAfterApply is a regression test for a false-positive immutability diff.
 // After a successful create, a no-change plan must produce no diff, and destroy
 // must complete without the "Attribute is immutable" error.
 func Test_CM_License_NoChangeAfterApply(t *testing.T) {
@@ -281,7 +281,7 @@ resource "ciphertrust_license" "test" {
 				),
 			},
 			{
-				// Directly asserts the TFIN-430 fix: ImmutableString must not fire
+				// Directly asserts the fix: ImmutableString must not fire
 				// when state.License == plan.License on the second plan.
 				Config:             config,
 				PlanOnly:           true,
@@ -353,4 +353,3 @@ resource "ciphertrust_license" "bindtype_test" {
 		},
 	})
 }
-

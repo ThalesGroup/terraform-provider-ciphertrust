@@ -20,7 +20,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -57,12 +56,11 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 				Description: "The ID of this resource.",
 			},
+			// host: ImmutableString() removed (TFIN-523). CM's PATCH /configs/syslogs/{id}
+			// accepts in-place host changes (confirmed live: HTTP 200, value persists).
 			"host": schema.StringAttribute{
 				Required:    true,
-				Description: "(Immutable) The hostname or IP address of the syslog connection.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				Description: "The hostname or IP address of the syslog connection.",
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
@@ -74,13 +72,22 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 					stringvalidator.OneOf("udp", "tcp", "tls"),
 				},
 			},
+			// ca_cert: UseStateWhenClearingString() replaces UseStateForUnknown() (TFIN-524).
+			// CM's PATCH /configs/syslogs/{id} silently ignores caCert="" — the API has no
+			// reset signal for this field. Once a CA certificate is set, it cannot be
+			// cleared back to unset via the API; only replacement with a new certificate
+			// is supported. UseStateWhenClearingString() preserves the existing certificate
+			// and emits a warning when the user removes ca_cert from config.
 			"ca_cert": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					modifiers.UseStateWhenClearingString(),
 				},
-				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode",
+				Description: "The trusted CA cert in PEM format. Only used in TLS transport mode. " +
+					"**API limitation**: once set, this field cannot be cleared back to unset — " +
+					"CM's update API has no reset signal for ca_cert (empty string is silently ignored). " +
+					"To remove the CA cert, destroy and recreate the resource.",
 			},
 			"message_format": schema.StringAttribute{
 				Optional: true,
@@ -93,14 +100,17 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 					stringvalidator.OneOf("rfc5424", "plain_message", "cef", "leef"),
 				},
 			},
+			// port: ImmutableInt64() removed (TFIN-523). CM's PATCH /configs/syslogs/{id}
+			// accepts in-place port changes (confirmed live: HTTP 200, value persists).
+			// When removed from config, Update() sends the transport-specific default
+			// (514 for udp, confirmed to reset correctly via live API test).
 			"port": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
-					modifiers.ImmutableInt64(),
 				},
-				Description: "(Immutable) The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls. Known limitation: once set, this cannot be cleared back to unset by removing it from config; to reset to the CM default, destroy and recreate the resource.",
+				Description: "The port to use for the connection. Defaults to 514 for udp, 601 for tcp and 6514 for tls.",
 				Validators: []validator.Int64{
 					int64validator.Between(1, 65535),
 				},
@@ -126,7 +136,7 @@ func (r *resourceCMSyslog) Schema(_ context.Context, _ resource.SchemaRequest, r
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_syslog.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_syslog.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMSyslogTFSDK
@@ -151,13 +161,14 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		payload.MessageFormat = &mfVal
 	}
 
-	if plan.Port.ValueInt64() != types.Int64Unknown().ValueInt64() {
-		payload.Port = plan.Port.ValueInt64()
+	if !plan.Port.IsNull() && !plan.Port.IsUnknown() {
+		portVal := plan.Port.ValueInt64()
+		payload.Port = &portVal
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Syslog Configuration",
 			err.Error(),
@@ -171,7 +182,7 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		common.URL_CM_SYSLOG,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error adding Syslog configuration on CipherTrust Manager: ",
 			"Could not add Syslog "+plan.Host.ValueString()+", unexpected error: "+err.Error(),
@@ -199,9 +210,9 @@ func (r *resourceCMSyslog) Create(ctx context.Context, req resource.CreateReques
 		}
 	}
 
-	tflog.Debug(ctx, "[resource_syslog.go -> Create Output]["+response+"]")
+	r.client.Log.Debug("[resource_syslog.go -> Create Output][" + response + "]")
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -224,13 +235,12 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
-				"Syslog Not Found",
-				"The Syslog resource was not found on CipherTrust Manager (HTTP 404). It may have been deleted outside of Terraform. Removing it from state.",
+				"Syslog Not Found — State Preserved",
+				"The Syslog resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
 			)
-			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading Syslog configuration on CipherTrust Manager: ",
 			"Could not read Syslog cofiguration : ,"+state.ID.ValueString()+"unexpected error: "+err.Error(),
@@ -262,7 +272,7 @@ func (r *resourceCMSyslog) Read(ctx context.Context, req resource.ReadRequest, r
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Read][" + id + "]")
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -290,16 +300,8 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	// Check if there are actual changes - if not, skip the update
-	if plan.Transport.Equal(state.Transport) &&
-		plan.CACert.Equal(state.CACert) &&
-		plan.MessageFormat.Equal(state.MessageFormat) {
-		// No changes, just set the state and return
-		diags = resp.State.Set(ctx, plan)
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
+	// host is Required; always include it so CM persists the correct value.
+	payload.Host = plan.Host.ValueString()
 	payload.Transport = plan.Transport.ValueString()
 
 	// 3-Way State-Transition Comparison for ca_cert:
@@ -312,19 +314,34 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		payload.CACert = &emptyStr
 	}
 
-	// 3-Way State-Transition Comparison for message_format:
+	// 3-Way State-Transition Comparison for message_format (TFIN-434):
+	// CM's PATCH silently ignores messageFormat="" — the API has no reset-to-unset signal.
+	// Confirmed live: sending the explicit default "rfc5424" correctly resets the field.
+	// When the user removes message_format from config, send the documented default.
 	if !plan.MessageFormat.IsNull() && !plan.MessageFormat.IsUnknown() {
 		mfVal := plan.MessageFormat.ValueString()
 		payload.MessageFormat = &mfVal
 	} else if !state.MessageFormat.IsNull() && !state.MessageFormat.IsUnknown() {
-		// Transitioning from set to null: send an explicit empty string pointer to clear/reset it on CM
-		emptyStr := ""
-		payload.MessageFormat = &emptyStr
+		// Transitioning from set to null: send the explicit default to reset on CM.
+		defaultMF := "rfc5424"
+		payload.MessageFormat = &defaultMF
+	}
+
+	// port handling (TFIN-523): Update() previously omitted port entirely, preventing
+	// in-place port changes. Add port to the PATCH payload; when removed from config,
+	// send the default 514 (confirmed live: CM resets correctly to 514).
+	if !plan.Port.IsNull() && !plan.Port.IsUnknown() {
+		portVal := plan.Port.ValueInt64()
+		payload.Port = &portVal
+	} else if !state.Port.IsNull() && !state.Port.IsUnknown() {
+		// Port was previously set; user removed it — reset to default 514.
+		defaultPort := int64(514)
+		payload.Port = &defaultPort
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Syslog Updation",
 			err.Error(),
@@ -338,7 +355,7 @@ func (r *resourceCMSyslog) Update(ctx context.Context, req resource.UpdateReques
 		common.URL_CM_SYSLOG,
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_syslog.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_syslog.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating Syslog on CipherTrust Manager: ",
 			"Could not update Syslog "+plan.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -380,7 +397,7 @@ func (r *resourceCMSyslog) Delete(ctx context.Context, req resource.DeleteReques
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CM_SYSLOG, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_syslog.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_syslog.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return

@@ -107,8 +107,9 @@ output "cte_client_id" {
 - `lgcs_access_only` (Boolean) Whether the client can be added to an LDT communication group. If lgcs_access_only is set to false, the client can be added to an LDT communication group. Only available on Windows clients.
 - `max_num_cache_log` (Number) Maximum number of logs to cache.
 - `max_space_cache_log` (Number) Maximum space for the cached logs.
-- `password` (String, Sensitive) Password for the client. Required when password_creation_method is MANUAL.
+- `password` (String, Sensitive) Password for the client. Required when password_creation_method is MANUAL. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.
 - `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
+- `password_version` (Number) Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.
 - `profile_id` (String) ID of the profile that contains logger, logging, and QOS configuration.
 - `profile_identifier` (String) Identifier of the Client Profile to be associated with the client. If not provided, the default profile will be linked.
 - `protection_mode` (String) Update protection mode for windows client. This change is irreversible. The valid value is "CTE RWP"

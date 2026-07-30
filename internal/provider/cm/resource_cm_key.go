@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -838,7 +837,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_key.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CMKeyTFSDK
@@ -1032,7 +1031,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	// Add hkdfCreateParameters to payload if set
 	var hkdfCreateParameters HKDFParametersJSON
 	if plan.HKDFCreateParameters != nil {
-		tflog.Debug(ctx, "HKDFParameters should not be empty at this point")
+		r.client.Log.Debug("HKDFParameters should not be empty at this point")
 		if plan.HKDFCreateParameters.HashAlgorithm.ValueString() != "" {
 			hkdfCreateParameters.HashAlgorithm = plan.HKDFCreateParameters.HashAlgorithm.ValueString()
 		}
@@ -1234,7 +1233,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Key Creation",
 			err.Error(),
@@ -1244,7 +1243,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating key on CipherTrust Manager: ",
 			"Could not create key, unexpected error: "+err.Error(),
@@ -1321,7 +1320,7 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -1332,8 +1331,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_key.go -> Read]["+id+"]")
-	defer tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_key.go -> Read][" + id + "]")
+	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Read][" + id + "]")
 
 	var state CMKeyTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -1355,7 +1354,7 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error Reading CipherTrust Key",
 			"Could not read key "+state.ID.ValueString()+": "+err.Error(),
@@ -1881,7 +1880,7 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Key Update",
 			err.Error(),
@@ -1893,7 +1892,7 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	// pick up server-assigned alias indices for newly added aliases immediately.
 	responseBody, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_KEY_MANAGEMENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating key on CipherTrust Manager: ",
 			"Could not update key, unexpected error: "+err.Error(),
@@ -1975,7 +1974,7 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Update]["+plan.ID.ValueString()+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Update][" + plan.ID.ValueString() + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -1995,7 +1994,7 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_KEY_MANAGEMENT, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_key.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			return
