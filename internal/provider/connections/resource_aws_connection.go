@@ -84,11 +84,19 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "AWS IAM role ARN",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Specify AWS Role external ID",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"aws_region": schema.StringAttribute{
 				Optional: true,
@@ -119,7 +127,11 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Description about the connection",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 
 			"iam_role_anywhere": schema.SingleNestedAttribute{
@@ -398,6 +410,30 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
@@ -465,15 +501,10 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	// description: purely user-settable; CM only returns what was explicitly set.
-	// Note: CM's PATCH API does not support clearing description once set (sending "" or null
-	// is treated as a no-op). To prevent perpetual plan drift when a user clears description,
-	// we preserve the null state if it is currently null in the configuration/state.
-	if !state.Description.IsNull() {
-		if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
-			state.Description = types.StringValue(r.String())
-		} else {
-			state.Description = types.StringNull()
-		}
+	if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
+		state.Description = types.StringValue(r.String())
+	} else {
+		state.Description = types.StringNull()
 	}
 	// access_key_id: only hydrate from API when the user configured the field (prior state
 	// is non-null). When null in state, the connection may carry credentials set via the
@@ -486,25 +517,15 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			state.AccessKeyID = types.StringValue(r.String())
 		}
 	}
-	// Note: CM's PATCH API does not support clearing assume_role_arn once set (sending "" or null
-	// is treated as a no-op). To prevent perpetual plan drift when a user clears assume_role_arn,
-	// we preserve the null state if it is currently null in the configuration/state.
-	if !state.AssumeRoleARN.IsNull() {
-		if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
-			state.AssumeRoleARN = types.StringValue(r.String())
-		} else {
-			state.AssumeRoleARN = types.StringNull()
-		}
+	if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+		state.AssumeRoleARN = types.StringValue(r.String())
+	} else {
+		state.AssumeRoleARN = types.StringNull()
 	}
-	// Note: CM's PATCH API does not support clearing assume_role_external_id once set (sending "" or null
-	// is treated as a no-op). To prevent perpetual plan drift when a user clears assume_role_external_id,
-	// we preserve the null state if it is currently null in the configuration/state.
-	if !state.AssumeRoleExternalID.IsNull() {
-		if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
-			state.AssumeRoleExternalID = types.StringValue(r.String())
-		} else {
-			state.AssumeRoleExternalID = types.StringNull()
-		}
+	if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+		state.AssumeRoleExternalID = types.StringValue(r.String())
+	} else {
+		state.AssumeRoleExternalID = types.StringNull()
 	}
 
 	// aws_region, aws_sts_regional_endpoints, cloud_name: CM returns server defaults
@@ -780,6 +801,31 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
+
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(readResponse, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
 	// Optional fields retain plan values (user intent); Read() on next plan/refresh corrects API-side drift.
 
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
