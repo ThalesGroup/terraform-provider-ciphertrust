@@ -305,7 +305,7 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 			if convDiags := list.ElementsAs(ctx, &entries, false); !convDiags.HasError() {
 				for _, entry := range entries {
 					if entry.SourceKeyIdentifier.ValueString() == sourceKeyIdentifier {
-						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
+						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] resolved loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
 						return
 					}
 				}
@@ -548,6 +548,7 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 		client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] loop: %d overallStatus: %s", i, overallStatus))
 
 		if strings.EqualFold(overallStatus, "success") {
+			client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] resolved loop: %d overallStatus: success keyID: %s", i, keyID))
 			return retryOperation
 		}
 		if strings.EqualFold(overallStatus, "failed") {
@@ -762,7 +763,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 		}
 
 		if allDone() {
-			client.Log.Info(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] all keys confirmed refreshed after %d polls", i+1))
+			client.Log.Info(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] resolved loop: %d all keys confirmed refreshed keyID: %s", i, keyID))
 			return
 		}
 		if i < maxPolls-1 {

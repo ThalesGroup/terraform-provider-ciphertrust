@@ -117,8 +117,7 @@ func replicateKeyCommon(
 	if origin == "EXTERNAL" && sourceKeyID != "" {
 		// For BYOK replicas, import_state == IMPORTED is the definitive completion signal:
 		// CCKM always uses the primary's existing material, and AWS transitions the key to
-		// Enabled only after accepting that material. KeyState == Enabled is therefore
-		// implied by IMPORTED - no need to poll it separately.
+		// Enabled only after accepting that material.
 		var historyDiags diag.Diagnostics
 		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
 		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
@@ -169,7 +168,7 @@ func replicateKeyCommon(
 				diags.AddWarning(d.Summary(), d.Detail())
 			}
 		} else {
-			msg := "Error updating AWS key. Unabled to primary region. Replica key is not enabled."
+			msg := "Replica key is not enabled. Unable to make it the primary key."
 			details := utils.ApiError(msg, map[string]interface{}{
 				"configured primary region": replicaRegion,
 			})
@@ -229,6 +228,7 @@ func waitForReplication(ctx context.Context, id string, client *common.Client, r
 		keyState = gjson.Get(response, "aws_param.KeyState").String()
 		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] Key state: %s", keyState))
 		if keyState != "Creating" {
+			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] resolved Key state: %s replicaKeyID: %s", keyState, replicaKeyID))
 			client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
 			return response
 		}
@@ -242,8 +242,7 @@ func waitForReplication(ctx context.Context, id string, client *common.Client, r
 }
 
 // waitForReplicatedKeyIsEnabled polls the replica key until its state reaches "Enabled" or a timeout is
-// reached. An EXTERNAL/BYOK replica key requires AWS to enable it after key material has been imported;
-// this function also covers the window between a native replica leaving "Creating" state and reaching "Enabled".
+// reached.
 func waitForReplicatedKeyIsEnabled(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) string {
 	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")

@@ -569,10 +569,24 @@ func (r *resourceAWSKeyMaterial) setAwsKeyMaterialState(ctx context.Context, cmK
 }
 
 // updateKeyMaterial is the orchestrator for key material operations during both Create and Update.
-// It classifies plan entries against live rotation history, then runs each repair
-// and import phase in order. After each phase, history is re-fetched and all
-// classification slices are rebuilt from the fresh data so that subsequent phases
-// always operate on current AWS state.
+//
+// AWS key material operations are asynchronous and some workflows require
+// multiple AWS operations to complete in sequence. CCKM submits the initial
+// request and monitors AWS progress in the background, but only waits for a
+// bounded period before returning.
+//
+// As a result, this function may observe intermediate states where a previous
+// operation has been accepted but not yet fully completed (for example,
+// PENDING_IMPORT or PENDING_ROTATION). These are expected transient states,
+// not necessarily failures.
+//
+// updateKeyMaterial therefore operates as a state machine. Each iteration
+// re-fetches the live rotation history, reclassifies every key material entry,
+// and performs whatever repair or continuation step is currently required.
+// If asynchronous AWS processing has not yet completed by the end of an apply,
+// a subsequent apply will detect the current state and continue the workflow
+// until no further work remains.
+//
 // On Create, stateKeyMaterial is passed as types.Set{} (null), so stateMats is empty:
 // no removedMats and no metadataUpdates are produced.
 func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id string, keyID string, plan *AWSKeyMaterialTFSDK, stateKeyMaterial types.Set, keyJSON string, diags *diag.Diagnostics) {
