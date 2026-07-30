@@ -58,38 +58,44 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 					validators.PEMCertificate(),
 				},
 			},
+			// http_proxy: uses ProxyURL() instead of URL() to accept the schemeless
+			// proxy format (e.g. "user:pass@host:port") that CM's own documentation
+			// describes as valid (Scenario 3 — protocol not specified explicitly).
+			// validators.URL() was too strict: it enforced RFC URL semantics and
+			// rejected valid CM-accepted values. (TFIN-526)
 			"http_proxy": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				Description: "HTTP proxy URL for proxy configurations. Include the scheme (e.g. " +
-					"`http://username:password@proxy.example.com:8080`). If the proxy server's password " +
-					"contains any special character replace it with percent-encoded values. " +
+				Description: "HTTP proxy address. Accepts a full URL (e.g. " +
+					"`http://username:password@proxy.example.com:8080`), a schemeless address " +
+					"(e.g. `username:password@host:port` or `host:port`), or a bare hostname. " +
+					"If the proxy password contains special characters, percent-encode them. " +
 					"**Known limitation**: CipherTrust Manager always returns this value with the password " +
 					"masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform " +
 					"state holds the cleartext value from your configuration. A password-only out-of-band " +
-					"change (same scheme, host, port, and username; different password only) is " +
-					"undetectable by `terraform plan -refresh-only` because the masked URL is structurally " +
-					"identical before and after. Changes to scheme, host, port, or username are fully " +
-					"detectable and will surface as drift.",
+					"change is undetectable by `terraform plan -refresh-only` because the masked URL is " +
+					"structurally identical before and after. Changes to scheme, host, port, or username " +
+					"are fully detectable and will surface as drift.",
 				Validators: []validator.String{
-					validators.URL(),
+					validators.ProxyURL(),
 				},
 			},
+			// https_proxy: same validator relaxation as http_proxy. (TFIN-526)
 			"https_proxy": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				Description: "HTTPS proxy URL for proxy configurations. Include the scheme (e.g. " +
-					"`https://username:password@proxy.example.com:8080`). If the proxy server's password " +
-					"contains any special character replace it with percent-encoded values. " +
+				Description: "HTTPS proxy address. Accepts a full URL (e.g. " +
+					"`https://username:password@proxy.example.com:8080`), a schemeless address " +
+					"(e.g. `username:password@host:port` or `host:port`), or a bare hostname. " +
+					"If the proxy password contains special characters, percent-encode them. " +
 					"**Known limitation**: CipherTrust Manager always returns this value with the password " +
 					"masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform " +
 					"state holds the cleartext value from your configuration. A password-only out-of-band " +
-					"change (same scheme, host, port, and username; different password only) is " +
-					"undetectable by `terraform plan -refresh-only` because the masked URL is structurally " +
-					"identical before and after. Changes to scheme, host, port, or username are fully " +
-					"detectable and will surface as drift.",
+					"change is undetectable by `terraform plan -refresh-only` because the masked URL is " +
+					"structurally identical before and after. Changes to scheme, host, port, or username " +
+					"are fully detectable and will surface as drift.",
 				Validators: []validator.String{
-					validators.URL(),
+					validators.ProxyURL(),
 				},
 			},
 			"no_proxy": schema.ListAttribute{
@@ -344,28 +350,32 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		plan.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// http_proxy: apply same structural-drift logic as Read().
-	// plan.HTTPProxy holds the desired cleartext value from Terraform config.
-	// If non-password portions are equal (including a password-only config change),
-	// plan.HTTPProxy retains the cleartext plan value in state.
+	// http_proxy / https_proxy: TFIN-527 — preserve the plan value after a successful
+	// update. CM's password-masking implementation corrupts the non-password portion of
+	// the proxy URL in its PUT response (e.g. "http://proxyuser:p@host" comes back as
+	// "httxxxxxx://xxxxxxroxyuser:xxxxxx@host" — scheme and username partially overwritten
+	// by mask characters). This corruption is non-deterministic and depends on the byte
+	// length of the previous and new credentials. Passing CM's corrupted response to
+	// proxyNonPasswordPart() produces a structural mismatch against the plan value, which
+	// causes the provider to write the corrupted masked string to state — and
+	// terraform-plugin-framework then rejects the state as inconsistent with the plan.
+	//
+	// Since the PUT returned 200 (success), the planned value IS now the server state.
+	// Preserve the plan value unconditionally. The API response is lossy/corrupted for
+	// this specific field; it must not be used to hydrate state after an update.
+	// (Read() uses proxyNonPasswordPart() for structural drift detection and is unaffected.)
 	if !plan.HTTPProxy.IsNull() {
 		if r := gjson.Get(response, "http_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPProxy.ValueString()) {
-				// Structural mismatch — store the CM-authoritative masked value.
-				plan.HTTPProxy = types.StringValue(r.String())
-			}
-			// else: CM confirms the non-password portion matches — preserve cleartext plan value in state.
+			// Preserve the cleartext plan value — do not use CM's masked/corrupted response.
+			// plan.HTTPProxy already holds the correct post-update state.
 		} else {
 			plan.HTTPProxy = types.StringNull()
 		}
 	}
 
-	// https_proxy: same pattern.
 	if !plan.HTTPSProxy.IsNull() {
 		if r := gjson.Get(response, "https_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPSProxy.ValueString()) {
-				plan.HTTPSProxy = types.StringValue(r.String())
-			}
+			// Preserve the cleartext plan value — do not use CM's masked/corrupted response.
 		} else {
 			plan.HTTPSProxy = types.StringNull()
 		}
