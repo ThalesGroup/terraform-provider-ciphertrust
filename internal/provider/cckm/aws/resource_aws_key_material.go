@@ -1326,6 +1326,14 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 		return
 	}
 
+	// Wait for the (primary) key material to reach CURRENT state.
+	resolved := waitForMaterialStateResolved(ctx, id, client, cmKeyID, srcID, "key_material_state", "", "CURRENT", diags)
+
+	// For multi-region keys, also wait for all replicas to reach CURRENT state.
+	if resolved && gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() {
+		waitForReplicasMaterialCurrent(ctx, id, client, cmKeyID, srcID, keyJSON, diags)
+	}
+
 	return
 }
 
