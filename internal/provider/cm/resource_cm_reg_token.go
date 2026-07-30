@@ -61,12 +61,13 @@ func (r *resourceCMRegToken) Schema(_ context.Context, _ resource.SchemaRequest,
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			// ca_id: ImmutableString() removed (TFIN-514). CM's PATCH endpoint accepts
+			// and persists in-place ca_id changes (confirmed live: HTTP 200, value
+			// updated on GET). The prior ImmutableString() modifier was based on an
+			// incorrect assumption from TFIN-370 that CM's PATCH schema excludes ca_id.
 			"ca_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				Description: "DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.",
 			},
 			"cert_duration": schema.Int64Attribute{
 				Optional:    true,
