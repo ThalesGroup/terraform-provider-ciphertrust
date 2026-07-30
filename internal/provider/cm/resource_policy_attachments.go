@@ -164,6 +164,16 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Create][" + id + "]")
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddError(
+				"Linked Policy Not Found on CipherTrust Manager",
+				"Could not attach to policy "+plan.Policy.ValueString()+": CipherTrust Manager returned 404. "+
+					"The policy may have been deleted out-of-band since this Terraform state was last refreshed. "+
+					"Re-create the policy and re-apply, or run 'terraform state rm' on the stale ciphertrust_policies "+
+					"resource before applying again.",
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error attaching to policy on CipherTrust Manager: ",
 			"Could not attach to policy "+plan.Policy.ValueString()+", unexpected error: "+err.Error(),

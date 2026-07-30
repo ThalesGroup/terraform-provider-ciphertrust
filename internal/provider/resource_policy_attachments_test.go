@@ -627,3 +627,30 @@ resource "ciphertrust_policy_attachments" "attachment" {
 		},
 	})
 }
+
+// Test_CM_AccCMPolicyAttachment_CreateFailsOnMissingPolicy verifies that attaching to a
+// policy that does not exist on CipherTrust Manager surfaces a specific, actionable error
+// instead of CM's bare 404, addressing the confusing failure mode in the cascading
+// destroy-succeeds/create-fails scenario (out-of-band deleted policy left stale in state).
+func Test_CM_AccCMPolicyAttachment_CreateFailsOnMissingPolicy(t *testing.T) {
+	RequireCM(t)
+	policyName := fmt.Sprintf("tf-test-nonexistent-policy-%d", time.Now().Unix())
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policy_attachments" "test" {
+  policy = %q
+  principal_selector = {
+    acct = "pers-jsmith"
+    user = "apitestuser"
+  }
+}
+`, policyName),
+				ExpectError: regexp.MustCompile(`(?i)Linked Policy Not Found|deleted out-of-band`),
+			},
+		},
+	})
+}
