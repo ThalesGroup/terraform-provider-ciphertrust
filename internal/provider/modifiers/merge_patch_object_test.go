@@ -101,4 +101,24 @@ func Test_CM_MergePatchObject(t *testing.T) {
 			t.Errorf("expected no error when unrelated field is unchanged, got: %v", resp.Diagnostics)
 		}
 	})
+
+	t.Run("existing resource: clearing multiple fields at once reports them in a deterministic (sorted) order", func(t *testing.T) {
+		state := objectOf(t, map[string]*string{"zebra": strPtr("z"), "alpha": strPtr("a"), "mango": strPtr("m")})
+		plan := objectOf(t, map[string]*string{"zebra": nil, "alpha": nil, "mango": nil})
+		want := "" // computed on first iteration, then compared on every subsequent one
+		for i := 0; i < 20; i++ {
+			_, resp := run(state, plan)
+			if !resp.Diagnostics.HasError() {
+				t.Fatal("expected clearing multiple fields to be rejected")
+			}
+			got := resp.Diagnostics[0].Detail()
+			if want == "" {
+				want = got
+				continue
+			}
+			if got != want {
+				t.Fatalf("error message ordering is non-deterministic across runs:\nfirst: %s\nlater: %s", want, got)
+			}
+		}
+	})
 }

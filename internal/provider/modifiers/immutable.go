@@ -12,6 +12,7 @@ package modifiers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -292,6 +293,7 @@ func (m mergePatchObjectModifier) PlanModifyObject(_ context.Context, req planmo
 	if len(cleared) == 0 {
 		return
 	}
+	sort.Strings(cleared)
 	resp.Diagnostics.AddError(
 		"Cannot Clear Field After Creation",
 		fmt.Sprintf(

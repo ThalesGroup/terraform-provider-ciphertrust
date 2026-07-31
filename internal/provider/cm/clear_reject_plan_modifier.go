@@ -45,6 +45,9 @@ func (m clearRejectStringModifier) PlanModifyString(_ context.Context, req planm
 	if req.State.Raw.IsNull() {
 		return // create path
 	}
+	if req.PlanValue.IsUnknown() {
+		return // value not yet known (e.g. depends on another resource) — not a clear attempt
+	}
 	if !req.PlanValue.IsNull() && req.PlanValue.ValueString() != "" {
 		return // explicit non-empty value — not a clear attempt
 	}
@@ -113,7 +116,10 @@ func (m clearRejectMapModifier) PlanModifyMap(_ context.Context, req planmodifie
 	if req.State.Raw.IsNull() {
 		return // create path
 	}
-	if !req.PlanValue.IsNull() && !req.PlanValue.IsUnknown() && len(req.PlanValue.Elements()) > 0 {
+	if req.PlanValue.IsUnknown() {
+		return // value not yet known (e.g. depends on another resource) — not a clear attempt
+	}
+	if !req.PlanValue.IsNull() && len(req.PlanValue.Elements()) > 0 {
 		return // explicit non-empty map — not a clear attempt
 	}
 	if req.StateValue.IsNull() || len(req.StateValue.Elements()) == 0 {

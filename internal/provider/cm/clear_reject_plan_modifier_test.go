@@ -55,6 +55,13 @@ func Test_CM_ClearRejectStringModifier(t *testing.T) {
 			t.Errorf("unexpected error: %v", resp.Diagnostics)
 		}
 	})
+
+	t.Run("existing resource: unknown plan value (e.g. depends on another resource) is not a clear attempt", func(t *testing.T) {
+		resp := run(nonNullAliasRawState(), types.StringValue("old"), types.StringUnknown())
+		if resp.Diagnostics.HasError() {
+			t.Errorf("unexpected error for unknown plan value: %v", resp.Diagnostics)
+		}
+	})
 }
 
 func Test_CM_ClearRejectInt64Modifier(t *testing.T) {
@@ -99,6 +106,13 @@ func Test_CM_ClearRejectInt64Modifier(t *testing.T) {
 		resp := run(nonNullAliasRawState(), types.Int64Null(), types.Int64Null())
 		if resp.Diagnostics.HasError() {
 			t.Errorf("unexpected error: %v", resp.Diagnostics)
+		}
+	})
+
+	t.Run("existing resource: unknown plan value (e.g. depends on another resource) is not a clear attempt", func(t *testing.T) {
+		resp := run(nonNullAliasRawState(), types.Int64Value(12), types.Int64Unknown())
+		if resp.Diagnostics.HasError() {
+			t.Errorf("unexpected error for unknown plan value: %v", resp.Diagnostics)
 		}
 	})
 }
@@ -149,6 +163,13 @@ func Test_CM_ClearRejectMapModifier(t *testing.T) {
 		resp := run(nonNullAliasRawState(), emptyMap, emptyMap)
 		if resp.Diagnostics.HasError() {
 			t.Errorf("unexpected error: %v", resp.Diagnostics)
+		}
+	})
+
+	t.Run("existing resource: unknown plan value (e.g. depends on another resource) is not a clear attempt", func(t *testing.T) {
+		resp := run(nonNullAliasRawState(), nonEmptyMap, types.MapUnknown(types.StringType))
+		if resp.Diagnostics.HasError() {
+			t.Errorf("unexpected error for unknown plan value: %v", resp.Diagnostics)
 		}
 	})
 }
