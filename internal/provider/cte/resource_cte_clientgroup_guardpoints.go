@@ -359,6 +359,27 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 		allIDs = append(allIDs, gp.ID)
 	}
 
+	// If every guard_path this resource was tracking in state has disappeared
+	// from CM (out-of-band deletion via the /unguard action, since direct
+	// DELETE is not supported), the resource no longer exists. Remove it from
+	// state so Terraform plans a clean "+create" on the next apply instead of
+	// an "~ update in-place" that the framework's plan-consistency check will
+	// reject once Update() recreates the guardpoint with a new id.
+	if len(state.GuardPoints) > 0 {
+		anyTrackedPathStillExists := false
+		for guardPath := range state.GuardPoints {
+			if _, found := newGuardPoints[guardPath]; found {
+				anyTrackedPathStillExists = true
+				break
+			}
+		}
+		if !anyTrackedPathStillExists {
+			tflog.Debug(ctx, "[resource_cte_clientgroup_guardpoints.go -> Read] all guard_points for client group "+clientGroupID+" no longer exist on CipherTrust Manager (out-of-band deletion), removing from state")
+			resp.State.RemoveResource(ctx)
+			return
+		}
+	}
+
 	state.GuardPoints = newGuardPoints
 	sort.Strings(allIDs)
 	state.ID = types.StringValue(strings.Join(allIDs, ","))
