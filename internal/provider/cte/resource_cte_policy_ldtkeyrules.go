@@ -373,6 +373,9 @@ func (r *resourceCTEPolicyLDTKeyRule) Delete(ctx context.Context, req resource.D
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.CTEClientPolicyID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_ldtkeyrules.go -> Delete]["+state.LDTKeyRule.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Policy LDT Key Rule "+state.LDTKeyRule.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Policy LDT Key Rule",
 			"Could not delete CTE Policy LDT Key Rule, unexpected error: "+err.Error(),

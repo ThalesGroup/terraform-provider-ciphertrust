@@ -373,6 +373,9 @@ func (r *resourceCTEPolicySecurityRule) Delete(ctx context.Context, req resource
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.CTEClientPolicyID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_securityrules.go -> Delete]["+state.SecurityRule.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Policy Security Rule "+state.SecurityRule.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Policy Security Rule",
 			"Could not delete CTE Policy Security Rule, unexpected error: "+err.Error(),

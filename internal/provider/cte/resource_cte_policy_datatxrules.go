@@ -307,6 +307,9 @@ func (r *resourceCTEPolicyDataTXRule) Delete(ctx context.Context, req resource.D
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.CTEClientPolicyID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_datatxrules.go -> Delete]["+state.DataTXRule.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Policy Data Transformation Rule "+state.DataTXRule.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Policy",
 			"Could not delete CTE Policy, unexpected error: "+err.Error(),
