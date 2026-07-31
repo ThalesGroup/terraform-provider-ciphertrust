@@ -653,6 +653,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		metadataUpdates        []AWSByokImportMaterialTFSDK // in history, not pending, valid_to or desc changed
 		newCandidates          []AWSByokImportMaterialTFSDK // not in history at all
 		removed                []AWSByokImportMaterialTFSDK // in state but not in plan
+		keyPendingImport       bool                         // AWS key state is PendingImport but rotation history is non-empty
 	)
 
 	// fetchHistoryAndClassify re-fetches rotation history, rebuilds historyBySourceKey,
@@ -671,6 +672,16 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		}
 		if diags.HasError() {
 			return
+		}
+
+		// Check the AWS key state directly. If the key reports PendingImport at the
+		// AWS level but rotation history is non-empty, CCKM's optimistic cache is ahead
+		// of AWS. Record this so the outer loop keeps iterating and the
+		// end-of-iteration RefreshKeyAndWait forces CCKM to re-sync with AWS.
+		keyPendingImport = false
+		if liveKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); getErr == nil {
+			awsKeyState := gjson.Get(liveKeyJSON, "aws_param.KeyState").String()
+			keyPendingImport = awsKeyState == "PendingImport" && len(historyEntries) > 0
 		}
 
 		pendingMRRepairs = pendingMRRepairs[:0]
@@ -714,9 +725,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 				}
 			}
 		}
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d metadataUpdates: %d keyID: %s",
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d metadataUpdates: %d keyPendingImport: %v keyID: %s",
 			len(pendingMRRepairs), len(pendingImportRepairs), len(pendingRotationRepairs),
-			len(newCandidates), len(removed), len(metadataUpdates), keyID))
+			len(newCandidates), len(removed), len(metadataUpdates), keyPendingImport, keyID))
 	}
 
 	// Initial history fetch and classification.
@@ -752,6 +763,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 
 		numOperations := len(pendingMRRepairs) + len(pendingImportRepairs) + len(pendingRotationRepairs) +
 			len(newCandidates) + len(removed) + len(metadataUpdates)
+		if keyPendingImport {
+			numOperations++
+		}
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
 			r.client.Log.Debug("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
