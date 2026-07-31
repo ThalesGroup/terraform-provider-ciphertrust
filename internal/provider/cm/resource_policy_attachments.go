@@ -77,21 +77,19 @@ func (r *resourceCMPolicyAttachment) Schema(_ context.Context, _ resource.Schema
 				},
 			},
 			"actions": schema.ListAttribute{
-				Optional:    true,
 				Computed:    true,
-				Description: "(Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey",
+				Description: "(Read-only) Actions carried by this attachment. CM always derives these from the linked policy's own actions — they cannot be set independently on the attachment.",
 				ElementType: types.StringType,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
+					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"resources": schema.ListAttribute{
-				Optional:    true,
 				Computed:    true,
-				Description: "(Immutable) Resources is a list of URI strings, which must be in URI format.",
+				Description: "(Read-only) Resources carried by this attachment. CM always derives these from the linked policy's own resources — they cannot be set independently on the attachment.",
 				ElementType: types.StringType,
 				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
+					listplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"uri": schema.StringAttribute{
@@ -146,21 +144,8 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		payload.Jurisdiction = plan.Jurisdiction.ValueString()
 	}
 
-	if !plan.Actions.IsNull() && !plan.Actions.IsUnknown() {
-		var actions []string
-		for _, elem := range plan.Actions.Elements() {
-			actions = append(actions, elem.(types.String).ValueString())
-		}
-		payload.Actions = actions
-	}
-
-	if !plan.Resources.IsNull() && !plan.Resources.IsUnknown() {
-		var resources []string
-		for _, elem := range plan.Resources.Elements() {
-			resources = append(resources, elem.(types.String).ValueString())
-		}
-		payload.Resources = resources
-	}
+	// actions and resources are not sent: CM always derives them from the linked policy
+	// and ignores any attachment-level value, so they are Computed-only in the schema.
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -179,6 +164,16 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 		payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Create][" + id + "]")
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddError(
+				"Linked Policy Not Found on CipherTrust Manager",
+				"Could not attach to policy "+plan.Policy.ValueString()+": CipherTrust Manager returned 404. "+
+					"The policy may have been deleted out-of-band since this Terraform state was last refreshed. "+
+					"Re-create the policy and re-apply, or run 'terraform state rm' on the stale ciphertrust_policies "+
+					"resource before applying again.",
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error attaching to policy on CipherTrust Manager: ",
 			"Could not attach to policy "+plan.Policy.ValueString()+", unexpected error: "+err.Error(),
@@ -197,57 +192,38 @@ func (r *resourceCMPolicyAttachment) Create(ctx context.Context, req resource.Cr
 	// Reading them from the API response would override user values with CM-transformed
 	// forms (e.g. short name → full URI) causing plan consistency errors.
 
-	// actions: only hydrate from API when user explicitly set them in config
-	// (plan is non-null, non-unknown). CM propagates policy actions for unconfigured
-	// attachments — hydrating those would cause perpetual drift on subsequent plans.
-	// If the API returns empty or omits the field entirely, keep the plan's value to
-	// avoid "element has vanished" plan-consistency errors (CM POST responses may omit
-	// these fields even when they were accepted).
-	if plan.Actions.IsUnknown() {
-		plan.Actions = types.ListNull(types.StringType)
-	} else if !plan.Actions.IsNull() {
-		rActions := gjson.Get(response, "actions")
-		if rActions.Exists() {
-			actArr := rActions.Array()
-			if len(actArr) > 0 {
-				actElems := make([]attr.Value, len(actArr))
-				for i, a := range actArr {
-					actElems[i] = types.StringValue(a.String())
-				}
-				actList, diags3 := types.ListValue(types.StringType, actElems)
-				resp.Diagnostics.Append(diags3...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				plan.Actions = actList
-			}
-			// else: API returned empty array; keep plan.Actions
+	// actions and resources are Computed-only: always take whatever CM actually derived
+	// from the linked policy, regardless of what the plan held.
+	if rActions := gjson.Get(response, "actions"); rActions.Exists() {
+		actArr := rActions.Array()
+		actElems := make([]attr.Value, len(actArr))
+		for i, a := range actArr {
+			actElems[i] = types.StringValue(a.String())
 		}
-		// else: API omitted the field; keep plan.Actions
+		actList, diags3 := types.ListValue(types.StringType, actElems)
+		resp.Diagnostics.Append(diags3...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.Actions = actList
+	} else {
+		plan.Actions = types.ListNull(types.StringType)
 	}
 
-	// resources: same guard as actions.
-	if plan.Resources.IsUnknown() {
-		plan.Resources = types.ListNull(types.StringType)
-	} else if !plan.Resources.IsNull() {
-		rResources := gjson.Get(response, "resources")
-		if rResources.Exists() {
-			resArr := rResources.Array()
-			if len(resArr) > 0 {
-				resElems := make([]attr.Value, len(resArr))
-				for i, res := range resArr {
-					resElems[i] = types.StringValue(res.String())
-				}
-				resList, diags4 := types.ListValue(types.StringType, resElems)
-				resp.Diagnostics.Append(diags4...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				plan.Resources = resList
-			}
-			// else: API returned empty array; keep plan.Resources
+	if rResources := gjson.Get(response, "resources"); rResources.Exists() {
+		resArr := rResources.Array()
+		resElems := make([]attr.Value, len(resArr))
+		for i, res := range resArr {
+			resElems[i] = types.StringValue(res.String())
 		}
-		// else: API omitted the field; keep plan.Resources
+		resList, diags4 := types.ListValue(types.StringType, resElems)
+		resp.Diagnostics.Append(diags4...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.Resources = resList
+	} else {
+		plan.Resources = types.ListNull(types.StringType)
 	}
 
 	diags = resp.State.Set(ctx, plan)
@@ -321,12 +297,10 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 		state.Jurisdiction = types.StringNull()
 	}
 
-	// actions: CM may return empty-array even when actions were stored (the POST response
-	// omits them and the GET may also return []). Only update state when the API returns
-	// a non-empty array so we don't trigger perpetual drift for user-configured fields.
-	// State is preserved when API returns empty or omits the field entirely.
-	rActions := gjson.Get(response, "actions")
-	if actArr := rActions.Array(); len(actArr) > 0 && !state.Actions.IsNull() {
+	// actions and resources are Computed-only: always reflect what CM actually derived
+	// from the linked policy.
+	if rActions := gjson.Get(response, "actions"); rActions.Exists() {
+		actArr := rActions.Array()
 		actElems := make([]attr.Value, len(actArr))
 		for i, a := range actArr {
 			actElems[i] = types.StringValue(a.String())
@@ -337,12 +311,12 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 			return
 		}
 		state.Actions = actList
+	} else {
+		state.Actions = types.ListNull(types.StringType)
 	}
-	// else: preserve state.Actions (covers empty-array or absent cases)
 
-	// resources: same guard as actions.
-	rResources := gjson.Get(response, "resources")
-	if resArr := rResources.Array(); len(resArr) > 0 && !state.Resources.IsNull() {
+	if rResources := gjson.Get(response, "resources"); rResources.Exists() {
+		resArr := rResources.Array()
 		resElems := make([]attr.Value, len(resArr))
 		for i, res := range resArr {
 			resElems[i] = types.StringValue(res.String())
@@ -353,8 +327,9 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 			return
 		}
 		state.Resources = resList
+	} else {
+		state.Resources = types.ListNull(types.StringType)
 	}
-	// else: preserve state.Resources (covers empty-array or absent cases)
 
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -366,9 +341,9 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMPolicyAttachment) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy_attachments.go -> Update]")
-	resp.Diagnostics.AddError(
-		"Update Not Supported",
-		"ciphertrust_policy_attachment does not support updates. Delete and recreate this resource to change any field.",
+	resp.Diagnostics.AddWarning(
+		"Cannot update a CM policy attachment.",
+		"The policy attachment cannot be updated once set.",
 	)
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy_attachments.go -> Update]")
 }

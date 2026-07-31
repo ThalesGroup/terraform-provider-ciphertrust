@@ -52,9 +52,6 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "connection id of log-forwarder connection (elasticsearch, loki, syslog).",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -392,28 +389,25 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.LokiParams = nil
 	}
 
-	// Hydrate syslog_params.
-	// CMLogForwardersSyslogTFSDK.SyslogParams has tfsdk tag "forward_logs".
-	// gjson path follows json:"syslog_params" on CMLogForwardersSyslogJSON.SyslogParams,
-	// so the nested path is "syslog_params.syslog_params.*".
+	// Hydrate syslog_params. CM returns {"syslog_params": {"forward_logs": {...}}}.
 	if gjson.Get(response, "syslog_params").Exists() {
 		var syslogInner CMLogForwardersSyslogParamsTFSDK
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_kmip"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_kmip"); r.Exists() {
 			syslogInner.ActivityKMIP = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityKMIP = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_nae"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_nae"); r.Exists() {
 			syslogInner.ActivityNAE = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityNAE = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.client_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.client_audit_records"); r.Exists() {
 			syslogInner.ClientAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ClientAuditRecords = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.server_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.server_audit_records"); r.Exists() {
 			syslogInner.ServerAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ServerAuditRecords = types.BoolNull()
@@ -506,7 +500,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 			syslogParamLabels["server_audit_records"] = plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool()
 		}
 		if len(syslogParamLabels) > 0 {
-			syslogParams["syslog_params"] = syslogParamLabels
+			syslogParams["forward_logs"] = syslogParamLabels
 			payload["syslog_params"] = syslogParams
 		}
 	}
@@ -530,8 +524,8 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 
 	response, err := r.client.UpdateDataV2(
 		ctx,
-		id,
-		common.URL_CM_LOG_FORWARDS+"/"+plan.ID.ValueString(),
+		plan.ID.ValueString(),
+		common.URL_CM_LOG_FORWARDS,
 		payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")

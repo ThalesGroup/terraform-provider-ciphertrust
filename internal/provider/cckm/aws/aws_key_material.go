@@ -122,7 +122,7 @@ func fetchRotationHistoryByokFull(ctx context.Context, id string, client *common
 			"valid_to":                 types.StringValue(res.Get("aws_param.ValidTo").String()),
 		})
 		if awsParamsDiag.HasError() {
-			client.Log.Warn("Warning: could not build BYOK full rotation history aws_params object.")
+			client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryByokFull] Warning: could not build BYOK full rotation history aws_params object.")
 			return emptyList, false
 		}
 		obj, d := types.ObjectValue(rotationHistoryByokFullElemType.AttrTypes, map[string]attr.Value{
@@ -147,14 +147,14 @@ func fetchRotationHistoryByokFull(ctx context.Context, id string, client *common
 			"aws_params": awsParamsObj,
 		})
 		if d.HasError() {
-			client.Log.Warn("Warning: could not build BYOK full rotation history entry object.")
+			client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryByokFull] Warning: could not build BYOK full rotation history entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
 	}
 	listVal, d := types.ListValue(rotationHistoryByokFullElemType, elems)
 	if d.HasError() {
-		client.Log.Warn("Warning: could not build BYOK full rotation history list.")
+		client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryByokFull] Warning: could not build BYOK full rotation history list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -194,7 +194,7 @@ func fetchRotationHistoryByokSummary(ctx context.Context, id string, client *com
 			"source_key_tier":       types.StringValue(r.Get("source_key_tier").String()),
 		})
 		if d.HasError() {
-			client.Log.Warn("Warning: could not build BYOK rotation history summary entry object.")
+			client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryByokSummary] Warning: could not build BYOK rotation history summary entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
@@ -203,7 +203,7 @@ func fetchRotationHistoryByokSummary(ctx context.Context, id string, client *com
 	if d.HasError() {
 		var diagWarn diag.Diagnostics
 		diagWarn.Append(d...)
-		client.Log.Warn("Warning: could not build BYOK rotation history summary list.")
+		client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryByokSummary] Warning: could not build BYOK rotation history summary list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -240,7 +240,7 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 			"last_import_status": types.StringValue(r.Get("last_import_status").String()),
 		})
 		if d.HasError() {
-			client.Log.Warn("Warning: could not build native rotation history summary entry object.")
+			client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryNativeSummary] Warning: could not build native rotation history summary entry object.")
 			return emptyList, false
 		}
 		elems = append(elems, obj)
@@ -249,7 +249,7 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 	if d.HasError() {
 		var diagWarn diag.Diagnostics
 		diagWarn.Append(d...)
-		client.Log.Warn("Warning: could not build native rotation history summary list.")
+		client.Log.Warn("[aws_key_material.go -> fetchRotationHistoryNativeSummary] Warning: could not build native rotation history summary list.")
 		return emptyList, false
 	}
 	return listVal, false
@@ -305,7 +305,7 @@ func waitForRotationHistoryRecord(ctx context.Context, id string, client *common
 			if convDiags := list.ElementsAs(ctx, &entries, false); !convDiags.HasError() {
 				for _, entry := range entries {
 					if entry.SourceKeyIdentifier.ValueString() == sourceKeyIdentifier {
-						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
+						client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForRotationHistoryRecord] resolved loop: %d found rotation history record for source_key_identifier: %s", i, sourceKeyIdentifier))
 						return
 					}
 				}
@@ -398,7 +398,7 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 					// Not yet resolved - keep polling.
 				}
 				if !foundEntry {
-					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d TIMED OUT waiting for entry in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
+					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d entry not found in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
 				}
 			}
 		}
@@ -455,7 +455,7 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		replicaARN := replicaResult.Get("Arn").String()
 		replicaRegion := replicaResult.Get("Region").String()
 		if replicaARN == "" || replicaRegion == "" {
-			client.Log.Warn("waitForReplicasMaterialCurrent: replica entry missing Arn or Region, skipping.")
+			client.Log.Warn("[aws_key_material.go -> waitForReplicasMaterialCurrent] replica entry missing Arn or Region, skipping.")
 			continue
 		}
 
@@ -463,12 +463,12 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		// ARN format: arn:aws:kms:<region>:<account>:key/<key-id>
 		arnParts := strings.Split(replicaARN, ":")
 		if len(arnParts) < 6 {
-			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, unexpected replica ARN format: arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] Skipping replica CURRENT wait, unexpected replica ARN format: arn: %s", replicaARN))
 			continue
 		}
 		kidParts := strings.Split(arnParts[5], "/")
 		if len(kidParts) < 2 {
-			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait, could not extract key ID from replica ARN. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] Skipping replica CURRENT wait, could not extract key ID from replica ARN. arn: %s", replicaARN))
 			continue
 		}
 		awsKeyID := kidParts[len(kidParts)-1]
@@ -479,17 +479,17 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 		filters.Add("region", replicaRegion)
 		listJSON, listErr := client.ListWithFilters(ctx, id, common.URL_AWS_KEY, filters)
 		if listErr != nil {
-			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: error looking up replica key in CipherTrust Manager. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] Skipping replica CURRENT wait: error looking up replica key in CipherTrust Manager. arn: %s", replicaARN))
 			continue
 		}
 		total := gjson.Get(listJSON, "total").Int()
 		if total == 0 {
-			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: replica key not found in CipherTrust Manager. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] Skipping replica CURRENT wait: replica key not found in CipherTrust Manager. arn: %s", replicaARN))
 			continue
 		}
 		replicaCMKeyID := gjson.Get(listJSON, "resources.0.id").String()
 		if replicaCMKeyID == "" {
-			client.Log.Warn(fmt.Sprintf("waitForReplicasMaterialCurrent: Skipping replica CURRENT wait: could not determine CipherTrust Manager key ID for replica. arn: %s", replicaARN))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForReplicasMaterialCurrent] Skipping replica CURRENT wait: could not determine CipherTrust Manager key ID for replica. arn: %s", replicaARN))
 			continue
 		}
 
@@ -548,13 +548,14 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 		client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] loop: %d overallStatus: %s", i, overallStatus))
 
 		if strings.EqualFold(overallStatus, "success") {
+			client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] resolved loop: %d overallStatus: success keyID: %s", i, keyID))
 			return retryOperation
 		}
 		if strings.EqualFold(overallStatus, "failed") {
 			errorDetails := gjson.Get(response, "error_details").String()
 			if strings.Contains(errorDetails, materialAlreadyExistsError) {
 				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] key material already exists. error: %s", errorDetails))
-				msg := "AWS key material rotation reported failure: key material already exists."
+				msg := "AWS key material rotation reported failure: key material already exists. Refreshing key and retrying."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
 				client.Log.Warn(details)
 				retryOperation = true
@@ -562,7 +563,7 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 			}
 			if strings.Contains(errorDetails, materialHasNotBeenImportedError) {
 				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] material has not been imported (to replica). error: %s", errorDetails))
-				msg := "AWS key material rotation reported failure: material has not been imported to replica."
+				msg := "AWS key material rotation reported failure: material has not been imported to replica. Refreshing key and retrying."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
 				client.Log.Warn(details)
 				retryOperation = true
@@ -570,7 +571,7 @@ func waitForMaterialRotation(ctx context.Context, id string, client *common.Clie
 			}
 			if strings.Contains(errorDetails, materialPendingImportError) {
 				client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> waitForMaterialRotation] key is pending import (KMSInvalidStateException). error: %s", errorDetails))
-				msg := "AWS key material rotation reported failure: key is pending import."
+				msg := "AWS key material rotation reported failure: key is pending import. Refreshing key and retrying."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error_details": errorDetails})
 				client.Log.Warn(details)
 				retryOperation = true
@@ -756,13 +757,13 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 				if newUpdatedAt != t.sentinelUpdatedAt {
 					done[ti] = true
 				}
-				client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti]))
+				client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] loop: %d oldUpdatedAt: %s newUpdatedAt: %s changed: %t importState: %s keyMaterialState: %s", i, t.sentinelUpdatedAt, newUpdatedAt, done[ti], res.Get("aws_param.ImportState").String(), res.Get("aws_param.KeyMaterialState").String()))
 				break
 			}
 		}
 
 		if allDone() {
-			client.Log.Info(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] all keys confirmed refreshed after %d polls", i+1))
+			client.Log.Info(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] resolved loop: %d all keys confirmed refreshed keyID: %s", i, keyID))
 			return
 		}
 		if i < maxPolls-1 {
@@ -779,7 +780,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 				"sentinel_source_key": t.sentinelSourceKeyID,
 				"sentinel_updated_at": t.sentinelUpdatedAt,
 			})
-			client.Log.Warn(fmt.Sprintf("RefreshKeyAndWait: TIMED OUT after %d polls waiting for rotation history to reflect key refresh.", maxPolls))
+			client.Log.Warn(fmt.Sprintf("[aws_key_material.go -> RefreshKeyAndWait] TIMED OUT after %d polls waiting for rotation history to reflect key refresh.", maxPolls))
 			diags.AddWarning(details, "")
 		}
 	}

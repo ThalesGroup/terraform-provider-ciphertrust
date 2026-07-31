@@ -427,6 +427,43 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		payload.TrustedCAs = &trustedCAs
 	}
 
+	// local_auto_gen_attributes (TFIN-534): Create() previously omitted this block entirely.
+	// Update() had the correct logic; copy it here so the first apply converges without
+	// requiring a redundant second apply.
+	if plan.LocalAutogenAttributes != nil {
+		var attributes CMInterfaceLocalAutogenAttrJSON
+		if plan.LocalAutogenAttributes.CN.ValueString() != "" && plan.LocalAutogenAttributes.CN.ValueString() != types.StringNull().ValueString() {
+			attributes.CN = plan.LocalAutogenAttributes.CN.ValueString()
+		}
+		var dnsArr []string
+		for _, s := range plan.LocalAutogenAttributes.DNSNames {
+			dnsArr = append(dnsArr, s.ValueString())
+		}
+		attributes.DNSNames = dnsArr
+		var emailsArr []string
+		for _, s := range plan.LocalAutogenAttributes.Emails {
+			emailsArr = append(emailsArr, s.ValueString())
+		}
+		attributes.Emails = emailsArr
+		var ipArr []string
+		for _, s := range plan.LocalAutogenAttributes.IPAddresses {
+			ipArr = append(ipArr, s.ValueString())
+		}
+		attributes.IPAddresses = ipArr
+		var namesArr []NamesParamsJSON
+		for _, n := range plan.LocalAutogenAttributes.Names {
+			namesArr = append(namesArr, NamesParamsJSON{
+				C: n.C.ValueString(), L: n.L.ValueString(),
+				O: n.O.ValueString(), OU: n.OU.ValueString(), ST: n.ST.ValueString(),
+			})
+		}
+		attributes.Names = namesArr
+		if plan.LocalAutogenAttributes.UID.ValueString() != "" && plan.LocalAutogenAttributes.UID.ValueString() != types.StringNull().ValueString() {
+			attributes.UID = plan.LocalAutogenAttributes.UID.ValueString()
+		}
+		payload.LocalAutogenAttributes = &attributes
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Create][" + id + "]")
@@ -494,9 +531,9 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
 		if r := gjson.Get(response, "auto_registration"); r.Exists() {
 			plan.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
-			plan.AutoRegistration = types.BoolNull()
 		}
+		// else: CM omits auto_registration from create response (write-only field).
+		// plan.AutoRegistration already holds the user's configured value — preserve it.
 	}
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
@@ -665,13 +702,19 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AutogenDaysBeforeExpiry = types.Int64Null()
 		}
 	}
-	if !state.AutoRegistration.IsNull() {
-		if r := gjson.Get(response, "auto_registration"); r.Exists() {
-			state.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
+	// auto_registration (Optional, write-only on create):
+	// - CM returns true  → store true in state.
+	// - CM returns false → field was cleared; null is the correct Terraform state.
+	// - CM omits key     → preserve prior state (write-only create: key absent from 201 and
+	//                      subsequent GET until the value is explicitly set/cleared).
+	if r := gjson.Get(response, "auto_registration"); r.Exists() {
+		if r.Bool() {
+			state.AutoRegistration = types.BoolValue(true)
+		} else if !state.AutoRegistration.IsNull() {
 			state.AutoRegistration = types.BoolNull()
 		}
 	}
+	// else: key absent — leave state.AutoRegistration unchanged.
 	if !state.CertUserField.IsNull() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
 			state.CertUserField = types.StringValue(r.String())
@@ -829,37 +872,45 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 				}
 				laga.IPAddresses = ips
 			}
-			var names []NamesParamsTFSDK
-			for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
-				entry := NamesParamsTFSDK{}
-				if r := n.Get("C"); r.Exists() {
-					entry.C = types.StringValue(r.String())
-				} else {
-					entry.C = types.StringNull()
+			// names (TFIN-535): CM always returns a default names entry even when the user
+			// never configured it. Only hydrate from the API response when the user previously
+			// configured names (non-nil slice in prior state); otherwise preserve nil to prevent
+			// perpetual drift. Matches the preserve-prior-state pattern used for uid below.
+			if state.LocalAutogenAttributes.Names != nil {
+				var names []NamesParamsTFSDK
+				for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
+					entry := NamesParamsTFSDK{}
+					if r := n.Get("C"); r.Exists() {
+						entry.C = types.StringValue(r.String())
+					} else {
+						entry.C = types.StringNull()
+					}
+					if r := n.Get("L"); r.Exists() {
+						entry.L = types.StringValue(r.String())
+					} else {
+						entry.L = types.StringNull()
+					}
+					if r := n.Get("O"); r.Exists() {
+						entry.O = types.StringValue(r.String())
+					} else {
+						entry.O = types.StringNull()
+					}
+					if r := n.Get("OU"); r.Exists() {
+						entry.OU = types.StringValue(r.String())
+					} else {
+						entry.OU = types.StringNull()
+					}
+					if r := n.Get("ST"); r.Exists() {
+						entry.ST = types.StringValue(r.String())
+					} else {
+						entry.ST = types.StringNull()
+					}
+					names = append(names, entry)
 				}
-				if r := n.Get("L"); r.Exists() {
-					entry.L = types.StringValue(r.String())
-				} else {
-					entry.L = types.StringNull()
-				}
-				if r := n.Get("O"); r.Exists() {
-					entry.O = types.StringValue(r.String())
-				} else {
-					entry.O = types.StringNull()
-				}
-				if r := n.Get("OU"); r.Exists() {
-					entry.OU = types.StringValue(r.String())
-				} else {
-					entry.OU = types.StringNull()
-				}
-				if r := n.Get("ST"); r.Exists() {
-					entry.ST = types.StringValue(r.String())
-				} else {
-					entry.ST = types.StringNull()
-				}
-				names = append(names, entry)
+				laga.Names = names
+			} else {
+				laga.Names = nil
 			}
-			laga.Names = names
 			if r := gjson.Get(response, "local_auto_gen_attributes.uid"); r.Exists() && r.String() != "" {
 				laga.UID = types.StringValue(r.String())
 			} else {
@@ -964,7 +1015,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		payload["cert_user_field"] = plan.CertUserField.ValueString()
 	} else if !state.CertUserField.IsNull() {
-		payload["cert_user_field"] = "" // Reset/empty
+		// CM does not support clearing cert_user_field — it is an enum with no unset member
+		// and rejects "" with HTTP 400. Send the CM-documented default "CN" to reset.
+		payload["cert_user_field"] = "CN"
 	}
 
 	// custom_uid_size (Int64)
@@ -985,7 +1038,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.DefaultConnection.IsNull() && !plan.DefaultConnection.IsUnknown() {
 		payload["default_connection"] = plan.DefaultConnection.ValueString()
 	} else if !state.DefaultConnection.IsNull() {
-		payload["default_connection"] = "" // Reset/empty
+		// CM does not support clearing default_connection via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["default_connection"] = "local_account"
 	}
 
 	// kmip_enable_hard_delete (Int64)
@@ -1043,7 +1098,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MaximumTLSVersion.ValueString() != "" && plan.MaximumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["maximum_tls_version"] = plan.MaximumTLSVersion.ValueString()
 	} else if !state.MaximumTLSVersion.IsNull() {
-		payload["maximum_tls_version"] = ""
+		// CM does not support clearing maximum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["maximum_tls_version"] = "tls_1_3"
 	}
 
 	if plan.Meta != nil {
@@ -1063,15 +1120,25 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["minimum_tls_version"] = plan.MinimumTLSVersion.ValueString()
 	} else if !state.MinimumTLSVersion.IsNull() {
-		payload["minimum_tls_version"] = ""
+		// CM does not support clearing minimum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["minimum_tls_version"] = "tls_1_2"
 	}
 
 	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
 		payload["mode"] = plan.Mode.ValueString()
+	} else if !state.Mode.IsNull() {
+		// CM does not support clearing mode by omitting the field — without an explicit value
+		// the prior setting persists silently. Send the CM-documented default to genuinely reset.
+		payload["mode"] = "unauth-tls-pw-req"
 	}
 
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload["network_interface"] = plan.NetworkInterface.ValueString()
+	} else if !state.NetworkInterface.IsNull() {
+		// CM does not support clearing network_interface by omitting the field — without an
+		// explicit value the prior setting persists silently. Send the CM-documented default.
+		payload["network_interface"] = "all"
 	}
 
 	// registration_token: send explicit "" clear when user removes the field and prior state

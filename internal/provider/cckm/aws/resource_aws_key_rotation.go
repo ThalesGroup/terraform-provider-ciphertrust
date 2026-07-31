@@ -409,10 +409,10 @@ func waitForKeyUpdatedAt(
 //  1. aws_param.CurrentKeyMaterialId changed from prevMaterialID.
 //  2. The rotation history record count increased beyond prevRotationCount.
 //
-// The function sleeps at the TOP of each iteration before fetching so the first poll
-// also includes a wait. No /refresh calls are made at any point to avoid confusing
-// CCKM state.
-// Returns true on confirmed success, false if the timeout expired (error added t
+// The outer loop runs maxRefreshRounds times. On each round after the first a
+// best-effort /refresh is issued before polling, prompting CCKM to re-sync with AWS.
+// If the last poll of the last round still shows no change, an error is added to diags.
+// Returns true on confirmed success, false if the timeout expired.
 func waitForNativeRotation(
 	ctx context.Context,
 	id string,
@@ -426,61 +426,69 @@ func waitForNativeRotation(
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> waitForNativeRotation][" + id + "]")
 
 	const (
-		maxPolls     = 12
-		pollInterval = shortAwsKeyOpSleep
+		maxRefreshRounds = 2
+		maxPolls         = 12
+		pollInterval     = shortAwsKeyOpSleep
 	)
 
 	rotListFilters := url.Values{"limit": []string{"-1"}}
 
-	for i := 0; i < maxPolls; i++ {
-		// Sleep first on every iteration (including the first) before fetching.
-		time.Sleep(time.Duration(pollInterval) * time.Second)
-
-		// Fetch the key record without calling /refresh first.
-		keyJSON, err := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-		if err != nil {
-			msg := "Error fetching key during rotation poll."
-			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-			client.Log.Error(details)
-			diags.AddError(details, "")
-			return false
-		}
-		currentMaterialID := gjson.Get(keyJSON, "aws_param.CurrentKeyMaterialId").String()
-
-		// Fetch current rotation count.
-		rotListJSON, listErr := client.ListWithFilters(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotations", rotListFilters)
-		var currentRotationCount int64
-		if listErr == nil {
-			currentRotationCount = gjson.Get(rotListJSON, "total").Int()
+	for r := 0; r < maxRefreshRounds; r++ {
+		// On rounds after the first, prompt CCKM to re-sync with AWS before polling.
+		// This is best-effort: a failure does not abort the attempt.
+		if r > 0 {
+			client.Log.Info(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] round %d/%d: requesting key refresh before polling",
+				r+1, maxRefreshRounds))
+			_, refreshErr := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/refresh", []byte("{}"))
+			if refreshErr != nil {
+				client.Log.Warn(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] round %d/%d: key refresh failed (best-effort): %s",
+					r+1, maxRefreshRounds, refreshErr.Error()))
+			}
 		}
 
-		client.Log.Debug(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] poll %d/%d - rotationCount: prev=%d current=%d, currentMaterialID: prev=%q current=%q",
-			i+1, maxPolls, prevRotationCount, currentRotationCount, prevMaterialID, currentMaterialID,
-		))
+		for i := 0; i < maxPolls; i++ {
+			// Sleep first on every iteration (including the first) before fetching.
+			time.Sleep(time.Duration(pollInterval) * time.Second)
 
-		confirmed := false
-		if currentMaterialID != "" && currentMaterialID != prevMaterialID {
-			client.Log.Info("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via material ID change")
-			confirmed = true
-		} else if currentRotationCount > prevRotationCount {
-			client.Log.Info("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed via rotation count increase")
-			confirmed = true
+			keyJSON, err := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+			if err != nil {
+				msg := "Error fetching key during rotation poll."
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				client.Log.Error(details)
+				diags.AddError(details, "")
+				return false
+			}
+			currentMaterialID := gjson.Get(keyJSON, "aws_param.CurrentKeyMaterialId").String()
+
+			rotListJSON, listErr := client.ListWithFilters(ctx, id, common.URL_AWS_KEY+"/"+keyID+"/rotations", rotListFilters)
+			var currentRotationCount int64
+			if listErr == nil {
+				currentRotationCount = gjson.Get(rotListJSON, "total").Int()
+			}
+
+			client.Log.Debug(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] round %d/%d poll %d/%d - rotationCount: prev=%d current=%d, currentMaterialID: prev=%q current=%q",
+				r+1, maxRefreshRounds, i+1, maxPolls, prevRotationCount, currentRotationCount, prevMaterialID, currentMaterialID,
+			))
+
+			if (currentMaterialID != "" && currentMaterialID != prevMaterialID) || currentRotationCount > prevRotationCount {
+				client.Log.Info(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed on round %d/%d poll %d/%d",
+					r+1, maxRefreshRounds, i+1, maxPolls))
+				return true
+			}
+
+			// Last poll of the last round - timeout expired.
+			if r+1 == maxRefreshRounds && i+1 == maxPolls {
+				msg := "On-demand rotation was requested but completion could not be confirmed before the timeout expired. " +
+					"The rotation may still complete asynchronously. " +
+					"Refresh the key before retrying."
+				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
+				client.Log.Error(details)
+				diags.AddError(details, "")
+				return false
+			}
 		}
-
-		if confirmed {
-			return true
-		}
-
 	}
 
-	// Timeout reached. rotate-material was already called so state is NOT saved.
-	// The user must change trigger to attempt another rotation.
-	msg := "On-demand rotation was requested but completion could not be confirmed before the timeout expired. " +
-		"The rotation may still complete asynchronously. " +
-		"Refresh the key before retrying."
-	details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-	client.Log.Error(details)
-	diags.AddError(details, "")
 	return false
 }
 
