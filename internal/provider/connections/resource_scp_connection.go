@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -131,6 +130,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"path_to": schema.StringAttribute{
 				Required:    true,
 				Description: "A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"public_key": schema.StringAttribute{
 				Required:    true,
@@ -160,7 +162,7 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Computed:    true,
 				Description: labelsDescription,
 				PlanModifiers: []planmodifier.Map{
-					mapplanmodifier.UseStateForUnknown(),
+					modifiers.UseStateWhenClearingMap(),
 				},
 			},
 			"meta": schema.MapAttribute{
