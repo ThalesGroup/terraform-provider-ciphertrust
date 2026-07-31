@@ -1,27 +1,40 @@
-# Visit https://golangci-lint.run/ for usage documentation
-# and information on other useful linters
-issues:
-  max-per-linter: 0
-  max-same-issues: 0
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - durationcheck
-    - errcheck
-    - exportloopref
-    - forcetypeassert
-    - godot
-    - gofmt
-    - gosimple
-    - ineffassign
-    - makezero
-    - misspell
-    - nilerr
-    - predeclared
-    - staticcheck
-    - tenv
-    - unconvert
-    - unparam
-    - unused
-    - govet
+    - durationcheck      # detects incorrect time.Duration arithmetic (e.g. multiplying two durations)
+    - errcheck           # ensures returned errors are checked and not silently discarded
+    - forcetypeassert    # flags unchecked type assertions that can panic at runtime
+    - godot              # enforces that top-level comments end with a period
+    - govet              # reports suspicious constructs caught by the official go vet tool
+    - ineffassign        # detects assignments whose value is never subsequently used
+    - makezero           # finds make() calls that create slices with a non-zero initial length
+    - misspell           # catches commonly misspelled English words in comments and strings
+    - nilerr             # flags functions that return a nil error alongside a non-nil value
+    - predeclared        # warns when identifiers shadow Go predeclared names (e.g. len, error)
+    - staticcheck        # comprehensive suite of static analysis checks (replaces gosimple)
+    - unconvert          # removes redundant explicit type conversions
+    - unparam            # reports function parameters that always receive the same argument
+    - unused             # reports unexported identifiers (types, funcs, vars) that are never used
+  exclusions:
+    generated: lax       # apply a relaxed standard to generated files rather than skipping them entirely
+    presets:
+      - comments               # suppresses comment-formatting false positives (e.g. godot on special comments)
+      - common-false-positives # suppresses well-known false positives across many linters
+      - legacy                 # suppresses issues that only apply to pre-module or pre-1.18 code patterns
+      - std-error-handling     # suppresses opinionated standard-library error-handling warnings
+    paths:
+      - third_party$  # skip vendored third-party code
+      - builtin$      # skip generated built-in stubs
+      - examples$     # skip example code
+issues:
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt              # enforces canonical Go source formatting (replaces the old gofmt linter)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$  # skip vendored third-party code
+      - builtin$      # skip generated built-in stubs
+      - examples$     # skip example code
