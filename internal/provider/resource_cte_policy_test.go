@@ -2,7 +2,6 @@ package provider
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -161,9 +160,11 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 }
 
 // TestCTEPolicyResource_typeImmutable verifies a change to the (immutable)
-// policy_type is rejected.
+// policy_type is planned as a destroy+create replacement rather than a
+// misleading in-place update that then fails at apply (TFIN-546).
 func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 	name := "tf-policy-typeimm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -171,12 +172,22 @@ func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 			{
 				Config: ctePolicyTypedConfig(name, "Standard"),
 				Check: checkStep(t, "policy type immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy", "policy_type", "Standard"),
+					resource.TestCheckResourceAttr(rn, "policy_type", "Standard"),
 				),
 			},
 			{
-				Config:      ctePolicyTypedConfig(name, "LDT"),
-				ExpectError: regexp.MustCompile(`(?i)cannot change type of the policy|immutable`),
+				// CSI, like Standard, only requires security_rules; other
+				// non-Standard types (e.g. LDT) require additional
+				// mandatory nested rule blocks tied to real key material.
+				Config: ctePolicyTypedConfig(name, "CSI"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "policy type immutable: replace",
+					resource.TestCheckResourceAttr(rn, "policy_type", "CSI"),
+				),
 			},
 		},
 	})
