@@ -483,8 +483,9 @@ resource "ciphertrust_interface" "test" {
 				Check: checkStep(t, "uid applied and preserved in state",
 					resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.uid", uid),
 				),
-				// CM overrides other local_auto_gen_attributes fields with auto-generated values.
-				ExpectNonEmptyPlan: true,
+				// TFIN-534 fix: Create() now sends all local_auto_gen_attributes so these fields
+				// converge on the first apply. ExpectNonEmptyPlan is false post-fix.
+				ExpectNonEmptyPlan: false,
 			},
 			{
 				// Step 2: Refresh from CM. uid must still be in state.
@@ -832,6 +833,106 @@ resource "ciphertrust_interface" "test" {
 
 // Test_CM_Interface_Clear_Optional_Fields asserts that clearing a previously
 // set optional field properly resets its state on the server.
+// Test_CM_Interface_LocalAutoGenCreateConverges verifies that Create() now includes
+// local_auto_gen_attributes in the POST payload (TFIN-534). After the first apply
+// the plan must be empty — no second apply required to converge.
+func Test_CM_Interface_LocalAutoGenCreateConverges(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9877) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9877
+  interface_type = "nae"
+  local_auto_gen_attributes = {
+    cn              = "tfin534.local"
+    dns_names       = ["tfin534.local"]
+    email_addresses = ["tfin534@example.com"]
+    ip_addresses    = ["10.53.4.1"]
+  }
+}`,
+				Check: checkStep(t, "create with local_auto_gen_attributes",
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "local_auto_gen_attributes.cn", "tfin534.local"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_LocalAutoGenNamesNoDrift verifies that Read() does not hydrate
+// the CM-default names entry into state when the user never configured names (TFIN-535).
+// Before the fix: every plan would propose removing the default names block.
+// After the fix: plan is empty when names is not in config.
+func Test_CM_Interface_LocalAutoGenNamesNoDrift(t *testing.T) {
+	RequireCM(t)
+
+	cfg := providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9878
+  interface_type = "nae"
+  local_auto_gen_attributes = {
+    cn              = "tfin535.local"
+    dns_names       = ["tfin535.local"]
+    email_addresses = ["tfin535@example.com"]
+    ip_addresses    = ["10.53.5.1"]
+    # names intentionally absent — must not drift with CM's default names entry
+  }
+}`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9878) },
+				Config:    providerConfig + cfg,
+				Check: checkStep(t, "create without names",
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config:             providerConfig + cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_AutoRegistrationCreateDoesNotCrash verifies that creating with
+// auto_registration=true no longer crashes with "Provider produced inconsistent result"
+// (TFIN-536). CM omits auto_registration from the 201 and GET responses; the provider
+// must preserve the configured value in both Create() and Read() rather than nullifying it.
+func Test_CM_Interface_AutoRegistrationCreateDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9879) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port              = 9879
+  interface_type    = "nae"
+  auto_registration = true
+}`,
+				Check: checkStep(t, "create with auto_registration=true",
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_registration", "true"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 func Test_CM_Interface_Clear_Optional_Fields(t *testing.T) {
 	RequireCM(t)
 

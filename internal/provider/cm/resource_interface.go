@@ -427,6 +427,43 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		payload.TrustedCAs = &trustedCAs
 	}
 
+	// local_auto_gen_attributes (TFIN-534): Create() previously omitted this block entirely.
+	// Update() had the correct logic; copy it here so the first apply converges without
+	// requiring a redundant second apply.
+	if plan.LocalAutogenAttributes != nil {
+		var attributes CMInterfaceLocalAutogenAttrJSON
+		if plan.LocalAutogenAttributes.CN.ValueString() != "" && plan.LocalAutogenAttributes.CN.ValueString() != types.StringNull().ValueString() {
+			attributes.CN = plan.LocalAutogenAttributes.CN.ValueString()
+		}
+		var dnsArr []string
+		for _, s := range plan.LocalAutogenAttributes.DNSNames {
+			dnsArr = append(dnsArr, s.ValueString())
+		}
+		attributes.DNSNames = dnsArr
+		var emailsArr []string
+		for _, s := range plan.LocalAutogenAttributes.Emails {
+			emailsArr = append(emailsArr, s.ValueString())
+		}
+		attributes.Emails = emailsArr
+		var ipArr []string
+		for _, s := range plan.LocalAutogenAttributes.IPAddresses {
+			ipArr = append(ipArr, s.ValueString())
+		}
+		attributes.IPAddresses = ipArr
+		var namesArr []NamesParamsJSON
+		for _, n := range plan.LocalAutogenAttributes.Names {
+			namesArr = append(namesArr, NamesParamsJSON{
+				C: n.C.ValueString(), L: n.L.ValueString(),
+				O: n.O.ValueString(), OU: n.OU.ValueString(), ST: n.ST.ValueString(),
+			})
+		}
+		attributes.Names = namesArr
+		if plan.LocalAutogenAttributes.UID.ValueString() != "" && plan.LocalAutogenAttributes.UID.ValueString() != types.StringNull().ValueString() {
+			attributes.UID = plan.LocalAutogenAttributes.UID.ValueString()
+		}
+		payload.LocalAutogenAttributes = &attributes
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_interface.go -> Create][" + id + "]")
@@ -494,9 +531,9 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
 		if r := gjson.Get(response, "auto_registration"); r.Exists() {
 			plan.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
-			plan.AutoRegistration = types.BoolNull()
 		}
+		// else: CM omits auto_registration from create response (write-only field).
+		// plan.AutoRegistration already holds the user's configured value — preserve it.
 	}
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
@@ -665,13 +702,13 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AutogenDaysBeforeExpiry = types.Int64Null()
 		}
 	}
-	if !state.AutoRegistration.IsNull() {
-		if r := gjson.Get(response, "auto_registration"); r.Exists() {
-			state.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
-			state.AutoRegistration = types.BoolNull()
-		}
+	// auto_registration: CM does not return this in GET responses (write-only field).
+	// Preserve the prior state value to prevent perpetual drift.
+	// (same pattern as registration_token / certificate — lines 897–898)
+	if r := gjson.Get(response, "auto_registration"); r.Exists() {
+		state.AutoRegistration = types.BoolValue(r.Bool())
 	}
+	// else: key absent — leave state.AutoRegistration unchanged.
 	if !state.CertUserField.IsNull() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
 			state.CertUserField = types.StringValue(r.String())
@@ -829,37 +866,45 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 				}
 				laga.IPAddresses = ips
 			}
-			var names []NamesParamsTFSDK
-			for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
-				entry := NamesParamsTFSDK{}
-				if r := n.Get("C"); r.Exists() {
-					entry.C = types.StringValue(r.String())
-				} else {
-					entry.C = types.StringNull()
+			// names (TFIN-535): CM always returns a default names entry even when the user
+			// never configured it. Only hydrate from the API response when the user previously
+			// configured names (non-nil slice in prior state); otherwise preserve nil to prevent
+			// perpetual drift. Matches the preserve-prior-state pattern used for uid below.
+			if state.LocalAutogenAttributes.Names != nil {
+				var names []NamesParamsTFSDK
+				for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
+					entry := NamesParamsTFSDK{}
+					if r := n.Get("C"); r.Exists() {
+						entry.C = types.StringValue(r.String())
+					} else {
+						entry.C = types.StringNull()
+					}
+					if r := n.Get("L"); r.Exists() {
+						entry.L = types.StringValue(r.String())
+					} else {
+						entry.L = types.StringNull()
+					}
+					if r := n.Get("O"); r.Exists() {
+						entry.O = types.StringValue(r.String())
+					} else {
+						entry.O = types.StringNull()
+					}
+					if r := n.Get("OU"); r.Exists() {
+						entry.OU = types.StringValue(r.String())
+					} else {
+						entry.OU = types.StringNull()
+					}
+					if r := n.Get("ST"); r.Exists() {
+						entry.ST = types.StringValue(r.String())
+					} else {
+						entry.ST = types.StringNull()
+					}
+					names = append(names, entry)
 				}
-				if r := n.Get("L"); r.Exists() {
-					entry.L = types.StringValue(r.String())
-				} else {
-					entry.L = types.StringNull()
-				}
-				if r := n.Get("O"); r.Exists() {
-					entry.O = types.StringValue(r.String())
-				} else {
-					entry.O = types.StringNull()
-				}
-				if r := n.Get("OU"); r.Exists() {
-					entry.OU = types.StringValue(r.String())
-				} else {
-					entry.OU = types.StringNull()
-				}
-				if r := n.Get("ST"); r.Exists() {
-					entry.ST = types.StringValue(r.String())
-				} else {
-					entry.ST = types.StringNull()
-				}
-				names = append(names, entry)
+				laga.Names = names
+			} else {
+				laga.Names = nil
 			}
-			laga.Names = names
 			if r := gjson.Get(response, "local_auto_gen_attributes.uid"); r.Exists() && r.String() != "" {
 				laga.UID = types.StringValue(r.String())
 			} else {
