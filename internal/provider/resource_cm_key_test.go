@@ -164,6 +164,57 @@ resource "ciphertrust_cm_key" "k" {
 	_ = capturedID
 }
 
+// Test_CM_AccCMKey_aliasAddition verifies that adding a new alias to an already-existing
+// key via Update() succeeds — regression test for the "Provider produced inconsistent
+// result after apply" crash caused by the per-item `index` field's positional
+// UseStateForUnknown() incorrectly resolving to null for a genuinely new list element.
+func Test_CM_AccCMKey_aliasAddition(t *testing.T) {
+	RequireCM(t)
+	suffix := uuid.New().String()[:8]
+	keyName := "tf-acc-key-aliasadd-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  aliases = [
+    { alias = "alias-first", type = "string" },
+  ]
+}
+`, keyName),
+				Check: checkStep(t, "alias addition: initial create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "aliases.0.alias", "alias-first"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "aliases.0.index"),
+				),
+			},
+			{
+				// Add a second alias to the already-existing key — must not crash with
+				// "Provider produced inconsistent result after apply".
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  aliases = [
+    { alias = "alias-first", type = "string" },
+    { alias = "alias-second", type = "string" },
+  ]
+}
+`, keyName),
+				Check: checkStep(t, "alias addition: second alias added in place",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "aliases.#", "2"),
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "aliases.1.index"),
+				),
+			},
+		},
+	})
+}
+
 func Test_CM_AccCMKey_metaHydration(t *testing.T) {
 	RequireCM(t)
 
@@ -1802,7 +1853,7 @@ resource "ciphertrust_cm_key" "test" {
   key_size  = 256
   name      = %q
 }`, name),
-				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
+				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
 			},
 		},
 	})
@@ -1841,9 +1892,9 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
-// TestCipherTrust_CMKey_MetaOwnerIdUpdate verifies that any attempt to change meta.owner_id
-// after creation is blocked at plan time by ImmutableObject() — including non-null → non-null
-// changes. meta is fully immutable: CM's merge-PATCH cannot clear or reliably update sub-fields.
+// Test_CM_CipherTrust_CMKey_MetaOwnerIdUpdate verifies that changing meta.owner_id to a new
+// non-null value after creation succeeds in place: CM's merge-PATCH replaces a present key's
+// value fully (it only fails to converge when a key is omitted from the PATCH body entirely).
 func Test_CM_CipherTrust_CMKey_MetaOwnerIdUpdate(t *testing.T) {
 	RequireCM(t)
 	name := "tf-test-metaupd-" + uuid.New().String()[:8]
@@ -1865,9 +1916,7 @@ resource "ciphertrust_cm_key" "test" {
 				),
 			},
 			{
-				// Attempt to change owner_id (non-null → non-null); ImmutableObject() must fire.
-				// meta is fully immutable — CM's merge-PATCH cannot reliably update sub-fields
-				// either, so any post-creation meta change is blocked at plan time.
+				// owner_id changes from one non-null value to another — must apply in place.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "test" {
   algorithm = "aes"
@@ -1877,8 +1926,9 @@ resource "ciphertrust_cm_key" "test" {
     owner_id = "admin2"
   }
 }`, name),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)attribute is immutable`),
+				Check: checkStep(t, "owner_id updated in place",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "meta.owner_id", "admin2"),
+				),
 			},
 		},
 	})
@@ -1938,6 +1988,149 @@ resource "ciphertrust_cm_key" "test" {
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_CMKey_DescriptionClearRejected verifies that removing description
+// from config after it was set produces a hard AddError diagnostic instead of a false
+// success — CM's PATCH endpoint would otherwise silently leave the live value unchanged
+// while Terraform reported the clear as applied.
+func Test_CM_CipherTrust_CMKey_DescriptionClearRejected(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-desc-clear-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm   = "aes"
+  key_size    = 256
+  name        = %q
+  description = "initial desc"
+}`, name),
+				Check: checkStep(t, "description set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "description", "initial desc"),
+				),
+			},
+			{
+				// Remove description entirely — must produce AddError, not succeed.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_CMKey_UsageMaskClearRejected verifies that removing usage_mask
+// from config after it was set produces a hard AddError diagnostic instead of a false
+// success.
+func Test_CM_CipherTrust_CMKey_UsageMaskClearRejected(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-mask-clear-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm  = "aes"
+  key_size   = 256
+  name       = %q
+  usage_mask = 12
+}`, name),
+				Check: checkStep(t, "usage_mask set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "usage_mask", "12"),
+				),
+			},
+			{
+				// Remove usage_mask entirely — must produce AddError, not succeed.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_CMKey_RotationFrequencyDaysClearRejected verifies that removing
+// rotation_frequency_days from config after it was set produces a hard AddError
+// diagnostic instead of a false success.
+func Test_CM_CipherTrust_CMKey_RotationFrequencyDaysClearRejected(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-rotation-clear-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm               = "aes"
+  key_size                = 256
+  name                    = %q
+  rotation_frequency_days = "30"
+}`, name),
+				Check: checkStep(t, "rotation_frequency_days set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "rotation_frequency_days", "30"),
+				),
+			},
+			{
+				// Remove rotation_frequency_days entirely — must produce AddError, not succeed.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
+			},
+		},
+	})
+}
+
+// Test_CM_CipherTrust_CMKey_LabelsClearRejected verifies that removing labels from
+// config after it was set produces a hard AddError diagnostic instead of a false
+// success.
+func Test_CM_CipherTrust_CMKey_LabelsClearRejected(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-labels-clear-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+  labels = {
+    env = "test"
+  }
+}`, name),
+				Check: checkStep(t, "labels set",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "labels.env", "test"),
+				),
+			},
+			{
+				// Remove labels entirely — must produce AddError, not succeed.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "test" {
+  algorithm = "aes"
+  key_size  = 256
+  name      = %q
+}`, name),
+				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
 			},
 		},
 	})

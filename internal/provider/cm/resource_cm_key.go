@@ -90,6 +90,9 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"aliases": schema.ListNestedAttribute{
 				Optional:    true,
 				Description: "Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified.",
+				PlanModifiers: []planmodifier.List{
+					aliasListIndexModifier{},
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"alias": schema.StringAttribute{
@@ -99,9 +102,6 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"index": schema.StringAttribute{
 							Computed:    true,
 							Description: "Index assigned by the server. Read-only.",
-							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
-							},
 						},
 						"type": schema.StringAttribute{
 							Optional:    true,
@@ -183,8 +183,13 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"description": schema.StringAttribute{
-				Optional:    true,
-				Description: "It store information about key",
+				Optional: true,
+				Description: "It store information about key. Once set, this field cannot be cleared back " +
+					"to empty by omitting it from config — CM does not honour empty-string PATCH requests " +
+					"for this field.",
+				PlanModifiers: []planmodifier.String{
+					clearRejectStringModifier{FieldName: "description"},
+				},
 			},
 			"destroy_date": schema.StringAttribute{
 				Optional:    true,
@@ -327,11 +332,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"meta": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "(Immutable) Optional end-user or service data stored with the key. " +
-					"PATCH merges JSON objects: removing a field from config does NOT clear it on the server. " +
+				Description: "Optional end-user or service data stored with the key. Fields can be added or " +
+					"changed in place; a field already set cannot be cleared by omitting it (PATCH merges JSON " +
+					"objects — removing a field from config does NOT clear it on the server). " +
 					"On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.MergePatchObject(),
 				},
 				Attributes: map[string]schema.Attribute{
 					"owner_id": schema.StringAttribute{
@@ -457,8 +463,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "Message explaining revocation.",
 			},
 			"rotation_frequency_days": schema.StringAttribute{
-				Optional:    true,
-				Description: "Number of days from current date to rotate the key. It should be greater than or equal to 0. Default is an empty string. If set to 0, rotationFrequencyDays set to an empty string and auto rotation of key will be disabled.",
+				Optional: true,
+				Description: "Number of days from current date to rotate the key. It should be greater than or equal to 0. Default is an empty string. If set to 0, rotationFrequencyDays set to an empty string and auto rotation of key will be disabled. " +
+					"Once set, this field cannot be cleared back to empty by omitting it from config — CM does not honour empty-string PATCH requests for this field.",
+				PlanModifiers: []planmodifier.String{
+					clearRejectStringModifier{FieldName: "rotation_frequency_days"},
+				},
 			},
 			"secret_data_encoding": schema.StringAttribute{
 				Optional:    true,
@@ -518,10 +528,14 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"usage_mask": schema.Int64Attribute{
-				Optional:    true,
-				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks). Must be between 0 and 4194303 (inclusive).",
+				Optional: true,
+				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks). Must be between 0 and 4194303 (inclusive). " +
+					"Once set, this field cannot be cleared by omitting it from config — CM does not honour omitted-field PATCH requests for this field.",
 				Validators: []validator.Int64{
 					int64validator.Between(0, 4194303),
+				},
+				PlanModifiers: []planmodifier.Int64{
+					clearRejectInt64Modifier{FieldName: "usage_mask"},
 				},
 			},
 			"uuid": schema.StringAttribute{
@@ -824,7 +838,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "Optional map of string key-value labels to associate with the key.",
+				Description: "Optional map of string key-value labels to associate with the key. Once set, this " +
+					"field cannot be cleared back to empty by omitting it from config — CM does not honour " +
+					"empty-object PATCH requests for this field.",
+				PlanModifiers: []planmodifier.Map{
+					clearRejectMapModifier{FieldName: "labels"},
+				},
 			},
 			"all_versions": schema.BoolAttribute{
 				Optional:    true,

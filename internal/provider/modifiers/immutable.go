@@ -3,14 +3,20 @@
 // ImmutableList, ImmutableMap, and ImmutableObject each enforce that a
 // given schema attribute cannot change after resource creation, emitting
 // a plan-time diagnostic error so no API call is made and no
-// destroy+recreate occurs.
+// destroy+recreate occurs. MergePatchObject is looser: it allows in-place
+// changes/additions to an object attribute and only blocks clearing a
+// previously-set field by omitting it, matching CM's JSON merge-PATCH
+// endpoints where omitted keys are left untouched rather than cleared.
 package modifiers
 
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // ImmutableString returns a plan modifier that prevents a string attribute from
@@ -252,4 +258,83 @@ func (m immutableObjectModifier) PlanModifyObject(_ context.Context, req planmod
 			"To change this attribute, destroy and recreate the resource.",
 	)
 	resp.PlanValue = req.StateValue
+}
+
+// MergePatchObject returns an Object plan modifier for attributes backed by a CM endpoint
+// that uses JSON merge-PATCH semantics: a key present in the PATCH body is set/replaced
+// in place, but a key absent from the body leaves the server's existing value untouched.
+// This means adding or changing a (sub-)field works fine in place, but clearing a
+// previously-set field by omitting it from config can never converge — Read() will keep
+// re-hydrating the stale server value forever. MergePatchObject allows the former and
+// blocks the latter with a plan-time error, checked recursively through nested objects.
+func MergePatchObject() planmodifier.Object {
+	return mergePatchObjectModifier{}
+}
+
+type mergePatchObjectModifier struct{}
+
+func (m mergePatchObjectModifier) Description(_ context.Context) string {
+	return "Fields already set cannot be cleared by omitting them (CM merge-PATCH); changing or adding fields is allowed."
+}
+
+func (m mergePatchObjectModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m mergePatchObjectModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	if req.StateValue.IsNull() {
+		return // create path
+	}
+	if req.PlanValue.IsUnknown() {
+		return
+	}
+	cleared := clearedMergePatchFields(req.PathExpression.String(), req.StateValue, req.PlanValue)
+	if len(cleared) == 0 {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Cannot Clear Field After Creation",
+		fmt.Sprintf(
+			"The following field(s) were set and cannot be removed by omitting them from "+
+				"config: %s. CM's merge-PATCH leaves omitted fields unchanged on the server, "+
+				"so removing them here would never converge. Restore the previous value, or "+
+				"destroy and recreate the resource.",
+			strings.Join(cleared, ", "),
+		),
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// clearedMergePatchFields recursively finds attribute paths that were non-null in state
+// and are null (entirely absent) in plan. It does not descend into non-Object values
+// (lists, primitives) — a changed or shrunk list/value is a legitimate in-place update
+// under JSON merge-patch semantics, since a *present* key is fully replaced, not merged.
+func clearedMergePatchFields(path string, stateVal, planVal attr.Value) []string {
+	if stateVal == nil || stateVal.IsNull() {
+		return nil
+	}
+	if planVal == nil || planVal.IsNull() {
+		return []string{path}
+	}
+	if planVal.IsUnknown() {
+		return nil
+	}
+	stateObj, ok := stateVal.(types.Object)
+	if !ok {
+		return nil
+	}
+	planObj, ok := planVal.(types.Object)
+	if !ok {
+		return nil
+	}
+	var cleared []string
+	for name, sAttr := range stateObj.Attributes() {
+		pAttr, exists := planObj.Attributes()[name]
+		if !exists {
+			cleared = append(cleared, path+"."+name)
+			continue
+		}
+		cleared = append(cleared, clearedMergePatchFields(path+"."+name, sAttr, pAttr)...)
+	}
+	return cleared
 }
