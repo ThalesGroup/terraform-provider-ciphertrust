@@ -13,6 +13,8 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/validators"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -20,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -48,25 +51,37 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) Unique group name.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1), // CM rejects "" with HTTP 422
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
 			},
 			"app_metadata": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
 				Description: "Application-specific metadata associated with the group. Stored as compacted JSON string.",
+				Validators: []validator.String{
+					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)
+				},
 			},
 			"client_metadata": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
 				Description: "Client-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
+				Validators: []validator.String{
+					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)
+				},
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Description: "Human-readable description of the group.",
 			},
 			"user_metadata": schema.StringAttribute{
-				Optional:    true,
+				Optional: true,
 				Description: "User-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
+				Validators: []validator.String{
+					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)
+				},
 			},
 			"user_ids": schema.SetAttribute{
 				Optional:    true,
@@ -110,23 +125,32 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 
 	if !plan.AppMetadata.IsNull() && !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
-			payload.AppMetadata = meta
+		if err := json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in app_metadata",
+				fmt.Sprintf("app_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.AppMetadata = meta
 	}
 
 	if !plan.ClientMetadata.IsNull() && !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
-			payload.ClientMetadata = meta
+		if err := json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in client_metadata",
+				fmt.Sprintf("client_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.ClientMetadata = meta
 	}
 
 	if !plan.UserMetadata.IsNull() && !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
-			payload.UserMetadata = meta
+		if err := json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in user_metadata",
+				fmt.Sprintf("user_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.UserMetadata = meta
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -157,16 +181,24 @@ func (r *resourceCMGroup) Create(ctx context.Context, req resource.CreateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// TFIN-542: add members without early-returning on failure. If any user add fails,
+	// we still write the group to state so it is tracked and a subsequent apply can
+	// reconcile the membership via Update() rather than hitting a 409 conflict.
+	var addedUsers []string
 	for _, uid := range desiredUsers {
 		if err := r.addUserToGroup(ctx, id, plan.Name.ValueString(), uid); err != nil {
 			resp.Diagnostics.AddError(
 				"Error Adding User to CipherTrust Group",
-				fmt.Sprintf("Could not add user %q to group %q: %s", uid, plan.Name.ValueString(), err.Error()),
+				fmt.Sprintf("Could not add user %q to group %q: %s. "+
+					"The group was created successfully — re-apply to reconcile membership.", uid, plan.Name.ValueString(), err.Error()),
 			)
-			return
+			// Do not return — continue adding remaining users and always record the group.
+		} else {
+			addedUsers = append(addedUsers, uid)
 		}
 	}
-	plan.UserIDs = stringSliceToSet(desiredUsers)
+	plan.UserIDs = stringSliceToSet(addedUsers)
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_group.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
@@ -331,9 +363,12 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	} else if !plan.AppMetadata.IsUnknown() && plan.AppMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta) == nil {
-			payload.AppMetadata = meta
+		if err := json.Unmarshal([]byte(plan.AppMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in app_metadata",
+				fmt.Sprintf("app_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.AppMetadata = meta
 	}
 
 	if plan.ClientMetadata.IsNull() {
@@ -349,9 +384,12 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	} else if !plan.ClientMetadata.IsUnknown() && plan.ClientMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta) == nil {
-			payload.ClientMetadata = meta
+		if err := json.Unmarshal([]byte(plan.ClientMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in client_metadata",
+				fmt.Sprintf("client_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.ClientMetadata = meta
 	}
 
 	if plan.UserMetadata.IsNull() {
@@ -367,9 +405,12 @@ func (r *resourceCMGroup) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	} else if !plan.UserMetadata.IsUnknown() && plan.UserMetadata.ValueString() != "" {
 		var meta map[string]interface{}
-		if json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta) == nil {
-			payload.UserMetadata = meta
+		if err := json.Unmarshal([]byte(plan.UserMetadata.ValueString()), &meta); err != nil {
+			resp.Diagnostics.AddError("Invalid JSON in user_metadata",
+				fmt.Sprintf("user_metadata must be a valid JSON object: %s", err))
+			return
 		}
+		payload.UserMetadata = meta
 	}
 
 	payloadJSON, err := json.Marshal(payload)

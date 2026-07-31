@@ -12,11 +12,14 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -58,6 +61,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 				Required:    true,
 				Description: "(Immutable) List of administrators for the domain",
 				ElementType: types.StringType,
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1), // CM rejects an empty list with HTTP 400
+				},
 				PlanModifiers: []planmodifier.List{
 					modifiers.ImmutableList(),
 				},
@@ -65,6 +71,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) The name of the domain",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1), // CM rejects an empty name with HTTP 422
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -245,12 +254,17 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 		plan.HSMKEKLabel = types.StringValue(hsmKekLabelResp)
 	}
 
-	parentCaIdResp := gjson.Get(response, "parent_ca_id").String()
-	if parentCaIdResp == "" {
+	// parent_ca_id: CM never returns this field in the 201 create response (write-only input).
+	// When the user configured a value, preserve it — nullifying would crash with
+	// "Provider produced inconsistent result after apply" (TFIN-539).
+	// When the user did not configure it (plan is null/unknown), set null explicitly
+	// so the framework's post-create consistency check is satisfied.
+	if r := gjson.Get(response, "parent_ca_id"); r.Exists() && r.String() != "" {
+		plan.ParentCAId = types.StringValue(r.String())
+	} else if plan.ParentCAId.IsNull() || plan.ParentCAId.IsUnknown() {
 		plan.ParentCAId = types.StringNull()
-	} else {
-		plan.ParentCAId = types.StringValue(parentCaIdResp)
 	}
+	// else: plan holds the user's configured value — preserve it.
 
 	r.client.Log.Debug("[resource_cm_domain.go -> Create Output][" + response + "]")
 
@@ -308,12 +322,12 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 		state.HSMKEKLabel = types.StringValue(hsmKekLabel)
 	}
 
-	parentCaId := gjson.Get(response, "parent_ca_id").String()
-	if parentCaId == "" {
-		state.ParentCAId = types.StringNull()
-	} else {
-		state.ParentCAId = types.StringValue(parentCaId)
+	// parent_ca_id: CM does not return this field in GET responses (write-only input field).
+	// Preserve prior state to prevent perpetual drift after initial create.
+	if r := gjson.Get(response, "parent_ca_id"); r.Exists() && r.String() != "" {
+		state.ParentCAId = types.StringValue(r.String())
 	}
+	// else: key absent — leave state.ParentCAId unchanged.
 
 	if r := gjson.Get(response, "allow_user_management"); r.Exists() {
 		state.AllowUserManagement = types.BoolValue(r.Bool())
@@ -531,12 +545,12 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		plan.HSMKEKLabel = types.StringValue(hsmKekLabelUpdate)
 	}
 
-	parentCaIdUpdate := gjson.Get(readResponse, "parent_ca_id").String()
-	if parentCaIdUpdate == "" {
-		plan.ParentCAId = types.StringNull()
-	} else {
-		plan.ParentCAId = types.StringValue(parentCaIdUpdate)
+	// parent_ca_id: CM does not return this field in GET responses (write-only, immutable).
+	// Preserve the plan value (= prior state, since ImmutableString blocks changes).
+	if r := gjson.Get(readResponse, "parent_ca_id"); r.Exists() && r.String() != "" {
+		plan.ParentCAId = types.StringValue(r.String())
 	}
+	// else: key absent — leave plan.ParentCAId unchanged.
 
 	adminsReadResult := gjson.Get(readResponse, "admins")
 	if adminsReadResult.Exists() && adminsReadResult.IsArray() {
