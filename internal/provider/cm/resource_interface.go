@@ -1015,7 +1015,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		payload["cert_user_field"] = plan.CertUserField.ValueString()
 	} else if !state.CertUserField.IsNull() {
-		payload["cert_user_field"] = "" // Reset/empty
+		// CM does not support clearing cert_user_field — it is an enum with no unset member
+		// and rejects "" with HTTP 400. Send the CM-documented default "CN" to reset.
+		payload["cert_user_field"] = "CN"
 	}
 
 	// custom_uid_size (Int64)
@@ -1036,7 +1038,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.DefaultConnection.IsNull() && !plan.DefaultConnection.IsUnknown() {
 		payload["default_connection"] = plan.DefaultConnection.ValueString()
 	} else if !state.DefaultConnection.IsNull() {
-		payload["default_connection"] = "" // Reset/empty
+		// CM does not support clearing default_connection via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["default_connection"] = "local_account"
 	}
 
 	// kmip_enable_hard_delete (Int64)
@@ -1094,7 +1098,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MaximumTLSVersion.ValueString() != "" && plan.MaximumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["maximum_tls_version"] = plan.MaximumTLSVersion.ValueString()
 	} else if !state.MaximumTLSVersion.IsNull() {
-		payload["maximum_tls_version"] = ""
+		// CM does not support clearing maximum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["maximum_tls_version"] = "tls_1_3"
 	}
 
 	if plan.Meta != nil {
@@ -1114,15 +1120,25 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["minimum_tls_version"] = plan.MinimumTLSVersion.ValueString()
 	} else if !state.MinimumTLSVersion.IsNull() {
-		payload["minimum_tls_version"] = ""
+		// CM does not support clearing minimum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["minimum_tls_version"] = "tls_1_2"
 	}
 
 	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
 		payload["mode"] = plan.Mode.ValueString()
+	} else if !state.Mode.IsNull() {
+		// CM does not support clearing mode by omitting the field — without an explicit value
+		// the prior setting persists silently. Send the CM-documented default to genuinely reset.
+		payload["mode"] = "unauth-tls-pw-req"
 	}
 
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload["network_interface"] = plan.NetworkInterface.ValueString()
+	} else if !state.NetworkInterface.IsNull() {
+		// CM does not support clearing network_interface by omitting the field — without an
+		// explicit value the prior setting persists silently. Send the CM-documented default.
+		payload["network_interface"] = "all"
 	}
 
 	// registration_token: send explicit "" clear when user removes the field and prior state

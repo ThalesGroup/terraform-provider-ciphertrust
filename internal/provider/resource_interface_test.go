@@ -968,3 +968,196 @@ resource "ciphertrust_interface" "test" {
 		},
 	})
 }
+
+// Test_CM_Interface_CertUserFieldClearConverges verifies that clearing cert_user_field
+// sends "CN" (the CM default) instead of "" which CM rejects with HTTP 400 (TFIN-537).
+// Read() does not re-hydrate optional fields when state is null, so the Terraform state
+// will show the field absent after clear. The live CM value is verified via a direct GET.
+func Test_CM_Interface_CertUserFieldClearConverges(t *testing.T) {
+	RequireCM(t)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9880) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port            = 9880
+  interface_type  = "nae"
+  cert_user_field = "SN"
+}`,
+				Check: checkStep(t, "set cert_user_field=SN",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "cert_user_field", "SN"),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_interface.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				// Remove cert_user_field — provider must send "CN" default, not "" (which 400s).
+				// State will show field absent (null); verify live CM value via direct GET.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9880
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "clear cert_user_field — no crash, CN on CM, clean plan",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "cert_user_field"),
+					func(s *terraform.State) error {
+						if capturedName == "" {
+							t.Logf("capturedName not set — skipping CM-side assertion")
+							return nil
+						}
+						cmClient, ok := createCMClient()
+						if !ok {
+							t.Logf("CM client unavailable — skipping CM-side assertion")
+							return nil
+						}
+						resp, err := cmClient.ReadDataByParam(context.Background(), uuid.New().String(), capturedName, common.URL_INTERFACE)
+						if err != nil {
+							return fmt.Errorf("CM-side GET failed: %v", err)
+						}
+						if val := gjson.Get(resp, "cert_user_field").String(); val != "CN" {
+							return fmt.Errorf("expected cert_user_field=CN on CM after clear, got %q", val)
+						}
+						return nil
+					},
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_ModeClearConverges verifies that clearing mode sends the CM-documented
+// default "unauth-tls-pw-req" instead of omitting the field entirely (TFIN-537).
+// State shows field absent after clear; live CM value is verified via direct GET.
+func Test_CM_Interface_ModeClearConverges(t *testing.T) {
+	RequireCM(t)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9881) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9881
+  interface_type = "nae"
+  mode           = "tls-pw-opt"
+}`,
+				Check: checkStep(t, "set mode=tls-pw-opt",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "mode", "tls-pw-opt"),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_interface.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				// Remove mode — provider must send "unauth-tls-pw-req" default, not omit the field.
+				// State will show field absent (null); verify live CM value via direct GET.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9881
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "clear mode — default on CM, clean plan",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "mode"),
+					func(s *terraform.State) error {
+						if capturedName == "" {
+							t.Logf("capturedName not set — skipping CM-side assertion")
+							return nil
+						}
+						cmClient, ok := createCMClient()
+						if !ok {
+							t.Logf("CM client unavailable — skipping CM-side assertion")
+							return nil
+						}
+						resp, err := cmClient.ReadDataByParam(context.Background(), uuid.New().String(), capturedName, common.URL_INTERFACE)
+						if err != nil {
+							return fmt.Errorf("CM-side GET failed: %v", err)
+						}
+						if val := gjson.Get(resp, "mode").String(); val != "unauth-tls-pw-req" {
+							return fmt.Errorf("expected mode=unauth-tls-pw-req on CM after clear, got %q", val)
+						}
+						return nil
+					},
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_TLSVersionClearConverges verifies that clearing maximum_tls_version
+// and minimum_tls_version sends CM-documented defaults instead of "" (TFIN-537).
+// State shows fields absent after clear; live CM values are verified via direct GET.
+func Test_CM_Interface_TLSVersionClearConverges(t *testing.T) {
+	RequireCM(t)
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9882) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port                = 9882
+  interface_type      = "nae"
+  maximum_tls_version = "tls_1_2"
+  minimum_tls_version = "tls_1_1"
+}`,
+				Check: checkStep(t, "set TLS versions",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "maximum_tls_version", "tls_1_2"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "minimum_tls_version", "tls_1_1"),
+					func(s *terraform.State) error {
+						capturedName = s.RootModule().Resources["ciphertrust_interface.test"].Primary.Attributes["name"]
+						return nil
+					},
+				),
+			},
+			{
+				// Remove TLS versions — provider must send defaults, not "" (which CM silently ignores).
+				// State shows fields absent; verify live CM values via direct GET.
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9882
+  interface_type = "nae"
+}`,
+				Check: checkStep(t, "clear TLS versions — CM defaults confirmed, clean plan",
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "maximum_tls_version"),
+					resource.TestCheckNoResourceAttr("ciphertrust_interface.test", "minimum_tls_version"),
+					func(s *terraform.State) error {
+						if capturedName == "" {
+							t.Logf("capturedName not set — skipping CM-side assertion")
+							return nil
+						}
+						cmClient, ok := createCMClient()
+						if !ok {
+							t.Logf("CM client unavailable — skipping CM-side assertion")
+							return nil
+						}
+						resp, err := cmClient.ReadDataByParam(context.Background(), uuid.New().String(), capturedName, common.URL_INTERFACE)
+						if err != nil {
+							return fmt.Errorf("CM-side GET failed: %v", err)
+						}
+						if val := gjson.Get(resp, "maximum_tls_version").String(); val != "tls_1_3" {
+							return fmt.Errorf("expected maximum_tls_version=tls_1_3 on CM after clear, got %q", val)
+						}
+						if val := gjson.Get(resp, "minimum_tls_version").String(); val != "tls_1_2" {
+							return fmt.Errorf("expected minimum_tls_version=tls_1_2 on CM after clear, got %q", val)
+						}
+						return nil
+					},
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
