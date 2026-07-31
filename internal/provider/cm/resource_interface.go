@@ -702,11 +702,17 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AutogenDaysBeforeExpiry = types.Int64Null()
 		}
 	}
-	// auto_registration: CM does not return this in GET responses (write-only field).
-	// Preserve the prior state value to prevent perpetual drift.
-	// (same pattern as registration_token / certificate — lines 897–898)
+	// auto_registration (Optional, write-only on create):
+	// - CM returns true  → store true in state.
+	// - CM returns false → field was cleared; null is the correct Terraform state.
+	// - CM omits key     → preserve prior state (write-only create: key absent from 201 and
+	//                      subsequent GET until the value is explicitly set/cleared).
 	if r := gjson.Get(response, "auto_registration"); r.Exists() {
-		state.AutoRegistration = types.BoolValue(r.Bool())
+		if r.Bool() {
+			state.AutoRegistration = types.BoolValue(true)
+		} else if !state.AutoRegistration.IsNull() {
+			state.AutoRegistration = types.BoolNull()
+		}
 	}
 	// else: key absent — leave state.AutoRegistration unchanged.
 	if !state.CertUserField.IsNull() {

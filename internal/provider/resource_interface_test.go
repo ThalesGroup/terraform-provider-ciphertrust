@@ -889,15 +889,15 @@ resource "ciphertrust_interface" "test" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig: func() { interfaceSweep(9878) },
-				Config:    providerConfig + cfg,
+				PreConfig:          func() { interfaceSweep(9878) },
+				Config:             cfg,
 				Check: checkStep(t, "create without names",
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
 				),
 				ExpectNonEmptyPlan: false,
 			},
 			{
-				Config:             providerConfig + cfg,
+				Config:             cfg,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
