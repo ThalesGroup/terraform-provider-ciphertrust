@@ -121,6 +121,9 @@ func replicateKeyCommon(
 		var historyDiags diag.Diagnostics
 		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
 		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
+		// Wait for KeyState == Enabled: CCKM imports material asynchronously and the key
+		// may still show PendingImport even after import_state reaches IMPORTED.
+		waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
 		for _, d := range historyDiags {
 			diags.AddWarning(d.Summary(), d.Detail())
 		}
