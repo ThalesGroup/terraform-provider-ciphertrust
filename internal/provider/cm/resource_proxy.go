@@ -15,6 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -50,6 +52,9 @@ func (r *resourceCMProxy) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Unique identifier for the proxy configuration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"certificate": schema.StringAttribute{
 				Optional:    true,
@@ -344,32 +349,15 @@ func (r *resourceCMProxy) Update(ctx context.Context, req resource.UpdateRequest
 		plan.Certificate = types.StringValue(certFromAPI)
 	}
 
-	// http_proxy: apply same structural-drift logic as Read().
-	// plan.HTTPProxy holds the desired cleartext value from Terraform config.
-	// If non-password portions are equal (including a password-only config change),
-	// plan.HTTPProxy retains the cleartext plan value in state.
-	if !plan.HTTPProxy.IsNull() {
-		if r := gjson.Get(response, "http_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPProxy.ValueString()) {
-				// Structural mismatch — store the CM-authoritative masked value.
-				plan.HTTPProxy = types.StringValue(r.String())
-			}
-			// else: CM confirms the non-password portion matches — preserve cleartext plan value in state.
-		} else {
-			plan.HTTPProxy = types.StringNull()
-		}
-	}
-
-	// https_proxy: same pattern.
-	if !plan.HTTPSProxy.IsNull() {
-		if r := gjson.Get(response, "https_proxy"); r.Exists() && r.String() != "" {
-			if proxyNonPasswordPart(r.String()) != proxyNonPasswordPart(plan.HTTPSProxy.ValueString()) {
-				plan.HTTPSProxy = types.StringValue(r.String())
-			}
-		} else {
-			plan.HTTPSProxy = types.StringNull()
-		}
-	}
+	// http_proxy and https_proxy are Sensitive, non-Computed attributes: Terraform requires
+	// Update() to commit exactly the planned (cleartext config) value — there is no legitimate
+	// alternate value to substitute. CM's PUT/GET response is masked, and that masking can
+	// itself corrupt the visible (non-password) portion of the value (e.g. "http://..." coming
+	// back as "httxxxxxx://..."); consulting it here risks committing a corrupted string as
+	// final state, which Terraform then rejects as an inconsistent apply result. plan.HTTPProxy
+	// / plan.HTTPSProxy already hold the correct value from req.Plan.Get above — leave them as-is.
+	// Genuine out-of-band drift detection for these fields still happens correctly in Read(),
+	// which has no such consistency constraint.
 
 	noProxyHosts := gjson.Get(response, "no_proxy").Array()
 	var noProxies []types.String
