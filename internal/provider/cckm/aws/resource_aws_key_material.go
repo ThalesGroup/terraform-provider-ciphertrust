@@ -849,6 +849,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		if len(newCandidates) > 0 {
 			mat := newCandidates[0]
 			srcID := mat.SourceKeyID.ValueString()
+			rotationConfirmed := false
 			if len(historyBySourceKey) == 0 {
 				// No rotation history at all - key is back in PendingImport state.
 				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey is empty, using import-material (NEW_KEY_MATERIAL). srcID: %s keyID: %s", srcID, keyID))
@@ -866,7 +867,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 				}
 			} else {
 				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey has %d entries, rotate to new material.", len(historyBySourceKey)))
-				rotateToNewMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
+				rotationConfirmed = rotateToNewMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
 					mat.ValidTo.ValueString(), mat.KeyMaterialDescription.ValueString(), keyJSON, diags)
 			}
 			if diags.HasError() {
@@ -875,6 +876,35 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			fetchHistoryAndClassify()
 			if diags.HasError() {
 				return
+			}
+			// If rotation was confirmed done but source_key_identifier is still missing from
+			// CCKM's rotation history (race condition where syncKeyRotations deleted the
+			// record before AWS returned the material in its list), re-import as
+			// EXISTING_KEY_MATERIAL to restore source_key_identifier, then wait for it to
+			// appear in history before re-classifying.
+			if rotationConfirmed {
+				stillNew := false
+				for _, c := range newCandidates {
+					if c.SourceKeyID.ValueString() == srcID {
+						stillNew = true
+						break
+					}
+				}
+				if stillNew {
+					r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] rotation confirmed but source_key_identifier for %s not in history; re-importing as EXISTING_KEY_MATERIAL to restore it", srcID))
+					r.updateExistingKeyMaterialMetadata(ctx, id, keyID, mat, diags)
+					if diags.HasError() {
+						return
+					}
+					waitForRotationHistoryRecord(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(), diags)
+					if diags.HasError() {
+						return
+					}
+					fetchHistoryAndClassify()
+					if diags.HasError() {
+						return
+					}
+				}
 			}
 		}
 
@@ -1299,7 +1329,7 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 // and work is in progress asynchronously.
 // If rotate-material fails with replica pending import cannot rotate error we need to attempt to fix up
 // Return true to re-calculate material states and try again
-func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) {
+func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) bool {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 
@@ -1318,23 +1348,23 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 		details := utils.ApiError(msg, map[string]interface{}{"error": marshalErr.Error(), "key_id": cmKeyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return
+		return false
 	}
 	_, rotErr := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+cmKeyID+"/rotate-material", payloadBytes)
 	if rotErr != nil {
 		errStr := rotErr.Error()
 		if strings.Contains(errStr, materialAlreadyExistsError) {
 			// The key material is already associated with this KMS key.
-			// Treat as a no-op and let the outer loop refresh state and re-classify.
+			// Treat as a no-op and report rotation confirmed (the material IS there).
 			msg := fmt.Sprintf("AWS key material rotate-material: material (source_key_id: %s) is already associated with this KMS key. Treating as no-op and refreshing state.", srcID)
 			client.Log.Warn(msg)
-			return
+			return true
 		}
 		msg := "Error calling rotate-material on AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": cmKeyID, "source_key_id": srcID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return
+		return false
 	}
 
 	client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmKeyID, srcID))
@@ -1348,10 +1378,10 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	if retryOperation {
 		client.Log.Debug("[resource_aws_key_material.go -> rotateToNewMaterial] waiting for material rotation failed with soft error, continuing.")
 		// Known errors - re-calculate material states and try again - probably should refresh here.
-		return
+		return false
 	}
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	// Wait for the (primary) key material to reach CURRENT state.
@@ -1362,7 +1392,7 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 		waitForReplicasMaterialCurrent(ctx, id, client, cmKeyID, srcID, keyJSON, diags)
 	}
 
-	return
+	return true
 }
 
 // deleteRemovedKeyMaterial calls delete-material on the primary key and, for multi-region
