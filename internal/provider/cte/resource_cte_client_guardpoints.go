@@ -310,6 +310,12 @@ func (r *resourceCTEClientGP) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
+	if len(envelope.Resources) == 0 {
+		tflog.Debug(ctx, "[resource_cte_client_guardpoints.go -> Read] no guardpoints remain on CM for client "+clientID+" (removed out-of-band), removing resource from state")
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	newGuardPoints := make(map[string]CTEClientGroupGuardPointEntryTFSDK)
 	var allIDs []string
 
