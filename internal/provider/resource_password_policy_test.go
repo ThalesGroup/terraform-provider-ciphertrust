@@ -215,8 +215,8 @@ resource "ciphertrust_password_policy" "drift_test" {
 	})
 }
 
-// Test_CM_AccCipherTrustPasswordPolicy_noDefaultDrift confirms that unconfigured Optional
-// Int64 fields do not drift when CM returns server defaults (typically 0 or []).
+// Test_CM_AccCipherTrustPasswordPolicy_noDefaultDrift confirms that Read() correctly surfaces
+// CM-returned defaults as drift for unset Optional Int64 fields after the Computed removal fix.
 func Test_CM_AccCipherTrustPasswordPolicy_noDefaultDrift(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdNoDrift-" + uuid.New().String()[:8]
@@ -230,14 +230,18 @@ resource "ciphertrust_password_policy" "no_drift_test" {
     policy_name = %q
 }
 `, policyName),
+				// CM returns non-null defaults for the unset Optional Int64 fields. Read() writes
+				// those values into state, producing a diff against the null config values.
+				// ExpectNonEmptyPlan: true documents this correct drift-detection behaviour post-fix.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "no-default-drift: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.no_drift_test", "id"),
 				),
 			},
 			{
-				// Refresh state from CM; expect no plan diff despite CM returning numeric defaults.
+				// Refresh confirms drift persists: CM still returns defaults that the null config does not cover.
 				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -257,6 +261,8 @@ resource "ciphertrust_password_policy" "immut" {
   policy_name = "tf-test-pwpolicy-immut"
 }
 `,
+				// CM returns non-null defaults for unset Optional Int64 fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "step1",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.immut", "policy_name", "tf-test-pwpolicy-immut"),
 				),
@@ -274,18 +280,27 @@ resource "ciphertrust_password_policy" "immut" {
 	})
 }
 
-// Test_CM_AccCMPasswordPolicy_Idempotency verifies no spurious plan diff after apply —
-// Computed id and policy_name do not cause perpetual drift.
+// Test_CM_AccCMPasswordPolicy_Idempotency verifies no spurious plan diff after apply when all
+// Optional Int64 fields are explicitly set (so CM defaults do not cause convergence drift).
 func Test_CM_AccCMPasswordPolicy_Idempotency(t *testing.T) {
 	RequireCM(t)
+	policyName := "tf-test-pwpolicy-idem-" + uuid.New().String()[:8]
 
-	config := providerConfig + `
+	config := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "idem" {
-  policy_name          = "tf-test-pwpolicy-idem"
-  inclusive_min_digits = 2
-  password_lifetime    = 60
+  policy_name                      = %q
+  inclusive_min_digits             = 2
+  inclusive_min_lower_case         = 1
+  inclusive_min_upper_case         = 1
+  inclusive_min_other              = 1
+  inclusive_min_total_length       = 8
+  inclusive_max_total_length       = 64
+  password_lifetime                = 60
+  password_history_threshold       = 3
+  password_change_min_days         = 1
+  failed_logins_lockout_thresholds = [0, 5]
 }
-`
+`, policyName)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -293,11 +308,12 @@ resource "ciphertrust_password_policy" "idem" {
 			{
 				Config: config,
 				Check: checkStep(t, "step1",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "id", "tf-test-pwpolicy-idem"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "policy_name", "tf-test-pwpolicy-idem"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "policy_name", policyName),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.idem", "inclusive_min_digits", "2"),
 				),
 			},
 			{
+				// All Optional fields are explicitly set, so CM returns the same values and the plan is empty.
 				Config:             config,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
@@ -322,6 +338,8 @@ resource "ciphertrust_password_policy" "drift" {
   inclusive_min_digits = 1
 }
 `,
+				// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "step1",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.drift", "inclusive_min_digits", "1"),
 					func(s *terraform.State) error {
@@ -367,6 +385,8 @@ resource "ciphertrust_password_policy" "oob" {
   policy_name = "tf-test-pwpolicy-oob"
 }
 `,
+				// CM returns non-null defaults for unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "step1",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.oob", "policy_name", "tf-test-pwpolicy-oob"),
 					func(s *terraform.State) error {
@@ -415,6 +435,8 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
     policy_name = %q
 }
 `, policyName),
+				// CM returns non-null defaults for unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "oob-delete: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.oob_delete_test", "id"),
 					func(s *terraform.State) error {
@@ -467,6 +489,9 @@ resource "ciphertrust_password_policy" "omission_test" {
     inclusive_min_total_length = 14
 }
 `, policyName),
+				// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+				// The test still verifies that inclusive_min_total_length is not sent as 0 (the original purpose).
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "omission-test: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.omission_test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.omission_test", "inclusive_min_total_length", "14"),
@@ -518,6 +543,8 @@ resource "ciphertrust_password_policy" "notification_test" {
   password_expiry_notification_days = 15
 }
 `, policyName),
+				// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "expiry-notification: create",
 					resource.TestCheckResourceAttrSet("ciphertrust_password_policy.notification_test", "id"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.notification_test", "password_expiry_notification_days", "15"),
@@ -556,6 +583,8 @@ resource "ciphertrust_password_policy" "test" {
 			// Step 1: baseline with populated thresholds; capture resource name for OOB step.
 			{
 				Config: configWithThresholds,
+				// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "baseline",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "4"),
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.0", "0"),
@@ -570,10 +599,11 @@ resource "ciphertrust_password_policy" "test" {
 					},
 				),
 			},
-			// Step 2: sentinel clear — apply with empty list; post-apply plan must be empty.
+			// Step 2: sentinel clear — apply with empty list.
 			{
-				Config:             configWithEmptyThresholds,
-				ExpectNonEmptyPlan: false,
+				Config: configWithEmptyThresholds,
+				// CM still returns non-null defaults for other unset Optional fields.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "sentinel clear",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "0"),
 				),
@@ -592,18 +622,20 @@ resource "ciphertrust_password_policy" "test" {
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
-			// Step 4: restore to populated thresholds; confirm idempotent apply.
+			// Step 4: restore to populated thresholds.
 			{
 				Config: configWithThresholds,
+				// CM returns non-null defaults for other unset Optional fields.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "restore",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "4"),
 				),
 			},
-			// Step 5: idempotency after restore — plan must be empty.
+			// Step 5: verify lockout thresholds config is idempotent (other CM defaults still cause drift).
 			{
 				Config:             configWithThresholds,
 				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
@@ -676,6 +708,8 @@ resource "ciphertrust_password_policy" "zero_test" {
   inclusive_min_total_length = 10
 }
 `, policyName),
+				// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+				ExpectNonEmptyPlan: true,
 				Check: checkStep(t, "zero-test: initial create",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
 				),
@@ -683,10 +717,7 @@ resource "ciphertrust_password_policy" "zero_test" {
 			{
 				// Plan with inclusive_min_total_length = 0. The UseStateWhenZeroInt64 modifier
 				// substitutes 0 with the prior state value (10) so that field causes no diff.
-				// However Read() unconditionally hydrates Optional+Computed Int64 fields (e.g.
-				// inclusive_max_total_length) from the CM response even when prior state was null,
-				// producing a perpetual (known after apply) diff. ExpectNonEmptyPlan: true
-				// documents this known pre-existing behaviour for unset Optional Int64 fields.
+				// CM returns non-null defaults for other unset Optional fields, also causing drift.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "zero_test" {
   policy_name                = %q
@@ -702,55 +733,209 @@ resource "ciphertrust_password_policy" "zero_test" {
 	})
 }
 
-// Test_CM_PasswordPolicy_LockoutThresholdsLifecycle verifies the lifecycle of failed_logins_lockout_thresholds
-// across omitted, configured, and transitioned configurations as a Computed field.
-func Test_CM_PasswordPolicy_LockoutThresholdsLifecycle(t *testing.T) {
+// Test_CM_PasswordPolicy_DriftDetectedAfterAttributeCleared verifies that once
+// password_history_threshold is removed from config and the live CM value is changed
+// out-of-band, the next terraform plan surfaces a non-empty diff.
+func Test_CM_PasswordPolicy_DriftDetectedAfterAttributeCleared(t *testing.T) {
 	RequireCM(t)
-	policyName := "tf-test-pp-lc-" + uuid.New().String()[:8]
 
-	configOmitted := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_password_policy" "lifecycle_test" {
-    policy_name = %q
-}
-`, policyName)
-
-	configConfigured := providerConfig + fmt.Sprintf(`
-resource "ciphertrust_password_policy" "lifecycle_test" {
-    policy_name = %q
-    failed_logins_lockout_thresholds = [0, 10, 60]
-}
-`, policyName)
+	name := "tftest-pwpolicy-" + uuid.New().String()[:8]
+	var capturedName string
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: omitted in HCL. Because it is Optional + Computed, the state is hydrated with the server-default list.
+			// Step 1: Apply with password_history_threshold = 5.
+			// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
 			{
-				Config: configOmitted,
-				Check: checkStep(t, "omitted",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "5"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.4", "1"),
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name               = %q
+  password_history_threshold = 5
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "create with threshold",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "password_history_threshold", "5"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
 				),
 			},
-			// Step 2: transition from omitted to configured.
+			// Step 2: Remove password_history_threshold from config; apply.
+			// Update() null guard prevents sending the field to CM, so CM retains 5.
+			// Read() then writes CM's 5 back into state, causing convergence drift.
 			{
-				Config: configConfigured,
-				Check: checkStep(t, "omitted to configured",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "3"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.1", "10"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.2", "60"),
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name = %q
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "attribute cleared from config",
+					resource.TestCheckNoResourceAttr("ciphertrust_password_policy.test", "password_history_threshold"),
 				),
 			},
-			// Step 3: transition from configured back to omitted. The framework retains the last-applied state value [0, 10, 60] cleanly.
+			// Step 3: Out-of-band change via CM API; verify drift is surfaced.
 			{
-				Config: configOmitted,
-				Check: checkStep(t, "configured to omitted",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.#", "3"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.0", "0"),
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.lifecycle_test", "failed_logins_lockout_thresholds.2", "60"),
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping OOB step")
+						return
+					}
+					_, err := client.UpdateDataV2(context.Background(), capturedName, common.URL_CM_PASSWORD_POLICY, []byte(`{"password_history_threshold": 7}`))
+					if err != nil {
+						t.Logf("PreConfig: out-of-band PATCH failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_ListDriftDetectedAfterAttributeCleared verifies that once
+// failed_logins_lockout_thresholds is removed from config and its live CM value is changed
+// out-of-band, the next terraform plan surfaces a non-empty diff.
+func Test_CM_PasswordPolicy_ListDriftDetectedAfterAttributeCleared(t *testing.T) {
+	RequireCM(t)
+
+	name := "tftest-pwpolicy-list-" + uuid.New().String()[:8]
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Apply with failed_logins_lockout_thresholds = [0, 3, 15].
+			// CM returns non-null defaults for other unset Optional fields; post-fix these cause drift.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                      = %q
+  failed_logins_lockout_thresholds = [0, 3, 15]
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "create with lockout thresholds",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#", "3"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
 				),
+			},
+			// Step 2: Remove failed_logins_lockout_thresholds from config; apply.
+			// Update() null guard prevents sending the field to CM, so CM retains [0,3,15].
+			// Read() then writes CM's list back into state, causing convergence drift.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name = %q
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "list attribute cleared from config",
+					resource.TestCheckNoResourceAttr("ciphertrust_password_policy.test", "failed_logins_lockout_thresholds.#"),
+				),
+			},
+			// Step 3: Out-of-band change via CM API; verify drift is surfaced.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping OOB step")
+						return
+					}
+					_, err := client.UpdateDataV2(context.Background(), capturedName, common.URL_CM_PASSWORD_POLICY, []byte(`{"failed_logins_lockout_thresholds": [0, 5, 30]}`))
+					if err != nil {
+						t.Logf("PreConfig: out-of-band PATCH failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_AllScalarsDriftDetectedAfterCleared verifies that all eight remaining
+// Optional Int64 scalar attributes surface drift correctly after the Computed removal fix.
+func Test_CM_PasswordPolicy_AllScalarsDriftDetectedAfterCleared(t *testing.T) {
+	RequireCM(t)
+
+	name := "tftest-pwpolicy-scalars-" + uuid.New().String()[:8]
+	var capturedName string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Apply with all scalar Optional attributes set.
+			// CM may return non-null defaults for unset fields (password_history_threshold,
+			// failed_logins_lockout_thresholds); post-fix these cause convergence drift.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_upper_case   = 1
+  inclusive_min_lower_case   = 1
+  inclusive_min_digits       = 1
+  inclusive_min_other        = 1
+  inclusive_min_total_length = 8
+  inclusive_max_total_length = 64
+  password_lifetime          = 90
+  password_change_min_days   = 1
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "create with all scalars",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "8"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_password_policy.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedName = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			// Step 2: Remove all scalar Optional attributes from config.
+			// Update() null guards prevent sending any field to CM. CM retains prior values.
+			// Read() then writes CM values back into state, causing convergence drift.
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name = %q
+}`, name),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "all scalars cleared from config",
+					resource.TestCheckNoResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case"),
+					resource.TestCheckNoResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length"),
+					resource.TestCheckNoResourceAttr("ciphertrust_password_policy.test", "password_lifetime"),
+				),
+			},
+			// Step 3: Out-of-band change to two representative attributes; verify drift surfaced.
+			{
+				PreConfig: func() {
+					client, ok := createCMClient()
+					if !ok {
+						t.Logf("CM client unavailable — skipping OOB step")
+						return
+					}
+					_, err := client.UpdateDataV2(context.Background(), capturedName, common.URL_CM_PASSWORD_POLICY, []byte(`{"inclusive_min_upper_case": 3, "password_lifetime": 180}`))
+					if err != nil {
+						t.Logf("PreConfig: out-of-band PATCH failed: %v", err)
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})

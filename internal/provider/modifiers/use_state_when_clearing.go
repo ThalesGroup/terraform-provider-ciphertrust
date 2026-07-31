@@ -182,15 +182,16 @@ func (m useStateWhenZeroInt64Modifier) PlanModifyInt64(_ context.Context, req pl
 	if req.State.Raw.IsNull() {
 		return
 	}
-	// Plan value is not 0 — pass through.
-	if !req.PlanValue.IsNull() && req.PlanValue.ValueInt64() != 0 {
+	// Plan value is null (field omitted from config) or non-zero — pass through.
+	// Only substitute state when the user explicitly sets the value to 0.
+	if req.PlanValue.IsNull() || req.PlanValue.ValueInt64() != 0 {
 		return
 	}
 	// State is also empty/null or 0 — nothing to preserve, pass through.
 	if req.StateValue.IsNull() || req.StateValue.ValueInt64() == 0 {
 		return
 	}
-	// Plan is trying to clear/set to 0. CM cannot honour this,
+	// User explicitly set the field to 0. CM cannot honour this reset,
 	// so substitute the state value to suppress the perpetual diff.
 	resp.Diagnostics.AddAttributeWarning(
 		req.Path,
