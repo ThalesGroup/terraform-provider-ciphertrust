@@ -398,7 +398,7 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 					// Not yet resolved - keep polling.
 				}
 				if !foundEntry {
-					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d TIMED OUT waiting for entry in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
+					client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] loop: %d entry not found in history (total entries=%d) keyID: %s sourceKeyID: %s", i, len(entries), keyID, sourceKeyIdentifier))
 				}
 			}
 		}
