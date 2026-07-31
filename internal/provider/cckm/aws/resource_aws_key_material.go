@@ -1534,6 +1534,15 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				// Continue to attempt remaining keys - caller sees all failures.
 			} else {
 				r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmID, srcID))
+				// Wait for the rotation history entry to leave IMPORTED state before the
+				// outer loop fires RefreshKeyAndWait. Without this gate, RefreshKeyAndWait
+				// can trigger a CCKM re-sync from AWS before AWS has processed the deletion,
+				// causing CCKM to overwrite import_state back to IMPORTED.
+				// Only poll the primary key - replicas are managed by AWS automatically.
+				if cmID == keyID {
+					waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID,
+						"import_state", "IMPORTED", "", diags)
+				}
 			}
 		}
 	}
