@@ -906,3 +906,78 @@ resource "ciphertrust_domain" "test" {
 		},
 	})
 }
+
+// Test_CM_Domain_ParentCAIdCreateDoesNotCrash verifies that creating a domain with
+// parent_ca_id set no longer crashes with "Provider produced inconsistent result after
+// apply" (TFIN-539). CM omits parent_ca_id from both the 201 and GET responses (write-only
+// input); the provider must preserve the configured value rather than overwriting it with null.
+// Requires CIPHERTRUST_TEST_PARENT_CA_ID to be set to a valid local CA ID on the CM instance.
+func Test_CM_Domain_ParentCAIdCreateDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	parentCAID := getEnvOrSkip(t, "CIPHERTRUST_TEST_PARENT_CA_ID")
+	rName := "tf-domain-pca-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID),
+				Check: checkStep(t, "create with parent_ca_id — no crash",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "parent_ca_id", parentCAID),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Domain_EmptyNameRejectedAtPlan verifies that name = "" is rejected at plan
+// time by the LengthAtLeast(1) validator before reaching CM's API (TFIN-540).
+func Test_CM_Domain_EmptyNameRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_domain" "test" {
+  name   = ""
+  admins = ["admin"]
+}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+		},
+	})
+}
+
+// Test_CM_Domain_EmptyAdminsRejectedAtPlan verifies that admins = [] is rejected at
+// plan time by the SizeAtLeast(1) validator before reaching CM's API (TFIN-540).
+func Test_CM_Domain_EmptyAdminsRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_domain" "test" {
+  name   = "test-domain-empty-admins"
+  admins = []
+}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+		},
+	})
+}
