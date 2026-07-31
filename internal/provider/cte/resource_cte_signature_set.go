@@ -190,9 +190,7 @@ func (r *resourceCTESignatureSet) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_SIGNATURE_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Signature Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 

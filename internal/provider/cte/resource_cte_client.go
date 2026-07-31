@@ -344,8 +344,7 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 		state.ID.ValueString(),
 		common.URL_CTE_CLIENT,
 	)
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
