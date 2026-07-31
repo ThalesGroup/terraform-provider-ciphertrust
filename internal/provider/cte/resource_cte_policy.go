@@ -27,9 +27,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &resourceCTEPolicy{}
-	_ resource.ResourceWithConfigure   = &resourceCTEPolicy{}
-	_ resource.ResourceWithImportState = &resourceCTEPolicy{}
+	_ resource.Resource                   = &resourceCTEPolicy{}
+	_ resource.ResourceWithConfigure      = &resourceCTEPolicy{}
+	_ resource.ResourceWithImportState    = &resourceCTEPolicy{}
+	_ resource.ResourceWithValidateConfig = &resourceCTEPolicy{}
 )
 
 func NewResourceCTEPolicy() resource.Resource {
@@ -373,6 +374,42 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Description: "To remove restriction of policy for modification.",
 			},
 		},
+	}
+}
+
+// ValidateConfig rejects config combinations that CipherTrust Manager would
+// silently mutate server-side, which would otherwise cause a permanent
+// terraform plan/apply loop (TFIN-496).
+func (r *resourceCTEPolicy) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config CTEPolicyTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// never_deny defaults to false when omitted from config, and CM strips
+	// "applykey" from every security_rules.effect in that case.
+	if config.NeverDeny.ValueBool() || config.NeverDeny.IsUnknown() {
+		return
+	}
+
+	for i, rule := range config.SecurityRules {
+		if rule.Effect.IsNull() || rule.Effect.IsUnknown() {
+			continue
+		}
+		for _, effect := range strings.Split(rule.Effect.ValueString(), ",") {
+			if strings.TrimSpace(effect) == "applykey" {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("security_rules").AtListIndex(i).AtName("effect"),
+					"Invalid security_rules.effect with never_deny = false",
+					fmt.Sprintf(
+						"CipherTrust Manager strips \"applykey\" from a security rule's effect when the policy's never_deny is false (the default), which causes terraform to perpetually plan and revert this change. Either set never_deny = true or remove \"applykey\" from effect (%q) for this rule.",
+						rule.Effect.ValueString(),
+					),
+				)
+				break
+			}
+		}
 	}
 }
 

@@ -181,3 +181,64 @@ func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 		},
 	})
 }
+
+// cteApplykeyPolicyConfig renders a Standard ciphertrust_cte_policy whose
+// single security rule's effect and never_deny are both parameterized, used
+// to exercise the TFIN-496 never_deny/applykey cross-field validation.
+func cteApplykeyPolicyConfig(name string, neverDeny bool, effect string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "cte_policy_applykey" {
+  name        = %q
+  policy_type = "Standard"
+  never_deny  = %t
+
+  key_rules = [{
+    key_id = "clear_key"
+  }]
+
+  security_rules = [
+    {
+      effect        = %q
+      action        = "all_ops"
+      partial_match = false
+    }
+  ]
+}
+`, name, neverDeny, effect)
+}
+
+// TestCTEPolicyResource_neverDenyApplykeyValidation verifies that a
+// security_rules.effect containing "applykey" is rejected at plan time when
+// never_deny = false, since CipherTrust Manager silently strips "applykey"
+// server-side in that case, which otherwise produces a permanent
+// plan/apply loop (TFIN-496).
+func TestCTEPolicyResource_neverDenyApplykeyValidation(t *testing.T) {
+	name := "tf-policy-applykey-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// never_deny = false + applykey must be rejected at plan time.
+				Config:      cteApplykeyPolicyConfig(name, false, "deny,applykey"),
+				ExpectError: regexp.MustCompile(`(?i)Invalid security_rules\.effect with never_deny = false`),
+			},
+			{
+				// never_deny = true + applykey is valid and must succeed.
+				Config: cteApplykeyPolicyConfig(name, true, "deny,applykey"),
+				Check: checkStep(t, "policy applykey validation: never_deny=true allowed",
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "never_deny", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "security_rules.0.effect", "deny,applykey"),
+				),
+			},
+			{
+				// never_deny = false without applykey is valid and must succeed.
+				Config: cteApplykeyPolicyConfig(name, false, "deny"),
+				Check: checkStep(t, "policy applykey validation: never_deny=false without applykey allowed",
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "never_deny", "false"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "security_rules.0.effect", "deny"),
+				),
+			},
+		},
+	})
+}
