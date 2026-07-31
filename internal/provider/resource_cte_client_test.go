@@ -188,6 +188,38 @@ func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
 	})
 }
 
+// cteClientCacheLogConfig renders a client that explicitly configures
+// max_num_cache_log/max_space_cache_log, both of which CipherTrust Manager
+// silently ignores at the client level (TFIN-467).
+func cteClientCacheLogConfig(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  max_num_cache_log        = 200
+  max_space_cache_log      = 100
+}
+`, name)
+}
+
+// TestCTEClientResource_cacheLogNonFunctional verifies that configuring
+// max_num_cache_log/max_space_cache_log is rejected up front with an explicit
+// error, instead of silently no-oping against CipherTrust Manager and
+// producing a perpetual, unresolvable plan diff (TFIN-467).
+func TestCTEClientResource_cacheLogNonFunctional(t *testing.T) {
+	name := "tf-client-cachelog-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      cteClientCacheLogConfig(name),
+				ExpectError: regexp.MustCompile(`(?i)non-functional field for cte client`),
+			},
+		},
+	})
+}
+
 // TestCTEClientResource_drift mutates the description out-of-band and asserts the
 // next plan is non-empty.
 func TestCTEClientResource_drift(t *testing.T) {
