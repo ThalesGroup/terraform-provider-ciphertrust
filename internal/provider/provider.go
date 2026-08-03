@@ -705,6 +705,7 @@ func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.R
 		cm.NewResourceCMCluster,
 		cm.NewResourceCMClusterNode,
 		cm.NewResourceCMInterface,
+		cm.NewResourceInterfaceCertificateRenewal,
 		cm.NewResourceCMLicense,
 		cm.NewResourceCMNTP,
 		cm.NewResourceCMTrialLicense,
