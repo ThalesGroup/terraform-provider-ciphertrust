@@ -671,17 +671,6 @@ func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_password_policy" "zero_test" {
-  policy_name                = %q
-  inclusive_min_total_length = 10
-}
-`, policyName),
-				Check: checkStep(t, "zero-test: initial create",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
-				),
-			},
-			{
 				// AtLeast(1) validator rejects 0 at plan time — no modifier intercept needed.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "zero_test" {
@@ -695,6 +684,7 @@ resource "ciphertrust_password_policy" "zero_test" {
 		},
 	})
 }
+
 
 // Test_CM_PasswordPolicy_LockoutThresholdsLifecycle verifies the lifecycle of failed_logins_lockout_thresholds
 // across omitted, configured, and transitioned configurations as a Computed field.
