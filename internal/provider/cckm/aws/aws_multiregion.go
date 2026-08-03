@@ -123,7 +123,56 @@ func replicateKeyCommon(
 		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
 		// Wait for KeyState == Enabled: CCKM imports material asynchronously and the key
 		// may still show PendingImport even after import_state reaches IMPORTED.
-		waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
+		// Use a separate diags so we can discard transient noise from the first attempt.
+		var firstEnabledDiags diag.Diagnostics
+		firstEnabledResponse := waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &firstEnabledDiags)
+
+		if gjson.Get(firstEnabledResponse, "aws_param.KeyState").String() != "Enabled" {
+			// Replica is not yet Enabled. Re-fetch to check the current key state.
+			replicaKeyJSON, getErr := client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
+			replicaKeyState := ""
+			if getErr == nil {
+				replicaKeyState = gjson.Get(replicaKeyJSON, "aws_param.KeyState").String()
+			}
+
+			if replicaKeyState == "PendingImport" {
+				// CCKM failed to import material to the replica (likely because the replica was
+				// still in Creating state when CCKM attempted the import). Compensate by
+				// importing all primary key materials directly to the replica, then re-wait.
+				client.Log.Warn(fmt.Sprintf(
+					"[aws_multiregion.go -> replicateKeyCommon] Replica key %s is still PendingImport. "+
+						"CCKM may have failed to push material (eg: replica was still in Creating state). "+
+						"Compensating: importing all primary key materials directly.",
+					replicaKeyID))
+				importAllMaterialsToReplica(ctx, id, client, primaryKeyID, replicaKeyID, &historyDiags)
+
+				// waitForRotationHistoryRecord and waitForMaterialStateResolved are already called
+				// per-entry inside importAllMaterialsToReplica, so skipping them here.
+				// waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
+				// waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
+				secondEnabledResponse := waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
+
+				if gjson.Get(secondEnabledResponse, "aws_param.KeyState").String() != "Enabled" {
+					// Still not Enabled - fall back to refreshing the primary to trigger CCKM's
+					// background sync, then make one final attempt at waiting for Enabled.
+					sourceKeyIDs := listKeyMaterialSourceKeyIDs(ctx, id, client, primaryKeyID)
+					refreshedPrimaryJSON, refreshErr := client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
+					if refreshErr == nil {
+						RefreshKeyAndWait(ctx, id, client, primaryKeyID, refreshedPrimaryJSON, sourceKeyIDs, &historyDiags)
+					}
+					waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
+				}
+			} else {
+				// Replica is not PendingImport (some other transient state). Use the existing
+				// refresh-primary approach to trigger CCKM's background sync and retry.
+				sourceKeyIDs := listKeyMaterialSourceKeyIDs(ctx, id, client, primaryKeyID)
+				refreshedPrimaryJSON, refreshErr := client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
+				if refreshErr == nil {
+					RefreshKeyAndWait(ctx, id, client, primaryKeyID, refreshedPrimaryJSON, sourceKeyIDs, &historyDiags)
+				}
+				waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
+			}
+		}
 		for _, d := range historyDiags {
 			diags.AddWarning(d.Summary(), d.Detail())
 		}
@@ -196,6 +245,115 @@ func replicateKeyCommon(
 	}
 	client.Log.Debug("[aws_multiregion.go -> replicateKeyCommon][response:" + redactAWSResponse(replicaKeyResponse))
 	return replicaKeyResponse
+}
+
+// importAllMaterialsToReplica imports all key materials from the primary key to the replica key,
+// in order from oldest to newest. This compensates for CCKM failing to push materials to the
+// replica (e.g. because the replica was still in Creating state when CCKM attempted the import).
+//
+// For each rotation entry on the primary key that has a source_key_identifier:
+//   - ImportByokKeyMaterial is called on the replica with EXISTING_KEY_MATERIAL.
+//   - If AWS returns "is creating", the import is retried up to 5 times with a short sleep.
+//   - After a successful import call, waitForRotationHistoryRecord and waitForMaterialStateResolved
+//     are called on the replica to confirm the material was received before proceeding.
+//
+// All failures are added as warnings (not errors): the replicate-key call already succeeded and
+// the caller must always save state.
+func importAllMaterialsToReplica(ctx context.Context, id string, client *common.Client,
+	primaryKeyID string, replicaKeyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> importAllMaterialsToReplica][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> importAllMaterialsToReplica][" + id + "]")
+
+	client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] primaryKeyID: %s replicaKeyID: %s", primaryKeyID, replicaKeyID))
+
+	// Fetch primary rotation history (newest-first).
+	primaryHistory, apiFailed := fetchRotationHistoryByokFull(ctx, id, client, primaryKeyID)
+	if apiFailed {
+		msg := "importAllMaterialsToReplica: failed to fetch primary key rotation history."
+		details := utils.ApiError(msg, map[string]interface{}{"primary_key_id": primaryKeyID})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "")
+		return
+	}
+
+	var entries []RotationHistoryEntryFullTFSDK
+	if convDiags := primaryHistory.ElementsAs(ctx, &entries, false); convDiags.HasError() {
+		msg := "importAllMaterialsToReplica: failed to read primary key rotation history entries."
+		details := utils.ApiError(msg, map[string]interface{}{"primary_key_id": primaryKeyID})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "")
+		return
+	}
+
+	if len(entries) == 0 {
+		client.Log.Debug("[aws_multiregion.go -> importAllMaterialsToReplica] no rotation history on primary key, nothing to import")
+		return
+	}
+
+	// Reverse so we process oldest-to-newest (API returns newest-first).
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	const (
+		maxCreatingRetries = 5
+		creatingRetryDelay = 10 // seconds
+	)
+
+	for idx, entry := range entries {
+		srcID := entry.SourceKeyIdentifier.ValueString()
+		srcTier := entry.SourceKeyTier.ValueString()
+		if srcID == "" || srcTier == "" {
+			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: source_key_identifier or source_key_tier empty, skipping", idx))
+			continue
+		}
+
+		client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: importing srcID: %s srcTier: %s to replicaKeyID: %s", idx, srcID, srcTier, replicaKeyID))
+
+		// Retry the import when AWS rejects with "is creating" (replica not yet fully provisioned).
+		imported := false
+		for attempt := 0; attempt < maxCreatingRetries; attempt++ {
+			if attempt > 0 {
+				client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: retry attempt %d for srcID: %s", idx, attempt, srcID))
+				time.Sleep(time.Duration(creatingRetryDelay) * time.Second)
+			}
+			var importDiags diag.Diagnostics
+			ImportByokKeyMaterial(ctx, id, client, replicaKeyID, srcID, srcTier, "", "", "EXISTING_KEY_MATERIAL", &importDiags)
+			if !importDiags.HasError() {
+				imported = true
+				break
+			}
+			// Check if the error is "is creating" - if so, retry; otherwise break immediately.
+			retryable := false
+			for _, d := range importDiags {
+				if strings.Contains(d.Summary(), "is creating") || strings.Contains(d.Detail(), "is creating") {
+					retryable = true
+					break
+				}
+			}
+			if !retryable {
+				// Non-retryable error - log as warning and move on.
+				for _, d := range importDiags {
+					diags.AddWarning(d.Summary(), d.Detail())
+				}
+				break
+			}
+			client.Log.Warn(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: replica still in Creating state, will retry (attempt %d/%d). srcID: %s", idx, attempt+1, maxCreatingRetries, srcID))
+		}
+
+		if !imported {
+			client.Log.Warn(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: could not import srcID: %s after retries, continuing to next entry", idx, srcID))
+			continue
+		}
+
+		// Wait for the rotation history record to appear on the replica.
+		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, srcID, srcTier, diags)
+
+		// Wait for import_state to reach IMPORTED before importing the next material.
+		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, srcID, "import_state", "", "IMPORTED", diags)
+	}
+
+	client.Log.Debug("[aws_multiregion.go -> importAllMaterialsToReplica] done")
 }
 
 // waitForReplication polls the replica key until its state leaves the "Creating" phase or a timeout is reached.
@@ -458,12 +616,16 @@ func waitForPrimaryRegionUpdateConfirmed(
 
 				lastUpdatedAt[keyID] = updatedAt
 
+				keyState := gjson.Get(keyJSON, "aws_param.KeyState").String()
 				regionOK := primaryRegion == newPrimaryRegion
+				// Both the old and new primary keys enter a transient Updating/Creating state
+				// briefly after update-primary-region. Require KeyState == "Enabled" for both
+				// to ensure we don't exit the wait while they are still transitioning.
 				switch keyID {
 				case newPrimaryKeyID:
-					done[i] = regionOK && keyType == "PRIMARY"
+					done[i] = regionOK && keyType == "PRIMARY" && keyState == "Enabled"
 				case primaryKeyID:
-					done[i] = regionOK && keyType == "REPLICA"
+					done[i] = regionOK && keyType == "REPLICA" && keyState == "Enabled"
 				default:
 					done[i] = regionOK
 				}

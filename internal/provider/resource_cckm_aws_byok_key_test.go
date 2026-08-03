@@ -731,7 +731,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 1: create primary EXTERNAL multi-region key with source material.
 				// Verify key is Enabled, multi_region=true, and multi_region_configuration
 				// identifies this key as PRIMARY with no replicas yet.
-				Config: base + primaryConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    base + primaryConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(primaryResource, "id"),
 					resource.TestCheckResourceAttrSet(primaryResource, "aws_param.arn"),
@@ -747,7 +748,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 2: replicate the primary to a second region.
 				// The replica inherits key material from the primary automatically.
 				// Verify the replica is REPLICA and the primary now shows 1 replica.
-				Config: base + primaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    base + primaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
@@ -765,7 +767,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 3: promote the replica to primary via primary_region
 				// The replica's multi_region_configuration.multi_region_key_type becomes PRIMARY.
 				// The old primary becomes REPLICA. Both keys remain Enabled.
-				Config: base + makeReplicaPrimaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 3") },
+				Config:    base + makeReplicaPrimaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 					// At this point the replicaResource will still show REPLICA - a refresh is required
@@ -774,6 +777,7 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				),
 			},
 			{
+				PreConfig:    func() { logTestStep(t.Name(), "Step 4") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
