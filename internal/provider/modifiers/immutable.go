@@ -47,6 +47,12 @@ func (m immutableStringModifier) PlanModifyString(_ context.Context, req planmod
 	if req.State.Raw.IsNull() {
 		return
 	}
+	// Destroy plan: the resource is being torn down, not updated. Config may have
+	// drifted from state on this immutable field, but destroy never applies planned
+	// attribute values — blocking it here would prevent legitimate teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
 	// Guard against null or unknown PlanValue — covers framework-internal null-plan
 	// phases and any future scenario where Read() nullifies state before a plan.
 	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
@@ -86,6 +92,10 @@ func (m immutableInt64Modifier) MarkdownDescription(_ context.Context) string {
 func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
 	// Brand-new resource: no prior resource state — allow any value.
 	if req.State.Raw.IsNull() {
+		return
+	}
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 	// Allow plan values that are null or unknown (e.g., Optional field removed from config
@@ -131,6 +141,10 @@ func (m immutableBoolModifier) PlanModifyBool(_ context.Context, req planmodifie
 	if req.State.Raw.IsNull() {
 		return
 	}
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
 	// When an Optional+Computed bool is omitted from config, the framework sets
 	// the plan value to Unknown before UseStateForUnknown resolves it. Allow
 	// null/unknown plan values so that only an explicit user-supplied change fires
@@ -174,6 +188,10 @@ func (m immutableListModifier) PlanModifyList(_ context.Context, req planmodifie
 	if req.State.Raw.IsNull() {
 		return
 	}
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
 	if req.PlanValue.Equal(req.StateValue) {
 		return
 	}
@@ -206,6 +224,10 @@ func (m immutableMapModifier) MarkdownDescription(_ context.Context) string {
 func (m immutableMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
 	// Brand-new resource: no prior resource state — allow any value.
 	if req.State.Raw.IsNull() {
+		return
+	}
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 	// Guard against null or unknown PlanValue — covers framework-internal null-plan
@@ -244,6 +266,10 @@ func (m immutableObjectModifier) MarkdownDescription(_ context.Context) string {
 // The IsUnknown() early-return prevents false errors when plan sub-attributes
 // are Unknown (e.g. populated by UseStateForUnknown() on nested attributes).
 func (m immutableObjectModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
 	if req.StateValue.IsNull() {
 		return
 	}
@@ -283,6 +309,10 @@ func (m mergePatchObjectModifier) MarkdownDescription(ctx context.Context) strin
 }
 
 func (m mergePatchObjectModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
 	if req.StateValue.IsNull() {
 		return // create path
 	}

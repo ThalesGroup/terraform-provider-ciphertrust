@@ -54,20 +54,21 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 				},
 			},
 			"password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
+				Required:  true,
+				Sensitive: true,
+				WriteOnly: true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				// No ImmutableString() modifier: WriteOnly attributes are never stored in state,
+				// so the modifier has nothing to compare on re-plan (both state and plan are null).
+				// Adding ImmutableString() to a WriteOnly attribute interferes with how Terraform
+				// populates req.Config for variable-referenced values.
 				Description: "(Immutable) Current password for the user.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"new_password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
+				Required:  true,
+				Sensitive: true,
+				WriteOnly: true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				// No ImmutableString() modifier — see password above.
 				Description: "(Immutable) New password to set for the user.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"auth_domain": schema.StringAttribute{
 				Optional:    true,
@@ -92,7 +93,6 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 	id := uuid.New().String()
 	r.client.GetLog().Trace(common.MSG_METHOD_START + "[resource_cm_user_pwd_change.go -> Create][" + id + "]")
 
-	// Retrieve values from plan
 	var plan CMPwdChangeTFSDK
 	var payload CMPwdChangeJSON
 
@@ -102,9 +102,19 @@ func (r *resourceCMPwdChange) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	// password and new_password are WriteOnly: the framework nulls them from PlannedState
+	// before Create() runs, so plan.Password/plan.NewPassword are always null here.
+	// req.Config is populated fresh from the HCL config and always carries the actual values.
+	var config CMPwdChangeTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Username = plan.Username.ValueString()
-	payload.Password = plan.Password.ValueString()
-	payload.NewPassword = plan.NewPassword.ValueString()
+	payload.Password = config.Password.ValueString()
+	payload.NewPassword = config.NewPassword.ValueString()
 	if !plan.AuthDomain.IsNull() && !plan.AuthDomain.IsUnknown() {
 		payload.AuthDomain = plan.AuthDomain.ValueString()
 	}

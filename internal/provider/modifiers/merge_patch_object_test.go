@@ -7,7 +7,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 // objectOf builds a types.Object from string-typed attributes for test brevity.
@@ -36,8 +38,17 @@ func strPtr(s string) *string { return &s }
 func Test_CM_MergePatchObject(t *testing.T) {
 	mod := modifiers.MergePatchObject()
 
+	// updatePlanRaw simulates a non-destroy plan. The MergePatchObject modifier now
+	// guards on req.Plan.Raw.IsNull() to skip the check during destroy operations
+	// (TFIN-552); tests that simulate updates must set Plan.Raw to a non-null value.
+	updatePlanRaw := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{"x": tftypes.String}},
+		map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
+	)}
+
 	run := func(stateVal, planVal types.Object) (types.Object, planmodifier.ObjectResponse) {
 		req := planmodifier.ObjectRequest{
+			Plan:       updatePlanRaw,
 			StateValue: stateVal,
 			PlanValue:  planVal,
 		}

@@ -1016,3 +1016,43 @@ resource "ciphertrust_user" "test" {
 		},
 	})
 }
+
+// Test_CM_User_NicknameAtCreateDoesNotCrash verifies that creating a ciphertrust_user
+// with nickname set to a value different from username no longer crashes with
+// "Provider produced inconsistent result after apply" (TFIN-551).
+// CM silently ignores the configured nickname and always assigns nickname = username —
+// the provider now preserves the configured value in state rather than overwriting it.
+// Also verifies that a subsequent terraform plan is clean (no drift).
+func Test_CM_User_NicknameAtCreateDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+	username := "tf-nick-crash-" + uuid.New().String()[:8]
+	nickname := "custom-nick-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+  nickname = %q
+}`, username, nickname)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Create with nickname != username — must not crash.
+				// Before the fix: "was cty.StringVal(<nickname>), but now cty.StringVal(<username>)".
+				Config: cfg,
+				Check: checkStep(t, "create with explicit nickname — no crash",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "nickname", nickname),
+				),
+			},
+			{
+				// Regression: subsequent plan must be empty — no drift from Read() overwriting
+				// the configured nickname with the CM-returned username.
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
