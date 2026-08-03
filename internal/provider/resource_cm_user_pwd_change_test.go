@@ -1,11 +1,14 @@
 package provider
 
 import (
-	"fmt"
+	"context"
 	"os"
 	"regexp"
 	"testing"
 
+	providercm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	fwschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -449,57 +452,34 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 	})
 }
 
-// Test_CM_UserPwdChange_PasswordNotInState verifies that password and new_password
-// are not persisted in Terraform state after a successful apply (TFIN-549).
-// With WriteOnly: true, the framework never writes these values to state — matching
-// the hardened pattern on ciphertrust_user.password.
-func Test_CM_UserPwdChange_PasswordNotInState(t *testing.T) {
-	RequireCM(t)
-	initialPwd := generateComplexPassword()
-	newPwd := generateComplexPassword()
-	username := "tf-pwdnotinstate-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+// Test_CM_UserPwdChange_PasswordWriteOnly verifies that password and new_password
+// have WriteOnly: true in the schema (TFIN-549). WriteOnly prevents the framework
+// from persisting these values to terraform.tfstate entirely. The test inspects the
+// schema directly — no live CM interaction required — matching the pattern already
+// used by ciphertrust_user.password.
+func Test_CM_UserPwdChange_PasswordWriteOnly(t *testing.T) {
+	ctx := context.Background()
+	r := providercm.NewResourceCMPwdChange()
 
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				// Pre-condition: create the user to change password on.
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "base" {
-  username = %q
-  password = %q
-}`, username, initialPwd),
-			},
-			{
-				// Apply the password change and verify neither credential appears in state.
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "base" {
-  username = %q
-  password = %q
-}
-resource "ciphertrust_cm_user_password_change" "test" {
-  username     = %q
-  password     = %q
-  new_password = %q
-  depends_on   = [ciphertrust_user.base]
-}`, username, initialPwd, username, initialPwd, newPwd),
-				Check: checkStep(t, "password change applied — credentials not in state",
-					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.test", "id"),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["ciphertrust_cm_user_password_change.test"]
-						if !ok {
-							return nil
-						}
-						if v := rs.Primary.Attributes["password"]; v != "" {
-							return fmt.Errorf("password should not be in state, got %q", v)
-						}
-						if v := rs.Primary.Attributes["new_password"]; v != "" {
-							return fmt.Errorf("new_password should not be in state, got %q", v)
-						}
-						return nil
-					},
-				),
-			},
-		},
-	})
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	for _, field := range []string{"password", "new_password"} {
+		attr, ok := schemaResp.Schema.Attributes[field]
+		if !ok {
+			t.Errorf("expected attribute %q to be present in schema", field)
+			continue
+		}
+		strAttr, ok := attr.(fwschema.StringAttribute)
+		if !ok {
+			t.Errorf("expected attribute %q to be a StringAttribute", field)
+			continue
+		}
+		if !strAttr.WriteOnly {
+			t.Errorf("attribute %q must have WriteOnly: true to prevent plaintext persisting in tfstate (TFIN-549)", field)
+		}
+		if !strAttr.Sensitive {
+			t.Errorf("attribute %q must have Sensitive: true", field)
+		}
+	}
 }
