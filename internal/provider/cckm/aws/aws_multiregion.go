@@ -115,12 +115,13 @@ func replicateKeyCommon(
 	sourceKeyTier := gjson.Get(primaryKeyJSON, "source_key_tier").String()
 
 	if origin == "EXTERNAL" && sourceKeyID != "" {
-		// For BYOK replicas, import_state == IMPORTED is the definitive completion signal:
-		// CCKM always uses the primary's existing material, and AWS transitions the key to
-		// Enabled only after accepting that material.
+
+		// For BYOK replicas, wait for ALL primary key materials to appear on the replica with
+		// import_state=IMPORTED before checking Enabled state. This ensures that all materials
+		//  have fully settled, preventing a false CURRENT state on older materials
 		var historyDiags diag.Diagnostics
-		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, sourceKeyID, sourceKeyTier, &historyDiags)
-		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, sourceKeyID, "import_state", "", "IMPORTED", &historyDiags)
+		waitForAllMaterialsImportedToReplica(ctx, id, client, primaryKeyID, replicaKeyID, &historyDiags)
+
 		// Wait for KeyState == Enabled: CCKM imports material asynchronously and the key
 		// may still show PendingImport even after import_state reaches IMPORTED.
 		// Use a separate diags so we can discard transient noise from the first attempt.
@@ -144,6 +145,7 @@ func replicateKeyCommon(
 						"CCKM may have failed to push material (eg: replica was still in Creating state). "+
 						"Compensating: importing all primary key materials directly.",
 					replicaKeyID))
+
 				importAllMaterialsToReplica(ctx, id, client, primaryKeyID, replicaKeyID, &historyDiags)
 
 				// waitForRotationHistoryRecord and waitForMaterialStateResolved are already called
@@ -245,6 +247,158 @@ func replicateKeyCommon(
 	}
 	client.Log.Debug("[aws_multiregion.go -> replicateKeyCommon][response:" + redactAWSResponse(replicaKeyResponse))
 	return replicaKeyResponse
+}
+
+// waitForReplication polls the replica key until its state leaves the "Creating" phase or a timeout is reached.
+func waitForReplication(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) string {
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplication][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplication][" + id + "]")
+	var (
+		err      error
+		response string
+		keyState string
+	)
+
+	// Give CCKM/AWS a head start before the first poll.
+	time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
+	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
+	defer ticker.Stop()
+	deadline := time.Now().Add(time.Duration(110) * time.Second)
+	for range ticker.C {
+		if time.Now().After(deadline) {
+			break
+		}
+		response, err = client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
+		if err != nil {
+			msg := "Error creating AWS key. Error reading replicated key."
+			details := utils.ApiError(msg, map[string]interface{}{
+				"error":          err.Error(),
+				"replica_key_id": replicaKeyID,
+			})
+			client.Log.Error(details)
+			diags.AddWarning(details, "")
+			return ""
+		}
+		keyState = gjson.Get(response, "aws_param.KeyState").String()
+		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] Key state: %s", keyState))
+		if keyState != "Creating" {
+			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] resolved Key state: %s replicaKeyID: %s", keyState, replicaKeyID))
+			client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
+			return response
+		}
+	}
+	msg := fmt.Sprintf("Error replicating AWS key, key state is still '%s'.", keyState)
+	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
+	client.Log.Warn(details)
+	diags.AddWarning(details, "")
+	client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
+	return response
+}
+
+// waitForReplicatedKeyIsEnabled polls the replica key until its state reaches "Enabled" or a timeout is
+// reached.
+func waitForReplicatedKeyIsEnabled(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) string {
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")
+	var (
+		err      error
+		response string
+		keyState string
+	)
+
+	// time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second) // commented out to observe initial states
+	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
+	defer ticker.Stop()
+	deadline := time.Now().Add(time.Duration(60) * time.Second)
+	loop := 0
+	for range ticker.C {
+		if time.Now().After(deadline) {
+			break
+		}
+		response, err = client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
+		if err != nil {
+			msg := "Error creating AWS key. Error reading replicated key."
+			details := utils.ApiError(msg, map[string]interface{}{
+				"error":          err.Error(),
+				"replica_key_id": replicaKeyID,
+			})
+			client.Log.Error(details)
+			diags.AddWarning(details, "")
+			return ""
+		}
+		keyState = gjson.Get(response, "aws_param.KeyState").String()
+		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] loop: %d Key state: %s", loop, keyState))
+		if keyState == "Enabled" {
+			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] resolved loop: %d key is Enabled", loop))
+			return response
+		}
+		loop++
+	}
+	msg := fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] TIMED OUT waiting for Enabled, last state: '%s'.", keyState)
+	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
+	client.Log.Warn(details)
+	diags.AddWarning(details, "")
+	client.Log.Debug("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][response:" + redactAWSResponse(response))
+	return response
+}
+
+// waitForAllMaterialsImportedToReplica waits for every key material on the primary to have a
+// rotation history record on the replica with import_state=IMPORTED. It iterates oldest-to-newest
+// so that each material's record is confirmed before moving on to the next. This prevents the
+// provider from returning while older materials still show a transient CURRENT state on the replica.
+// Failures are added as warnings (not errors) since the replicate-key call already succeeded.
+func waitForAllMaterialsImportedToReplica(
+	ctx context.Context,
+	id string,
+	client *common.Client,
+	primaryKeyID string,
+	replicaKeyID string,
+	diags *diag.Diagnostics,
+) {
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForAllMaterialsImportedToReplica][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForAllMaterialsImportedToReplica][" + id + "]")
+
+	primaryHistory, apiFailed := fetchRotationHistoryByokFull(ctx, id, client, primaryKeyID)
+	if apiFailed {
+		msg := "waitForAllMaterialsImportedToReplica: failed to fetch primary key rotation history."
+		details := utils.ApiError(msg, map[string]interface{}{"primary_key_id": primaryKeyID})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "")
+		return
+	}
+
+	var entries []RotationHistoryEntryFullTFSDK
+	if convDiags := primaryHistory.ElementsAs(ctx, &entries, false); convDiags.HasError() {
+		msg := "waitForAllMaterialsImportedToReplica: failed to read primary key rotation history entries."
+		details := utils.ApiError(msg, map[string]interface{}{"primary_key_id": primaryKeyID})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "")
+		return
+	}
+
+	if len(entries) == 0 {
+		client.Log.Debug("[aws_multiregion.go -> waitForAllMaterialsImportedToReplica] no rotation history on primary, nothing to wait for")
+		return
+	}
+
+	// Reverse to process oldest-to-newest (API returns newest-first).
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	for idx, entry := range entries {
+		srcID := entry.SourceKeyIdentifier.ValueString()
+		srcTier := entry.SourceKeyTier.ValueString()
+		if srcID == "" {
+			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForAllMaterialsImportedToReplica] entry[%d]: source_key_identifier empty, skipping", idx))
+			continue
+		}
+		client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForAllMaterialsImportedToReplica] entry[%d]: waiting for srcID: %s to be IMPORTED on replica: %s", idx, srcID, replicaKeyID))
+		waitForRotationHistoryRecord(ctx, id, client, replicaKeyID, srcID, srcTier, diags)
+		waitForMaterialStateResolved(ctx, id, client, replicaKeyID, srcID, "import_state", "", "IMPORTED", diags)
+	}
+
+	client.Log.Debug("[aws_multiregion.go -> waitForAllMaterialsImportedToReplica] done")
 }
 
 // importAllMaterialsToReplica imports all key materials from the primary key to the replica key,
@@ -354,99 +508,6 @@ func importAllMaterialsToReplica(ctx context.Context, id string, client *common.
 	}
 
 	client.Log.Debug("[aws_multiregion.go -> importAllMaterialsToReplica] done")
-}
-
-// waitForReplication polls the replica key until its state leaves the "Creating" phase or a timeout is reached.
-func waitForReplication(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) string {
-	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplication][" + id + "]")
-	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplication][" + id + "]")
-	var (
-		err      error
-		response string
-		keyState string
-	)
-
-	// Give CCKM/AWS a head start before the first poll.
-	time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
-	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
-	defer ticker.Stop()
-	deadline := time.Now().Add(time.Duration(110) * time.Second)
-	for range ticker.C {
-		if time.Now().After(deadline) {
-			break
-		}
-		response, err = client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
-		if err != nil {
-			msg := "Error creating AWS key. Error reading replicated key."
-			details := utils.ApiError(msg, map[string]interface{}{
-				"error":          err.Error(),
-				"replica_key_id": replicaKeyID,
-			})
-			client.Log.Error(details)
-			diags.AddWarning(details, "")
-			return ""
-		}
-		keyState = gjson.Get(response, "aws_param.KeyState").String()
-		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] Key state: %s", keyState))
-		if keyState != "Creating" {
-			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplication] resolved Key state: %s replicaKeyID: %s", keyState, replicaKeyID))
-			client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
-			return response
-		}
-	}
-	msg := fmt.Sprintf("Error replicating AWS key, key state is still '%s'.", keyState)
-	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
-	client.Log.Warn(details)
-	diags.AddWarning(details, "")
-	client.Log.Debug("[aws_multiregion.go -> waitForReplication][response:" + redactAWSResponse(response))
-	return response
-}
-
-// waitForReplicatedKeyIsEnabled polls the replica key until its state reaches "Enabled" or a timeout is
-// reached.
-func waitForReplicatedKeyIsEnabled(ctx context.Context, id string, client *common.Client, replicaKeyID string, diags *diag.Diagnostics) string {
-	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")
-	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][" + id + "]")
-	var (
-		err      error
-		response string
-		keyState string
-	)
-
-	// time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second) // commented out to observe initial states
-	ticker := time.NewTicker(time.Duration(shortAwsKeyOpSleep) * time.Second)
-	defer ticker.Stop()
-	deadline := time.Now().Add(time.Duration(60) * time.Second)
-	loop := 0
-	for range ticker.C {
-		if time.Now().After(deadline) {
-			break
-		}
-		response, err = client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
-		if err != nil {
-			msg := "Error creating AWS key. Error reading replicated key."
-			details := utils.ApiError(msg, map[string]interface{}{
-				"error":          err.Error(),
-				"replica_key_id": replicaKeyID,
-			})
-			client.Log.Error(details)
-			diags.AddWarning(details, "")
-			return ""
-		}
-		keyState = gjson.Get(response, "aws_param.KeyState").String()
-		client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] loop: %d Key state: %s", loop, keyState))
-		if keyState == "Enabled" {
-			client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] resolved loop: %d key is Enabled", loop))
-			return response
-		}
-		loop++
-	}
-	msg := fmt.Sprintf("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled] TIMED OUT waiting for Enabled, last state: '%s'.", keyState)
-	details := utils.ApiError(msg, map[string]interface{}{"key_id": replicaKeyID})
-	client.Log.Warn(details)
-	diags.AddWarning(details, "")
-	client.Log.Debug("[aws_multiregion.go -> waitForReplicatedKeyIsEnabled][response:" + redactAWSResponse(response))
-	return response
 }
 
 // updatePrimaryRegion changes the primary region of a multi-region AWS key and polls until the change
