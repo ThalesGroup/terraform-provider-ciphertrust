@@ -488,3 +488,98 @@ data "ciphertrust_scheduler_list" "jobs" {
 		},
 	})
 }
+
+// Test_CM_SchedulerList_ZeroMatchReturnsEmptySlice verifies that a filter matching
+// zero schedulers returns an empty list (not null), so length() and for_each work
+// correctly (TFIN-556 regression test).
+func Test_CM_SchedulerList_ZeroMatchReturnsEmptySlice(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+data "ciphertrust_scheduler_list" "zero" {
+  filters = {
+    name = "nonexistent-scheduler-zzz-tfin556"
+  }
+}
+
+output "zero_count" {
+  value = length(data.ciphertrust_scheduler_list.zero.scheduler)
+}
+`,
+				Check: checkStep(t, "zero-match returns empty list",
+					resource.TestCheckResourceAttr("data.ciphertrust_scheduler_list.zero", "scheduler.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_Scheduler_EmptyDateNotRejectedOnCreate verifies that start_date = "" and
+// end_date = "" do not cause a 400 error on Create() (TFIN-557). Empty strings are
+// the "clear/unset" sentinel and must be omitted from the POST payload; they are
+// only valid in PATCH (update) requests.
+// Requires CIPHERTRUST_SCHEDULER_ENABLED=1.
+func Test_CM_Scheduler_EmptyDateNotRejectedOnCreate(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_Scheduler_EmptyDateNotRejectedOnCreate: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	name := "tf-sched-emptydate-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Creating with start_date = "" and end_date = "" must not return 400.
+				// Before the fix: Create() sent "" in the POST payload → CM rejected with HTTP 400.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name       = %q
+  operation  = "cckm_key_rotation"
+  run_at     = "0 9 * * sat"
+  start_date = ""
+  end_date   = ""
+  cckm_key_rotation_params {
+    cloud_name = "aws"
+  }
+}`, name),
+				Check: checkStep(t, "create with empty dates — no 400 error",
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "id"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_Scheduler_MutuallyExclusiveParamsRejectedAtPlan verifies that setting more
+// than one of the four mutually-exclusive params blocks produces a plan-time error
+// (TFIN-558). Before the fix, this passed plan silently and crashed apply.
+func Test_CM_Scheduler_MutuallyExclusiveParamsRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scheduler" "test" {
+  name      = "tf-sched-mutex-probe"
+  operation = "cckm_key_rotation"
+  run_at    = "0 9 * * sat"
+  cckm_key_rotation_params {
+    cloud_name = "aws"
+  }
+  cckm_synchronization_params {
+    cloud_name = "aws"
+  }
+}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)mutually exclusive`),
+			},
+		},
+	})
+}
