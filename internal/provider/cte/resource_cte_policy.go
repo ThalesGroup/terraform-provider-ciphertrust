@@ -73,9 +73,9 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"Standard", "LDT", "IDT", "Cloud_Object_Storage", "CSI"}...),
 				},
-				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI",
+				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI. Changing this value forces the policy to be destroyed and recreated.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"data_transform_rules": schema.ListNestedAttribute{
@@ -995,6 +995,24 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	plan.ID = types.StringValue(response)
+
+	// Read back the policy from CM after the update completes to refresh any
+	// server-computed/normalized fields before writing plan to state
+	// (TFIN-547), following the same GetById-then-merge-into-plan pattern
+	// used in resource_cm_user.go's Update().
+	readBackID := uuid.New().String()
+	getResp, getErr := r.client.GetById(ctx, readBackID, plan.ID.ValueString(), common.URL_CTE_POLICY)
+	if getErr == nil && getResp != "" {
+		var apiResp CTEPolicyListJSON
+		if err := json.Unmarshal([]byte(getResp), &apiResp); err == nil {
+			plan.Description = types.StringValue(apiResp.Description)
+			plan.NeverDeny = types.BoolValue(apiResp.NeverDeny)
+			plan.Metadata = &CTEPolicyMetadataTFSDK{
+				RestrictUpdate: types.BoolValue(apiResp.Metadata.RestrictUpdate),
+			}
+		}
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
