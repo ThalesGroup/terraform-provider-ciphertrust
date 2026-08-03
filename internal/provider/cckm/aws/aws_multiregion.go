@@ -388,7 +388,7 @@ func waitForAllMaterialsImportedToReplica(
 
 	for idx, entry := range entries {
 		srcID := entry.SourceKeyIdentifier.ValueString()
-		srcTier := entry.SourceKeyTier.ValueString()
+		srcTier := entry.KeySource.ValueString()
 		if srcID == "" {
 			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForAllMaterialsImportedToReplica] entry[%d]: source_key_identifier empty, skipping", idx))
 			continue
@@ -456,7 +456,7 @@ func importAllMaterialsToReplica(ctx context.Context, id string, client *common.
 
 	for idx, entry := range entries {
 		srcID := entry.SourceKeyIdentifier.ValueString()
-		srcTier := entry.SourceKeyTier.ValueString()
+		srcTier := entry.KeySource.ValueString()
 		if srcID == "" || srcTier == "" {
 			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: source_key_identifier or source_key_tier empty, skipping", idx))
 			continue
