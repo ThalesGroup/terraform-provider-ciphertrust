@@ -224,11 +224,12 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 			} else {
 				plan.Name = types.StringNull()
 			}
-			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
-				plan.Nickname = types.StringValue(gj.String())
-			} else {
-				plan.Nickname = types.StringNull()
-			}
+			// nickname: preserve the plan value — do NOT overwrite from GET response (TFIN-551).
+			// CM's user-creation endpoint silently ignores the configured nickname and always
+			// assigns nickname = username (same behaviour as PATCH, fixed in Update() for TFIN-407).
+			// Overwriting plan.Nickname with the GET-returned value trips the framework's
+			// post-apply consistency check. ImmutableString() ensures the value is stable
+			// in state for the lifetime of the resource.
 			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
 				plan.Email = types.StringValue(gj.String())
 			} else {
@@ -309,11 +310,9 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		state.Name = types.StringNull()
 	}
 
-	if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
-		state.Nickname = types.StringValue(gj.String())
-	} else {
-		state.Nickname = types.StringNull()
-	}
+	// nickname: preserve prior state — CM always returns username, not the configured value.
+	// Overwriting state.Nickname with the GET response would cause perpetual drift when the
+	// user configured a non-empty nickname at creation (same pattern as Create() / Update()).
 	if !state.Metadata.IsNull() {
 		metaResult := gjson.Get(userResponse, "user_metadata")
 		if !metaResult.Exists() {

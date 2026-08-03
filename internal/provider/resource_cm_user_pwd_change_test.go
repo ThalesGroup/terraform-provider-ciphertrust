@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"testing"
@@ -442,6 +443,61 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 				ExpectNonEmptyPlan: false,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.pwd_change", "id"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_UserPwdChange_PasswordNotInState verifies that password and new_password
+// are not persisted in Terraform state after a successful apply (TFIN-549).
+// With WriteOnly: true, the framework never writes these values to state — matching
+// the hardened pattern on ciphertrust_user.password.
+func Test_CM_UserPwdChange_PasswordNotInState(t *testing.T) {
+	RequireCM(t)
+	initialPwd := generateComplexPassword()
+	newPwd := generateComplexPassword()
+	username := "tf-pwdnotinstate-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Pre-condition: create the user to change password on.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "base" {
+  username = %q
+  password = %q
+}`, username, initialPwd),
+			},
+			{
+				// Apply the password change and verify neither credential appears in state.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "base" {
+  username = %q
+  password = %q
+}
+resource "ciphertrust_cm_user_password_change" "test" {
+  username     = %q
+  password     = %q
+  new_password = %q
+  depends_on   = [ciphertrust_user.base]
+}`, username, initialPwd, username, initialPwd, newPwd),
+				Check: checkStep(t, "password change applied — credentials not in state",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_user_password_change.test", "id"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_cm_user_password_change.test"]
+						if !ok {
+							return nil
+						}
+						if v := rs.Primary.Attributes["password"]; v != "" {
+							return fmt.Errorf("password should not be in state, got %q", v)
+						}
+						if v := rs.Primary.Attributes["new_password"]; v != "" {
+							return fmt.Errorf("new_password should not be in state, got %q", v)
+						}
+						return nil
+					},
 				),
 			},
 		},

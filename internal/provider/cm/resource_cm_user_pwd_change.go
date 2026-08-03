@@ -56,6 +56,7 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 			"password": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
+				WriteOnly:   true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
 				Description: "(Immutable) Current password for the user.",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
@@ -64,6 +65,7 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 			"new_password": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
+				WriteOnly:   true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
 				Description: "(Immutable) New password to set for the user.",
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
