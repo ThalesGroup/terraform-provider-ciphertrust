@@ -229,9 +229,7 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_PROCESS_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Process Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResp CTEProcessSetJSON
@@ -365,6 +363,9 @@ func (r *resourceCTEProcessSet) Delete(ctx context.Context, req resource.DeleteR
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Process Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Process Set",
 			"Could not delete CTE Process Set, unexpected error: "+err.Error(),

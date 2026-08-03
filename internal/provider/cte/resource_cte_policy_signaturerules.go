@@ -465,6 +465,11 @@ func (r *resourceCTEPolicySignatureRule) Delete(ctx context.Context, req resourc
 		)
 		_, err := r.client.DeleteByID(ctx, "DELETE", ruleIDStr, url, nil)
 		if err != nil {
+			if handleDeleteNotFound(err, "Signature Rule "+ruleIDStr, &resp.Diagnostics) {
+				// Already gone (e.g. removed out-of-band): skip it and keep
+				// deleting the remaining signature rules in this list.
+				continue
+			}
 			resp.Diagnostics.AddError(
 				"Error Deleting Signature Rule",
 				"Could not delete signature rule "+ruleIDStr+": "+err.Error(),

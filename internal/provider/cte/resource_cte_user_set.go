@@ -241,9 +241,7 @@ func (r *resourceCTEUserSet) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_USER_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE User Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -380,6 +378,9 @@ func (r *resourceCTEUserSet) Delete(ctx context.Context, req resource.DeleteRequ
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE User Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE User Set",
 			"Could not delete CTE User Set, unexpected error: "+err.Error(),

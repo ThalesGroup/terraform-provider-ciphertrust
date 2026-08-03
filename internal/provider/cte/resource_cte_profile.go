@@ -872,9 +872,7 @@ func (r *resourceCTEProfile) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_PROFILE)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Profile ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -1214,6 +1212,9 @@ func (r *resourceCTEProfile) Delete(ctx context.Context, req resource.DeleteRequ
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Profile "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Profile",
 			"Could not delete CTE Profile, unexpected error: "+err.Error(),

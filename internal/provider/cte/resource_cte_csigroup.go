@@ -237,9 +237,8 @@ func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	// Get CSI Group details
-	groupResponse, _ := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CSIGROUP)
-	if groupResponse == "" {
-		resp.State.RemoveResource(ctx)
+	groupResponse, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CSIGROUP)
+	if handleReadNotFound(ctx, err, "CTE CSI Group ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -507,6 +506,9 @@ func (r *resourceCTECSIGroup) Delete(ctx context.Context, req resource.DeleteReq
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE CSISecurityGroup "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE CSISecurityGroup",
 			"Could not delete CSISecurityGroup, unexpected error: "+err.Error(),

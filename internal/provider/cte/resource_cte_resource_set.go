@@ -239,9 +239,7 @@ func (r *resourceCTEResourceSet) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_RESOURCE_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Resource Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -382,6 +380,9 @@ func (r *resourceCTEResourceSet) Delete(ctx context.Context, req resource.Delete
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_resource_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Resource Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Resource Set",
 			"Could not delete CTE Resource Set, unexpected error: "+err.Error(),

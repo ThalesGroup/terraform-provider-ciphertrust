@@ -347,9 +347,7 @@ func (r *resourceCTEClientGroup) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CLIENT_GROUP)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client Group ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -1087,6 +1085,11 @@ func (r *resourceCTEClientGroup) Delete(ctx context.Context, req resource.Delete
 			common.URL_CTE_CLIENT_GROUP+"/"+state.ID.ValueString()+"/clients/"+clientName,
 		)
 		if err != nil {
+			if handleDeleteNotFound(err, "Client "+clientName+" in CTE Client Group "+state.ID.ValueString(), &resp.Diagnostics) {
+				// Already removed from the group out-of-band: skip it and
+				// keep removing the remaining clients in the list.
+				continue
+			}
 			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> Delete client]["+state.ID.ValueString()+"]")
 			resp.Diagnostics.AddError(
 				"Error removing client from CTE Client Group before deletion",
@@ -1101,6 +1104,9 @@ func (r *resourceCTEClientGroup) Delete(ctx context.Context, req resource.Delete
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Client Group "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Client Group on CipherTrust Manager",
 			"Could not delete CTE Client Group "+state.ID.ValueString()+", unexpected error: "+err.Error(),
