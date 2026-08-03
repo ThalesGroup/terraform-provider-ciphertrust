@@ -78,7 +78,7 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 							Attributes: map[string]schema.Attribute{
 								"guard_point_type": schema.StringAttribute{
 									Required:    true,
-									Description: "Type of the GuardPoint.",
+									Description: "Type of the GuardPoint. Changing this value forces the GuardPoint to be destroyed and recreated.",
 									Validators: []validator.String{
 										stringvalidator.OneOf([]string{
 											"directory_auto", "directory_manual",
@@ -86,6 +86,9 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 											"cloudstorage_auto", "cloudstorage_manual",
 											"ransomware_protection",
 										}...),
+									},
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.RequiresReplace(),
 									},
 								},
 								"policy_id": schema.StringAttribute{

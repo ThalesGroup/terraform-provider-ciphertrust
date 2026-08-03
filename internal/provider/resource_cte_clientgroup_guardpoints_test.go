@@ -3,11 +3,13 @@ package provider
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 const cteClientGroupGPName = "ciphertrust_cte_clientgroup_guardpoint.gp"
@@ -149,6 +151,43 @@ func TestCTEClientGroupGuardPointResource_drift(t *testing.T) {
 				Config:             cteClientGroupGPConfig(policyName, cgName, cteCGGuardPoint("/tmp/testpathcg1", "\n        guard_enabled    = true")),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupGuardPointResource_guardPointTypeRequiresReplace verifies
+// that changing guard_point_type is planned as a destroy+create rather than
+// an in-place update, and that the apply then succeeds (TFIN-521).
+func TestCTEClientGroupGuardPointResource_guardPointTypeRequiresReplace(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	policyName := "TF_CTE_Policy_CGGPType-" + suffix
+	cgName := "TF_CTE_ClientGroup_GPType-" + suffix
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientGroupGPConfig(policyName, cgName, cteCGGuardPoint("/tmp/testpathcgtype1", "")),
+				Check: checkStep(t, "clientgroup_guardpoint requires replace: create",
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgtype1.guard_point_params.guard_point_type", "directory_auto"),
+				),
+			},
+			{
+				Config: strings.Replace(
+					cteClientGroupGPConfig(policyName, cgName, cteCGGuardPoint("/tmp/testpathcgtype1", "")),
+					`guard_point_type = "directory_auto"`,
+					`guard_point_type = "directory_manual"`,
+					1,
+				),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(cteClientGroupGPName, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "clientgroup_guardpoint requires replace: change guard_point_type",
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgtype1.guard_point_params.guard_point_type", "directory_manual"),
+				),
 			},
 		},
 	})
