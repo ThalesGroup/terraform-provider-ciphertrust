@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
-	"testing"
-
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"regexp"
+	"testing"
 )
 
 // cteStandardPolicyConfig renders a Standard ciphertrust_cte_policy with a single
