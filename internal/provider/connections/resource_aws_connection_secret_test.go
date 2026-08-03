@@ -14,9 +14,12 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -924,6 +927,127 @@ func Test_AWSConnectionSchema_PlanModifierRequiresComputed(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Test_AWSConnection_SecretAccessKeyLengthValidator verifies that secret_access_key
+// rejects explicitly configured empty strings at plan/validate time, but allows
+// null values (omitted values).
+func Test_AWSConnection_SecretAccessKeyLengthValidator(t *testing.T) {
+	ctx := context.Background()
+
+	var schemaResp resource.SchemaResponse
+	(&resourceCCKMAWSConnection{}).Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+	}
+
+	attr, ok := schemaResp.Schema.Attributes["secret_access_key"]
+	if !ok {
+		t.Fatal("secret_access_key attribute not found in schema")
+	}
+	withValidators, ok := attr.(stringValidatorsAttribute)
+	if !ok {
+		t.Fatalf("secret_access_key attribute (%T) does not expose StringValidators", attr)
+	}
+	validators := withValidators.StringValidators()
+	if len(validators) == 0 {
+		t.Fatal("secret_access_key has no validators; expected a LengthAtLeast(1) validator")
+	}
+
+	runValidators := func(value types.String) diag.Diagnostics {
+		var diags diag.Diagnostics
+		for _, v := range validators {
+			req := validator.StringRequest{Path: path.Root("secret_access_key"), ConfigValue: value}
+			var resp validator.StringResponse
+			v.ValidateString(ctx, req, &resp)
+			diags.Append(resp.Diagnostics...)
+		}
+		return diags
+	}
+
+	// 1. Valid: non-empty secret key
+	if diags := runValidators(types.StringValue("some-secret-key")); diags.HasError() {
+		t.Errorf("expected non-empty secret key to be accepted, got errors: %v", diags)
+	}
+
+	// 2. Invalid: explicitly empty secret key ""
+	if diags := runValidators(types.StringValue("")); !diags.HasError() {
+		t.Error("expected empty string \"\" for secret_access_key to be rejected, but no error occurred")
+	}
+
+	// 3. Valid: Null string (omitted from config entirely)
+	if diags := runValidators(types.StringNull()); diags.HasError() {
+		t.Errorf("expected null (omitted) secret key to be accepted, got errors: %v", diags)
+	}
+}
+
+// Test_AWSConnectionList_EmptyResponseSucceeds verifies that if CM returns an empty
+// response body on zero-match filters, the ciphertrust_aws_connection_list data source
+// Read() call completes successfully and yields an empty slice without crashing.
+func Test_AWSConnectionList_EmptyResponseSucceeds(t *testing.T) {
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Return empty body (zero matches)
+		fmt.Fprint(w, "")
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	d := &dataSourceAWSConnection{client: client}
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+
+	// Create request with nonexistent filter
+	objType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	values := make(map[string]tftypes.Value, len(objType.AttributeTypes))
+	for name, attrType := range objType.AttributeTypes {
+		values[name] = tftypes.NewValue(attrType, nil)
+	}
+
+	// Set a sample non-existent name filter in the config
+	filterObj := tftypes.NewValue(tftypes.Map{
+		ElementType: tftypes.String,
+	}, map[string]tftypes.Value{
+		"name": tftypes.NewValue(tftypes.String, "nonexistent-aws-conn"),
+	})
+	values["filters"] = filterObj
+
+	configVal := tftypes.NewValue(objType, values)
+
+	req := datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configVal},
+	}
+	resp := &datasource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: configVal},
+	}
+
+	// Execute Read
+	d.Read(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics in Read() on empty response: %v", resp.Diagnostics)
+	}
+
+	// Verify that the resulting state contains an empty slice of AWS connections
+	var updatedState AWSConnectionDataSourceModel
+	err := resp.State.Get(ctx, &updatedState)
+	if err != nil {
+		t.Fatalf("failed to decode response state: %v", err)
+	}
+
+	if len(updatedState.AWS) != 0 {
+		t.Errorf("expected 0 connections in state, got: %d", len(updatedState.AWS))
 	}
 }
 

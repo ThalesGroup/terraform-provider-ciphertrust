@@ -224,6 +224,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				Optional:    true,
 				Sensitive:   true,
 				WriteOnly:   true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 				Description: "Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.",
 			},
 			"secret_access_key_version": schema.Int64Attribute{

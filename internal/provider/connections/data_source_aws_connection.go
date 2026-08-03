@@ -217,6 +217,9 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
+	if jsonStr == "" {
+		jsonStr = "[]"
+	}
 	awsConnections := []AWSConnectionModelJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &awsConnections)
 	if err != nil {
