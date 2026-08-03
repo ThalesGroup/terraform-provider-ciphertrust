@@ -297,12 +297,16 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 			return
 		}
 
+		// POST .../clientgroups/{id}/clients does not return the standard
+		// {"items": [...]} envelope; it returns
+		// {"association_response": [...], "num_failed_association": N, "failed_associations": {...}}
+		// (TFIN-525).
 		_, err = r.client.PostData(
 			ctx,
 			id,
 			common.URL_CTE_CLIENT_GROUP+"/"+plan.ID.ValueString()+"/clients",
 			addClientsPayloadJSON,
-			"items",
+			"association_response",
 		)
 		if err != nil {
 			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> Create add-clients]["+id+"]")
@@ -343,9 +347,7 @@ func (r *resourceCTEClientGroup) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CLIENT_GROUP)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client Group ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -993,12 +995,17 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			return
 		}
 
-		response, err := r.client.PostData(
+		// POST .../clientgroups/{id}/clients does not return the standard
+		// {"items": [...]} envelope; it returns
+		// {"association_response": [...], "num_failed_association": N, "failed_associations": {...}}
+		// (TFIN-525). The group's ID does not change when adding clients, so
+		// the response is only used for error checking here.
+		_, err = r.client.PostData(
 			ctx,
 			plan.ID.ValueString(),
 			common.URL_CTE_CLIENT_GROUP+"/"+plan.ID.ValueString()+"/clients",
 			payloadJSON,
-			"items")
+			"association_response")
 		if err != nil {
 			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup.go -> add-client]["+plan.ID.ValueString()+"]")
 			resp.Diagnostics.AddError(
@@ -1007,7 +1014,6 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			)
 			return
 		}
-		plan.ID = types.StringValue(response + plan.ID.ValueString())
 		} else if opType == "ldt-pause" {
 		if plan.Paused.ValueBool() != types.BoolNull().ValueBool() {
 			payload.Paused = plan.Paused.ValueBool()

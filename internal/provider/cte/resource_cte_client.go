@@ -344,8 +344,7 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 		state.ID.ValueString(),
 		common.URL_CTE_CLIENT,
 	)
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -478,12 +477,18 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 			payload.SharedDomainList = append(payload.SharedDomainList, domain.ValueString())
 		}
 	}
-	// Add labels to payload
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Add labels to payload; send nil (JSON null) rather than an empty map
+	// when labels is empty/removed, so CM actually clears them instead of
+	// silently no-op'ing on {} (TFIN-463).
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -613,8 +618,48 @@ func validateCTEUClientConfig(ctx context.Context, req resource.ValidateConfigRe
 	}
 }
 
+// validateNonFunctionalCacheLogFields rejects max_num_cache_log/max_space_cache_log
+// when explicitly configured. TFIN-467: CipherTrust Manager silently ignores
+// writes to these two fields at the client level (confirmed via direct REST
+// PATCH cross-check, including values that respect the linked profile's
+// documented minimums) — every apply reports success but the value never
+// persists, producing a perpetual, unresolvable plan diff. The equivalent
+// setting is only functional on the linked ciphertrust_cte_profile resource's
+// cache_settings.max_files/max_space. Erroring here up front, rather than
+// sending a PATCH CM will 200-OK and silently no-op, matches the existing
+// in-file precedent (see validateCTEUClientConfig above) of surfacing
+// unsupported field combinations as an explicit attribute error instead of
+// letting them fail silently against CM.
+func validateNonFunctionalCacheLogFields(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var maxNumCacheLog types.Int64
+	var maxSpaceCacheLog types.Int64
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_num_cache_log"), &maxNumCacheLog)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_space_cache_log"), &maxSpaceCacheLog)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !maxNumCacheLog.IsNull() && !maxNumCacheLog.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_num_cache_log"),
+			"Non-Functional Field for CTE Client",
+			"max_num_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead.",
+		)
+	}
+	if !maxSpaceCacheLog.IsNull() && !maxSpaceCacheLog.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_space_cache_log"),
+			"Non-Functional Field for CTE Client",
+			"max_space_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead.",
+		)
+	}
+}
+
 func (r *resourceCTEClient) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	validateCTEUClientConfig(ctx, req, resp)
+	validateNonFunctionalCacheLogFields(ctx, req, resp)
 }
 
 func setCTEClientState(
@@ -629,9 +674,14 @@ func setCTEClientState(
 	} else {
 		state.Description = types.StringNull()
 	}
-	if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue(apiResp.Name)
-	}
+	// TFIN-465: name must be refreshed from the live API response on every
+	// Read() (including `terraform apply -refresh-only`), not just the very
+	// first read when state happens to be null/empty. name now carries
+	// modifiers.ImmutableString() on its schema attribute (TFIN-461), so a
+	// refreshed value that no longer matches config surfaces as an explicit
+	// "Attribute is immutable" error at plan time instead of a silent,
+	// unresolvable diff.
+	state.Name = types.StringValue(apiResp.Name)
 	state.ClientLocked = types.BoolValue(apiResp.ClientLocked)
 	state.ClientType = types.StringValue(apiResp.ClientType)
 	state.CommunicationEnabled = types.BoolValue(apiResp.CommunicationEnabled)
@@ -661,7 +711,9 @@ func setCTEClientState(
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
-	if apiResp.Labels != nil {
+	// Normalize an absent/nil or empty {} labels response to null so the
+	// resource can converge once labels have ever been set (TFIN-463).
+	if len(apiResp.Labels) > 0 {
 		labelsMap := map[string]attr.Value{}
 		for k, v := range apiResp.Labels {
 			if strVal, ok := v.(string); ok {
@@ -674,6 +726,8 @@ func setCTEClientState(
 			return
 		}
 		state.Labels = labels
+	} else {
+		state.Labels = types.MapNull(types.StringType)
 	}
 
 }

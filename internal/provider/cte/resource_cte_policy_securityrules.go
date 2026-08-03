@@ -80,6 +80,12 @@ func (r *resourceCTEPolicySecurityRule) Schema(_ context.Context, _ resource.Sch
 					"effect": schema.StringAttribute{
 						Optional:    true,
 						Description: "Effects applicable to the rule. Separate multiple effects by commas. The valid values are: permit, deny, audit, applykey",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`^(permit|deny|audit|applykey)(,(permit|deny|audit|applykey))*$`),
+								"must be a comma-separated list of: permit, deny, audit, applykey",
+							),
+						},
 					},
 					"exclude_process_set": schema.BoolAttribute{
 						Optional:    true,

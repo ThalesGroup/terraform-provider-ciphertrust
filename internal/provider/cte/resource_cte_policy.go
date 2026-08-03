@@ -27,9 +27,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &resourceCTEPolicy{}
-	_ resource.ResourceWithConfigure   = &resourceCTEPolicy{}
-	_ resource.ResourceWithImportState = &resourceCTEPolicy{}
+	_ resource.Resource                   = &resourceCTEPolicy{}
+	_ resource.ResourceWithConfigure      = &resourceCTEPolicy{}
+	_ resource.ResourceWithImportState    = &resourceCTEPolicy{}
+	_ resource.ResourceWithValidateConfig = &resourceCTEPolicy{}
 )
 
 func NewResourceCTEPolicy() resource.Resource {
@@ -72,9 +73,9 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"Standard", "LDT", "IDT", "Cloud_Object_Storage", "CSI"}...),
 				},
-				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI",
+				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI. Changing this value forces the policy to be destroyed and recreated.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"data_transform_rules": schema.ListNestedAttribute{
@@ -376,6 +377,42 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
+// ValidateConfig rejects config combinations that CipherTrust Manager would
+// silently mutate server-side, which would otherwise cause a permanent
+// terraform plan/apply loop (TFIN-496).
+func (r *resourceCTEPolicy) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config CTEPolicyTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// never_deny defaults to false when omitted from config, and CM strips
+	// "applykey" from every security_rules.effect in that case.
+	if config.NeverDeny.ValueBool() || config.NeverDeny.IsUnknown() {
+		return
+	}
+
+	for i, rule := range config.SecurityRules {
+		if rule.Effect.IsNull() || rule.Effect.IsUnknown() {
+			continue
+		}
+		for _, effect := range strings.Split(rule.Effect.ValueString(), ",") {
+			if strings.TrimSpace(effect) == "applykey" {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("security_rules").AtListIndex(i).AtName("effect"),
+					"Invalid security_rules.effect with never_deny = false",
+					fmt.Sprintf(
+						"CipherTrust Manager strips \"applykey\" from a security rule's effect when the policy's never_deny is false (the default), which causes terraform to perpetually plan and revert this change. Either set never_deny = true or remove \"applykey\" from effect (%q) for this rule.",
+						rule.Effect.ValueString(),
+					),
+				)
+				break
+			}
+		}
+	}
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -652,9 +689,7 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_POLICY)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Policy ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -960,6 +995,24 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	plan.ID = types.StringValue(response)
+
+	// Read back the policy from CM after the update completes to refresh any
+	// server-computed/normalized fields before writing plan to state
+	// (TFIN-547), following the same GetById-then-merge-into-plan pattern
+	// used in resource_cm_user.go's Update().
+	readBackID := uuid.New().String()
+	getResp, getErr := r.client.GetById(ctx, readBackID, plan.ID.ValueString(), common.URL_CTE_POLICY)
+	if getErr == nil && getResp != "" {
+		var apiResp CTEPolicyListJSON
+		if err := json.Unmarshal([]byte(getResp), &apiResp); err == nil {
+			plan.Description = types.StringValue(apiResp.Description)
+			plan.NeverDeny = types.BoolValue(apiResp.NeverDeny)
+			plan.Metadata = &CTEPolicyMetadataTFSDK{
+				RestrictUpdate: types.BoolValue(apiResp.Metadata.RestrictUpdate),
+			}
+		}
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

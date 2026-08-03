@@ -140,9 +140,10 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 	}
 
 	// Fetch each rule by ID and refresh state
+	priorSignatureSetList := state.SignatureSetList
 	var refreshedNames []types.String
 	var refreshedIDs []attr.Value
-	for _, ruleID := range state.SignatureRuleIDs.Elements() {
+	for idx, ruleID := range state.SignatureRuleIDs.Elements() {
 		ruleIDStr := ruleID.(types.String).ValueString()
 		response, err := r.client.GetById(ctx, id, ruleIDStr,
 			common.URL_CTE_POLICY+"/"+state.CTEPolicyID.ValueString()+"/signaturerules")
@@ -158,9 +159,36 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 			return
 		}
 
-		// Use signature_set_name from response
-		refreshedNames = append(refreshedNames, types.StringValue(apiResp.SignatureSetName))
+		// The API response carries both the signature set's UUID
+		// (signature_set_id) and its resolved name (signature_set_name).
+		// Round-trip whichever form the caller originally supplied
+		// (matched against the prior state value at this index) instead
+		// of always overwriting with the name — otherwise a UUID
+		// configured by the user never matches state and Terraform shows
+		// a perpetual diff (TFIN-456).
+		refreshedValue := apiResp.SignatureSetName
+		if idx < len(priorSignatureSetList) {
+			priorValue := priorSignatureSetList[idx].ValueString()
+			if apiResp.SignatureSetID != "" && priorValue == apiResp.SignatureSetID {
+				refreshedValue = apiResp.SignatureSetID
+			} else if priorValue == apiResp.SignatureSetName {
+				refreshedValue = apiResp.SignatureSetName
+			}
+		}
+
+		refreshedNames = append(refreshedNames, types.StringValue(refreshedValue))
 		refreshedIDs = append(refreshedIDs, types.StringValue(apiResp.ID))
+	}
+
+	// If this resource previously tracked at least one rule but CM now
+	// reports zero remaining (all deleted out-of-band), remove the
+	// resource from state entirely so the next plan proposes a fresh
+	// "+ create" instead of a "~ update" against a resource shell with
+	// empty attributes (TFIN-457).
+	if len(state.SignatureRuleIDs.Elements()) > 0 && len(refreshedIDs) == 0 {
+		tflog.Debug(ctx, "[resource_cte_policy_signaturerules.go -> Read] no signature rules remain on CM for policy "+state.CTEPolicyID.ValueString()+" (removed out-of-band), removing resource from state")
+		resp.State.RemoveResource(ctx)
+		return
 	}
 
 	state.SignatureSetList = refreshedNames

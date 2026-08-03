@@ -69,7 +69,18 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 							Computed:    true,
 							Description: "GuardPoint ID returned by the API.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// UseStateForUnknown() unconditionally copies the prior
+								// state value once triggered. For a guard_path key that
+								// does not exist yet in prior state (e.g. a newly added
+								// guard_point), that state value is null (not absent),
+								// which forces this attribute's planned value to a
+								// concrete null instead of leaving it unknown. Terraform
+								// then rejects the apply once Update() resolves it to a
+								// real ID ("provider produced inconsistent result after
+								// apply"). UseNonNullStateForUnknown() only copies the
+								// prior value when it is non-null, so brand-new map
+								// entries correctly stay "(known after apply)".
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"guard_point_params": schema.SingleNestedAttribute{
@@ -78,7 +89,7 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 							Attributes: map[string]schema.Attribute{
 								"guard_point_type": schema.StringAttribute{
 									Required:    true,
-									Description: "Type of the GuardPoint.",
+									Description: "Type of the GuardPoint. Changing this value forces the GuardPoint to be destroyed and recreated.",
 									Validators: []validator.String{
 										stringvalidator.OneOf([]string{
 											"directory_auto", "directory_manual",
@@ -86,6 +97,9 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 											"cloudstorage_auto", "cloudstorage_manual",
 											"ransomware_protection",
 										}...),
+									},
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.RequiresReplace(),
 									},
 								},
 								"policy_id": schema.StringAttribute{

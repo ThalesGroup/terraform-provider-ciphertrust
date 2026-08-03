@@ -237,9 +237,8 @@ func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	// Get CSI Group details
-	groupResponse, _ := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CSIGROUP)
-	if groupResponse == "" {
-		resp.State.RemoveResource(ctx)
+	groupResponse, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CSIGROUP)
+	if handleReadNotFound(ctx, err, "CTE CSI Group ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
