@@ -478,12 +478,18 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 			payload.SharedDomainList = append(payload.SharedDomainList, domain.ValueString())
 		}
 	}
-	// Add labels to payload
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Add labels to payload; send nil (JSON null) rather than an empty map
+	// when labels is empty/removed, so CM actually clears them instead of
+	// silently no-op'ing on {} (TFIN-463).
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -658,7 +664,9 @@ func setCTEClientState(
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
-	if apiResp.Labels != nil {
+	// Normalize an absent/nil or empty {} labels response to null so the
+	// resource can converge once labels have ever been set (TFIN-463).
+	if len(apiResp.Labels) > 0 {
 		labelsMap := map[string]attr.Value{}
 		for k, v := range apiResp.Labels {
 			if strVal, ok := v.(string); ok {
@@ -671,6 +679,8 @@ func setCTEClientState(
 			return
 		}
 		state.Labels = labels
+	} else {
+		state.Labels = types.MapNull(types.StringType)
 	}
 
 }
