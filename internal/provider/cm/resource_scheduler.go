@@ -27,10 +27,11 @@ import (
 )
 
 var (
-	_ resource.Resource                = &resourceScheduler{}
-	_ resource.ResourceWithConfigure   = &resourceScheduler{}
-	_ resource.ResourceWithImportState = &resourceScheduler{}
-	_ resource.ResourceWithModifyPlan  = &resourceScheduler{}
+	_ resource.Resource                   = &resourceScheduler{}
+	_ resource.ResourceWithConfigure      = &resourceScheduler{}
+	_ resource.ResourceWithImportState    = &resourceScheduler{}
+	_ resource.ResourceWithModifyPlan     = &resourceScheduler{}
+	_ resource.ResourceWithValidateConfig = &resourceScheduler{}
 
 	runAt = `Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
 
@@ -69,6 +70,35 @@ type resourceScheduler struct {
 
 func (r *resourceScheduler) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_scheduler"
+}
+
+// ValidateConfig enforces that at most one of the four mutually-exclusive params blocks
+// is configured at a time (TFIN-558). Validation uses the resource's TFSDK model so the
+// framework correctly handles unknown/null values in nested blocks before we check.
+func (r *resourceScheduler) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config CreateJobConfigParamsTFSDK
+	diags := req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var names []string
+	if config.DatabaseBackupParams != nil           { names = append(names, "database_backup_params") }
+	if config.CCKMKeyRotationParams != nil          { names = append(names, "cckm_key_rotation_params") }
+	if config.CCKMSynchronizationParams != nil      { names = append(names, "cckm_synchronization_params") }
+	if config.CCKMXksRotateCredentialsParams != nil { names = append(names, "cckm_xks_credential_rotation_params") }
+
+	if len(names) > 1 {
+		resp.Diagnostics.AddError(
+			"Mutually exclusive params blocks",
+			fmt.Sprintf(
+				"Only one of the params blocks may be set at a time; got: %s. "+
+					"Remove all but one params block.",
+				strings.Join(names, ", "),
+			),
+		)
+	}
 }
 
 // Schema defines the schema for the resource.
@@ -407,14 +437,19 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
+	// start_date / end_date: omit empty string from the POST payload (TFIN-557).
+	// CM's create endpoint rejects "" with HTTP 400; the update endpoint accepts it
+	// as a "clear" sentinel. Omitting the field on create is equivalent to leaving it unset.
 	if !plan.StartDate.IsNull() && !plan.StartDate.IsUnknown() {
-		v := plan.StartDate.ValueString()
-		payload.StartDate = &v
+		if v := plan.StartDate.ValueString(); v != "" {
+			payload.StartDate = &v
+		}
 	}
 
 	if !plan.EndDate.IsNull() && !plan.EndDate.IsUnknown() {
-		v := plan.EndDate.ValueString()
-		payload.EndDate = &v
+		if v := plan.EndDate.ValueString(); v != "" {
+			payload.EndDate = &v
+		}
 	}
 
 	payloadJSON, err := json.Marshal(payload)
