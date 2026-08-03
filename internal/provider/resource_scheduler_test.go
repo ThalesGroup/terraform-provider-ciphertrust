@@ -543,7 +543,7 @@ resource "ciphertrust_scheduler" "test" {
   run_at     = "0 9 * * sat"
   start_date = ""
   end_date   = ""
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name = "aws"
   }
 }`, name),
@@ -570,10 +570,10 @@ resource "ciphertrust_scheduler" "test" {
   name      = "tf-sched-mutex-probe"
   operation = "cckm_key_rotation"
   run_at    = "0 9 * * sat"
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name = "aws"
   }
-  cckm_synchronization_params {
+  cckm_synchronization_params = {
     cloud_name = "aws"
   }
 }`,
