@@ -347,9 +347,7 @@ func (r *resourceCTEClientGroup) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_CLIENT_GROUP)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client Group ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 

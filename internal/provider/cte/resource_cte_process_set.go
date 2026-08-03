@@ -229,9 +229,7 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_PROCESS_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Process Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResp CTEProcessSetJSON

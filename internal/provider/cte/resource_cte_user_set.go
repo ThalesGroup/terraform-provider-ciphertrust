@@ -241,9 +241,7 @@ func (r *resourceCTEUserSet) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_USER_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE User Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 

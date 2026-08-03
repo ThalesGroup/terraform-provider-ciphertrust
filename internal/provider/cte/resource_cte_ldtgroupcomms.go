@@ -157,9 +157,7 @@ func (r *resourceLDTGroupCommSvc) Read(ctx context.Context, req resource.ReadReq
 
 	// Fetch LDT group details
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_LDT_GROUP_COMM_SVC)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE LDT Group Communication Service ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
