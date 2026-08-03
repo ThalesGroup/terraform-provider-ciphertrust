@@ -610,9 +610,9 @@ resource "ciphertrust_password_policy" "test" {
 }
 
 // Test_CM_PasswordPolicy_ZeroMinLengthNoRegression verifies that setting
-// inclusive_min_total_length = 0 does NOT produce a perpetual plan diff.
-// The UseStateWhenZeroInt64 plan modifier intercepts 0, substitutes the prior
-// state value (10), and the effective plan equals state — no diff.
+// inclusive_min_total_length = 0 on an existing resource is rejected at plan time
+// (TFIN-553: int64validator.AtLeast(1) added). Before the fix, UseStateWhenZeroInt64
+// would intercept 0 and produce an empty plan; now 0 is rejected outright.
 func Test_CM_PasswordPolicy_ZeroMinLengthNoRegression(t *testing.T) {
 	RequireCM(t)
 	policyName := "tf-test-pp-zmr-" + uuid.New().String()[:8]
@@ -649,12 +649,13 @@ resource "ciphertrust_password_policy" "test" {
 				),
 			},
 			// Step 2: plan-only with inclusive_min_total_length = 0.
-			// The UseStateWhenZeroInt64 modifier substitutes 0 with the prior state value (10),
-			// so the effective plan equals state and the plan must be empty.
+			// The AtLeast(1) validator now rejects 0 outright at plan time (TFIN-553).
+			// The plan must fail with a clear validator error rather than silently succeeding
+			// or crashing after orphaning a resource on CM.
 			{
-				Config:             baseConfig(0),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				Config:      baseConfig(0),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
 			},
 		},
 	})
