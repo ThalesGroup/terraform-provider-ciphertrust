@@ -755,3 +755,70 @@ resource "ciphertrust_password_policy" "lifecycle_test" {
 		},
 	})
 }
+
+// Test_CM_PasswordPolicy_ZeroMinTotalLengthRejectedAtPlan verifies that
+// inclusive_min_total_length = 0 is rejected at plan time (TFIN-553).
+// Before the fix, 0 would pass planning, CM would assign its default (8), and
+// Terraform would crash with "Provider produced inconsistent result after apply".
+func Test_CM_PasswordPolicy_ZeroMinTotalLengthRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+	name := "tf-ppol-zero-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_total_length = 0
+}`, name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_UseStateForUnknownOnUpdate verifies that unchanged
+// Optional+Computed fields do not show "(known after apply)" when an unrelated
+// field has a genuine pending change (TFIN-555 regression test).
+func Test_CM_PasswordPolicy_UseStateForUnknownOnUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tf-ppol-usfu-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with two fields set.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_digits       = 1
+  inclusive_min_upper_case   = 1
+}`, name),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+				),
+			},
+			{
+				// Step 2: change one field; the other must NOT become "(known after apply)".
+				// With UseStateForUnknown(), stable fields keep their current state value.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_digits       = 2
+  inclusive_min_upper_case   = 1
+}`, name),
+				Check: checkStep(t, "update one field — sibling stays stable",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+				),
+				// A clean subsequent plan confirms no drift from the UseStateForUnknown() modifiers.
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
