@@ -261,6 +261,9 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Delete(ctx context.Context,
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Client Group Designated Primary Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Client Group Designated Primary Set",
 			"Could not delete Designated Primary Set, unexpected error: "+err.Error(),

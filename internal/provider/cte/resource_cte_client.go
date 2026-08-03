@@ -558,6 +558,9 @@ func (r *resourceCTEClient) Delete(ctx context.Context, req resource.DeleteReque
 	output, err := r.client.DeleteByID(ctx, "PATCH", state.ID.ValueString(), url, PayloadJSON)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Client "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust CTE Client",
 			"Could not delete CTE Client, unexpected error: "+err.Error(),

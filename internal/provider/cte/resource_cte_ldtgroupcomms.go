@@ -415,6 +415,9 @@ func (r *resourceLDTGroupCommSvc) Delete(ctx context.Context, req resource.Delet
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_ldtgroupcomms.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "LDT Group Communication Service "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting LDT Group Communication Service",
 			"Could not delete LDT Group Communication Service, unexpected error: "+err.Error(),

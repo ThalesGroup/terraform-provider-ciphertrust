@@ -363,6 +363,9 @@ func (r *resourceCTEProcessSet) Delete(ctx context.Context, req resource.DeleteR
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Process Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Process Set",
 			"Could not delete CTE Process Set, unexpected error: "+err.Error(),

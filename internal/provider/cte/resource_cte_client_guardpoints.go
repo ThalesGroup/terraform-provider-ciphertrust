@@ -667,11 +667,13 @@ func (r *resourceCTEClientGP) Delete(ctx context.Context, req resource.DeleteReq
 	)
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client_guardpoints.go -> Delete/Unguard]["+state.ID.ValueString()+"]["+output+"]")
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting/Unguarding CipherTrust CTE Client Guardpoint",
-			"Could not delete/unguard CTE Client Guardpoint, unexpected error: "+err.Error(),
-		)
-		return
+		if !handleDeleteNotFound(err, "CTE Client Guardpoint "+state.ID.ValueString(), &resp.Diagnostics) {
+			resp.Diagnostics.AddError(
+				"Error Deleting/Unguarding CipherTrust CTE Client Guardpoint",
+				"Could not delete/unguard CTE Client Guardpoint, unexpected error: "+err.Error(),
+			)
+			return
+		}
 	}
 
 	resp.State.RemoveResource(ctx)
