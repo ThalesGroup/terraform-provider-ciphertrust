@@ -641,21 +641,20 @@ resource "ciphertrust_password_policy" "test" {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: establish baseline with inclusive_min_total_length = 10.
 			{
-				Config: baseConfig(10),
-				Check: checkStep(t, "baseline min_length=10",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
-				),
-			},
-			// Step 2: plan-only with inclusive_min_total_length = 0.
-			// The AtLeast(1) validator now rejects 0 outright at plan time (TFIN-553).
-			// The plan must fail with a clear validator error rather than silently succeeding
-			// or crashing after orphaning a resource on CM.
-			{
+				// Step 1 (PlanOnly): verify 0 is rejected at plan time, even on a fresh resource.
+				// No resource is created — the plan fails before applying.
 				Config:      baseConfig(0),
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+			{
+				// Step 2: create with a valid value. Post-test destroy uses the final step's
+				// config — must not contain 0 or the AtLeast(1) validator blocks destroy too.
+				Config: baseConfig(10),
+				Check: checkStep(t, "create with valid min_length=10",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
+				),
 			},
 		},
 	})
