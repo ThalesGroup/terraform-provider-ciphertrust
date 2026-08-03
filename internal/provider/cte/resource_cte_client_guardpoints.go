@@ -71,7 +71,10 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 							Attributes: map[string]schema.Attribute{
 								"guard_point_type": schema.StringAttribute{
 									Required:    true,
-									Description: "Type of the GuardPoint.",
+									Description: "Type of the GuardPoint. Changing this value forces the guard path to be destroyed and recreated, since guard_point_type is immutable once a GuardPoint is created.",
+									PlanModifiers: []planmodifier.String{
+										stringplanmodifier.RequiresReplace(),
+									},
 								},
 								"policy_id": schema.StringAttribute{
 									Required:    true,
