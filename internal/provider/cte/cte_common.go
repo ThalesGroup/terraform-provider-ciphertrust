@@ -25,6 +25,9 @@ func handleDeleteNotFound(err error, resourceLabel string, diags *diag.Diagnosti
 	diags.AddWarning(
 		fmt.Sprintf("%s already deleted", resourceLabel),
 		fmt.Sprintf("%s was not found on CipherTrust Manager during delete, indicating it was already removed out-of-band (e.g. console, direct API, or a DR operation). Treating delete as successful.", resourceLabel),
+	)
+	return true
+}
 // handleReadNotFound centralizes CTE resource Read() 404/error handling.
 // On err == nil it does nothing and returns false (caller proceeds normally).
 // On a genuine error it adds a diagnostic error. On a 404 specifically it
