@@ -35,8 +35,9 @@ const awsDefaultCloudName = "aws"
 const awsDefaultSTSEndpoints = "legacy"
 
 var (
-	_ resource.Resource              = &resourceCCKMAWSConnection{}
-	_ resource.ResourceWithConfigure = &resourceCCKMAWSConnection{}
+	_ resource.Resource                = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithConfigure   = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithModifyPlan  = &resourceCCKMAWSConnection{}
 )
 
 func NewResourceCCKMAWSConnection() resource.Resource {
@@ -213,7 +214,10 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				ElementType: types.StringType,
 				Description: "Array of the CipherTrust products associated with the connection. " +
 					"Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. " +
-					"Any other value is rejected by CipherTrust Manager with a 422 error.",
+					"Any other value is rejected by CipherTrust Manager with a 422 error. " +
+					"Note: once set, this field cannot be cleared back to unset via Terraform. " +
+					"The CM API silently ignores an empty products list on update; the prior value is preserved in state and a warning is emitted. " +
+					"To remove all products, destroy and recreate the resource.",
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(
 						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
@@ -274,6 +278,41 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 		},
+	}
+}
+
+// ModifyPlan enforces the products-clear restriction at plan time (TFIN-479).
+// The CM PATCH endpoint silently ignores an empty products list, so a transition
+// from a non-empty list to null/[] would silently no-op and then cause perpetual
+// drift on every subsequent plan. Block the operation with a clear diagnostic
+// so the user understands they must destroy and recreate to remove products.
+func (r *resourceCCKMAWSConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Only relevant for updates (both state and plan are non-null).
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state AWSConnectionModelTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var plan AWSConnectionModelTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Block: non-empty products → null/empty (clearing is unsupported by the CM API).
+	if len(state.Products) > 0 && len(plan.Products) == 0 {
+		resp.Diagnostics.AddError(
+			"Cannot clear products: unsupported by CipherTrust Manager API",
+			"CipherTrust Manager does not support clearing the products field once it has been "+
+				"set (the PATCH endpoint silently ignores an empty list). "+
+				"Remove this change from your configuration, or destroy and recreate the resource "+
+				"to remove all products.",
+		)
 	}
 }
 
