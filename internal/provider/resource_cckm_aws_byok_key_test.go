@@ -624,7 +624,8 @@ func TestCckmAWSByokKeyMultiRegionAndMakePrimary(t *testing.T) {
 				// Step 1: create primary EXTERNAL multi-region key with source material.
 				// Verify key is Enabled, multi_region=true, and multi_region_configuration
 				// identifies this key as PRIMARY with no replicas yet.
-				Config: base + primaryConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    base + primaryConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(primaryResource, "id"),
 					resource.TestCheckResourceAttrSet(primaryResource, "aws_param.arn"),
@@ -641,7 +642,8 @@ func TestCckmAWSByokKeyMultiRegionAndMakePrimary(t *testing.T) {
 				// The replica inherits key material from the primary automatically.
 				// The replica is made the primary key after replication
 				// Verify the replica is now the PRIMARY
-				Config: base + primaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    base + primaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
 					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
@@ -659,7 +661,8 @@ func TestCckmAWSByokKeyMultiRegionAndMakePrimary(t *testing.T) {
 			},
 			{
 				// Step 3: Verify the original primary key is now a replica
-				Config: base + primaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 4") },
+				Config:    base + primaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
@@ -731,7 +734,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 1: create primary EXTERNAL multi-region key with source material.
 				// Verify key is Enabled, multi_region=true, and multi_region_configuration
 				// identifies this key as PRIMARY with no replicas yet.
-				Config: base + primaryConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    base + primaryConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(primaryResource, "id"),
 					resource.TestCheckResourceAttrSet(primaryResource, "aws_param.arn"),
@@ -747,7 +751,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 2: replicate the primary to a second region.
 				// The replica inherits key material from the primary automatically.
 				// Verify the replica is REPLICA and the primary now shows 1 replica.
-				Config: base + primaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    base + primaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
@@ -765,7 +770,8 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				// Step 3: promote the replica to primary via primary_region
 				// The replica's multi_region_configuration.multi_region_key_type becomes PRIMARY.
 				// The old primary becomes REPLICA. Both keys remain Enabled.
-				Config: base + makeReplicaPrimaryConfig + replicaConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 3") },
+				Config:    base + makeReplicaPrimaryConfig + replicaConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 					// At this point the replicaResource will still show REPLICA - a refresh is required
@@ -774,6 +780,7 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				),
 			},
 			{
+				PreConfig:    func() { logTestStep(t.Name(), "Step 4") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
@@ -794,6 +801,251 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsByokKey,
 				ImportStateIdFunc:       getResourceAttr(replicaResource, "id"),
+			},
+		},
+	})
+}
+
+// TestCckmAWSByokKeyMultiRegionReplication tests that when a multi-region EXTERNAL (BYOK)
+// primary key has multiple key materials (rotations), replicating it to a second region
+// copies all materials to the replica. The replica should show the same rotation_history
+// count as the primary, with all entries IMPORTED and the current material CURRENT.
+//
+// Steps:
+//  1. Create primary MR EXTERNAL key with material 1 (via source_key_identifier).
+//  2. Add material 2 via ciphertrust_aws_key_material. Primary rotation_history.#=2.
+//  3. Add material 3. Primary rotation_history.#=3.
+//  4. Add material 4. Primary rotation_history.#=4.
+//  5. Replicate to regions[1]. Verify replica rotation_history.#=4, all IMPORTED,
+//     key_state=Enabled.
+//  6. RefreshState - confirm plan is stable.
+func TestCckmAWSByokKeyMultiRegionReplication(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	replicaAlias := "tf-" + uuid.New().String()[8:]
+
+	// Extra CM keys for materials 2-4. All names are derived from cmKeyName so they are
+	// unique per test run without requiring additional uuid calls.
+	cmExtraKeysConfig := `
+		locals {
+			cmKeyName2 = "${local.cmKeyName}-2"
+			cmKeyName3 = "${local.cmKeyName}-3"
+			cmKeyName4 = "${local.cmKeyName}-4"
+		}
+		resource "ciphertrust_cm_key" "cm_aes_key2" {
+			name      = local.cmKeyName2
+			algorithm = "AES"
+		}
+		resource "ciphertrust_cm_key" "cm_aes_key3" {
+			name      = local.cmKeyName3
+			algorithm = "AES"
+		}
+		resource "ciphertrust_cm_key" "cm_aes_key4" {
+			name      = local.cmKeyName4
+			algorithm = "AES"
+		}`
+
+	// primaryConfig creates the primary EXTERNAL multi-region key with material 1.
+	primaryConfig := `
+		resource "ciphertrust_aws_byok_key" "mr_primary" {
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier       = "local"
+			aws_param = {
+				alias        = [local.alias]
+				multi_region = true
+			}
+		}`
+
+	// addMaterial2Config rotates to material 2.
+	addMaterial2Config := `
+		resource "ciphertrust_aws_key_material" "km" {
+			aws_key_id = ciphertrust_aws_byok_key.mr_primary.aws_param.key_id
+			key_material = [
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key2.id
+					source_key_tier       = "local"
+				},
+			]
+		}`
+
+	// addMaterial3Config rotates to material 3.
+	addMaterial3Config := `
+		resource "ciphertrust_aws_key_material" "km" {
+			aws_key_id = ciphertrust_aws_byok_key.mr_primary.aws_param.key_id
+			key_material = [
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key2.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key3.id
+					source_key_tier       = "local"
+				},
+			]
+		}`
+
+	// addMaterial4Config rotates to material 4.
+	addMaterial4Config := `
+		resource "ciphertrust_aws_key_material" "km" {
+			aws_key_id = ciphertrust_aws_byok_key.mr_primary.aws_param.key_id
+			key_material = [
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key2.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key3.id
+					source_key_tier       = "local"
+				},
+				{
+					source_key_identifier = ciphertrust_cm_key.cm_aes_key4.id
+					source_key_tier       = "local"
+				},
+			]
+		}`
+
+	// replicaConfig adds a replica key in the second region.
+	replicaConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_byok_key" "mr_replica" {
+			region = ciphertrust_aws_kms.kms.regions[1]
+			replicate_key = {
+				key_id = ciphertrust_aws_byok_key.mr_primary.id
+			}
+			aws_param = {
+				alias = ["%s"]
+			}
+		}`, replicaAlias)
+
+	primaryResource := "ciphertrust_aws_byok_key.mr_primary"
+	replicaResource := "ciphertrust_aws_byok_key.mr_replica"
+	base := awsConnectionResource + cmAesKeyConfig + cmExtraKeysConfig
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create primary EXTERNAL multi-region key with material 1.
+				// Verify key is Enabled, multi_region=true, and rotation_history.#=1.
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    base + primaryConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(primaryResource, "id"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.origin", "EXTERNAL"),
+					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.#", "1"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.key_material_state", "CURRENT"),
+				),
+			},
+			{
+				// Step 2: apply material 2. The km resource is created; the byok key is not
+				// modified so Terraform does not re-read it in this apply step.
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    base + primaryConfig + addMaterial2Config,
+			},
+			{
+				// Step 3: refresh state so the byok key is re-read and rotation_history is current.
+				// Verify rotation_history.#=2: cm_aes_key2 CURRENT, cm_aes_key NON_CURRENT.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 3") },
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.#", "2"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.key_material_state", "CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.key_material_state", "NON_CURRENT"),
+				),
+			},
+			{
+				// Step 4: apply material 3.
+				PreConfig: func() { logTestStep(t.Name(), "Step 4") },
+				Config:    base + primaryConfig + addMaterial3Config,
+			},
+			{
+				// Step 5: refresh state - verify rotation_history.#=3. All IMPORTED.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 5") },
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.#", "3"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.key_material_state", "CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.key_material_state", "NON_CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.2.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.2.key_material_state", "NON_CURRENT"),
+				),
+			},
+			{
+				// Step 6: apply material 4.
+				PreConfig: func() { logTestStep(t.Name(), "Step 6") },
+				Config:    base + primaryConfig + addMaterial4Config,
+			},
+			{
+				// Step 7: refresh state - verify rotation_history.#=4. All IMPORTED.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 7") },
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.#", "4"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.0.key_material_state", "CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.1.key_material_state", "NON_CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.2.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.2.key_material_state", "NON_CURRENT"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.3.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(primaryResource, "rotation_history.3.key_material_state", "NON_CURRENT"),
+				),
+			},
+			{
+				// Step 8: replicate the primary (4 materials) to regions[1].
+				// The replica should inherit all 4 materials with full import parity.
+				PreConfig: func() { logTestStep(t.Name(), "Step 8") },
+				Config:    base + primaryConfig + addMaterial4Config + replicaConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.key_state", "Enabled"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.origin", "EXTERNAL"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					// Replica must have the same number of rotation history entries as the primary.
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.#", "4"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.0.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.0.key_material_state", "CURRENT"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.1.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.1.key_material_state", "NON_CURRENT"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.2.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.2.key_material_state", "NON_CURRENT"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.3.import_state", "IMPORTED"),
+					resource.TestCheckResourceAttr(replicaResource, "rotation_history.3.key_material_state", "NON_CURRENT"),
+				),
+			},
+			{
+				// Step 9: refresh state - confirm plan is stable with no drift.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 9") },
+				RefreshState: true,
 			},
 		},
 	})

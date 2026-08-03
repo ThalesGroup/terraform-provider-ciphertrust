@@ -915,25 +915,10 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		}
 
 		// Refresh the primary key so CM re-checks AWS.
-		filters := url.Values{
-			"skip":  []string{"0"},
-			"limit": []string{"-1"},
-			"sort":  []string{"-RotationDate"},
-		}
-		endpoint := "api/v1/cckm/aws/keys/" + keyID + "/rotations"
-		rotationsJSON, err := r.client.ListWithFilters(ctx, id, endpoint, filters)
-		if err == nil {
-			resources := gjson.Get(rotationsJSON, "resources").Array()
-			var sourceKeyIDs []string
-			for _, item := range resources {
-				if item.Get("source_key_identifier").String() != "" {
-					sourceKeyIDs = append(sourceKeyIDs, item.Get("source_key_identifier").String())
-				}
-			}
-			primaryKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-			if getErr == nil {
-				RefreshKeyAndWait(ctx, id, r.client, keyID, primaryKeyJSON, sourceKeyIDs, diags)
-			}
+		sourceKeyIDs := listKeyMaterialSourceKeyIDs(ctx, id, r.client, keyID)
+		primaryKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+		if getErr == nil {
+			RefreshKeyAndWait(ctx, id, r.client, keyID, primaryKeyJSON, sourceKeyIDs, diags)
 		}
 	}
 }
