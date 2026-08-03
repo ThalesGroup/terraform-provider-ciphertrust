@@ -661,8 +661,9 @@ resource "ciphertrust_password_policy" "test" {
 	})
 }
 
-// Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that planning inclusive_min_total_length = 0
-// triggers the custom plan modifier, preserving state value to prevent perpetual plan drift.
+// Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that inclusive_min_total_length = 0
+// is rejected at plan time by AtLeast(1) validator (TFIN-553). Previously UseStateWhenZeroInt64
+// silently intercepted 0; now 0 is rejected outright before any plan diff is produced.
 func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdZero-" + uuid.New().String()[:8]
@@ -682,22 +683,15 @@ resource "ciphertrust_password_policy" "zero_test" {
 				),
 			},
 			{
-				// Plan with inclusive_min_total_length = 0. The UseStateWhenZeroInt64 modifier
-				// substitutes 0 with the prior state value (10) so that field causes no diff.
-				// However Read() unconditionally hydrates Optional+Computed Int64 fields (e.g.
-				// inclusive_max_total_length) from the CM response even when prior state was null,
-				// producing a perpetual (known after apply) diff. ExpectNonEmptyPlan: true
-				// documents this known pre-existing behaviour for unset Optional Int64 fields.
+				// AtLeast(1) validator rejects 0 at plan time — no modifier intercept needed.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "zero_test" {
   policy_name                = %q
   inclusive_min_total_length = 0
 }
 `, policyName),
-				ExpectNonEmptyPlan: true,
-				Check: checkStep(t, "zero-test: update to 0",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
-				),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
 			},
 		},
 	})
