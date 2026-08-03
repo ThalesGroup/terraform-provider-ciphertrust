@@ -509,8 +509,8 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if plan.KeyPolicy != nil {
 		planUpdate.KeyPolicy = plan.KeyPolicy
 	}
-	if planAwsParam != nil && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsUnknown() {
-		planUpdate.Description = planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description
+	if planAwsParam != nil && !planAwsParam.Description.IsNull() && !planAwsParam.Description.IsUnknown() {
+		planUpdate.Description = planAwsParam.Description
 	}
 	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -518,16 +518,16 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	if planAwsParam != nil {
-		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
-			updateAliases(ctx, id, r.client, keyID, planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
+		if !planAwsParam.Alias.IsNull() && !planAwsParam.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, keyID, planAwsParam.Alias, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
-			planTagsMap := make(map[string]string, len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
-			if len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
-				resp.Diagnostics.Append(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
+		if !planAwsParam.Tags.IsNull() && !planAwsParam.Tags.IsUnknown() {
+			planTagsMap := make(map[string]string, len(planAwsParam.Tags.Elements()))
+			if len(planAwsParam.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(planAwsParam.Tags.ElementsAs(ctx, &planTagsMap, false)...)
 				if resp.Diagnostics.HasError() {
 					return
 				}
@@ -683,7 +683,7 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 			if xksP != nil {
-				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+				if len(xksP.Alias.Elements()) > 1 {
 					createInvalid = append(createInvalid, "aws_param.alias (only one alias may be set at creation; add more via update)")
 				}
 			}
@@ -709,8 +709,8 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 			if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 				xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 				if xksP != nil {
-					if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
-						len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
+					if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
+						len(xksP.Tags.Elements()) > 0 {
 						unlinkedInvalid = append(unlinkedInvalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
 					}
 				}
@@ -738,11 +738,11 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 			if xksP != nil {
-				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+				if len(xksP.Alias.Elements()) > 1 {
 					invalid = append(invalid, "aws_param.alias (more than one alias)")
 				}
-				if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
-					len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
+				if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
+					len(xksP.Tags.Elements()) > 0 {
 					invalid = append(invalid, "aws_param.tags")
 				}
 			}
@@ -822,30 +822,30 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 	if p == nil {
 		p = &AWSXKSKeyAwsParamTFSDK{}
 	}
-	setAliases(response, &p.AWSKeyStoreCommonAwsParamTFSDK.Alias, diags)
-	setKeyTags(ctx, response, &p.AWSKeyStoreCommonAwsParamTFSDK.Tags, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	setAliases(response, &p.Alias, diags)
+	setKeyTags(ctx, response, &p.Tags, diags)
+	p.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	p.AWSKeyStoreCommonAwsParamTFSDK.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	p.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	p.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	p.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
+	p.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	p.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
+	p.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	p.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	p.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	p.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	p.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	p.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	p.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	p.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	p.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
+	p.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
 	policy := gjson.Get(response, "aws_param.Policy").String()
 	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
-		!getPoliciesAreEqual(r.client, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
+		p.Policy.IsNull() || p.Policy.IsUnknown() ||
+		!getPoliciesAreEqual(r.client, policy, p.Policy.ValueString(), diags) {
+		p.Policy = types.StringValue(policy)
 	}
 	// XKS-specific computed field: populate the nested xks_key_configuration object.
 	// Set to nil (null object) when the key is unlinked or the ID is not yet populated.

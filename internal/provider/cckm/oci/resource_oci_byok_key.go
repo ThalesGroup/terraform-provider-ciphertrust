@@ -417,7 +417,7 @@ func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequ
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	response, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
+	response := getOciKey(ctx, id, r.client, vaultID, keyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -458,7 +458,7 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 	keyID := state.ID.ValueString()
 
 	vaultID := state.Vault.ValueString()
-	preCheckResponse, _ := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
+	preCheckResponse := getOciKey(ctx, id, r.client, vaultID, keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

@@ -102,7 +102,7 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 
 // deleteOCIKey schedules an OCI key for deletion.
 func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, days int64, diags *diag.Diagnostics) {
-	keyJSON, _ := getOciKey(ctx, id, client, vaultID, keyID, "deleting", diags)
+	keyJSON := getOciKey(ctx, id, client, vaultID, keyID, "deleting", diags)
 	if diags.HasError() {
 		return // key error - resource kept in state
 	}
@@ -200,7 +200,7 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 //
 // A non-404 key error is always a hard error; ("", false) is returned.
 // Callers that do not know the vault ID at call time (e.g. getOciKeyVersion) should pass "".
-func getOciKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, opLabel string, diags *diag.Diagnostics) (string, bool) {
+func getOciKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
 	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -209,7 +209,7 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 				client.Log.Warn(details)
 				diags.AddWarning(details, "")
-				return "", false
+				return ""
 			}
 			if vaultID != "" {
 				_, vaultErr := client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
@@ -232,21 +232,21 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 					client.Log.Error(details)
 					diags.AddError(details, "")
 				}
-				return "", false
+				return ""
 			}
 			msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI key")
 			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 			client.Log.Error(details)
 			diags.AddError(details, "")
-			return "", false
+			return ""
 		}
 		msg := "Error " + opLabel + " OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return "", false
+		return ""
 	}
-	return response, false
+	return response
 }
 
 // setKeyState sets the full Terraform state.

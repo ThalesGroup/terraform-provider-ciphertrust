@@ -399,7 +399,7 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 		}
 		if planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != "" && planAWSParamTFSDK.TrustAnchorCertificate.ValueString() != types.StringNull().ValueString() {
 			cert := planAWSParamTFSDK.TrustAnchorCertificate.ValueString()
-			cert = strings.Replace(cert, "\r\n", "\n", -1)
+			cert = strings.ReplaceAll(cert, "\r\n", "\n")
 			awsParamJSON.TrustAnchorCertificate = cert
 		}
 		if planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != "" && planAWSParamTFSDK.XKSProxyConnectivity.ValueString() != types.StringNull().ValueString() {
