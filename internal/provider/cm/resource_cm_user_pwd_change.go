@@ -54,22 +54,21 @@ func (r *resourceCMPwdChange) Schema(_ context.Context, _ resource.SchemaRequest
 				},
 			},
 			"password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
-				WriteOnly:   true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				Required:  true,
+				Sensitive: true,
+				WriteOnly: true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				// No ImmutableString() modifier: WriteOnly attributes are never stored in state,
+				// so the modifier has nothing to compare on re-plan (both state and plan are null).
+				// Adding ImmutableString() to a WriteOnly attribute interferes with how Terraform
+				// populates req.Config for variable-referenced values.
 				Description: "(Immutable) Current password for the user.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"new_password": schema.StringAttribute{
-				Required:    true,
-				Sensitive:   true,
-				WriteOnly:   true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				Required:  true,
+				Sensitive: true,
+				WriteOnly: true, // never written to state (requires Terraform ≥ 1.11) — matches ciphertrust_user.password
+				// No ImmutableString() modifier — see password above.
 				Description: "(Immutable) New password to set for the user.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"auth_domain": schema.StringAttribute{
 				Optional:    true,
