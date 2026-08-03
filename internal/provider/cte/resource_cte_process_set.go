@@ -296,7 +296,12 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = common.TrimString(plan.Description.String())
 	}
-	var processes []CTEProcessJSON
+	// Initialize as an empty (non-nil) slice so that when plan.Processes is
+	// empty, the PATCH body explicitly sends "processes": [] rather than
+	// omitting/nulling the field. CM's PATCH semantics leave a field
+	// unchanged when it is absent or null, so an explicit empty array is
+	// required to actually clear previously-set processes (TFIN-498).
+	processes := []CTEProcessJSON{}
 	for _, process := range plan.Processes {
 		var processJSON CTEProcessJSON
 		if process.Directory.ValueString() != "" && process.Directory.ValueString() != types.StringNull().ValueString() {
