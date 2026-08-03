@@ -819,3 +819,26 @@ func snapshotKeyForRefresh(ctx context.Context, id string, client *common.Client
 	target.sentinelUpdatedAt = resources[0].Get("updatedAt").String()
 	return target
 }
+
+// listKeyMaterialSourceKeyIDs lists the rotation history for a key and returns the
+// source_key_identifier values from all rotation records. Returns nil on error.
+func listKeyMaterialSourceKeyIDs(ctx context.Context, id string, client *common.Client, keyID string) []string {
+	filters := url.Values{
+		"skip":  []string{"0"},
+		"limit": []string{"-1"},
+		"sort":  []string{"-RotationDate"},
+	}
+	endpoint := "api/v1/cckm/aws/keys/" + keyID + "/rotations"
+	rotationsJSON, err := client.ListWithFilters(ctx, id, endpoint, filters)
+	if err != nil {
+		return nil
+	}
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> listKeyMaterialSourceKeyIDs] keyID: %s rotationsJSON: %s", keyID, rotationsJSON))
+	var sourceKeyIDs []string
+	for _, item := range gjson.Get(rotationsJSON, "resources").Array() {
+		if s := item.Get("source_key_identifier").String(); s != "" {
+			sourceKeyIDs = append(sourceKeyIDs, s)
+		}
+	}
+	return sourceKeyIDs
+}
