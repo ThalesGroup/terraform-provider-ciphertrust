@@ -9,11 +9,15 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
@@ -100,60 +104,103 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"failed_logins_lockout_thresholds": schema.ListAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 				ElementType: types.Int64Type,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+				Description: "List of lockout durations in minutes for failed login attempts. For example, with input of [0, 5, 30], the first failed login attempt with duration of zero will not lockout the user account, the second failed login attempt will lockout the account for 5 minutes, the third and subsequent failed login attempts will lockout for 30 minutes. Set an empty array '[]' to disable the user account lockout.",
 			},
 			"inclusive_max_total_length": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "The maximum length of the password. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
+				// TFIN-554: CM genuinely accepts and persists 0 for this field (confirmed live).
+				// The previous "0 is ignored" description was incorrect.
+				Description: "The maximum length of the password. Set 0 to remove the upper limit.",
 			},
 			"inclusive_min_digits": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The minimum number of digits.",
 			},
 			"inclusive_min_lower_case": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The minimum number of lower cases.",
 			},
 			"inclusive_min_other": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The minimum number of other characters.",
 			},
 			"inclusive_min_total_length": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					// TFIN-553: CM silently ignores 0 and assigns its own default (8), causing a
+					// post-apply consistency crash (plan=0, state=8). Reject 0 at plan time so
+					// users see a clear error instead of an orphaned resource on CM.
+					int64validator.AtLeast(1),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					modifiers.UseStateWhenZeroInt64(),
+					int64planmodifier.UseStateForUnknown(),
 				},
-				Description: "The minimum length of the password. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
+				Description: "The minimum length of the password. Must be ≥ 1 if specified — " +
+					"CM ignores 0 and silently applies its own default, causing a post-apply consistency error. " +
+					"Omit this field to let CM control the minimum length.",
 			},
 			"inclusive_min_upper_case": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The minimum number of upper cases.",
 			},
 			"password_change_min_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "The minimum period in days between password changes. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
+				// TFIN-554: CM genuinely accepts and persists 0 for this field (confirmed live).
+				Description: "The minimum period in days between password changes. Set 0 to remove this restriction.",
 			},
 			"password_history_threshold": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "Determines the number of past passwords a user cannot reuse. Even with value 0, the user will not be able to change their password to the same password.",
 			},
 			"password_lifetime": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
-				Description: "The maximum lifetime of the password in days. Setting 0 is ignored by CipherTrust Manager once a non-zero value is set; the provider will preserve the active server value in state to prevent perpetual plan drift.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
+				// TFIN-554: CM genuinely accepts and persists 0 for this field (confirmed live).
+				Description: "The maximum lifetime of the password in days. Set 0 to disable password expiry.",
 			},
 			"password_expiry_notification_days": schema.Int64Attribute{
-				Optional:    true,
-				Computed:    true,
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 				Description: "The number of days before password expiration to send a notification.",
 			},
 		},
