@@ -112,6 +112,48 @@ func TestCTEProcessSetResource_nameRequiresReplace(t *testing.T) {
 	})
 }
 
+// TestCTEProcessSetResource_processesClearing verifies that removing processes
+// from config actually clears them in CM and does not create a permanent plan
+// loop (TFIN-498).
+func TestCTEProcessSetResource_processesClearing(t *testing.T) {
+	name := "tf-procset-clear-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with a process entry
+			{
+				Config: cteProcessSetConfig(name, "Created via TF", false),
+				Check: checkStep(t, "process_set processes: create with processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "1"),
+				),
+			},
+			// Remove processes from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				Check: checkStep(t, "process_set processes: remove processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "0"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-498)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEProcessSetResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
 func TestCTEProcessSetResource_drift(t *testing.T) {

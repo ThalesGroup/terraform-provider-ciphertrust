@@ -188,6 +188,38 @@ func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
 	})
 }
 
+// cteClientCacheLogConfig renders a client that explicitly configures
+// max_num_cache_log/max_space_cache_log, both of which CipherTrust Manager
+// silently ignores at the client level (TFIN-467).
+func cteClientCacheLogConfig(name string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  max_num_cache_log        = 200
+  max_space_cache_log      = 100
+}
+`, name)
+}
+
+// TestCTEClientResource_cacheLogNonFunctional verifies that configuring
+// max_num_cache_log/max_space_cache_log is rejected up front with an explicit
+// error, instead of silently no-oping against CipherTrust Manager and
+// producing a perpetual, unresolvable plan diff (TFIN-467).
+func TestCTEClientResource_cacheLogNonFunctional(t *testing.T) {
+	name := "tf-client-cachelog-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      cteClientCacheLogConfig(name),
+				ExpectError: regexp.MustCompile(`(?i)non-functional field for cte client`),
+			},
+		},
+	})
+}
+
 // TestCTEClientResource_drift mutates the description out-of-band and asserts the
 // next plan is non-empty.
 func TestCTEClientResource_drift(t *testing.T) {
@@ -212,6 +244,66 @@ func TestCTEClientResource_drift(t *testing.T) {
 				Config:             cteClientConfig(name, true),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// cteClientLabelsConfig renders a ciphertrust_cte_client with labels set when
+// withLabels is true, and no labels attribute at all when false.
+func cteClientLabelsConfig(name string, withLabels bool) string {
+	labels := ""
+	if withLabels {
+		labels = `  labels = {
+    env = "drift-test"
+  }
+`
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+%s}
+`, name, labels)
+}
+
+// TestCTEClientResource_labelsClearing verifies TFIN-463: Update() sends an
+// explicit null (not {}) when labels is cleared, and Read() normalizes an
+// absent/empty labels response to null so the resource can converge once
+// labels has ever been set. Create() never sends labels to CM (the same gap
+// documented for protection_mode above), so the refresh in step 2 legitimately
+// diverges from the configured value and exercises Read()'s normalization.
+func TestCTEClientResource_labelsClearing(t *testing.T) {
+	name := "tfin463-labels-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientLabelsConfig(name, true),
+				Check: checkStep(t, "client labels: create",
+					resource.TestCheckResourceAttr(rn, "labels.env", "drift-test"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client labels: refresh converges to null instead of getting stuck (TFIN-463)",
+					resource.TestCheckNoResourceAttr(rn, "labels.env"),
+				),
+			},
+			{
+				Config: cteClientLabelsConfig(name, false),
+				Check: checkStep(t, "client labels: config catches up to null",
+					resource.TestCheckNoResourceAttr(rn, "labels.env"),
+				),
+			},
+			{
+				Config:             cteClientLabelsConfig(name, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
