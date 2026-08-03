@@ -374,7 +374,7 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -417,7 +417,7 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -567,7 +567,7 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

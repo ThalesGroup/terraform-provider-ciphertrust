@@ -361,7 +361,7 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -387,7 +387,7 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 
 // Update applies plan changes to an AWS key including policy, aliases, tags, rotation, and enable/disable state.
 // All attributes are always sent to AWS  -  unlike XKS and CloudHSM keys, there is no linked-state condition.
-// Returns an error if the key or KMS is not reachable
+// Returns an error if the key or KMS is not reachable.
 func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key.go -> Update][" + id + "]")
@@ -406,7 +406,7 @@ func (r *resourceAWSKey) Update(ctx context.Context, req resource.UpdateRequest,
 	}
 
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -556,7 +556,7 @@ func (r *resourceAWSKey) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return // KMS not found or unreachable - hard error, resource kept in state
 	}

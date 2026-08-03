@@ -349,7 +349,7 @@ func (r *resourceCCKMAWSAcl) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	if acl != nil {
-		response = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true)
+		_ = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -446,7 +446,7 @@ func (r *resourceCCKMAWSAcl) setAWSAclState(resourceID string, responseJSON stri
 	inputActions := state.Actions
 	// Reset Actions before calling SetAclCommonState so that kms_actions correctly
 	// reflects only what the API returned, not stale user input when the ACL is not found.
-	state.AclTFSDK.Actions, _ = types.SetValue(types.StringType, []attr.Value{})
+	state.Actions, _ = types.SetValue(types.StringType, []attr.Value{})
 	acls.SetAclCommonState(r.client, resourceID, responseJSON, &state.AclTFSDK, diags)
 	if len(state.Actions.Elements()) != 0 {
 		state.KmsActions = state.Actions

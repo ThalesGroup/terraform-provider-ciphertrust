@@ -276,12 +276,8 @@ func (r *resourceAWSKeyMaterial) Read(ctx context.Context, req resource.ReadRequ
 	}
 
 	// Fetch the key record to verify it still exists, with proper 404 handling.
-	// If the KMS is gone, preserveState is true we keep the existing state unchanged.
-	_, preserveState := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "reading", &resp.Diagnostics)
-	if preserveState {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
+	// A 404 adds a hard error so state is preserved; non-404 errors also add a hard error.
+	getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -328,12 +324,8 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 	}
 
 	// Step 2: verify the key still exists in CM and obtain its current JSON.
-	// preserveState is true when the KMS is gone - we should keep existing state.
-	keyJSON, preserveState := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "updating", &resp.Diagnostics)
-	if preserveState {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
+	// A 404 adds a hard error so state is preserved; non-404 errors also add a hard error.
+	keyJSON := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -808,7 +800,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		// with an empty body to activate the pending material. The material moves to either
 		// CURRENT or NON-CURRENT. History is re-fetched and re-classified after all resumes.
 		if len(pendingRotationRepairs) > 0 {
-			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
+			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, diags)
 			if diags.HasError() {
 				return
 			}
@@ -1056,7 +1048,7 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //     "No available key material pending rotation".
 //
 // keyJSON is the full CM key record for keyID, used to detect the multi-region case.
-func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
+func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
 	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
 
@@ -1313,7 +1305,7 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 // from the wait functions are added as warnings only - rotate-material was already called
 // and work is in progress asynchronously.
 // If rotate-material fails with replica pending import cannot rotate error we need to attempt to fix up
-// Return true to re-calculate material states and try again
+// Return true to re-calculate material states and try again.
 func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) bool {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")

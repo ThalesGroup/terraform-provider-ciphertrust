@@ -20,7 +20,7 @@ import (
 func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	keyID string, versionID string, versionOpLabel string, diags *diag.Diagnostics) string {
 
-	keyJSON, _ := getOciKey(ctx, id, client, "", keyID, "reading", diags)
+	keyJSON := getOciKey(ctx, id, client, "", keyID, "reading", diags)
 	if diags.HasError() || keyJSON == "" {
 		return "" // parent key not found or error - version kept in state
 	}

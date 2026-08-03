@@ -444,7 +444,7 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	}
 	planDesc := types.StringNull()
 	if planP != nil {
-		planDesc = planP.AWSKeyStoreCommonAwsParamTFSDK.Description
+		planDesc = planP.Description
 	}
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
 	if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() {
@@ -461,16 +461,16 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planP.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
-		updateAliases(ctx, id, r.client, keyID, planP.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
+	if planP != nil && !planP.Alias.IsNull() && !planP.Alias.IsUnknown() {
+		updateAliases(ctx, id, r.client, keyID, planP.Alias, response, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
 	}
-	if planP != nil && !planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
-		planTagsMap := make(map[string]string, len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
-		if len(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
-			resp.Diagnostics.Append(planP.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
+	if planP != nil && !planP.Tags.IsUnknown() {
+		planTagsMap := make(map[string]string, len(planP.Tags.Elements()))
+		if len(planP.Tags.Elements()) != 0 {
+			resp.Diagnostics.Append(planP.Tags.ElementsAs(ctx, &planTagsMap, false)...)
 			if resp.Diagnostics.HasError() {
 				return
 			}
@@ -616,7 +616,7 @@ func (r *resourceAWSCloudHSMKey) ModifyPlan(ctx context.Context, req resource.Mo
 
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 			cloudHSMP := extractCloudHSMKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-			if cloudHSMP != nil && len(cloudHSMP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
+			if cloudHSMP != nil && len(cloudHSMP.Alias.Elements()) > 1 {
 				invalid = append(invalid, "aws_param.alias (more than one alias)")
 			}
 		}
@@ -697,30 +697,30 @@ func setCloudHSMKeyResourceState(ctx context.Context, client *common.Client, res
 	if p == nil {
 		p = &AWSCloudHSMKeyAwsParamTFSDK{}
 	}
-	setAliases(response, &p.AWSKeyStoreCommonAwsParamTFSDK.Alias, diags)
-	setKeyTags(ctx, response, &p.AWSKeyStoreCommonAwsParamTFSDK.Tags, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	setAliases(response, &p.Alias, diags)
+	setKeyTags(ctx, response, &p.Tags, diags)
+	p.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	p.AWSKeyStoreCommonAwsParamTFSDK.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	p.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	p.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	p.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
+	p.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	p.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
+	p.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	p.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	p.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	p.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	p.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	p.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	p.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	p.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	p.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
+	p.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
 	policy := gjson.Get(response, "aws_param.Policy").String()
 	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
-		!getPoliciesAreEqual(client, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
+		p.Policy.IsNull() || p.Policy.IsUnknown() ||
+		!getPoliciesAreEqual(client, policy, p.Policy.ValueString(), diags) {
+		p.Policy = types.StringValue(policy)
 	}
 	// CloudHSM-specific computed field.
 	p.KeyRotationEnabled = types.BoolValue(gjson.Get(response, "aws_param.KeyRotationEnabled").Bool())

@@ -322,7 +322,7 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	if acl != nil {
-		response = r.applyAcls(ctx, id, vaultID, acl, &resp.Diagnostics, true)
+		_ = r.applyAcls(ctx, id, vaultID, acl, &resp.Diagnostics, true)
 		if resp.Diagnostics.HasError() {
 			return
 		}
