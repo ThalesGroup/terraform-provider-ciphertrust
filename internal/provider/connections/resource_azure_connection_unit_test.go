@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -673,5 +678,205 @@ func Test_CM_AzureClientSecret_OmittedPreservesState(t *testing.T) {
 	}
 	if resp.PlanValue.ValueString() != "previously-set-secret" {
 		t.Errorf("expected omitted client_secret to resolve to the prior state value, got %v", resp.PlanValue)
+	}
+}
+
+// buildAzureRawState builds a tftypes.Value for the full azure connection schema,
+// with all attributes null except those provided in overrides (string values only).
+func buildAzureRawState(t *testing.T, schemaResp resource.SchemaResponse, overrides map[string]string) tftypes.Value {
+	t.Helper()
+	ctx := context.Background()
+	resourceType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	vals := make(map[string]tftypes.Value, len(resourceType.AttributeTypes))
+	for name, attrType := range resourceType.AttributeTypes {
+		if v, ok := overrides[name]; ok {
+			vals[name] = tftypes.NewValue(tftypes.String, v)
+		} else {
+			vals[name] = tftypes.NewValue(attrType, nil)
+		}
+	}
+	return tftypes.NewValue(resourceType, vals)
+}
+
+// Test_CM_AzureConnection_IsCertificateUsed_ResponseParsing verifies that when CM omits
+// is_certificate_used from its response (documented behavior for certificate-based
+// connections), getAzureParamsFromResponse preserves the configured value rather than
+// defaulting to false and crashing the post-apply consistency check (TFIN-562).
+func Test_CM_AzureConnection_IsCertificateUsed_ResponseParsing(t *testing.T) {
+	// Response that omits is_certificate_used — as documented by CM for cert-auth connections.
+	responseWithoutField := `{"id":"abc","name":"test","tenant_id":"tid","client_id":"cid"}`
+
+	var diags diag.Diagnostics
+	data := AzureConnectionTFSDK{}
+	data.IsCertificateUsed = types.BoolValue(true) // plan had true
+	data.ExternalCertificateUsed = types.BoolValue(false)
+
+	getAzureParamsFromResponse(responseWithoutField, &diags, &data)
+
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	// Field absent from response: must preserve plan value, not default to false.
+	if !data.IsCertificateUsed.ValueBool() {
+		t.Error("IsCertificateUsed: expected true (preserved), got false — absent field must not override plan (TFIN-562)")
+	}
+
+	// When field IS present, it must be applied correctly.
+	responseWithField := `{"id":"abc","is_certificate_used":false}`
+	data2 := AzureConnectionTFSDK{}
+	data2.IsCertificateUsed = types.BoolValue(true)
+	getAzureParamsFromResponse(responseWithField, &diags, &data2)
+	if data2.IsCertificateUsed.ValueBool() {
+		t.Error("IsCertificateUsed: expected false (from response), got true")
+	}
+}
+
+// Test_CM_AzureConnection_ClientSecretOmittedPreservesSecret verifies that omitting
+// client_secret from a later apply config is a silent no-op — the existing secret
+// is preserved via UseStateForUnknown. This is the correct behavior: users should not
+// have to retype credentials on every apply (TFIN-563 is documented as Low severity;
+// the UX gap is accepted given that explicit client_secret="" is still blocked).
+func Test_CM_AzureConnection_ClientSecretOmittedPreservesSecret(t *testing.T) {
+	ctx := context.Background()
+	r := &resourceAzureConnection{}
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+	attr, ok := schemaResp.Schema.Attributes["client_secret"]
+	if !ok {
+		t.Fatal("client_secret not found in schema")
+	}
+	strAttr, ok := attr.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("client_secret is %T, expected StringAttribute", attr)
+	}
+	if len(strAttr.PlanModifiers) == 0 {
+		t.Fatal("client_secret must carry a plan modifier to preserve the value when omitted from config")
+	}
+}
+
+// Test_CM_AzureConnection_AzureStackRequiresCertAtPlan verifies that ValidateConfig
+// rejects cloud_name=AzureStack without azure_stack_server_cert (TFIN-564).
+func Test_CM_AzureConnection_AzureStackRequiresCertAtPlan(t *testing.T) {
+	ctx := context.Background()
+	r := &resourceAzureConnection{}
+	var schemaResp resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+	// Config: AzureStack without server cert → must error.
+	noCertRaw := buildAzureRawState(t, schemaResp, map[string]string{
+		"cloud_name": "AzureStack",
+	})
+	req := resource.ValidateConfigRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: noCertRaw},
+	}
+	resp := &resource.ValidateConfigResponse{}
+	r.ValidateConfig(ctx, req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Error("expected error for AzureStack without azure_stack_server_cert (TFIN-564)")
+	}
+
+	// Config: AzureStack WITH server cert → must succeed.
+	withCertRaw := buildAzureRawState(t, schemaResp, map[string]string{
+		"cloud_name":              "AzureStack",
+		"azure_stack_server_cert": "-----BEGIN CERTIFICATE-----\nMIIBfoo\n-----END CERTIFICATE-----",
+	})
+	req2 := resource.ValidateConfigRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: withCertRaw},
+	}
+	resp2 := &resource.ValidateConfigResponse{}
+	r.ValidateConfig(ctx, req2, resp2)
+	if resp2.Diagnostics.HasError() {
+		t.Errorf("unexpected error when azure_stack_server_cert is set: %v", resp2.Diagnostics)
+	}
+}
+
+// Test_CM_AzureConnectionList_EmptyResponseSucceeds verifies that a CM response with an
+// empty body (zero-match filter) returns an empty azure list, not null (TFIN-568).
+func Test_CM_AzureConnectionList_EmptyResponseSucceeds(t *testing.T) {
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "") // empty body = zero matches
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	d := &dataSourceAzureConnection{client: client}
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	dsVals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		dsVals[name] = tftypes.NewValue(attrType, nil)
+	}
+	rawConfig := tftypes.NewValue(dsType, dsVals)
+
+	req := datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	resp := &datasource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	d.Read(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error on empty response: %v", resp.Diagnostics)
+	}
+	var state AzureConnectionDataSourceModel
+	if err := resp.State.Get(ctx, &state); err != nil {
+		t.Fatalf("failed to decode state: %v", err)
+	}
+	if len(state.Azure) != 0 {
+		t.Errorf("expected 0 azure connections, got %d", len(state.Azure))
+	}
+}
+
+// Test_CM_AzureConnectionList_UnrecognizedFilterRejectedAtConfig verifies that
+// ConfigValidators rejects unknown filter keys at config-validate time (TFIN-568).
+func Test_CM_AzureConnectionList_UnrecognizedFilterRejectedAtConfig(t *testing.T) {
+	ctx := context.Background()
+	d := &dataSourceAzureConnection{}
+
+	validators := d.ConfigValidators(ctx)
+	if len(validators) == 0 {
+		t.Fatal("expected at least one ConfigValidator on ciphertrust_azure_connection_list")
+	}
+
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+
+	// Build config with an unrecognized filter key.
+	vals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		if name == "filters" {
+			vals[name] = tftypes.NewValue(tftypes.Map{ElementType: tftypes.String},
+				map[string]tftypes.Value{"bogusKey": tftypes.NewValue(tftypes.String, "x")})
+		} else {
+			vals[name] = tftypes.NewValue(attrType, nil)
+		}
+	}
+	rawConfig := tftypes.NewValue(dsType, vals)
+
+	for _, v := range validators {
+		req := datasource.ValidateConfigRequest{
+			Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+		}
+		resp := &datasource.ValidateConfigResponse{}
+		v.ValidateDataSource(ctx, req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Error("expected error for unrecognized filter key, got none")
+		}
 	}
 }

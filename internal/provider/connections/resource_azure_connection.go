@@ -41,8 +41,34 @@ var (
 `
 )
 
+var (
+	_ resource.Resource                   = &resourceAzureConnection{}
+	_ resource.ResourceWithConfigure      = &resourceAzureConnection{}
+	_ resource.ResourceWithValidateConfig = &resourceAzureConnection{}
+)
+
 func NewResourceAzureConnection() resource.Resource {
 	return &resourceAzureConnection{}
+}
+
+// ValidateConfig enforces cross-field constraints that cannot be expressed with
+// per-attribute validators (TFIN-564).
+func (r *resourceAzureConnection) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config AzureConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// azure_stack_server_cert is required by CM when cloud_name = "AzureStack".
+	// CM returns an unhelpful message-less 422 without it — catch this at plan time.
+	if config.CloudName.ValueString() == "AzureStack" &&
+		(config.AzureStackServerCert.IsNull() || config.AzureStackServerCert.ValueString() == "") {
+		resp.Diagnostics.AddError(
+			"azure_stack_server_cert required for AzureStack",
+			"CipherTrust Manager requires azure_stack_server_cert when cloud_name is \"AzureStack\". "+
+				"Set azure_stack_server_cert to a valid PEM certificate.",
+		)
+	}
 }
 
 type resourceAzureConnection struct {
@@ -525,25 +551,30 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.KeyVaultDNSSuffix = plan.KeyVaultDNSSuffix.ValueString()
 	}
 
+	// labels / meta: CM's PATCH merges rather than replaces. ApplyNullDeletes sends
+	// null for keys present in prior state but absent from the new plan, so CM removes
+	// them — matching Terraform's declarative "replace" semantics (TFIN-567).
+	azureLabelsPayload := make(map[string]interface{})
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
-		azureLabelsPayload := make(map[string]interface{})
 		for k, v := range plan.Labels.Elements() {
 			azureLabelsPayload[k] = v.(types.String).ValueString()
 		}
-		payload.Labels = azureLabelsPayload
 	}
+	ApplyNullDeletes(azureLabelsPayload, state.Labels.Elements())
+	payload.Labels = azureLabelsPayload
 
 	if plan.ManagementURL.ValueString() != "" && plan.ManagementURL.ValueString() != types.StringNull().ValueString() {
 		payload.ManagementURL = plan.ManagementURL.ValueString()
 	}
 
+	azureMetadataPayload := make(map[string]interface{})
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
-		azureMetadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
 			azureMetadataPayload[k] = v.(types.String).ValueString()
 		}
-		payload.Meta = azureMetadataPayload
 	}
+	ApplyNullDeletes(azureMetadataPayload, state.Meta.Elements())
+	payload.Meta = azureMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var azureProducts []string
@@ -681,8 +712,27 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	// Parameters for azure connection
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
-	data.ExternalCertificateUsed = types.BoolValue(gjson.Get(response, "external_certificate_used").Bool())
-	data.IsCertificateUsed = types.BoolValue(gjson.Get(response, "is_certificate_used").Bool())
+	// external_certificate_used: Computed-only — no user config to preserve.
+	// Use the CM value when present; otherwise default to false.
+	if res := gjson.Get(response, "external_certificate_used"); res.Exists() {
+		data.ExternalCertificateUsed = types.BoolValue(res.Bool())
+	} else {
+		data.ExternalCertificateUsed = types.BoolValue(false)
+	}
+	// is_certificate_used: Optional+Computed. When CM omits the field from its
+	// response (documented for certificate-auth connections, TFIN-562), the only
+	// case worth preserving is when the user explicitly configured true — that is
+	// the signal that this is a certificate-based connection. In every other case
+	// (unknown, null, or false) resolve to false so the Computed attribute is always
+	// a known value after apply.
+	if res := gjson.Get(response, "is_certificate_used"); res.Exists() {
+		data.IsCertificateUsed = types.BoolValue(res.Bool())
+	} else if !data.IsCertificateUsed.IsNull() && !data.IsCertificateUsed.IsUnknown() && data.IsCertificateUsed.ValueBool() {
+		// User explicitly set is_certificate_used=true — CM omits it from the
+		// response for certificate-based connections. Preserve the configured value.
+	} else {
+		data.IsCertificateUsed = types.BoolValue(false)
+	}
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
 	data.TenantID = types.StringValue(gjson.Get(response, "tenant_id").String())
 	data.ClientID = types.StringValue(gjson.Get(response, "client_id").String())
