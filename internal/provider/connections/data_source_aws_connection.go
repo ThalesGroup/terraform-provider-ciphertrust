@@ -118,6 +118,10 @@ func (d *dataSourceAWSConnection) Schema(_ context.Context, _ datasource.SchemaR
 									Sensitive:   true,
 									Description: "The private key associated with the certificate",
 								},
+								"private_key_version": schema.Int64Attribute{
+									Computed:    true,
+									Description: "Not populated by this data source — private_key is write-only and resource-only.",
+								},
 							},
 						},
 						"is_role_anywhere": schema.BoolAttribute{
@@ -270,11 +274,12 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 
 		if !reflect.DeepEqual((*IAMRoleAnywhereTFSDK)(nil), aws.IAMRoleAnywhere) {
 			iamRoleAnywhere := IAMRoleAnywhereTFSDK{
-				AnywhereRoleARN: types.StringValue(aws.IAMRoleAnywhere.AnywhereRoleARN),
-				Certificate:     types.StringValue(aws.IAMRoleAnywhere.Certificate),
-				ProfileARN:      types.StringValue(aws.IAMRoleAnywhere.ProfileARN),
-				TrustAnchorARN:  types.StringValue(aws.IAMRoleAnywhere.TrustAnchorARN),
-				PrivateKey:      types.StringValue(aws.IAMRoleAnywhere.PrivateKey),
+				AnywhereRoleARN:   types.StringValue(aws.IAMRoleAnywhere.AnywhereRoleARN),
+				Certificate:       types.StringValue(aws.IAMRoleAnywhere.Certificate),
+				ProfileARN:        types.StringValue(aws.IAMRoleAnywhere.ProfileARN),
+				TrustAnchorARN:    types.StringValue(aws.IAMRoleAnywhere.TrustAnchorARN),
+				PrivateKey:        types.StringValue(aws.IAMRoleAnywhere.PrivateKey),
+				PrivateKeyVersion: types.Int64Null(),
 			}
 			awsConn.IAMRoleAnywhere = &iamRoleAnywhere
 		}

@@ -66,6 +66,178 @@ func Test_AWSConnectionSchema_SecretAccessKeyWriteOnly(t *testing.T) {
 	}
 }
 
+// Test_AWSConnectionSchema_PrivateKeyWriteOnly verifies that the nested
+// iam_role_anywhere.private_key attribute is marked WriteOnly (never stored in
+// state/plan artifacts) and that iam_role_anywhere.private_key_version exists as the
+// companion state-tracked rotation trigger.
+func Test_AWSConnectionSchema_PrivateKeyWriteOnly(t *testing.T) {
+	var resp resource.SchemaResponse
+	(&resourceCCKMAWSConnection{}).Schema(context.Background(), resource.SchemaRequest{}, &resp)
+
+	nestedAttr, ok := resp.Schema.Attributes["iam_role_anywhere"].(schema.SingleNestedAttribute)
+	if !ok {
+		t.Fatalf("expected iam_role_anywhere to be schema.SingleNestedAttribute, got %T", resp.Schema.Attributes["iam_role_anywhere"])
+	}
+
+	privateKeyAttr, ok := nestedAttr.Attributes["private_key"].(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected private_key to be schema.StringAttribute, got %T", nestedAttr.Attributes["private_key"])
+	}
+	if !privateKeyAttr.WriteOnly {
+		t.Error("expected iam_role_anywhere.private_key to be marked WriteOnly: true")
+	}
+	if !privateKeyAttr.Sensitive {
+		t.Error("expected iam_role_anywhere.private_key to remain marked Sensitive: true")
+	}
+	if privateKeyAttr.Computed {
+		t.Error("expected iam_role_anywhere.private_key to not be Computed (WriteOnly attributes cannot be Computed)")
+	}
+
+	if _, ok := nestedAttr.Attributes["private_key_version"].(schema.Int64Attribute); !ok {
+		t.Fatalf("expected iam_role_anywhere.private_key_version to be schema.Int64Attribute, got %T", nestedAttr.Attributes["private_key_version"])
+	}
+}
+
+// Test_AWSConnectionUpdate_PrivateKeyVersionGatesResend proves that Update() only
+// re-sends iam_role_anywhere.private_key to CM when private_key_version changes between
+// state and plan, mirroring the secret_access_key_version gate above.
+func Test_AWSConnectionUpdate_PrivateKeyVersionGatesResend(t *testing.T) {
+	const connID = "conn-id-1"
+
+	tests := []struct {
+		name         string
+		stateVersion int64
+		planVersion  int64
+		configKey    string
+		expectInBody bool
+	}{
+		{
+			name:         "version unchanged: private_key omitted from payload",
+			stateVersion: 1,
+			planVersion:  1,
+			configKey:    "unused-key",
+			expectInBody: false,
+		},
+		{
+			name:         "version bumped: private_key included from config",
+			stateVersion: 1,
+			planVersion:  2,
+			configKey:    "rotated-key",
+			expectInBody: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedPatchBody string
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/v1/connectionmgmt/services/aws/connections/"+connID, func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodPatch:
+					body, _ := io.ReadAll(r.Body)
+					capturedPatchBody = string(body)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprintf(w, `{"id":%q}`, connID)
+				case http.MethodGet:
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprintf(w, `{"id":%q}`, connID)
+				default:
+					t.Fatalf("unexpected method %s", r.Method)
+				}
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			client := &common.Client{
+				CipherTrustURL: server.URL,
+				HTTPClient:     server.Client(),
+				Log:            hclog.NewNullLogger(),
+			}
+
+			r := &resourceCCKMAWSConnection{client: client}
+			ctx := context.Background()
+
+			var schemaResp resource.SchemaResponse
+			r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+			if schemaResp.Diagnostics.HasError() {
+				t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
+			}
+
+			nestedType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object).AttributeTypes["iam_role_anywhere"].(tftypes.Object)
+			buildNested := func(privateKey interface{}, version int64) tftypes.Value {
+				vals := map[string]tftypes.Value{
+					"anywhere_role_arn":   tftypes.NewValue(tftypes.String, "role-arn"),
+					"certificate":         tftypes.NewValue(tftypes.String, "cert"),
+					"profile_arn":         tftypes.NewValue(tftypes.String, "profile-arn"),
+					"trust_anchor_arn":    tftypes.NewValue(tftypes.String, "trust-anchor-arn"),
+					"private_key":         tftypes.NewValue(tftypes.String, privateKey),
+					"private_key_version": tftypes.NewValue(tftypes.Number, version),
+				}
+				return tftypes.NewValue(nestedType, vals)
+			}
+
+			baseOverrides := map[string]tftypes.Value{
+				"id":               tftypes.NewValue(tftypes.String, connID),
+				"name":             tftypes.NewValue(tftypes.String, "my-conn"),
+				"is_role_anywhere": tftypes.NewValue(tftypes.Bool, true),
+			}
+
+			stateOverrides := map[string]tftypes.Value{}
+			for k, v := range baseOverrides {
+				stateOverrides[k] = v
+			}
+			stateOverrides["iam_role_anywhere"] = buildNested(nil, tc.stateVersion)
+			stateValue := newAWSConnectionRawValue(ctx, schemaResp, stateOverrides)
+
+			planOverrides := map[string]tftypes.Value{}
+			for k, v := range baseOverrides {
+				planOverrides[k] = v
+			}
+			planOverrides["iam_role_anywhere"] = buildNested(nil, tc.planVersion)
+			planValue := newAWSConnectionRawValue(ctx, schemaResp, planOverrides)
+
+			configOverrides := map[string]tftypes.Value{}
+			for k, v := range baseOverrides {
+				configOverrides[k] = v
+			}
+			configOverrides["iam_role_anywhere"] = buildNested(tc.configKey, tc.planVersion)
+			configValue := newAWSConnectionRawValue(ctx, schemaResp, configOverrides)
+
+			req := resource.UpdateRequest{
+				Plan:   tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+				Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: configValue},
+				State:  tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+			}
+			resp := &resource.UpdateResponse{
+				State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+			}
+
+			r.Update(ctx, req, resp)
+
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("unexpected diagnostics from Update(): %v", resp.Diagnostics)
+			}
+
+			want := fmt.Sprintf(`"private_key":%q`, tc.configKey)
+			got := strings.Contains(capturedPatchBody, want)
+			if got != tc.expectInBody {
+				t.Errorf("expected private_key present in PATCH body = %v, got %v (body: %s)", tc.expectInBody, got, capturedPatchBody)
+			}
+
+			var final AWSConnectionModelTFSDK
+			diags := resp.State.Get(ctx, &final)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics reading back final state: %v", diags)
+			}
+			if final.IAMRoleAnywhere != nil && !final.IAMRoleAnywhere.PrivateKey.IsNull() {
+				t.Errorf("expected iam_role_anywhere.private_key to be null in state (write-only), got %q", final.IAMRoleAnywhere.PrivateKey.ValueString())
+			}
+		})
+	}
+}
+
 // newAWSConnectionRawValue builds a tftypes.Value covering every attribute declared in
 // resourceCCKMAWSConnection's Schema(), defaulting every attribute to null and applying
 // the given overrides. Attribute types (including the nested iam_role_anywhere object,
@@ -618,6 +790,10 @@ func Test_CM_AWSConnectionList_SensitiveFields(t *testing.T) {
 	if !pkStrAttr.Sensitive {
 		t.Error("expected 'private_key' to be marked Sensitive: true")
 	}
+
+	if _, ok := nestedAttr.Attributes["private_key_version"].(datasourceschema.Int64Attribute); !ok {
+		t.Fatalf("expected 'private_key_version' to be Int64Attribute, got %T", nestedAttr.Attributes["private_key_version"])
+	}
 }
 
 // Test_CM_AWSConnection_ArchitectureValidationScenarios validates all four required architectural scenarios:
@@ -1050,6 +1226,3 @@ func Test_AWSConnectionList_EmptyResponseSucceeds(t *testing.T) {
 		t.Errorf("expected 0 connections in state, got: %d", len(updatedState.AWS))
 	}
 }
-
-
-

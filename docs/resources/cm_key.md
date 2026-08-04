@@ -59,7 +59,7 @@ resource "ciphertrust_cm_key" "sample_key" {
   algorithm = "aes"
 
   # Bit length for the key.
-  size = 256
+  key_size = 256
 
   # Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303.
   usage_mask = 76
@@ -89,8 +89,10 @@ resource "ciphertrust_cm_key" "sample_key" {
       encryption_mode      = "CBC"
       cte_versioned        = false
     }
-    xts = false
   }
+
+  # Set the key to be XTS mode capable
+  xts = false
 }
 
 # Output the unique ID of the created CM Key
@@ -142,7 +144,7 @@ When returning the key material, this parameter specifies the format of the retu
 - `mac_sign_bytes` (String) (Immutable) This parameter specifies the MAC/Signature bytes to be used for verification while importing a key. The wrappingMethod should be mac/sign and the required parameters for the verification must be set.
 - `mac_sign_key_identifier` (String) (Immutable) This parameter specifies the identifier of the key to be used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the MAC/signature(macSignBytes) of the key material(material). For verifying the MAC, the key has to be a HMAC key. For verifying the signature, the key has to be an RSA private or public key.
 - `mac_sign_key_identifier_type` (String) (Immutable) This parameter specifies the identifier of the key(macSignKeyIdentifier) used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the mac/signature(macSignBytes) of the key material(material).
-- `material` (String, Sensitive) (Immutable) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\n'.
+- `material` (String, Sensitive) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\n'. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change a key's material after creation — destroy and recreate the resource to import different material.
 - `meta` (Attributes) Optional end-user or service data stored with the key. Fields can be added or changed in place; a field already set cannot be cleared by omitting it (PATCH merges JSON objects — removing a field from config does NOT clear it on the server). On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id. (see [below for nested schema](#nestedatt--meta))
 - `muid` (String) Additional identifier of the key. This is optional and applicable for import key only. If set, the value is imported as the key's muid.
 - `name` (String) (Immutable) Optional friendly name, The key name should not contain special characters such as angular brackets (<,>) and backslash (\).
@@ -152,7 +154,7 @@ if wrappingMethod is encrypt and the wrappingEncryptionAlgo doesn't have a mode 
 if wrappingMethod is pbe.
 If true, the RFC 5649(AES Key Wrap with Padding) is followed and if false, RFC 3394(AES Key Wrap) is followed for unwrapping the material for the symmetric key.
 If a certificate is being unwrapped with the wrappingMethod set to encrypt, the padded parameter has to be set to true. This parameter defaults to false.
-- `password` (String, Sensitive) (Immutable) For pkcs12 format, either password or secretDataLink should be specified. This should be the base64 encoded value of the password.
+- `password` (String, Sensitive) For pkcs12 format, either password or secretDataLink should be specified. This should be the base64 encoded value of the password. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change this after creation — destroy and recreate the resource to import with a different password.
 - `process_start_date` (String) Date/time when a Managed Symmetric Key Object MAY begin to be used to process cryptographically protected information (e.g., decryption or unwrapping)
 - `protect_stop_date` (String) Date/time after which a Managed Symmetric Key Object SHALL NOT be used for applying cryptographic protection (e.g., encryption or wrapping)
 - `public_key_parameters` (Attributes) (Immutable) Information needed to create a public key. (see [below for nested schema](#nestedatt--public_key_parameters))
@@ -213,7 +215,7 @@ Optional:
 - `hash_algorithm` (String) Hash Algorithm is used for HKDF. This is required if ikmKeyName is specified, default is hmac-sha256.
 - `ikm_key_name` (String) Any existing symmetric key. Mandatory while using HKDF key generation.
 - `info` (String) Info is an optional hex value for HKDF based derivation.
-- `salt` (String) Salt is an optional hex value for HKDF based derivation.
+- `salt` (String, Sensitive) Salt is an optional hex value for HKDF based derivation. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change this after creation.
 
 
 <a id="nestedatt--meta"></a>
@@ -289,7 +291,7 @@ Optional:
 - `hash_algorithm` (String) Hash Algorithm is used for HKDF Wrapping.
 - `info` (String) Info is an optional hex value for HKDF based derivation.
 - `okm_len` (Number) The desired output key material length in integer.
-- `salt` (String) Salt is an optional hex value for HKDF based derivation.
+- `salt` (String, Sensitive) Salt is an optional hex value for HKDF based derivation. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change this after creation.
 
 
 <a id="nestedatt--wrap_pbe"></a>

@@ -190,9 +190,20 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Defines what ethernet adapter the interface should listen to, use \"all\" for all. Defaults to all if not specified.",
 			},
 			"registration_token": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Registration token in case auto registration is true.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "Registration token in case auto registration is true. Write-only: never " +
+					"stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a " +
+					"rotated token, change `registration_token` and bump `registration_token_version` in the " +
+					"same apply.",
+			},
+			"registration_token_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Arbitrary version number stored in state and used to trigger re-sending " +
+					"`registration_token` to CipherTrust Manager. Since `registration_token` is write-only, " +
+					"Terraform cannot detect a change in its value on its own; increment this on every apply " +
+					"where you want the current `registration_token` value re-sent.",
 			},
 			"trusted_cas": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -231,9 +242,20 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 						},
 					},
 					"password": schema.StringAttribute{
-						Optional:    true,
-						Sensitive:   true,
-						Description: "Password to the encrypted key.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Password to the encrypted key. Write-only: never stored in Terraform " +
+							"state or plan artifacts (requires Terraform 1.11+). To resend a rotated password " +
+							"(e.g. without changing certificate_chain), change `password` and bump " +
+							"`password_version` in the same apply.",
+					},
+					"password_version": schema.Int64Attribute{
+						Optional: true,
+						Description: "Arbitrary version number stored in state and used to trigger " +
+							"re-sending `password` to CipherTrust Manager. Since `password` is write-only, " +
+							"Terraform cannot detect a change in its value on its own; increment this on every " +
+							"apply where you want the current `password` value re-sent.",
 					},
 				},
 			},
@@ -341,6 +363,18 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
+	// registration_token and certificate.password are write-only: the framework nulls
+	// them out of PlannedState during PlanResourceChange, before Create() ever runs, so
+	// plan.RegToken / plan.Certificate.Password are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMInterfaceTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Port = plan.Port.ValueInt64()
 	if !plan.AllowUnregistered.IsNull() && !plan.AllowUnregistered.IsUnknown() {
 		payload.AllowUnregistered = plan.AllowUnregistered.ValueBool()
@@ -404,8 +438,8 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload.NetworkInterface = plan.NetworkInterface.ValueString()
 	}
-	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
-		payload.RegToken = plan.RegToken.ValueString()
+	if v := config.RegToken.ValueString(); v != "" {
+		payload.RegToken = v
 	}
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
 		r.client.Log.Debug("Trusted CAs should not be empty at this point")
@@ -615,8 +649,13 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	// registration_token — write-only; plan.RegToken already holds the user's configured value.
-	// certificate — write-only; plan.Certificate already holds the user's configured value.
+	// registration_token / certificate.password are write-only — the framework nulls
+	// them from outgoing state/plan artifacts automatically, but null them explicitly
+	// too for clarity.
+	plan.RegToken = types.StringNull()
+	if plan.Certificate != nil {
+		plan.Certificate.Password = types.StringNull()
+	}
 
 	r.client.Log.Debug("[resource_interface.go -> Create Output][" + response + "]")
 
@@ -945,8 +984,8 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		}
 	}
 
-	// registration_token — write-only; state.RegToken already holds prior value.
-	// certificate — write-only; state.Certificate already holds prior value.
+	// registration_token / certificate.password are write-only — never stored in state,
+	// so there is nothing to hydrate or preserve here. Both are always null.
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
@@ -970,6 +1009,18 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	}
 	// Load prior state to obtain the stable resource UUID.
 	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// registration_token and certificate.password are write-only: the framework nulls
+	// them out of PlannedState during PlanResourceChange, before Update() ever runs, so
+	// plan.RegToken / plan.Certificate.Password are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMInterfaceTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -1141,13 +1192,17 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		payload["network_interface"] = "all"
 	}
 
-	// registration_token: send explicit "" clear when user removes the field and prior state
-	// held a value. CM accepts PATCH {"registration_token": ""} → HTTP 200, subsequent GET
+	// registration_token is write-only (never stored in state), so its own value can never
+	// be diffed against a prior value — registration_token_version is the explicit,
+	// state-tracked signal that the caller wants the current value re-sent (or cleared, if
+	// empty) to CM. CM accepts PATCH {"registration_token": ""} → HTTP 200, subsequent GET
 	// shows key absent (live-confirmed in ticket).
-	if !plan.RegToken.IsNull() && !plan.RegToken.IsUnknown() {
-		payload["registration_token"] = plan.RegToken.ValueString()
-	} else if !state.RegToken.IsNull() {
-		payload["registration_token"] = ""
+	if !plan.RegTokenVersion.Equal(state.RegTokenVersion) {
+		if v := config.RegToken.ValueString(); v != "" {
+			payload["registration_token"] = v
+		} else {
+			payload["registration_token"] = ""
+		}
 	}
 
 	// tls_ciphers: Null vs Empty vs Populated collection distinction
@@ -1207,12 +1262,23 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// certificate is absent from swagger ConfigurationUpdate AND ConfigurationAdd (undocumented
 	// CM API field); nil-clear follows the same convention used for local_auto_gen_attributes
 	// and meta in this Update().
+	//
+	// password is write-only (never stored in state), so it is read from config rather
+	// than plan. The whole certificate object is resent whenever the block is configured
+	// (matching CertChain/Generate/Format, which are not write-only and are resent
+	// unconditionally too) — password_version's sole purpose is to give Terraform a
+	// diffable signal to call Update() at all when only the password is being rotated
+	// and certificate_chain/format/generate are unchanged.
 	if plan.Certificate != nil {
+		var configPassword types.String
+		if config.Certificate != nil {
+			configPassword = config.Certificate.Password
+		}
 		payload["certificate"] = &CMInterfacCertificateJSON{
 			CertChain: plan.Certificate.CertChain.ValueString(),
 			Generate:  plan.Certificate.Generate.ValueBool(),
 			Format:    plan.Certificate.Format.ValueString(),
-			Password:  plan.Certificate.Password.ValueString(),
+			Password:  configPassword.ValueString(),
 		}
 	} else if state.Certificate != nil {
 		payload["certificate"] = nil
@@ -1245,6 +1311,14 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// Preserve Optional+Computed name from prior state when user has not set it.
 	if plan.Name.IsNull() || plan.Name.IsUnknown() {
 		plan.Name = state.Name
+	}
+
+	// registration_token / certificate.password are write-only — the framework nulls
+	// them from outgoing state/plan artifacts automatically, but null them explicitly
+	// too for clarity.
+	plan.RegToken = types.StringNull()
+	if plan.Certificate != nil {
+		plan.Certificate.Password = types.StringNull()
 	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Update][" + id + "]")

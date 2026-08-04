@@ -1230,7 +1230,13 @@ resource "ciphertrust_cm_key" "k" {
 // TestCMKeyMaterialImmutable verifies that changing 'material' (key material)
 // Test_CM_CMKeyMaterialImmutable verifies that changing 'material' (key material)
 // after creation produces a clear plan-time error.
-func Test_CM_CMKeyMaterialImmutable(t *testing.T) {
+// Test_CM_CMKeyMaterialWriteOnlyProducesNoDiff verifies that material is write-only:
+// Terraform Core excludes a write-only attribute's own value from diff computation, so
+// changing `material` alone (with everything else unchanged) produces an empty plan
+// rather than an error. material has no companion `*_version` field and Update() never
+// resends it — the only supported way to change a key's material is to destroy and
+// recreate the resource.
+func Test_CM_CMKeyMaterialWriteOnlyProducesNoDiff(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -1244,9 +1250,13 @@ resource "ciphertrust_cm_key" "test_key" {
   material  = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 }
 `, rName),
-				Check: resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.test_key", "material"),
+				),
 			},
 			{
+				// Change material value — write-only, so no diff is produced and no error occurs.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cm_key" "test_key" {
   name      = %q
@@ -1255,8 +1265,8 @@ resource "ciphertrust_cm_key" "test_key" {
   material  = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f"
 }
 `, rName),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`cannot be changed`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

@@ -259,6 +259,48 @@ func TestImmutableObject(t *testing.T) {
 	}
 }
 
+// TestImmutableObjectExceptWriteOnly verifies that changes to a named write-only child
+// attribute are ignored when computing immutability, while changes to any other child
+// attribute still block the plan. This is the fix for the class of bug where a WriteOnly
+// leaf inside an otherwise-immutable object always differs from its always-null state
+// value, misfiring on every plan (see cm_key's hkdf_create_parameters/wrap_hkdf.salt).
+func TestImmutableObjectExceptWriteOnly(t *testing.T) {
+	mod := modifiers.ImmutableObjectExceptWriteOnly("salt")
+	ctx := context.Background()
+
+	attrTypes := map[string]attr.Type{"info": types.StringType, "salt": types.StringType}
+	old, _ := types.ObjectValue(attrTypes, map[string]attr.Value{"info": types.StringValue("i"), "salt": types.StringNull()})
+	saltChanged, _ := types.ObjectValue(attrTypes, map[string]attr.Value{"info": types.StringValue("i"), "salt": types.StringValue("real-salt-value")})
+	infoChanged, _ := types.ObjectValue(attrTypes, map[string]attr.Value{"info": types.StringValue("changed"), "salt": types.StringNull()})
+
+	cases := []struct {
+		name      string
+		plan      tfsdk.Plan
+		stateVal  types.Object
+		planVal   types.Object
+		wantError bool
+	}{
+		{"create (null stateVal) — allow", updatePlan(), types.ObjectNull(attrTypes), saltChanged, false},
+		{"destroy drifted — allow (TFIN-552)", destroyPlan(), old, saltChanged, false},
+		{"update no-change — allow", updatePlan(), old, old, false},
+		{"update salt only (write-only leaf) — allow, matches WriteOnly plan-nulling behavior", updatePlan(), old, saltChanged, false},
+		{"update non-write-only field changed — block", updatePlan(), old, infoChanged, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := planmodifier.ObjectRequest{
+				Plan:       tc.plan,
+				StateValue: tc.stateVal,
+				PlanValue:  tc.planVal,
+			}
+			resp := &planmodifier.ObjectResponse{PlanValue: tc.planVal}
+			mod.PlanModifyObject(ctx, req, resp)
+			assertError(t, resp.Diagnostics.HasError(), tc.wantError)
+		})
+	}
+}
+
 func assertError(t *testing.T, got, want bool) {
 	t.Helper()
 	if want && !got {

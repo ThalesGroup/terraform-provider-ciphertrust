@@ -124,12 +124,14 @@ func (r *resourceInterfaceCertificateRenewal) Schema(_ context.Context, _ resour
 				},
 			},
 			"password": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "(Immutable) Password to the encrypted key, if the certificate data is an encrypted PKCS12. Changing this value causes resource replacement.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "Password to the encrypted key, if the certificate data is an encrypted PKCS12. " +
+					"Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+					"No RequiresReplace modifier on this attribute — since it is write-only, its own value can " +
+					"never be diffed against a prior value. `trigger` is the signal that controls when a " +
+					"renewal (and re-send of `password`) happens; change `trigger` to perform another renewal.",
 			},
 			"generate": schema.BoolAttribute{
 				Optional:    true,
@@ -177,6 +179,16 @@ func (r *resourceInterfaceCertificateRenewal) Create(ctx context.Context, req re
 		return
 	}
 
+	// password is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Password is always null
+	// here. req.Config is populated fresh from the HCL configuration on every RPC (not
+	// derived from the nullified plan), so it reliably carries the actual value.
+	var config InterfaceCertificateRenewalTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	interfaceName := plan.InterfaceName.ValueString()
 
 	// Verify the target interface exists. CM's interface API uses NAME (not UUID) as
@@ -194,7 +206,7 @@ func (r *resourceInterfaceCertificateRenewal) Create(ctx context.Context, req re
 	payload := interfaceRenewalCertificatePayloadJSON{
 		Certificate:    plan.Certificate.ValueString(),
 		Format:         plan.Format.ValueString(),
-		Password:       plan.Password.ValueString(),
+		Password:       config.Password.ValueString(),
 		Generate:       plan.Generate.ValueBool(),
 		SkipValidation: plan.SkipValidation.ValueBool(),
 	}
@@ -233,6 +245,9 @@ func (r *resourceInterfaceCertificateRenewal) Create(ctx context.Context, req re
 
 	plan.ID = types.StringValue(interfaceName + "/" + plan.Trigger.ValueString())
 	plan.AppliedCertificate = types.StringValue(stagedCertificate)
+	// password is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.Password = types.StringNull()
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 

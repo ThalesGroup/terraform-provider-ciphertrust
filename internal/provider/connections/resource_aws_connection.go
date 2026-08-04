@@ -35,9 +35,9 @@ const awsDefaultCloudName = "aws"
 const awsDefaultSTSEndpoints = "legacy"
 
 var (
-	_ resource.Resource                = &resourceCCKMAWSConnection{}
-	_ resource.ResourceWithConfigure   = &resourceCCKMAWSConnection{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMAWSConnection{}
+	_ resource.Resource               = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithConfigure  = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithModifyPlan = &resourceCCKMAWSConnection{}
 )
 
 func NewResourceCCKMAWSConnection() resource.Resource {
@@ -186,9 +186,19 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 						Description: "Specify AWS IAM Anywhere Trust Anchor ARN",
 					},
 					"private_key": schema.StringAttribute{
-						Optional:    true,
-						Sensitive:   true,
-						Description: "The private key associated with the certificate",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "The private key associated with the certificate. Write-only: never " +
+							"stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend " +
+							"a rotated key, change `private_key` and bump `private_key_version` in the same apply.",
+					},
+					"private_key_version": schema.Int64Attribute{
+						Optional: true,
+						Description: "Arbitrary version number stored in state and used to trigger " +
+							"re-sending `private_key` to CipherTrust Manager. Since `private_key` is " +
+							"write-only, Terraform cannot detect a change in its value on its own; increment " +
+							"this on every apply where you want the current `private_key` value re-sent.",
 					},
 				},
 			},
@@ -225,9 +235,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				},
 			},
 			"secret_access_key": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				WriteOnly:   true,
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
 				},
@@ -387,8 +397,13 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		if plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != "" && plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.TrustAnchorARN = plan.IAMRoleAnywhere.TrustAnchorARN.ValueString()
 		}
-		if plan.IAMRoleAnywhere.PrivateKey.ValueString() != "" && plan.IAMRoleAnywhere.PrivateKey.ValueString() != types.StringNull().ValueString() {
-			varIAMRoleAnywhere.PrivateKey = plan.IAMRoleAnywhere.PrivateKey.ValueString()
+		// private_key is write-only: the framework nulls it out of PlannedState during
+		// PlanResourceChange, before Create() ever runs, so plan.IAMRoleAnywhere.PrivateKey
+		// is always null here. config.IAMRoleAnywhere carries the actual configured value.
+		if config.IAMRoleAnywhere != nil {
+			if v := config.IAMRoleAnywhere.PrivateKey.ValueString(); v != "" {
+				varIAMRoleAnywhere.PrivateKey = v
+			}
 		}
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
@@ -528,6 +543,11 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
+
+	// iam_role_anywhere.private_key is write-only — same as above.
+	if plan.IAMRoleAnywhere != nil {
+		plan.IAMRoleAnywhere.PrivateKey = types.StringNull()
+	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
@@ -676,11 +696,13 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			nested.Certificate = types.StringValue(gjson.Get(response, "iam_role_anywhere.certificate").String())
 			nested.ProfileARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.profile_arn").String())
 			nested.TrustAnchorARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.trust_anchor_arn").String())
-			// private_key: write-only — absent from CM GET responses; preserve from prior state
+			// private_key is write-only — never stored in state, so there is nothing to
+			// hydrate or preserve here. nested.PrivateKey is always null.
+			nested.PrivateKey = types.StringNull()
+			// private_key_version is a plain stored attribute (not API-backed); this nested
+			// struct is rebuilt from scratch above, so carry it forward from prior state.
 			if state.IAMRoleAnywhere != nil {
-				nested.PrivateKey = state.IAMRoleAnywhere.PrivateKey
-			} else {
-				nested.PrivateKey = types.StringNull()
+				nested.PrivateKeyVersion = state.IAMRoleAnywhere.PrivateKeyVersion
 			}
 			state.IAMRoleAnywhere = &nested
 		} else {
@@ -823,8 +845,20 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		if plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != "" && plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.TrustAnchorARN = plan.IAMRoleAnywhere.TrustAnchorARN.ValueString()
 		}
-		if plan.IAMRoleAnywhere.PrivateKey.ValueString() != "" && plan.IAMRoleAnywhere.PrivateKey.ValueString() != types.StringNull().ValueString() {
-			varIAMRoleAnywhere.PrivateKey = plan.IAMRoleAnywhere.PrivateKey.ValueString()
+		// private_key is write-only (never stored in state), so its own value can never be
+		// diffed against a prior value — private_key_version is the explicit, state-tracked
+		// signal that the caller wants the current private_key value re-sent to CM.
+		var statePrivateKeyVersion, planPrivateKeyVersion types.Int64
+		if state.IAMRoleAnywhere != nil {
+			statePrivateKeyVersion = state.IAMRoleAnywhere.PrivateKeyVersion
+		}
+		if plan.IAMRoleAnywhere != nil {
+			planPrivateKeyVersion = plan.IAMRoleAnywhere.PrivateKeyVersion
+		}
+		if !planPrivateKeyVersion.Equal(statePrivateKeyVersion) && config.IAMRoleAnywhere != nil {
+			if v := config.IAMRoleAnywhere.PrivateKey.ValueString(); v != "" {
+				varIAMRoleAnywhere.PrivateKey = v
+			}
 		}
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
@@ -954,6 +988,11 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
+
+	// iam_role_anywhere.private_key is write-only — same as above.
+	if plan.IAMRoleAnywhere != nil {
+		plan.IAMRoleAnywhere.PrivateKey = types.StringNull()
+	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
