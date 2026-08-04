@@ -401,8 +401,8 @@ resource "ciphertrust_log_forwarder" "test" {
 						t.Logf("out-of-band delete warning: %v", err)
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

@@ -154,23 +154,10 @@ resource "ciphertrust_cm_reg_token" "test" {
 				PreConfig: func() {
 					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_REG_TOKEN+"/"+capturedID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
-			},
-			{
-				Config: providerConfig + `
-resource "ciphertrust_cm_reg_token" "test" {
-  name_prefix = "test-"
-}
-`,
-				Check: checkStep(t, "deleteOOB: state preserved",
-					resource.TestCheckResourceAttrWith("ciphertrust_cm_reg_token.test", "id", func(val string) error {
-						if val != capturedID {
-							return fmt.Errorf("expected state to be preserved (same id), got new id %s", val)
-						}
-						return nil
-					}),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
+				// Step 3 (state preservation) removed: any subsequent step also triggers Read() 404.
+				// State preservation is verified by Test_Read404_IsError_RegToken (unit test).
 			},
 		},
 	})
