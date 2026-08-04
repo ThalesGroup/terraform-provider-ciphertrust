@@ -15,8 +15,16 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAzureConnection{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAzureConnection{}
+	_ datasource.DataSource                     = &dataSourceAzureConnection{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAzureConnection{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAzureConnection{}
+
+	azureConnectionValidFilterKeys = map[string]struct{}{
+		"id": {}, "name": {}, "products": {}, "meta_contains": {}, "cloud_name": {},
+		"createdBefore": {}, "createdAfter": {}, "last_connection_ok": {},
+		"last_connection_before": {}, "last_connection_after": {},
+		"external_certificate_used": {}, "labels": {},
+	}
 )
 
 func NewDataSourceAzureConnection() datasource.DataSource {
@@ -34,6 +42,40 @@ type AzureConnectionDataSourceModel struct {
 
 func (d *dataSourceAzureConnection) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_azure_connection_list"
+}
+
+// ConfigValidators rejects unrecognized filter keys at plan time (TFIN-568).
+// CM silently ignores unknown keys and returns the full unfiltered list,
+// giving the user no signal that their filter had no effect.
+func (d *dataSourceAzureConnection) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{
+		azureConnectionFilterValidator{},
+	}
+}
+
+type azureConnectionFilterValidator struct{}
+
+func (v azureConnectionFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are recognized CM API parameters."
+}
+func (v azureConnectionFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v azureConnectionFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AzureConnectionDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := azureConnectionValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_azure_connection_list. "+
+					"CM silently ignores unknown keys and returns the full unfiltered list.", k),
+			)
+		}
+	}
 }
 
 func (d *dataSourceAzureConnection) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
@@ -170,7 +212,7 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AZURE_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_AZURE_CONNECTION+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_azure_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -180,6 +222,9 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
+	if jsonStr == "" {
+		jsonStr = "[]"
+	}
 	azureConnections := []AzureConnectionJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &azureConnections)
 	if err != nil {
@@ -191,6 +236,8 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
+	// Initialize to non-nil empty slice so zero-match filters return [] not null (TFIN-568).
+	state.Azure = []AzureConnectionTFSDK{}
 	for _, azure := range azureConnections {
 		azureConn := AzureConnectionTFSDK{
 			CMCreateConnectionResponseCommonTFSDK: CMCreateConnectionResponseCommonTFSDK{

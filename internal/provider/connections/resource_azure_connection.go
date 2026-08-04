@@ -41,8 +41,60 @@ var (
 `
 )
 
+var (
+	_ resource.Resource                   = &resourceAzureConnection{}
+	_ resource.ResourceWithConfigure      = &resourceAzureConnection{}
+	_ resource.ResourceWithValidateConfig = &resourceAzureConnection{}
+	_ resource.ResourceWithModifyPlan     = &resourceAzureConnection{}
+)
+
 func NewResourceAzureConnection() resource.Resource {
 	return &resourceAzureConnection{}
+}
+
+// ValidateConfig enforces cross-field constraints that cannot be expressed with
+// per-attribute validators (TFIN-564).
+func (r *resourceAzureConnection) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config AzureConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// azure_stack_server_cert is required by CM when cloud_name = "AzureStack".
+	// CM returns an unhelpful message-less 422 without it — catch this at plan time.
+	if config.CloudName.ValueString() == "AzureStack" &&
+		(config.AzureStackServerCert.IsNull() || config.AzureStackServerCert.ValueString() == "") {
+		resp.Diagnostics.AddError(
+			"azure_stack_server_cert required for AzureStack",
+			"CipherTrust Manager requires azure_stack_server_cert when cloud_name is \"AzureStack\". "+
+				"Set azure_stack_server_cert to a valid PEM certificate.",
+		)
+	}
+}
+
+// ModifyPlan enforces that client_secret cannot be removed once set (TFIN-563).
+// UseStateForUnknown() on client_secret causes the plan to carry the prior state
+// value when the user removes the attribute from config — making Update()'s
+// clientSecretClearBlocked() check unreachable. ModifyPlan detects the removal
+// by comparing req.Config (null when removed) vs req.State (non-null when set).
+func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return // create or destroy — not an update
+	}
+	var config, state AzureConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !state.ClientSecret.IsNull() && config.ClientSecret.IsNull() {
+		resp.Diagnostics.AddError(
+			"client_secret cannot be removed",
+			"CipherTrust Manager does not support clearing client_secret once it has been set. "+
+				"To rotate the secret, set client_secret to a new value. "+
+				"To remove client_secret-based auth entirely, destroy and recreate the connection.",
+		)
+	}
 }
 
 type resourceAzureConnection struct {
@@ -525,25 +577,30 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.KeyVaultDNSSuffix = plan.KeyVaultDNSSuffix.ValueString()
 	}
 
+	// labels / meta: CM's PATCH merges rather than replaces. ApplyNullDeletes sends
+	// null for keys present in prior state but absent from the new plan, so CM removes
+	// them — matching Terraform's declarative "replace" semantics (TFIN-567).
+	azureLabelsPayload := make(map[string]interface{})
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
-		azureLabelsPayload := make(map[string]interface{})
 		for k, v := range plan.Labels.Elements() {
 			azureLabelsPayload[k] = v.(types.String).ValueString()
 		}
-		payload.Labels = azureLabelsPayload
 	}
+	ApplyNullDeletes(azureLabelsPayload, state.Labels.Elements())
+	payload.Labels = azureLabelsPayload
 
 	if plan.ManagementURL.ValueString() != "" && plan.ManagementURL.ValueString() != types.StringNull().ValueString() {
 		payload.ManagementURL = plan.ManagementURL.ValueString()
 	}
 
+	azureMetadataPayload := make(map[string]interface{})
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
-		azureMetadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
 			azureMetadataPayload[k] = v.(types.String).ValueString()
 		}
-		payload.Meta = azureMetadataPayload
 	}
+	ApplyNullDeletes(azureMetadataPayload, state.Meta.Elements())
+	payload.Meta = azureMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var azureProducts []string
@@ -681,8 +738,17 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	// Parameters for azure connection
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
-	data.ExternalCertificateUsed = types.BoolValue(gjson.Get(response, "external_certificate_used").Bool())
-	data.IsCertificateUsed = types.BoolValue(gjson.Get(response, "is_certificate_used").Bool())
+	// is_certificate_used / external_certificate_used: CM omits these fields from
+	// responses when is_certificate_used=true (documented API behavior — the example
+	// response in the official docs also omits them). Using .Bool() on a missing path
+	// defaults to false and crashes the post-apply consistency check (TFIN-562).
+	// Only update data when the field is actually present in the response.
+	if res := gjson.Get(response, "external_certificate_used"); res.Exists() {
+		data.ExternalCertificateUsed = types.BoolValue(res.Bool())
+	}
+	if res := gjson.Get(response, "is_certificate_used"); res.Exists() {
+		data.IsCertificateUsed = types.BoolValue(res.Bool())
+	}
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
 	data.TenantID = types.StringValue(gjson.Get(response, "tenant_id").String())
 	data.ClientID = types.StringValue(gjson.Get(response, "client_id").String())
