@@ -222,8 +222,8 @@ resource "ciphertrust_syslog" "test" {
 						t.Logf("OOB delete failed (may already be gone): %v", err)
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

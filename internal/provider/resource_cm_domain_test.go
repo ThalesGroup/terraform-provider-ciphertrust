@@ -263,8 +263,8 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 			},
 			{
 				// Step 2: OOB delete + refresh.
-				// Read() gets 404, calls RemoveResource — resource removed from state.
-				// Config still wants the resource → plan proposes recreation → non-empty plan.
+				// Read() gets 404 → AddError + state preserved (PR #476 behavior).
+				// The refresh step errors; plan evaluation is skipped.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -273,8 +273,8 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 			{
 				// Step 3: re-apply config — Terraform recreates the domain.
@@ -597,7 +597,7 @@ func Test_CM_AccCMDomain_DeleteOutOfBand(t *testing.T) {
 				),
 			},
 			{
-				// OOB delete — Read() must call RemoveResource on 404; plan proposes recreation.
+				// OOB delete — Read() gets 404 → AddError + state preserved (PR #476 behavior).
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -606,8 +606,8 @@ func Test_CM_AccCMDomain_DeleteOutOfBand(t *testing.T) {
 					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

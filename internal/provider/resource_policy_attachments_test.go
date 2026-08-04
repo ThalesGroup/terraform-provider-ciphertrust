@@ -102,8 +102,8 @@ resource "ciphertrust_policy_attachments" "oob_attachment" {
 					endpoint := common.URL_CM_POLICY_ATTACHMENTS + "/" + capturedID
 					_, _ = client.DeleteByURL(context.Background(), capturedID, endpoint)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -543,8 +543,8 @@ resource "ciphertrust_policy_attachments" "oob" {
 					}
 					_, _ = client.DeleteByURL(context.Background(), uuid.New().String(), common.URL_CM_POLICY_ATTACHMENTS+"/"+attachmentID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

@@ -615,8 +615,8 @@ func Test_CM_AccCMGroup_DeleteOutOfBand(t *testing.T) {
 						}
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
