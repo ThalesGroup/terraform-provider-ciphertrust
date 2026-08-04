@@ -198,9 +198,9 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.ReadDataByParam(ctx, id, "", common.URL_CLUSTER_INFO)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Cluster Not Found — State Preserved",
-				"The Cluster resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Cluster"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Cluster", state.ID.ValueString()),
 			)
 			return
 		}

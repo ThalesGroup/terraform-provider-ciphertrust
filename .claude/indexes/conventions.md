@@ -145,8 +145,30 @@ The uuid is passed down to `c.GetById` / `c.PostData` etc. so request and respon
 - For per-attribute issues, use `resp.Diagnostics.AddAttributeError(path.Root("foo"), summary, detail)`.
 - Warn (don't fail) for advisory issues: `resp.Diagnostics.AddWarning(...)`.
 
-## 404 behavior on Read
-**Keep the resource in state on a 404** unless we're explicitly mid-delete of that resource. Commit `43f3b14` ("Conservative approach: keep resources in state on 404 unless deleting target resource") establishes this. Removing-from-state on every 404 caused TFIN-185 by surprising users when the CM was temporarily unavailable.
+## 404 behavior on Read / Update / Delete
+
+**Read / Update 404 → `AddError` + preserve state** (do NOT call `resp.State.RemoveResource`).  
+Rationale: a 404 during Read or Update is unexpected; the resource existed in state. Surfacing it as a hard error forces the operator to decide: `terraform state rm` to drop it, or re-apply to recreate it. Using a warning here risks silent drift going unnoticed.
+
+**Delete 404 → `AddWarning` + return normally** (Terraform removes the resource from state automatically when Delete returns with no error).  
+Rationale: if the resource is already gone, the desired state (absent) is achieved. An error would leave a phantom entry in state.
+
+Use the common format strings from `common/diagnostics.go` (never write ad-hoc messages):
+```go
+// Read/Update 404:
+resp.Diagnostics.AddError(
+    fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Resource Type"),
+    fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Resource Type", state.ID.ValueString()),
+)
+
+// Delete 404:
+resp.Diagnostics.AddWarning(
+    common.NotFoundDeleteWarningSummary,
+    common.NotFoundDeleteWarningDetail,
+)
+```
+
+Commit `43f3b14` ("Conservative approach: keep resources in state on 404 unless deleting target resource") established the state-preservation rule. The severity was later changed from Warning to Error for Read/Update to make drift explicit.
 
 ## Replica / long-running operations
 - AWS replica creation can be slow → see `resource_aws_key.go` constants `replicaKeyCreatingException`, `longAwsKeyOpSleep`, `refreshTokenSeconds`.

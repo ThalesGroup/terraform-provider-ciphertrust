@@ -250,9 +250,9 @@ func (r *resourceCMPolicyAttachment) Read(ctx context.Context, req resource.Read
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Read][" + id + "]")
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Policy Attachments Not Found — State Preserved",
-				"The Policy Attachments resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Policy Attachment"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Policy Attachment", state.ID.ValueString()),
 			)
 			return
 		}
@@ -363,6 +363,10 @@ func (r *resourceCMPolicyAttachment) Delete(ctx context.Context, req resource.De
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Delete][" + state.ID.ValueString() + "]")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

@@ -312,13 +312,9 @@ func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"OCI Connection Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed OCI connection %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "OCI Connection"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "OCI Connection", state.ID.ValueString()),
 			)
 			return
 		}
@@ -532,6 +528,13 @@ func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.Del
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_OCI_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
+			return
+		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Delete][" + id + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust OCI Connection",

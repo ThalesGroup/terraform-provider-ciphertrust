@@ -645,9 +645,9 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_INTERFACE)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"CM Interface Not Found — State Preserved",
-				"The CM Interface resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Interface"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Interface", state.Name.ValueString()),
 			)
 			return
 		}
@@ -1273,6 +1273,10 @@ func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteReq
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Delete][" + state.Name.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

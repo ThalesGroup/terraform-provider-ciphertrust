@@ -317,9 +317,9 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"License Not Found — State Preserved",
-				"The License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM License"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM License", state.ID.ValueString()),
 			)
 			return
 		}
@@ -395,6 +395,10 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

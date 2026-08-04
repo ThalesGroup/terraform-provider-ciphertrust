@@ -553,13 +553,9 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"AWS Connection Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed AWS connection %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "AWS Connection"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "AWS Connection", state.ID.ValueString()),
 			)
 			return
 		}
@@ -984,7 +980,10 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Resource already deleted out-of-band; treat as success.
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

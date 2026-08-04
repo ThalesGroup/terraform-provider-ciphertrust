@@ -307,9 +307,9 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Log Forwarder Not Found — State Preserved",
-				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Log Forwarder"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Log Forwarder", state.ID.ValueString()),
 			)
 			return
 		}
@@ -565,6 +565,10 @@ func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.Delet
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Delete][" + id + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Delete][" + id + "]")

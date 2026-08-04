@@ -230,9 +230,9 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	})
 
 	if !entry.Exists() {
-		resp.Diagnostics.AddWarning(
-			"NTP Server Not Found — State Preserved",
-			"The NTP server '"+targetHost+"' was not found in the CipherTrust Manager NTP server list. To prevent accidental data loss, this resource has been kept in state.",
+		resp.Diagnostics.AddError(
+			fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "NTP Server"),
+			fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "NTP Server", targetHost),
 		)
 		return
 	}
@@ -305,6 +305,10 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(
