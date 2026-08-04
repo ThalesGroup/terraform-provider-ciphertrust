@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"net/url"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -160,15 +160,14 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_oci_connection.go -> Read][" + id + "]")
 	var state OCIConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
-	var kvs []string
+	filterValues := url.Values{}
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
 		for k, v := range state.Filters.Elements() {
-			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-			kvs = append(kvs, kv)
+			filterValues.Set(k, v.(types.String).ValueString())
 		}
 	}
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_OCI_CONNECTION+"/?"+strings.Join(kvs, ""))
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_OCI_CONNECTION+"/?"+filterValues.Encode())
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(

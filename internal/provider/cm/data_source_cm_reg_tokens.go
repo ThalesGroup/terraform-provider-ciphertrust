@@ -3,7 +3,7 @@ package cm
 import (
 	"context"
 	"fmt"
-	"strings"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -140,18 +140,19 @@ func (d *dataSourceRegTokens) Read(ctx context.Context, req datasource.ReadReque
 
 	var state RegTokensDataSourceModel
 	req.Config.Get(ctx, &state)
-	var kvs []string
+	filterValues := url.Values{}
 	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+		filterValues.Set(k, v.(types.String).ValueString())
 	}
 
 	var allRawTokens []gjson.Result
 	limit := 100
 	skip := 0
 	for {
-		url := fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_REG_TOKEN, strings.Join(kvs, ""), skip, limit)
-		jsonStr, err := d.client.GetAll(ctx, id, url)
+		filterValues.Set("skip", fmt.Sprintf("%d", skip))
+		filterValues.Set("limit", fmt.Sprintf("%d", limit))
+		reqURL := fmt.Sprintf("%s/?%s", common.URL_REG_TOKEN, filterValues.Encode())
+		jsonStr, err := d.client.GetAll(ctx, id, reqURL)
 		if err != nil {
 			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_reg_tokens.go -> Read][" + id + "]")
 			resp.Diagnostics.AddError(

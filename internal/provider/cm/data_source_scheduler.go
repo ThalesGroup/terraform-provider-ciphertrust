@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"net/url"
 	"strings"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -225,13 +226,14 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 	d.client.Log.Trace(common.MSG_METHOD_START + "[resource_scheduler.go -> Read][" + id + "]")
 	var state DataSourceModelScheduler
 	req.Config.Get(ctx, &state)
-	var kvs []string
+	filterValues := url.Values{}
 	for k, v := range state.Filters.Elements() {
-		kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-		kvs = append(kvs, kv)
+		filterValues.Set(k, v.(types.String).ValueString())
 	}
+	filterValues.Set("skip", "0")
+	filterValues.Set("limit", "-1")
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS+"/?"+filterValues.Encode())
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(

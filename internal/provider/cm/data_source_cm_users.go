@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"net/url"
 
 	"github.com/google/uuid"
 
@@ -142,11 +142,10 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 	state.ID = types.StringValue("users-list")
 	state.User = []CMUserDSModel{}
 
-	var kvs []string
+	filterValues := url.Values{}
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
 		for k, v := range state.Filters.Elements() {
-			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-			kvs = append(kvs, kv)
+			filterValues.Set(k, v.(types.String).ValueString())
 		}
 	}
 
@@ -158,11 +157,13 @@ func (d *dataSourceUsers) Read(ctx context.Context, req datasource.ReadRequest, 
 	if !state.Skip.IsNull() && !state.Skip.IsUnknown() {
 		skipVal = state.Skip.ValueInt64()
 	}
+	filterValues.Set("skip", fmt.Sprintf("%d", skipVal))
+	filterValues.Set("limit", fmt.Sprintf("%d", limitVal))
 
 	jsonStr, total, err := d.client.GetAllWithTotal(
 		ctx,
 		id,
-		fmt.Sprintf("%s/?%sskip=%d&limit=%d", common.URL_USER_MANAGEMENT, strings.Join(kvs, ""), skipVal, limitVal))
+		fmt.Sprintf("%s/?%s", common.URL_USER_MANAGEMENT, filterValues.Encode()))
 
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_users.go -> Read][" + id + "]")
