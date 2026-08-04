@@ -226,8 +226,8 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 		client.Log.Error(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] TIMED OUT after %d retries: keyVersionState: %s key_id: %s version_id: %s", loop, keyVersionState, keyID, versionID))
 		client.Log.Error(details)
 		diags.AddError(details, "")
-	} else {
-		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] resolved in %d retries: keyVersionState: %s key_id: %s version_id: %s.", loop, keyVersionState, keyID, versionID))
+		return
 	}
+	client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] resolved in %d retries: keyVersionState: %s key_id: %s version_id: %s.", loop, keyVersionState, keyID, versionID))
 	client.Log.Debug("[oci_key_version_common.go -> waitForKeyVersionState][response:" + redactOCIResponse(response) + "]")
 }
