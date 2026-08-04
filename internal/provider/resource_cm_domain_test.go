@@ -276,13 +276,9 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 				RefreshState: true,
 				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
-			{
-				// Step 3: re-apply config — Terraform recreates the domain.
-				Config: cmDomainOOBConfig(rName),
-				Check: checkStep(t, "deleteOutOfBand: recreated",
-					resource.TestCheckResourceAttr("ciphertrust_domain.oob", "name", rName),
-				),
-			},
+			// Step 3 (recreate) removed: under AddError+Preserve, the resource remains in state
+			// after the 404 error. Recovery requires: terraform state rm <resource> + terraform apply.
+			// The OOB 404 behavior is verified by steps 1-2 and the unit test Test_Read404_IsError_RegToken.
 		},
 	})
 }

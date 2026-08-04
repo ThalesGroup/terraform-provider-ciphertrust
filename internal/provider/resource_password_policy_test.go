@@ -352,8 +352,7 @@ resource "ciphertrust_password_policy" "drift" {
 	})
 }
 
-// Test_CM_AccCMPasswordPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource
-// on 404 and plans recreation after OOB deletion.
+// Test_CM_AccCMPasswordPolicy_OutOfBandDeletion verifies that Read() returns AddError + preserves state on 404 (PR #476 behavior).
 func Test_CM_AccCMPasswordPolicy_OutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	var capturedName string
@@ -392,8 +391,8 @@ resource "ciphertrust_password_policy" "oob" {
   policy_name = "tf-test-pwpolicy-oob"
 }
 `,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -428,9 +427,8 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
 				),
 			},
 			{
-				// Delete the policy out-of-band; Read() should 404-guard and remove from state.
-				// PlanOnly: true confirms the plan shows a diff (resource needs recreation)
-				// without error, validating the 404 path in Read() is clean.
+				// Delete the policy out-of-band; Read() gets 404 → AddError + state preserved (PR #476).
+				// PlanOnly: true confirms the 404 error is raised, validating the Read() 404 path.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -444,8 +442,8 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
     policy_name = %q
 }
 `, policyName),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
