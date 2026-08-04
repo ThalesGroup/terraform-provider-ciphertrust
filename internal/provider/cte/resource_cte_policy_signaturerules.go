@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -60,7 +59,7 @@ func (r *resourceCTEPolicySignatureRule) Schema(_ context.Context, _ resource.Sc
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEPolicySignatureRule) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_policy_signaturerules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_policy_signaturerules.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEPolicyAddSignatureRuleTFSDK
@@ -78,7 +77,7 @@ func (r *resourceCTEPolicySignatureRule) Create(ctx context.Context, req resourc
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_signaturerules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_signaturerules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy Signature Rule Creation",
 			err.Error(),
@@ -92,7 +91,7 @@ func (r *resourceCTEPolicySignatureRule) Create(ctx context.Context, req resourc
 		common.URL_CTE_POLICY+"/"+plan.CTEPolicyID.ValueString()+"/signaturerules",
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_signaturerules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_signaturerules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Policy Signature Rule on CipherTrust Manager: ",
 			"Could not create CTE Policy Signature Rule, unexpected error: "+err.Error(),
@@ -119,7 +118,7 @@ func (r *resourceCTEPolicySignatureRule) Create(ctx context.Context, req resourc
 	}
 	plan.SignatureRuleIDs = signatureRuleIDList
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_signaturerules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_signaturerules.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -149,7 +148,7 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 			common.URL_CTE_POLICY+"/"+state.CTEPolicyID.ValueString()+"/signaturerules")
 		if err != nil || response == "" {
 			// Rule deleted on CM — skip it
-			tflog.Debug(ctx, "Signature rule not found on CM, removing from state: "+ruleIDStr)
+			r.client.Log.Debug("Signature rule not found on CM, removing from state: " + ruleIDStr)
 			continue
 		}
 
@@ -186,7 +185,7 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 	// "+ create" instead of a "~ update" against a resource shell with
 	// empty attributes (TFIN-457).
 	if len(state.SignatureRuleIDs.Elements()) > 0 && len(refreshedIDs) == 0 {
-		tflog.Debug(ctx, "[resource_cte_policy_signaturerules.go -> Read] no signature rules remain on CM for policy "+state.CTEPolicyID.ValueString()+" (removed out-of-band), removing resource from state")
+		r.client.Log.Debug("[resource_cte_policy_signaturerules.go -> Read] no signature rules remain on CM for policy " + state.CTEPolicyID.ValueString() + " (removed out-of-band), removing resource from state")
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -202,7 +201,7 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 	}
 	state.SignatureRuleIDs = refreshedIDsList
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_signaturerules.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_signaturerules.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 
@@ -272,10 +271,7 @@ func (r *resourceCTEPolicySignatureRule) Update(ctx context.Context, req resourc
 				return
 			}
 
-			tflog.Debug(
-				ctx,
-				"Deleted signature rule: "+ruleID,
-			)
+			r.client.Log.Debug("Deleted signature rule: " + ruleID)
 		}
 	}
 
@@ -335,15 +331,12 @@ func (r *resourceCTEPolicySignatureRule) Update(ctx context.Context, req resourc
 			return
 		}
 
-		tflog.Debug(
-			ctx,
-			fmt.Sprintf(
-				"Patched signature rule %s from %s to %s",
-				ruleID,
-				stateName,
-				planName,
-			),
-		)
+		r.client.Log.Debug(fmt.Sprintf(
+			"Patched signature rule %s from %s to %s",
+			ruleID,
+			stateName,
+			planName,
+		))
 
 		finalRuleIDs = append(finalRuleIDs, types.StringValue(ruleID))
 	}
@@ -411,10 +404,7 @@ func (r *resourceCTEPolicySignatureRule) Update(ctx context.Context, req resourc
 					types.StringValue(newRuleID),
 				)
 
-				tflog.Debug(
-					ctx,
-					"Created signature rule: "+newRuleID,
-				)
+				r.client.Log.Debug("Created signature rule: " + newRuleID)
 			}
 		}
 	}
@@ -476,7 +466,7 @@ func (r *resourceCTEPolicySignatureRule) Delete(ctx context.Context, req resourc
 			)
 			return
 		}
-		tflog.Debug(ctx, "Deleted signature rule: "+ruleIDStr)
+		r.client.Log.Debug("Deleted signature rule: " + ruleIDStr)
 	}
 
 }

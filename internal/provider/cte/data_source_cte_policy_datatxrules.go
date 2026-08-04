@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -90,17 +89,17 @@ func (d *dataSourceCTEPolicyDataTXRule) Schema(_ context.Context, _ datasource.S
 
 func (d *dataSourceCTEPolicyDataTXRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 	var state CTEPolicyDataTXRuleDataSourceModel
 	req.Config.Get(ctx, &state)
-	tflog.Info(ctx, "AnuragJain =====> "+state.PolicyID.ValueString())
+	d.client.Log.Info("AnuragJain =====> " + state.PolicyID.ValueString())
 
 	jsonStr, err := d.client.GetAllPaged(
 		ctx,
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/datatxrules")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Data TX Rules from CM",
 			err.Error(),
@@ -112,7 +111,7 @@ func (d *dataSourceCTEPolicyDataTXRule) Read(ctx context.Context, req datasource
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Data TX Rules from CM",
 			err.Error(),
@@ -138,7 +137,7 @@ func (d *dataSourceCTEPolicyDataTXRule) Read(ctx context.Context, req datasource
 		state.Rules = append(state.Rules, dataTxRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

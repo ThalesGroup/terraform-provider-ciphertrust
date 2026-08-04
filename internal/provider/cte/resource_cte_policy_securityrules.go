@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -138,7 +137,7 @@ func (r *resourceCTEPolicySecurityRule) Schema(_ context.Context, _ resource.Sch
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEPolicySecurityRule) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_policy_securityrules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_policy_securityrules.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEPolicyAddSecurityRuleTFSDK
@@ -180,7 +179,7 @@ func (r *resourceCTEPolicySecurityRule) Create(ctx context.Context, req resource
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_securityrules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_securityrules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy Security Rule Creation",
 			err.Error(),
@@ -194,7 +193,7 @@ func (r *resourceCTEPolicySecurityRule) Create(ctx context.Context, req resource
 		common.URL_CTE_POLICY+"/"+plan.CTEClientPolicyID.ValueString()+"/securityrules",
 		payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_securityrules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_securityrules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Policy Security Rule on CipherTrust Manager: ",
 			"Could not create CTE Policy Security Rule, unexpected error: "+err.Error(),
@@ -209,7 +208,7 @@ func (r *resourceCTEPolicySecurityRule) Create(ctx context.Context, req resource
 	plan.SecurityRule.ID = types.StringValue(newRule.ID)
 	plan.SecurityRule.OrderNumber = types.Int64Value(*newRule.OrderNumber)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_securityrules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_securityrules.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -243,7 +242,7 @@ func (r *resourceCTEPolicySecurityRule) Read(ctx context.Context, req resource.R
 
 	var apiResp SecurityRuleJSON
 	if err = json.Unmarshal([]byte(response), &apiResp); err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_securityrules.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_securityrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error parsing CTE Policy Security Rule response",
 			err.Error(),
@@ -266,7 +265,7 @@ func (r *resourceCTEPolicySecurityRule) Read(ctx context.Context, req resource.R
 		ExcludeResourceSet: types.BoolValue(apiResp.ExcludeResourceSet),
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_securityrules.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_securityrules.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 
@@ -328,7 +327,7 @@ func (r *resourceCTEPolicySecurityRule) Update(ctx context.Context, req resource
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_securityrules.go -> Update]["+plan.SecurityRule.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_securityrules.go -> Update][" + plan.SecurityRule.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy Security Rule Update",
 			err.Error(),
@@ -343,7 +342,7 @@ func (r *resourceCTEPolicySecurityRule) Update(ctx context.Context, req resource
 		payloadJSON,
 	)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_securityrules.go -> Update]["+plan.SecurityRule.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_securityrules.go -> Update][" + plan.SecurityRule.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Policy Security Rule on CipherTrust Manager: ",
 			"Could not update CTE Policy Security Rule, unexpected error: "+err.Error(),
@@ -377,7 +376,7 @@ func (r *resourceCTEPolicySecurityRule) Delete(ctx context.Context, req resource
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_POLICY, state.CTEClientPolicyID.ValueString(), "securityrules", state.SecurityRule.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.CTEClientPolicyID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_securityrules.go -> Delete]["+state.SecurityRule.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_securityrules.go -> Delete][" + state.SecurityRule.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE Policy Security Rule "+state.SecurityRule.ID.ValueString(), &resp.Diagnostics) {
 			return

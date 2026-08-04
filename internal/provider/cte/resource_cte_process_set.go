@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -136,7 +135,7 @@ func (r *resourceCTEProcessSet) Schema(_ context.Context, _ resource.SchemaReque
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_process_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_process_set.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEProcessSetTFSDK
@@ -180,7 +179,7 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Process Set Creation",
 			err.Error(),
@@ -190,7 +189,7 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_PROCESS_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Process Set on CipherTrust Manager: ",
 			"Could not create CTE Process Set, unexpected error: "+err.Error(),
@@ -204,7 +203,7 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	plan.Application = types.StringValue(gjson.Get(response, "application").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_process_set.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -217,11 +216,8 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 	var state CTEProcessSetTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_process_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_process_set.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -262,11 +258,8 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_process_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_process_set.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -320,7 +313,7 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Process Set Update",
 			err.Error(),
@@ -330,7 +323,7 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_PROCESS_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Process Set on CipherTrust Manager: ",
 			"Could not create CTE Process Set, unexpected error: "+err.Error(),
@@ -361,7 +354,7 @@ func (r *resourceCTEProcessSet) Delete(ctx context.Context, req resource.DeleteR
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_PROCESS_SET, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_process_set.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE Process Set "+state.ID.ValueString(), &resp.Diagnostics) {
 			return
@@ -449,7 +442,7 @@ func setCTEProcessSetState(
 
 func (r *resourceCTEProcessSet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_process_set.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_process_set.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_process_set.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_process_set.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

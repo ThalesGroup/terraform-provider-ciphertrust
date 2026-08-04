@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -220,7 +219,7 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_client.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEClientTFSDK
@@ -280,7 +279,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Creation",
 			err.Error(),
@@ -290,7 +289,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_CLIENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Client on CipherTrust Manager: ",
 			"Could not create CTE Client, unexpected error: "+err.Error(),
@@ -312,7 +311,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.Password = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_client.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -326,11 +325,8 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_client.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_client.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -369,11 +365,8 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_client.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_client.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -492,7 +485,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Update",
 			err.Error(),
@@ -502,7 +495,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_CLIENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Client on CipherTrust Manager: ",
 			"Could not update CTE Client, unexpected error: "+err.Error(),
@@ -546,7 +539,7 @@ func (r *resourceCTEClient) Delete(ctx context.Context, req resource.DeleteReque
 	}
 	PayloadJSON, err := json.Marshal(DelClient)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update][]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Update %s "+state.ID.ValueString(),
 			err.Error(),
@@ -556,7 +549,7 @@ func (r *resourceCTEClient) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete existing order using custom url
 	url := fmt.Sprintf("%s/%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_CLIENT, state.ID.ValueString(), "delete")
 	output, err := r.client.DeleteByID(ctx, "PATCH", state.ID.ValueString(), url, PayloadJSON)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_client.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE Client "+state.ID.ValueString(), &resp.Diagnostics) {
 			return
@@ -734,7 +727,7 @@ func setCTEClientState(
 
 func (r *resourceCTEClient) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_client.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_client.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

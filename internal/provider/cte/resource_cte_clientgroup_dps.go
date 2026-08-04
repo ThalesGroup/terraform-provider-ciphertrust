@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 )
@@ -72,7 +71,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context, _
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEClientGroupDesignatedPrimarySet) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_dps.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_clientgroup_dps.go -> Create][" + id + "]")
 
 	var plan CTEClientGroupDesignatedPrimarySetTFSDK
 	var payload CTEClientGroupDesignatedPrimarySetJSON
@@ -89,7 +88,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Create(ctx context.Context,
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Group Designated Primary Set Creation",
 			err.Error(),
@@ -100,7 +99,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Create(ctx context.Context,
 	url := fmt.Sprintf("%s/%s/dps", common.URL_CTE_CLIENT_GROUP, plan.ClientGroupID.ValueString())
 	response, err := r.client.PostData(ctx, id, url, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Client Group Designated Primary Set on CipherTrust Manager: ",
 			"Could not create Designated Primary Set, unexpected error: "+err.Error(),
@@ -112,7 +111,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Create(ctx context.Context,
 	// and used in Update/Delete URLs as {dpsId}
 	plan.ID = types.StringValue(response)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_dps.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -125,7 +124,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 	var state CTEClientGroupDesignatedPrimarySetTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_dps.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_clientgroup_dps.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -137,11 +136,11 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), url)
 	if err != nil {
 		if strings.Contains(err.Error(), "record not found") || strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_cte_clientgroup_dps.go -> Read] DPS not found, removing from state: "+state.ID.ValueString())
+			r.client.Log.Debug("[resource_cte_clientgroup_dps.go -> Read] DPS not found, removing from state: " + state.ID.ValueString())
 			resp.State.RemoveResource(ctx)
 			return
 		}
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CTE Client Group Designated Primary Set on CipherTrust Manager: ",
 			"Could not read Designated Primary Set id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
@@ -155,11 +154,11 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 		return
 	}
 
-	tflog.Debug(ctx, "RAW DPS API RESPONSE: "+response)
+	r.client.Log.Debug("RAW DPS API RESPONSE: " + response)
 
 	var apiResp CTEClientGroupDesignatedPrimarySetListJSON
 	if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error parsing CTE Client Group Designated Primary Set API response",
 			err.Error(),
@@ -175,7 +174,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_dps.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -218,7 +217,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Update(ctx context.Context,
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Group Designated Primary Set Update",
 			err.Error(),
@@ -230,7 +229,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Update(ctx context.Context,
 	url := fmt.Sprintf("%s/%s/dps", common.URL_CTE_CLIENT_GROUP, plan.ClientGroupID.ValueString())
 	_, err = r.client.UpdateData(ctx, plan.ID.ValueString(), url, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_dps.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Client Group Designated Primary Set on CipherTrust Manager: ",
 			"Could not update Designated Primary Set, unexpected error: "+err.Error(),
@@ -259,7 +258,7 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Delete(ctx context.Context,
 	// state.ID holds the dps_id returned from Create, used as {dpsId} in the DELETE URL
 	url := fmt.Sprintf("%s/%s/%s/dps/%s", r.client.CipherTrustURL, common.URL_CTE_CLIENT_GROUP, state.ClientGroupID.ValueString(), state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_dps.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE Client Group Designated Primary Set "+state.ID.ValueString(), &resp.Diagnostics) {
 			return
@@ -301,8 +300,8 @@ func setCTEClientGroupDesignatedPrimarySetState(
 
 func (r *resourceCTEClientGroupDesignatedPrimarySet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_dps.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_dps.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_clientgroup_dps.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_clientgroup_dps.go -> ImportState][" + id + "]")
 
 	// Expect import ID in format: "client_group_id:dps_id"
 	parts := strings.SplitN(req.ID, ":", 2)
