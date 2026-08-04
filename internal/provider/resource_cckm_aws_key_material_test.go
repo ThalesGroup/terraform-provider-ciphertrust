@@ -1,13 +1,16 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/hashicorp/go-hclog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -2257,7 +2260,21 @@ func TestCckmAWSKeyMaterialCDSPaaSNotSupported(t *testing.T) {
 }
 
 func logTestStep(testName, step string) {
-	f, err := os.OpenFile("ctp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	logFile := "ctp.log"
+	homeDir, _ := os.UserHomeDir()
+	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
+	if file, err := os.Open(configFileName); err == nil {
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			parts := strings.SplitN(scanner.Text(), "=", 2)
+			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "log_file" {
+				logFile = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+		_ = file.Close()
+	}
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		fmt.Printf("logTestStep OpenFile err: %s\n", err.Error())
 		return
