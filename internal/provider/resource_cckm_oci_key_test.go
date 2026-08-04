@@ -478,7 +478,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create a valid key + v1; verify attributes and data sources.
-				Config: createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
@@ -512,10 +513,12 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 2: refresh state - verify no unexpected drift.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 2") },
 				RefreshState: true,
 			},
 			{
 				// Step 3: import the key resource and verify all computed attributes round-trip.
+				PreConfig:               func() { logTestStep(t.Name(), "Step 3") },
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -523,6 +526,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 4: import the key version resource.
+				PreConfig:         func() { logTestStep(t.Name(), "Step 4") },
 				ResourceName:      v1Resource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -533,7 +537,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 5: disable key + rename + add freeform tag.
-				Config: updateConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 5") },
+				Config:    updateConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "DISABLED"),
@@ -543,7 +548,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 6: re-enable key (name stays keyNameUpdated).
-				Config: restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 6") },
+				Config:    restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -553,7 +559,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 7: add scheduler_one and enable auto-rotation.
-				Config: addRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 7") },
+				Config:    addRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -561,7 +568,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 8: switch auto-rotation to scheduler_two.
-				Config: changeRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 8") },
+				Config:    changeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -569,7 +577,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 9: remove enable_auto_rotation block - auto_rotate must become false.
-				Config: removeRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 9") },
+				Config:    removeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -578,24 +587,28 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			{
 				// Step 10: changing algorithm must be rejected at plan time.
 				// State is unchanged (PlanOnly) - key must NOT be destroyed.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 10") },
 				Config:      badAlgorithmConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
 				// Step 11: changing length must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 11") },
 				Config:      badLengthConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
 				// Step 12: changing vault must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
 				Config:      badVaultConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
 			},
 			{
 				// Step 13: changing cckm_key_id on the version must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 13") },
 				Config:      badCckmKeyIdConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
@@ -605,7 +618,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				// with all immutable attributes unchanged. Schedulers are destroyed here as a
 				// side effect since they are not present in this config.
 				// Capture key and v1 IDs for the OOB deletion tests that follow.
-				Config: afterImmutabilityConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 14") },
+				Config:    afterImmutabilityConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
@@ -632,7 +646,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			{
 				// Step 15: add v2 (depends_on v1) so that v1 becomes non-current.
 				// Only non-current versions are eligible for OOB scheduled deletion.
-				Config: twoVersionsConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 15") },
+				Config:    twoVersionsConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttrSet(v1Resource, "id"),
@@ -644,6 +659,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				// Expected: v1 retained with lifecycle_state = SCHEDULING_DELETION;
 				// v2 remains ENABLED.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 16")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedKeyID, capturedV1ID)
 				},
 				RefreshState: true,
@@ -666,7 +682,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				// Step 17: apply update with schedule_for_deletion_days = 7 on v1.
 				// v1 is already SCHEDULING_DELETION. Expected: provider issues a warning
 				// (not an error) and retains v1 in state with SCHEDULING_DELETION.
-				Config: twoVersionsUpdateV1Config,
+				PreConfig: func() { logTestStep(t.Name(), "Step 17") },
+				Config:    twoVersionsUpdateV1Config,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[v1Resource]
@@ -687,6 +704,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				// (plan wants true from schema default, read-back is false).
 				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 18")
 					scheduleOciKeyDeletionOutOfBand(capturedKeyID)
 				},
 				RefreshState:       true,
@@ -710,6 +728,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
 				// but the plan used the schema default (true). The Terraform framework raises
 				// "Provider produced inconsistent result".
+				PreConfig:   func() { logTestStep(t.Name(), "Step 19") },
 				Config:      oobKeyUpdateConfig,
 				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
 			},
@@ -792,7 +811,8 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create an HSM-protected native key and a version on the VP vault.
-				Config: baseConfig + createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    baseConfig + createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
@@ -811,7 +831,8 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
 				// Verify the trigger attribute is reflected in state.
-				Config: baseConfig + restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    baseConfig + restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
@@ -821,6 +842,7 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 3: refresh state to re-read version attributes from the API,
 				// then verify updated_at changed after the restore.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 3") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
@@ -902,12 +924,14 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: enable_key = false at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 1") },
 				Config:      disableAtCreateConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 			{
 				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      schedulerAtCreateConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
