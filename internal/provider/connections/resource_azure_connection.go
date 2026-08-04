@@ -45,10 +45,41 @@ var (
 	_ resource.Resource                   = &resourceAzureConnection{}
 	_ resource.ResourceWithConfigure      = &resourceAzureConnection{}
 	_ resource.ResourceWithValidateConfig = &resourceAzureConnection{}
+	_ resource.ResourceWithModifyPlan     = &resourceAzureConnection{}
 )
 
 func NewResourceAzureConnection() resource.Resource {
 	return &resourceAzureConnection{}
+}
+
+// ModifyPlan surfaces a warning when client_secret is removed from config while
+// it was previously set (TFIN-563). UseStateForUnknown() silently preserves the
+// prior value — the secret stays active on CM — but without any signal to the user.
+// We emit a warning (not an error) so that:
+//   - Normal updates that omit client_secret (the expected pattern) still succeed
+//     cleanly but now inform the user what is happening.
+//   - The behavior is consistent with the explicit client_secret="" path, which
+//     is blocked by clientSecretClearBlocked() in Update().
+func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return // create or destroy
+	}
+	var config, state AzureConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !state.ClientSecret.IsNull() && config.ClientSecret.IsNull() {
+		resp.Diagnostics.AddWarning(
+			"client_secret removed from config — existing value preserved",
+			"client_secret was removed from your configuration but the previously set value "+
+				"will be preserved in state and remain active on CipherTrust Manager. "+
+				"CipherTrust Manager does not support clearing client_secret. "+
+				"To rotate the secret, set client_secret to a new value. "+
+				"To switch to certificate-based auth, destroy and recreate the connection.",
+		)
+	}
 }
 
 // ValidateConfig enforces cross-field constraints that cannot be expressed with
@@ -143,11 +174,10 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Description: "Secret key for the Azure application. Required in Azure Stack connection. " +
 					"Write-only: CM never returns this field on GET, so its live value cannot be verified " +
 					"after apply and out-of-band changes are not detectable by terraform plan. " +
-					"Omitting this attribute in a later apply leaves the previously configured secret " +
-					"untouched (no diff). Once set, this field cannot be cleared back to empty by explicitly " +
-					"setting it to \"\": CM does not support clearing it, and the provider rejects the attempt " +
-					"at apply time rather than silently leaving state and CM's live value out of sync. To " +
-					"rotate the secret, set a new value.",
+					"Omitting this attribute in a later apply preserves the prior value (a plan warning is emitted). " +
+					"Explicitly setting it to \"\" is also blocked — CM does not support clearing it. " +
+					"To rotate the secret, set client_secret to a new value. " +
+					"To remove client_secret-based auth entirely, destroy and recreate the connection.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
