@@ -45,7 +45,6 @@ var (
 	_ resource.Resource                   = &resourceAzureConnection{}
 	_ resource.ResourceWithConfigure      = &resourceAzureConnection{}
 	_ resource.ResourceWithValidateConfig = &resourceAzureConnection{}
-	_ resource.ResourceWithModifyPlan     = &resourceAzureConnection{}
 )
 
 func NewResourceAzureConnection() resource.Resource {
@@ -68,31 +67,6 @@ func (r *resourceAzureConnection) ValidateConfig(ctx context.Context, req resour
 			"azure_stack_server_cert required for AzureStack",
 			"CipherTrust Manager requires azure_stack_server_cert when cloud_name is \"AzureStack\". "+
 				"Set azure_stack_server_cert to a valid PEM certificate.",
-		)
-	}
-}
-
-// ModifyPlan enforces that client_secret cannot be removed once set (TFIN-563).
-// UseStateForUnknown() on client_secret causes the plan to carry the prior state
-// value when the user removes the attribute from config — making Update()'s
-// clientSecretClearBlocked() check unreachable. ModifyPlan detects the removal
-// by comparing req.Config (null when removed) vs req.State (non-null when set).
-func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
-		return // create or destroy — not an update
-	}
-	var config, state AzureConnectionTFSDK
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if !state.ClientSecret.IsNull() && config.ClientSecret.IsNull() {
-		resp.Diagnostics.AddError(
-			"client_secret cannot be removed",
-			"CipherTrust Manager does not support clearing client_secret once it has been set. "+
-				"To rotate the secret, set client_secret to a new value. "+
-				"To remove client_secret-based auth entirely, destroy and recreate the connection.",
 		)
 	}
 }
