@@ -209,7 +209,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: Domain Creation",
 			err.Error(),
@@ -219,7 +219,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_DOMAIN, payloadJSON)
 	if err != nil {
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_group.go -> Create][" + id + "]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_domain.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating domain on CipherTrust Manager: ",
 			"Could not create domain, unexpected error: "+err.Error(),
