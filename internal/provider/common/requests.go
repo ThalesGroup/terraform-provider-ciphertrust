@@ -384,6 +384,9 @@ func (c *Client) UpdateData(ctx context.Context, resourceID string, endpoint str
 	}
 
 	ret := gjson.Get(string(body), id).String()
+	if id != "" && ret == "" && len(body) > 0 {
+		return "", fmt.Errorf("UpdateData: field %q not found in PATCH response body", id)
+	}
 	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> UpdateData][resourceID: "+resourceID+"]")
 	if err := c.waitForReplication(ctx); err != nil {
 		return "", err
