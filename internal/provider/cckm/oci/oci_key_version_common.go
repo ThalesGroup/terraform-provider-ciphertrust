@@ -206,7 +206,8 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 	keyVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
 	client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] key_id: %s version_id: %s waiting for state '%s', max_retries: %d", keyID, versionID, expectedState, numRetries))
-	for retry := 0; retry < numRetries && keyVersionState != expectedState; retry++ {
+	loop := 0
+	for loop = 0; loop < numRetries && keyVersionState != expectedState; loop++ {
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
 		response, err = client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 		if err != nil {
@@ -217,16 +218,16 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 			return
 		}
 		keyVersionState = gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
-		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] retry %d/%d: keyVersionState:%s key_id: %s version_id: %s", retry+1, numRetries, keyVersionState, keyID, versionID))
+		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] loop: %d keyVersionState:%s key_id: %s version_id: %s", loop, keyVersionState, keyID, versionID))
 	}
 	if keyVersionState != expectedState {
 		msg := fmt.Sprintf("Failed to confirm OCI key version state is '%s' in the given time. Consider extending provider configuration option 'oci_operation_timeout'.", expectedState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		client.Log.Error(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] TIMED OUT after %d retries: keyVersionState: %s key_id: %s version_id: %s", numRetries, keyVersionState, keyID, versionID))
+		client.Log.Error(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] TIMED OUT after %d retries: keyVersionState: %s key_id: %s version_id: %s", loop, keyVersionState, keyID, versionID))
 		client.Log.Error(details)
 		diags.AddError(details, "")
 	} else {
-		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] resolved in %d retries: keyVersionState: %s key_id: %s version_id: %s state reached '%s'.", keyVersionState, keyID, versionID))
+		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] resolved in %d retries: keyVersionState: %s key_id: %s version_id: %s.", loop, keyVersionState, keyID, versionID))
 	}
 	client.Log.Debug("[oci_key_version_common.go -> waitForKeyVersionState][response:" + redactOCIResponse(response) + "]")
 }
