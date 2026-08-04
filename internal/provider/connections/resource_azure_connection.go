@@ -738,21 +738,25 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	// Parameters for azure connection
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
-	// is_certificate_used / external_certificate_used: CM omits these fields from
-	// responses when is_certificate_used=true (documented API behavior). Three cases:
-	//   1. Field present  → use CM value.
-	//   2. Field absent, data is unknown (Computed field not yet resolved, e.g. client_secret
-	//      connection where CM never returns these) → resolve to false (CM default) so the
-	//      framework's "all values must be known after apply" contract is satisfied.
-	//   3. Field absent, data has a known value (e.g. plan had true) → preserve it (TFIN-562).
+	// external_certificate_used: Computed-only — no user config to preserve.
+	// Use the CM value when present; otherwise default to false.
 	if res := gjson.Get(response, "external_certificate_used"); res.Exists() {
 		data.ExternalCertificateUsed = types.BoolValue(res.Bool())
-	} else if data.ExternalCertificateUsed.IsUnknown() {
+	} else {
 		data.ExternalCertificateUsed = types.BoolValue(false)
 	}
+	// is_certificate_used: Optional+Computed. When CM omits the field from its
+	// response (documented for certificate-auth connections, TFIN-562), the only
+	// case worth preserving is when the user explicitly configured true — that is
+	// the signal that this is a certificate-based connection. In every other case
+	// (unknown, null, or false) resolve to false so the Computed attribute is always
+	// a known value after apply.
 	if res := gjson.Get(response, "is_certificate_used"); res.Exists() {
 		data.IsCertificateUsed = types.BoolValue(res.Bool())
-	} else if data.IsCertificateUsed.IsUnknown() {
+	} else if !data.IsCertificateUsed.IsNull() && !data.IsCertificateUsed.IsUnknown() && data.IsCertificateUsed.ValueBool() {
+		// User explicitly set is_certificate_used=true — CM omits it from the
+		// response for certificate-based connections. Preserve the configured value.
+	} else {
 		data.IsCertificateUsed = types.BoolValue(false)
 	}
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
