@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -70,9 +71,17 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Computed:    true,
 				Description: "Date and time the connection was created.",
 			},
+			// description: Optional+Computed with UseStateWhenClearingString so that removing
+			// the attribute from config preserves the prior value in state (TFIN-569). CM does not
+			// support clearing description via PATCH, so the plan modifier correctly prevents the
+			// plan=null / state="old text" mismatch that would crash the post-apply consistency check.
 			"description": schema.StringAttribute{
-				Optional:    true,
-				Description: "Description about the connection. Once set, 'description' can be changed but not removed.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
+				Description: "Description about the connection. Once set, this field cannot be cleared back to empty — CM does not support clearing it via PATCH. Removing this attribute from config preserves the existing value.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -98,9 +107,18 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				WriteOnly:   true,
 				Description: "Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.",
 			},
+			// meta: Optional+Computed with UseStateWhenClearingMap so that removing the attribute
+			// from config preserves the prior value in state (TFIN-569). CM's merge-PATCH semantics
+			// mean omitting the field leaves it unchanged; the modifier prevents the plan=null /
+			// state={...} mismatch that would crash the post-apply consistency check.
 			"meta": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.UseStateForUnknown(),
+					modifiers.UseStateWhenClearingMap(),
+				},
 				Description: "Optional end-user or service data stored with the connection.",
 			},
 			"name": schema.StringAttribute{
