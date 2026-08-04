@@ -170,7 +170,7 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AZURE_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_AZURE_CONNECTION+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_azure_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
