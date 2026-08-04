@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -445,4 +446,93 @@ func Test_CM_GCPConnection_CloudNameEnumValidator(t *testing.T) {
 			t.Errorf("unexpected error for a null config value: %v", diags)
 		}
 	})
+}
+
+// Test_CM_GCPConnectionList_EmptyResponseSucceeds verifies that a CM response with an
+// empty body (zero-match filter) returns an empty gcp list attribute, not null (TFIN-566).
+func Test_CM_GCPConnectionList_EmptyResponseSucceeds(t *testing.T) {
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "") // empty body = zero matches
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	d := &dataSourceGCPConnection{client: client}
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	dsVals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		dsVals[name] = tftypes.NewValue(attrType, nil)
+	}
+	rawConfig := tftypes.NewValue(dsType, dsVals)
+
+	req := datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	resp := &datasource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	d.Read(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error on empty response: %v", resp.Diagnostics)
+	}
+	var state GCPConnectionDataSourceModel
+	if err := resp.State.Get(ctx, &state); err != nil {
+		t.Fatalf("failed to decode state: %v", err)
+	}
+	if len(state.Gcp) != 0 {
+		t.Errorf("expected 0 gcp connections, got %d", len(state.Gcp))
+	}
+}
+
+// Test_CM_GCPConnectionList_UnrecognizedFilterRejectedAtConfig verifies that
+// ConfigValidators rejects unknown filter keys at config-validate time (TFIN-565).
+func Test_CM_GCPConnectionList_UnrecognizedFilterRejectedAtConfig(t *testing.T) {
+	ctx := context.Background()
+	d := &dataSourceGCPConnection{}
+
+	validators := d.ConfigValidators(ctx)
+	if len(validators) == 0 {
+		t.Fatal("expected at least one ConfigValidator on ciphertrust_gcp_connection_list")
+	}
+
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+
+	vals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		if name == "filters" {
+			vals[name] = tftypes.NewValue(tftypes.Map{ElementType: tftypes.String},
+				map[string]tftypes.Value{"bogusKey": tftypes.NewValue(tftypes.String, "x")})
+		} else {
+			vals[name] = tftypes.NewValue(attrType, nil)
+		}
+	}
+	rawConfig := tftypes.NewValue(dsType, vals)
+
+	for _, v := range validators {
+		req := datasource.ValidateConfigRequest{
+			Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+		}
+		resp := &datasource.ValidateConfigResponse{}
+		v.ValidateDataSource(ctx, req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Error("expected error for unrecognized filter key, got none")
+		}
+	}
 }
