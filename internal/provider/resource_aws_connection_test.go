@@ -584,8 +584,9 @@ resource "ciphertrust_aws_connection" "test" {
 	})
 }
 
-// Test_CM_AWSConnection_outOfBandDelete verifies that Read() removes the resource
-// from state on 404.
+// Test_CM_AWSConnection_outOfBandDelete verifies that Read() surfaces an error
+// diagnostic (state preserved) when the connection is deleted out-of-band.
+// The operator must run 'terraform state rm' to clean up.
 func Test_CM_AWSConnection_outOfBandDelete(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	name := "tf-acc-aws-oob-del-" + suffix
@@ -605,10 +606,10 @@ func Test_CM_AWSConnection_outOfBandDelete(t *testing.T) {
 				),
 			},
 			{
-				// Delete out-of-band; Read() must detect 404 and mark for re-creation.
-				PreConfig:          func() { deleteAWSConnection(capturedID) },
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				// Delete out-of-band; Read() detects 404 and raises a hard error.
+				PreConfig:    func() { deleteAWSConnection(capturedID) },
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`AWS Connection Not Found`),
 			},
 		},
 	})
