@@ -739,15 +739,21 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 	data.Certificate = types.StringValue(gjson.Get(response, "certificate").String())
 	data.CertificateThumbprint = types.StringValue(gjson.Get(response, "certificate_thumbprint").String())
 	// is_certificate_used / external_certificate_used: CM omits these fields from
-	// responses when is_certificate_used=true (documented API behavior — the example
-	// response in the official docs also omits them). Using .Bool() on a missing path
-	// defaults to false and crashes the post-apply consistency check (TFIN-562).
-	// Only update data when the field is actually present in the response.
+	// responses when is_certificate_used=true (documented API behavior). Three cases:
+	//   1. Field present  → use CM value.
+	//   2. Field absent, data is unknown (Computed field not yet resolved, e.g. client_secret
+	//      connection where CM never returns these) → resolve to false (CM default) so the
+	//      framework's "all values must be known after apply" contract is satisfied.
+	//   3. Field absent, data has a known value (e.g. plan had true) → preserve it (TFIN-562).
 	if res := gjson.Get(response, "external_certificate_used"); res.Exists() {
 		data.ExternalCertificateUsed = types.BoolValue(res.Bool())
+	} else if data.ExternalCertificateUsed.IsUnknown() {
+		data.ExternalCertificateUsed = types.BoolValue(false)
 	}
 	if res := gjson.Get(response, "is_certificate_used"); res.Exists() {
 		data.IsCertificateUsed = types.BoolValue(res.Bool())
+	} else if data.IsCertificateUsed.IsUnknown() {
+		data.IsCertificateUsed = types.BoolValue(false)
 	}
 	data.Description = types.StringValue(gjson.Get(response, "description").String())
 	data.TenantID = types.StringValue(gjson.Get(response, "tenant_id").String())
