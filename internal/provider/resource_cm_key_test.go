@@ -1039,8 +1039,9 @@ resource "ciphertrust_cm_key" "test_key" {
 }
 
 // Test_CM_CMKeyOutOfBandDeletion verifies that when a key is deleted directly on
-// CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
-// from state gracefully instead of returning a hard error.
+// CipherTrust Manager (out-of-band), the next terraform refresh surfaces a hard
+// error diagnostic (state preserved) so the operator is clearly informed of the
+// drift. The operator must run 'terraform state rm' to clean up.
 func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 	rName := "tf-key-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 
@@ -1054,9 +1055,7 @@ func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: Create the key normally. Capture its ID for use in Step 2.
-			// The post-apply refresh here succeeds (key still exists on CM) so the
-			// plan is empty and the step passes cleanly.
+			// Step 1: Create the key normally; capture its ID for the OOB delete.
 			{
 				Config: aesKeyConfig(rName, 256),
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -1067,9 +1066,8 @@ func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 					},
 				),
 			},
-			// Step 2: Delete the key out-of-band in PreConfig, then RefreshState.
-			// Read() detects the 404 and removes the resource from state, so the
-			// plan shows +create (ExpectNonEmptyPlan: true).
+			// Step 2: Delete the key out-of-band, then refresh.
+			// Read() detects the 404 and returns an error (state preserved).
 			{
 				PreConfig: func() {
 					endpoint := common.URL_KEY_MANAGEMENT + "/" + capturedID
@@ -1077,14 +1075,8 @@ func Test_CM_CMKeyOutOfBandDeletion(t *testing.T) {
 						t.Logf("out-of-band delete failed (key may already be gone): %s", err)
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-			},
-			// Step 3: Re-apply — Terraform recreates the key from scratch, proving
-			// the resource can be recovered after an out-of-band deletion.
-			{
-				Config: aesKeyConfig(rName, 256),
-				Check:  resource.TestCheckResourceAttrSet("ciphertrust_cm_key.test_key", "id"),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`CM Key Not Found`),
 			},
 		},
 	})

@@ -483,9 +483,9 @@ func (r *resourceCMPasswordPolicy) Read(ctx context.Context, req resource.ReadRe
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_CM_PASSWORD_POLICY)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Password Policy Not Found — State Preserved",
-				"The Password Policy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Password Policy"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Password Policy", state.Name.ValueString()),
 			)
 			return
 		}
@@ -779,6 +779,10 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_password_policy.go -> Delete][" + id + "][" + output + "]")
 		if err != nil {
 			if strings.Contains(err.Error(), notFoundError) {
+				resp.Diagnostics.AddWarning(
+					common.NotFoundDeleteWarningSummary,
+					common.NotFoundDeleteWarningDetail,
+				)
 				return
 			}
 			resp.Diagnostics.AddError(

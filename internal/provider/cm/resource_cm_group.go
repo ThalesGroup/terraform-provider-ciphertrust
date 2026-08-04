@@ -229,9 +229,9 @@ func (r *resourceCMGroup) Read(ctx context.Context, req resource.ReadRequest, re
 	response, err := r.client.GetById(ctx, id, resourceID, common.URL_GROUP)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"CM Group Not Found — State Preserved",
-				"The CM Group resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Group"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Group", state.ID.ValueString()),
 			)
 			return
 		}
@@ -528,6 +528,10 @@ func (r *resourceCMGroup) Delete(ctx context.Context, req resource.DeleteRequest
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_group.go -> Delete][" + state.Name.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

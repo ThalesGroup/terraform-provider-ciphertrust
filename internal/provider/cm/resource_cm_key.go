@@ -1363,13 +1363,9 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Key Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed key %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this key has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the key was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Key"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Key", state.ID.ValueString()),
 			)
 			return
 		}
@@ -2016,6 +2012,10 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {

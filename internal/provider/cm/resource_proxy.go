@@ -197,9 +197,9 @@ func (r *resourceCMProxy) Read(ctx context.Context, req resource.ReadRequest, re
 	response, err := r.client.ReadDataByParam(ctx, id, "all", common.URL_CM_PROXY)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"Proxy Not Found — State Preserved",
-				"The Proxy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Proxy"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Proxy", state.ID.ValueString()),
 			)
 			return
 		}

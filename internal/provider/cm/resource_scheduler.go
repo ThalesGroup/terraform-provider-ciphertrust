@@ -509,9 +509,9 @@ func (r *resourceScheduler) Read(ctx context.Context, req resource.ReadRequest, 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCHEDULER_JOB_CONFIGS)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
-			resp.Diagnostics.AddWarning(
-				"Scheduler Not Found — State Preserved",
-				"The Scheduler resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Scheduler"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Scheduler", state.ID.ValueString()),
 			)
 			return
 		}

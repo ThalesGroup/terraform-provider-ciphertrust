@@ -290,9 +290,9 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_DOMAIN)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"CM Domain Not Found — State Preserved",
-				"The CM Domain resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Domain"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Domain", state.ID.ValueString()),
 			)
 			return
 		}
@@ -627,6 +627,10 @@ func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteReques
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_domain.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

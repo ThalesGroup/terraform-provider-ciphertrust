@@ -161,10 +161,10 @@ func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 }
 
 // Test_CM_GCPRead_OOBDelete_GracefulStateRemoval is an end-to-end unit test that
-// proves Read() silently removes the resource from state — instead of returning an
-// error diagnostic — when CM responds with 404.  This is the out-of-band deletion
-// scenario: after an OOB delete the next terraform plan must propose a clean
-// +create rather than hard-erroring.
+// proves Read() surfaces an error diagnostic (preserving state) when CM responds with
+// 404. This is the out-of-band deletion scenario. The previous behaviour was to emit a
+// warning; it was changed to an error so operators are clearly informed of the drift and
+// can make an explicit decision (terraform state rm or re-apply to recreate).
 //
 // The test uses net/http/httptest as a drop-in fake CM so no live endpoint is needed.
 func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
@@ -234,20 +234,21 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	// Act: simulate a terraform plan/refresh after the connection was deleted out-of-band.
 	r.Read(ctx, req, resp)
 
-	// Assert 1: Read() must NOT add any error diagnostic on 404.
-	if resp.Diagnostics.HasError() {
-		t.Errorf("Read() must not add error diagnostics on OOB-delete 404, got: %v",
-			resp.Diagnostics)
+	// Assert 1: Read() MUST add an error diagnostic on 404 (changed from warning in prior
+	// behaviour — operators must be clearly informed of the resource drift).
+	if !resp.Diagnostics.HasError() {
+		t.Errorf("Read() on OOB-delete 404: expected an error diagnostic but got none")
 	}
 
-	// Assert 2: Read() must add a Warning diagnostic on 404 as per the State Preserved standard.
+	// Assert 2: Read() must add at least one diagnostic (error or warning) on 404.
 	if len(resp.Diagnostics) == 0 {
-		t.Error("Read() must add a Warning diagnostic on OOB-delete 404 to notify state preservation")
+		t.Error("Read() must add a diagnostic on OOB-delete 404")
 	}
 
-	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be false) on 404.
+	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be
+	// false) on 404 — state is preserved so the operator can decide.
 	if resp.State.Raw.IsNull() {
-		t.Errorf("Read() must preserve the resource in state (state.Raw.IsNull is false) on 404 as per CLAUDE.md convention, got null state")
+		t.Errorf("Read() must preserve the resource in state on 404, got null state")
 	}
 }
 

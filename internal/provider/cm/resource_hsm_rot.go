@@ -249,9 +249,9 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"HSM Root of Trust Setup Not Found — State Preserved",
-				"The HSM Root of Trust Setup resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "HSM Root of Trust"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "HSM Root of Trust", state.ID.ValueString()),
 			)
 			return
 		}
@@ -406,8 +406,11 @@ func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.Delete
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, payloadBytes)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Resource already deleted out-of-band; treat terraform destroy as successful.
 			r.client.Log.Debug("[resource_hsm_rot.go -> Delete] resource already absent, skipping [" + state.ID.ValueString() + "]")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Delete][" + state.ID.ValueString() + "]")

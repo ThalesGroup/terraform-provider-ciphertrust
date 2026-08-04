@@ -57,36 +57,27 @@ func Test_CM_KeyRead_PreservesStateOn404(t *testing.T) {
 
 	r.Read(ctx, req, resp)
 
-	// Ensure there are no hard errors (only warnings)
-	if resp.Diagnostics.HasError() {
-		t.Fatalf("Read() returned unexpected errors: %v", resp.Diagnostics.Errors())
+	// 404 on Read must now produce a hard error (not a warning) so the operator
+	// is clearly informed. State must still be preserved (not removed).
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("Read() on 404: expected an error diagnostic but got none")
 	}
 
-	// Verify that state is preserved
-	var final CMKeyTFSDK
-	diags := resp.State.Get(ctx, &final)
-	if diags.HasError() {
-		t.Fatalf("failed to parse final state: %v", diags)
-	}
-	if final.ID.ValueString() != "k1" {
-		t.Errorf("expected state ID to be preserved as 'k1', got %q", final.ID.ValueString())
+	// State must NOT have been cleared — the resource is retained in Terraform state
+	// even on error so the operator can decide whether to remove it explicitly.
+	if resp.State.Raw.IsNull() {
+		t.Fatal("Read() on 404: state was cleared — it should be preserved on error")
 	}
 
-	// Verify that a warning was appended
-	warnings := resp.Diagnostics.Warnings()
-	if len(warnings) == 0 {
-		t.Fatal("expected diagnostic warnings to be populated, but got none")
-	}
-
-	foundWarning := false
-	for _, w := range warnings {
-		if strings.Contains(w.Summary(), "Key Not Found") && strings.Contains(w.Detail(), "terraform state rm") {
-			foundWarning = true
+	// The error summary must reference the resource and include guidance.
+	foundError := false
+	for _, e := range resp.Diagnostics.Errors() {
+		if strings.Contains(e.Summary(), "Not Found") && strings.Contains(e.Detail(), "terraform state rm") {
+			foundError = true
 			break
 		}
 	}
-
-	if !foundWarning {
-		t.Errorf("did not find expected warning with 'terraform state rm' instruction. Warnings got: %v", warnings)
+	if !foundError {
+		t.Errorf("did not find expected error with 'terraform state rm' guidance. Errors: %v", resp.Diagnostics.Errors())
 	}
 }

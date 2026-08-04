@@ -273,9 +273,9 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	r.client.Log.Trace(userResponse)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"CM User Not Found — State Preserved",
-				"The CM User resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM User"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM User", state.ID.ValueString()),
 			)
 			return
 		}
@@ -590,10 +590,9 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user.go -> Delete][" + state.UserID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			// Resource was already deleted outside of Terraform — desired state achieved.
 			resp.Diagnostics.AddWarning(
-				"CipherTrust User Not Found on Delete",
-				"The CipherTrust User resource returned HTTP 404 during deletion. It was likely removed outside of Terraform. Treating as successfully deleted.",
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
 			)
 			return
 		}

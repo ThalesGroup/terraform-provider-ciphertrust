@@ -377,9 +377,9 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Read][" + id + "]")
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Policy Not Found — State Preserved",
-				"The Policy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Policy"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Policy", state.ID.ValueString()),
 			)
 			return
 		}
@@ -527,6 +527,10 @@ func (r *resourceCMPolicy) Delete(ctx context.Context, req resource.DeleteReques
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Delete][" + state.ID.ValueString() + "]")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				common.NotFoundDeleteWarningDetail,
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

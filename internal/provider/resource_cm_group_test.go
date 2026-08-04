@@ -102,7 +102,8 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band deletion; next plan should detect drift and recreate.
+				// Out-of-band deletion; next plan surfaces a hard error (state preserved).
+				// The operator must run 'terraform state rm' to clean up.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -114,9 +115,9 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 						common.URL_GROUP+"/"+capturedID,
 					)
 				},
-				Config:             cmGroupConfig(name, "Drift test", ""),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				Config:      cmGroupConfig(name, "Drift test", ""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`CM Group Not Found`),
 			},
 		},
 	})
