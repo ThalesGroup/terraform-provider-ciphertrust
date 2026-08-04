@@ -15,8 +15,15 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceGCPConnection{}
-	_ datasource.DataSourceWithConfigure = &dataSourceGCPConnection{}
+	_ datasource.DataSource                     = &dataSourceGCPConnection{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceGCPConnection{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceGCPConnection{}
+
+	gcpConnectionValidFilterKeys = map[string]struct{}{
+		"id": {}, "name": {}, "products": {}, "meta_contains": {}, "cloud_name": {},
+		"createdBefore": {}, "createdAfter": {}, "last_connection_ok": {},
+		"last_connection_before": {}, "last_connection_after": {}, "labels": {},
+	}
 )
 
 func NewDataSourceGCPConnection() datasource.DataSource {
@@ -34,6 +41,36 @@ type GCPConnectionDataSourceModel struct {
 
 func (d *dataSourceGCPConnection) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_gcp_connection_list"
+}
+
+// ConfigValidators rejects unrecognized filter keys at plan time (TFIN-565).
+func (d *dataSourceGCPConnection) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{gcpConnectionFilterValidator{}}
+}
+
+type gcpConnectionFilterValidator struct{}
+
+func (v gcpConnectionFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are recognized CM API parameters."
+}
+func (v gcpConnectionFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v gcpConnectionFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config GCPConnectionDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := gcpConnectionValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_gcp_connection_list. "+
+					"CM silently ignores unknown keys and returns the full unfiltered list.", k),
+			)
+		}
+	}
 }
 
 func (d *dataSourceGCPConnection) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
@@ -127,7 +164,7 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_GCP_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_GCP_CONNECTION+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_gcp_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -137,6 +174,9 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
+	if jsonStr == "" {
+		jsonStr = "[]"
+	}
 	gcpConnections := []GCPConnectionJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &gcpConnections)
 	if err != nil {
@@ -148,6 +188,8 @@ func (d *dataSourceGCPConnection) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
+	// Initialize to non-nil empty slice so zero-match filters return [] not null (TFIN-566).
+	state.Gcp = []GCPConnectionTFSDK{}
 	for _, gcp := range gcpConnections {
 		gcpConn := GCPConnectionTFSDK{
 			CMCreateConnectionResponseCommonTFSDK: CMCreateConnectionResponseCommonTFSDK{
