@@ -14,8 +14,16 @@ import (
 func Test_CM_ClearRejectStringModifier(t *testing.T) {
 	mod := clearRejectStringModifier{FieldName: "description"}
 
+	// nonNullPlan simulates a normal in-progress plan (not a destroy). req.Plan must be
+	// explicitly non-null: tftypes.Value{}'s zero value has IsNull()==true, which would
+	// trigger the destroy guard added in TFIN-574 and suppress the reject logic.
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.String) planmodifier.StringResponse {
-		req := planmodifier.StringRequest{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.StringRequest{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.StringResponse{PlanValue: planVal}
 		mod.PlanModifyString(context.Background(), req, &resp)
 		return resp
@@ -67,8 +75,13 @@ func Test_CM_ClearRejectStringModifier(t *testing.T) {
 func Test_CM_ClearRejectInt64Modifier(t *testing.T) {
 	mod := clearRejectInt64Modifier{FieldName: "usage_mask"}
 
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.Int64) planmodifier.Int64Response {
-		req := planmodifier.Int64Request{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.Int64Request{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.Int64Response{PlanValue: planVal}
 		mod.PlanModifyInt64(context.Background(), req, &resp)
 		return resp
@@ -123,8 +136,13 @@ func Test_CM_ClearRejectMapModifier(t *testing.T) {
 	nonEmptyMap := types.MapValueMust(types.StringType, map[string]attr.Value{"env": types.StringValue("prod")})
 	emptyMap, _ := types.MapValue(types.StringType, map[string]attr.Value{})
 
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.Map) planmodifier.MapResponse {
-		req := planmodifier.MapRequest{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.MapRequest{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.MapResponse{PlanValue: planVal}
 		mod.PlanModifyMap(context.Background(), req, &resp)
 		return resp
