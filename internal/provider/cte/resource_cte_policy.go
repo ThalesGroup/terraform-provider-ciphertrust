@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -65,7 +66,16 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Description: "Description of the policy.",
 				Computed:    true,
-				Default:     stringdefault.StaticString(""),
+				// TFIN-583: no Default here -- the framework never marks a
+				// Default-bearing attribute unknown (see
+				// MarkComputedNilsAsUnknown), which made UseStateForUnknown()
+				// a no-op and let every unrelated update silently reset an
+				// omitted description back to "". UseStateForUnknown() keeps
+				// the last known value stable instead; Create() below
+				// resolves the initial unknown to the real API value.
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"policy_type": schema.StringAttribute{
 				Required: true,
@@ -93,6 +103,13 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Optional:    true,
 							Computed:    true,
 							Description: "Precedence order of the rule in the policy.",
+							// TFIN-583: without this, order_number is
+							// marked (known after apply) on every plan that
+							// touches the resource, even when it hasn't
+							// changed.
+							PlanModifiers: []planmodifier.Int64{
+								int64planmodifier.UseStateForUnknown(),
+							},
 						},
 
 						"key_id": schema.StringAttribute{
@@ -102,7 +119,15 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 						"key_type": schema.StringAttribute{
 							Optional:    true,
 							Computed:    true,
-							Default:     stringdefault.StaticString(""),
+							// TFIN-583: no Default -- see the top-level
+							// description attribute for why Default and
+							// UseStateForUnknown() don't mix (Default
+							// pre-empts the unknown-marking the plan
+							// modifier relies on). Create() below resolves
+							// the initial unknown to the real API value.
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
 							Description: "Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.",
 						},
 						"resource_set_id": schema.StringAttribute{
@@ -616,6 +641,12 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	// Policy ID from top level
 	plan.ID = types.StringValue(apiResp.ID)
 
+	// TFIN-583: description no longer has a schema Default, so when config
+	// omits it, plan.Description is unknown at this point -- resolve it to
+	// the real API value before State.Set (mirrors the order_number/ID
+	// handling for the rule blocks below).
+	plan.Description = types.StringValue(apiResp.Description)
+
 	//Security Rule ID fetched from response
 	if len(apiResp.SecurityRules) > 0 {
 		// For LDT policy, first security rule is always a default rule — skip it
@@ -642,6 +673,9 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 		for i, rule := range apiResp.DataTransformRules {
 			plan.DataTransformRules[i].ID = types.StringValue(rule.ID)
 			plan.DataTransformRules[i].OrderNumber = types.Int64Value(*rule.OrderNumber)
+			// TFIN-583: key_type no longer has a schema Default, so resolve
+			// the initial unknown to the real API value here too.
+			plan.DataTransformRules[i].KeyType = types.StringValue(rule.KeyType)
 		}
 	}
 

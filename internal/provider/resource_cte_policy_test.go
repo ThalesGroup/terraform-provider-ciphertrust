@@ -5,7 +5,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"regexp"
 	"testing"
 )
@@ -216,6 +218,100 @@ resource "ciphertrust_cte_policy" "cte_policy_applykey" {
   ]
 }
 `, name, neverDeny, effect)
+}
+
+// cteDataTxRuleNestedPolicyConfig renders a Standard ciphertrust_cte_policy
+// whose own data_transform_rules nested attribute omits order_number and
+// key_type (letting CM compute them), and description is likewise omitted.
+// partialMatch is varied on the (required) security_rules block so the
+// update step produces a real, unrelated change.
+func cteDataTxRuleNestedPolicyConfig(name string, partialMatch bool) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "cte_policy_datatx" {
+  name        = %q
+  policy_type = "Standard"
+  never_deny  = false
+
+  key_rules = [{
+    key_id = "clear_key"
+  }]
+
+  data_transform_rules = [{
+    key_id = "clear_key"
+  }]
+
+  security_rules = [
+    {
+      effect        = "permit"
+      action        = "key_op"
+      partial_match = %t
+    }
+  ]
+}
+`, name, partialMatch)
+}
+
+// TestCTEPolicyResource_dataTransformRulesFieldsStability covers TFIN-583:
+// description (top-level) and data_transform_rules.order_number/key_type are
+// Optional+Computed. Without a UseStateForUnknown() plan modifier, any
+// unrelated change to the resource (here, security_rules.partial_match)
+// causes these fields to spuriously flip to "(known after apply)" -- or, for
+// description/key_type specifically, silently reset to their schema Default
+// ("") instead of keeping the real value, since the framework never marks a
+// Default-bearing attribute unknown in the first place. The PreApply plan
+// checks assert all three stay known, stable values across the unrelated
+// update.
+func TestCTEPolicyResource_dataTransformRulesFieldsStability(t *testing.T) {
+	name := "tf-policy-datatx-stability-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy_datatx"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteDataTxRuleNestedPolicyConfig(name, false),
+				Check: checkStep(t, "policy datatx fields: create",
+					resource.TestCheckResourceAttrSet(rn, "data_transform_rules.0.id"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.order_number", "1"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.key_type", ""),
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			{
+				Config: cteDataTxRuleNestedPolicyConfig(name, true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("data_transform_rules").AtSliceIndex(0).AtMapKey("order_number"),
+							knownvalue.Int64Exact(1),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("data_transform_rules").AtSliceIndex(0).AtMapKey("key_type"),
+							knownvalue.StringExact(""),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("description"),
+							knownvalue.StringExact(""),
+						),
+					},
+				},
+				Check: checkStep(t, "policy datatx fields: unrelated update",
+					resource.TestCheckResourceAttr(rn, "security_rules.0.partial_match", "true"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.order_number", "1"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.key_type", ""),
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			{
+				Config:             cteDataTxRuleNestedPolicyConfig(name, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
 }
 
 // TestCTEPolicyResource_neverDenyApplykeyValidation verifies that a
