@@ -781,7 +781,7 @@ func (r *resourceCMPasswordPolicy) Delete(ctx context.Context, req resource.Dele
 			if strings.Contains(err.Error(), notFoundError) {
 				resp.Diagnostics.AddWarning(
 					common.NotFoundDeleteWarningSummary,
-					common.NotFoundDeleteWarningDetail,
+					fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "Password Policy", state.Name.ValueString()),
 				)
 				return
 			}

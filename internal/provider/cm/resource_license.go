@@ -397,7 +397,7 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM License", state.ID.ValueString()),
 			)
 			return
 		}

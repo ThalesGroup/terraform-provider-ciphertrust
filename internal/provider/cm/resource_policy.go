@@ -529,7 +529,7 @@ func (r *resourceCMPolicy) Delete(ctx context.Context, req resource.DeleteReques
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Delete][" + state.ID.ValueString() + "]")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Policy", state.ID.ValueString()),
 			)
 			return
 		}

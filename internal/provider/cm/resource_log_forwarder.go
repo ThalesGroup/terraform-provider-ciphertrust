@@ -567,7 +567,7 @@ func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.Delet
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "Log Forwarder", state.ID.ValueString()),
 			)
 			return
 		}

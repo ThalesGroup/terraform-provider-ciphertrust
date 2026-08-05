@@ -982,7 +982,7 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "AWS Connection", state.ID.ValueString()),
 			)
 			return
 		}

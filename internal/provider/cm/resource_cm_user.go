@@ -592,7 +592,7 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM User", state.ID.ValueString()),
 			)
 			return
 		}

@@ -615,7 +615,7 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 			r.client.Log.Debug("SCP connection already deleted out-of-band on CM")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "SCP Connection", state.ID.ValueString()),
 			)
 			return
 		}

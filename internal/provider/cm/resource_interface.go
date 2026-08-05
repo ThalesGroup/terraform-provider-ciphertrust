@@ -1275,7 +1275,7 @@ func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteReq
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Interface", state.Name.ValueString()),
 			)
 			return
 		}

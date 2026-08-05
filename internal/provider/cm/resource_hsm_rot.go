@@ -409,7 +409,7 @@ func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.Delete
 			r.client.Log.Debug("[resource_hsm_rot.go -> Delete] resource already absent, skipping [" + state.ID.ValueString() + "]")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "HSM Root of Trust", state.ID.ValueString()),
 			)
 			return
 		}

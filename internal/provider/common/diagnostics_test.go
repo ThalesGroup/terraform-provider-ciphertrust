@@ -48,16 +48,27 @@ func TestNotFoundConstants(t *testing.T) {
 		}
 	})
 
-	t.Run("NotFoundDeleteWarningDetail is non-empty", func(t *testing.T) {
-		if NotFoundDeleteWarningDetail == "" {
-			t.Error("NotFoundDeleteWarningDetail must not be empty")
+	t.Run("NotFoundDeleteWarningDetailFmt is non-empty", func(t *testing.T) {
+		if NotFoundDeleteWarningDetailFmt == "" {
+			t.Error("NotFoundDeleteWarningDetailFmt must not be empty")
 		}
 	})
 
-	t.Run("NotFoundDeleteWarningDetail mentions deletion", func(t *testing.T) {
-		lower := strings.ToLower(NotFoundDeleteWarningDetail)
+	t.Run("NotFoundDeleteWarningDetailFmt formats with resource type and ID", func(t *testing.T) {
+		got := fmt.Sprintf(NotFoundDeleteWarningDetailFmt, "CM Key", "abc-123")
+		if !strings.Contains(got, "CM Key") {
+			t.Errorf("detail missing resource type: %q", got)
+		}
+		if !strings.Contains(got, "abc-123") {
+			t.Errorf("detail missing resource ID: %q", got)
+		}
+	})
+
+	t.Run("NotFoundDeleteWarningDetailFmt mentions deletion", func(t *testing.T) {
+		got := fmt.Sprintf(NotFoundDeleteWarningDetailFmt, "CM Key", "abc-123")
+		lower := strings.ToLower(got)
 		if !strings.Contains(lower, "404") && !strings.Contains(lower, "not found") {
-			t.Errorf("delete warning detail should reference 404 or 'not found': %q", NotFoundDeleteWarningDetail)
+			t.Errorf("delete warning detail should reference 404 or 'not found': %q", got)
 		}
 	})
 
