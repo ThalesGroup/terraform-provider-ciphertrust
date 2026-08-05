@@ -293,7 +293,7 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// Test_CM_AccCMInterface_OOBDelete verifies that Read() calls RemoveResource on 404 so Terraform plans to recreate.
+// Test_CM_AccCMInterface_OOBDelete verifies that Read() returns AddError + preserves state on 404 (PR #476 behavior).
 func Test_CM_AccCMInterface_OOBDelete(t *testing.T) {
 	RequireCM(t)
 	// CM's interface API uses NAME (not UUID) as the path key — capture name, not ID.
@@ -323,7 +323,7 @@ resource "ciphertrust_interface" "test" {
 				),
 			},
 			{
-				// Delete out-of-band; Read() must remove from state so Terraform plans to recreate.
+				// Delete out-of-band; Read() gets 404 → AddError + state preserved (PR #476 behavior).
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -338,8 +338,8 @@ resource "ciphertrust_interface" "test" {
 						nil,
 					)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

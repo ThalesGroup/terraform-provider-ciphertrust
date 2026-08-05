@@ -45,10 +45,43 @@ var (
 	_ resource.Resource                   = &resourceAzureConnection{}
 	_ resource.ResourceWithConfigure      = &resourceAzureConnection{}
 	_ resource.ResourceWithValidateConfig = &resourceAzureConnection{}
+	_ resource.ResourceWithModifyPlan     = &resourceAzureConnection{}
 )
 
 func NewResourceAzureConnection() resource.Resource {
 	return &resourceAzureConnection{}
+}
+
+// ModifyPlan surfaces a warning when client_secret is removed from config while
+// it was previously set (TFIN-563). client_secret is write-only — its own value is
+// never stored, so client_secret_version (a plain stored attribute) is the signal
+// that a secret was previously configured; see clientSecretClearBlocked() for the
+// analogous check in Update(). We emit a warning (not an error) here so that:
+//   - Normal updates that omit client_secret (the expected pattern, version left
+//     unchanged) still succeed cleanly but now inform the user what is happening.
+//   - Omitting client_secret while also bumping client_secret_version is previewed
+//     here and rejected as a hard error by clientSecretClearBlocked() in Update(),
+//     since that combination signals an (unsupported) attempt to clear the secret.
+func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return // create or destroy
+	}
+	var config, state AzureConnectionTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !state.ClientSecretVersion.IsNull() && config.ClientSecret.ValueString() == "" {
+		resp.Diagnostics.AddWarning(
+			"client_secret removed from config — existing value preserved",
+			"client_secret was removed from your configuration but the previously set value "+
+				"will be preserved in state and remain active on CipherTrust Manager. "+
+				"CipherTrust Manager does not support clearing client_secret. "+
+				"To rotate the secret, set client_secret to a new value and bump client_secret_version. "+
+				"To switch to certificate-based auth, destroy and recreate the connection.",
+		)
+	}
 }
 
 // ValidateConfig enforces cross-field constraints that cannot be expressed with
@@ -141,9 +174,11 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 					"Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
 					"CM never returns this field on GET, so Terraform cannot detect out-of-band rotation on its " +
 					"own; to resend a rotated secret, change `client_secret` and bump `client_secret_version` in " +
-					"the same apply. Once set, this field cannot be cleared back to empty by explicitly setting " +
-					"it to \"\": CM does not support clearing it, and the provider rejects the attempt at apply " +
-					"time rather than silently leaving state and CM's live value out of sync.",
+					"the same apply (omitting it while leaving `client_secret_version` unchanged emits a plan " +
+					"warning and preserves the prior secret). Once set, this field cannot be cleared back to " +
+					"empty by explicitly setting it to \"\": CM does not support clearing it, and the provider " +
+					"rejects the attempt at apply time rather than silently leaving state and CM's live value " +
+					"out of sync.",
 			},
 			"client_secret_version": schema.Int64Attribute{
 				Optional: true,

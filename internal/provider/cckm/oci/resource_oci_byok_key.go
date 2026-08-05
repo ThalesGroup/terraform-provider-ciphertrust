@@ -625,6 +625,9 @@ func (r *resourceCCKMOCIByokKey) ImportState(ctx context.Context, req resource.I
 // by createdAt) is used because the API response does not return these upload-time fields directly. If the version
 // list call fails, a warning is emitted and the previous state values are preserved.
 func setByokKeyState(ctx context.Context, id string, client *common.Client, response string, state *models.BYOKKeyTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key.go -> setByokKeyState][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_oci_byok_key.go -> setByokKeyState][" + id + "]")
+
 	setKeyState(ctx, id, client, response, &state.KeyTFSDK, diags)
 	if diags.HasError() {
 		return

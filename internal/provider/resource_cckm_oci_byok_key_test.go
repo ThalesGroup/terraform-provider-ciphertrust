@@ -284,7 +284,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create a valid key + versions; verify attributes and data sources.
-				Config: createResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    createResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
@@ -324,12 +325,14 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 2: ModifyPlan - source_key_id changed, expect plan-time immutability error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      modifyKeyConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
 			},
 			{
 				// Step 3: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 3") },
 				Config:      modifyVersionConfigStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
@@ -338,14 +341,17 @@ func TestCckmOCIByokKey(t *testing.T) {
 				// Step 4: re-apply createResourceStr to reset the framework's current config after
 				// the PlanOnly steps. This prevents the stale modifyVersionConfigStr from being
 				// used as the consistency plan config in the RefreshState step that follows.
-				Config: createResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 4") },
+				Config:    createResourceStr,
 			},
 			{
 				// Step 5: refresh state after create.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 5") },
 				RefreshState: true,
 			},
 			{
 				// Step 6: import the key resource.
+				PreConfig:               func() { logTestStep(t.Name(), "Step 6") },
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -353,6 +359,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 7: import the key version resource.
+				PreConfig:         func() { logTestStep(t.Name(), "Step 7") },
 				ResourceName:      versionResource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -367,7 +374,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			{
 				// Step 8: disable key + enable scheduler_1 rotation + update tags.
 				// schedule_for_deletion_days reduced to 7 for both key and version.
-				Config: updateResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 8") },
+				Config:    updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyName),
@@ -392,7 +400,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 9: re-enable key + switch rotation to scheduler_2 + update tags + rename.
-				Config: updateResourceStr2,
+				PreConfig: func() { logTestStep(t.Name(), "Step 9") },
+				Config:    updateResourceStr2,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
@@ -412,7 +421,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			{
 				// Step 10: remove schedulers, key rotation, and tags.
 				// Capture key and byok_v1 IDs for the OOB deletion steps that follow.
-				Config: updateResourceStr3,
+				PreConfig: func() { logTestStep(t.Name(), "Step 10") },
+				Config:    updateResourceStr3,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
@@ -447,6 +457,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				// Step 11: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
 				// then refresh state. Expected: byok_v1 retained with SCHEDULING_DELETION.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 11")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedByokKeyID, capturedByokV1ID)
 				},
 				RefreshState: true,
@@ -468,7 +479,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			{
 				// Step 12: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
 				// byok_v1 is already SCHEDULING_DELETION. Expected: warning issued, byok_v1 retained.
-				Config: updateResourceStr4,
+				PreConfig: func() { logTestStep(t.Name(), "Step 12") },
+				Config:    updateResourceStr4,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[versionResource]
@@ -488,6 +500,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				// OCI auto-disables the key, causing drift on enable_key - ExpectNonEmptyPlan captures this.
 				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 13")
 					scheduleOciKeyDeletionOutOfBand(capturedByokKeyID)
 				},
 				RefreshState:       true,
@@ -511,6 +524,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
 				// but the plan used the schema default (true). The Terraform framework raises
 				// "Provider produced inconsistent result".
+				PreConfig:   func() { logTestStep(t.Name(), "Step 14") },
 				Config:      updateResourceStr2,
 				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
 			},
@@ -617,7 +631,8 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create an HSM-protected BYOK key and a BYOK version on the VP vault.
-				Config: baseConfig + createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    baseConfig + createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
@@ -636,7 +651,8 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
 				// Verify the trigger attribute is reflected in state.
-				Config: baseConfig + restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    baseConfig + restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
@@ -646,6 +662,7 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 3: refresh state to re-read version attributes from the API,
 				// then verify updated_at changed after the restore.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 3") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
@@ -747,12 +764,14 @@ func TestCckmOCIByokInvalidCreateConfigs(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: enable_key = false at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 1") },
 				Config:      disableAtCreateStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 			{
 				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      schedulerAtCreateStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),

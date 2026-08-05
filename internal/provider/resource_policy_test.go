@@ -252,8 +252,7 @@ resource "ciphertrust_policies" "drift" {
 	})
 }
 
-// Test_CM_AccCMPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource on 404
-// and plans recreation after OOB deletion.
+// Test_CM_AccCMPolicy_OutOfBandDeletion verifies that Read() returns AddError + preserves state on 404 (PR #476 behavior).
 func Test_CM_AccCMPolicy_OutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	var policyID string
@@ -296,8 +295,8 @@ resource "ciphertrust_policies" "oob" {
   effect  = "allow"
 }
 `,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

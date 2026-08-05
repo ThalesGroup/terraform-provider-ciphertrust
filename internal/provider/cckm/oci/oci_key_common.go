@@ -24,6 +24,8 @@ const (
 
 // updateKey applies all mutable changes to an OCI key.
 func updateKey(ctx context.Context, id string, client *common.Client, keyID string, plan *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> updateKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> updateKey][" + id + "]")
 
 	if !plan.RestoreFromBackup.IsNull() && plan.RestoreFromBackup.ValueString() != "" {
 		restoreKeyFromBackup(ctx, id, client, keyID, diags)
@@ -102,6 +104,9 @@ func updateKey(ctx context.Context, id string, client *common.Client, keyID stri
 
 // deleteOCIKey schedules an OCI key for deletion.
 func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, days int64, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> deleteOCIKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> deleteOCIKey][" + id + "]")
+
 	keyJSON := getOciKey(ctx, id, client, vaultID, keyID, "deleting", diags)
 	if diags.HasError() {
 		return // key error - resource kept in state
@@ -163,6 +168,9 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 
 // getOciVault fetches an OCI vault by its CipherTrust Manager ID.
 func getOciVault(ctx context.Context, id string, client *common.Client, vaultID string, opLabel string, diags *diag.Diagnostics) string {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> getOciVault][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> getOciVault][" + id + "]")
+
 	response, err := client.GetById(ctx, id, vaultID, common.URL_OCI+"/vaults")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -201,6 +209,9 @@ func getOciVault(ctx context.Context, id string, client *common.Client, vaultID 
 // A non-404 key error is always a hard error; ("", false) is returned.
 // Callers that do not know the vault ID at call time (e.g. getOciKeyVersion) should pass "".
 func getOciKey(ctx context.Context, id string, client *common.Client, vaultID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> getOciKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> getOciKey][" + id + "]")
+
 	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -251,6 +262,9 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 
 // setKeyState sets the full Terraform state.
 func setKeyState(ctx context.Context, id string, client *common.Client, response string, state *models.KeyTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> setKeyState][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> setKeyState][" + id + "]")
+
 	setCommonKeyState(ctx, id, client, response, &state.KeyCommonTFSDK, diags)
 	if diags.HasError() {
 		return
@@ -267,6 +281,9 @@ func setKeyState(ctx context.Context, id string, client *common.Client, response
 // setCommonKeyState populates all shared TFSDK state fields from a raw CM API response string.
 // Makes a secondary API call to GET /oci/keys/:id/versions to populate version_summary.
 func setCommonKeyState(ctx context.Context, id string, client *common.Client, response string, state *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> setCommonKeyState][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> setCommonKeyState][" + id + "]")
+
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "auto_rotate").Bool())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
@@ -363,6 +380,9 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 
 // setKeyVersionSummaryState fetches the key version list and populates the version_summary state.
 func setKeyVersionSummaryState(ctx context.Context, id string, client *common.Client, keyID string, state *types.List, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> setKeyVersionSummaryState][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> setKeyVersionSummaryState][" + id + "]")
+
 	filters := url.Values{}
 	response, err := client.ListWithFilters(ctx, id, common.URL_OCI+"/keys/"+keyID+"/versions", filters)
 	if err != nil {
@@ -402,6 +422,9 @@ func setKeyVersionSummaryState(ctx context.Context, id string, client *common.Cl
 
 // patchKey sends a PATCH request to update display_name, freeform_tags, or defined_tags on an OCI key.
 func patchKey(ctx context.Context, id string, client *common.Client, keyID string, plan *models.KeyCommonTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> patchKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> patchKey][" + id + "]")
+
 	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		msg := "Error reading OCI key."
@@ -474,7 +497,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 			diags.AddError(details, "")
 			return
 		}
-		client.Log.Debug("[oci_key_common.go -> updateKey][response:" + redactOCIResponse(response) + "]")
+		client.Log.Debug("[oci_key_common.go -> patchKey][response:" + redactOCIResponse(response) + "]")
 		keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 		if keyState == keyStateUpdating {
 			waitForKeyStateChange(ctx, id, client, keyID, keyState, true, diags)
@@ -503,6 +526,9 @@ func getKeyLabelsFromJSON(client *common.Client, response string, keyID string, 
 
 // enableSchedulerRotation enables scheduled auto-rotation for an OCI key.
 func enableSchedulerRotation(ctx context.Context, id string, client *common.Client, keyID string, tfsdkParams *models.EnableAutoRotationTFSDK, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> enableSchedulerRotation][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> enableSchedulerRotation][" + id + "]")
+
 	payload := models.EnableAutoRotationJSON{
 		AutoRotateKeySource: tfsdkParams.KeySource.ValueString(),
 		JobConfigId:         tfsdkParams.JobConfigID.ValueString(),
@@ -528,6 +554,9 @@ func enableSchedulerRotation(ctx context.Context, id string, client *common.Clie
 
 // disableSchedulerRotation disables scheduled auto-rotation for an OCI key.
 func disableSchedulerRotation(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> disableSchedulerRotation][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> disableSchedulerRotation][" + id + "]")
+
 	response, err := ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/disable-auto-rotation")
 	if err != nil {
 		msg := "Error updating OCI key, failed to disable scheduled key rotation for OCI key."
@@ -541,6 +570,9 @@ func disableSchedulerRotation(ctx context.Context, id string, client *common.Cli
 
 // enableKey enables an OCI key and waits for the state to settle.
 func enableKey(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> enableKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> enableKey][" + id + "]")
+
 	response, err := ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/enable")
 	if err != nil {
 		msg := "Error enabling OCI key."
@@ -561,6 +593,9 @@ func enableKey(ctx context.Context, id string, client *common.Client, keyID stri
 
 // disableKey disables an OCI key and waits for the state to settle.
 func disableKey(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> disableKey][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> disableKey][" + id + "]")
+
 	response, err := ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/disable")
 	if err != nil {
 		msg := "Error disabling OCI key."
@@ -581,6 +616,9 @@ func disableKey(ctx context.Context, id string, client *common.Client, keyID str
 
 // changeKeyCompartment moves an OCI key to a different compartment.
 func changeKeyCompartment(ctx context.Context, id string, client *common.Client, keyID string, compartmentID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> changeKeyCompartment][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> changeKeyCompartment][" + id + "]")
+
 	payload := models.ChangeCompartmentPayload{
 		CompartmentID: compartmentID,
 	}
@@ -615,6 +653,9 @@ func changeKeyCompartment(ctx context.Context, id string, client *common.Client,
 // Returns an error if the state does not change within the configured oci_operation_timeout.
 // Returns a warning if the final state is neither ENABLED nor DISABLED.
 func waitForKeyStateChange(ctx context.Context, id string, client *common.Client, keyID string, currentState string, refresh bool, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> waitForKeyStateChange][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> waitForKeyStateChange][" + id + "]")
+
 	response, err := client.PostNoData(ctx, id, common.URL_OCI+"/keys/"+keyID+"/refresh")
 	if err != nil {
 		msg := "Error refreshing OCI key."
@@ -625,6 +666,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 	}
 	keyState := gjson.Get(response, "oci_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
+	client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForKeyStateChange] key_id: %s waiting for state to change from '%s', max_retries: %d", keyID, currentState, numRetries))
 	for retry := 0; retry < numRetries && keyState == currentState; retry++ {
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
 		if refresh {
@@ -647,17 +689,22 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 			}
 		}
 		keyState = gjson.Get(response, "oci_params.lifecycle_state").String()
+		client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForKeyStateChange] retry %d/%d: key_id: %s state: %s", retry+1, numRetries, keyID, keyState))
 	}
 	if keyState == currentState {
 		msg := fmt.Sprintf("Failed to confirm OCI key state has changed from '%s' in the given time. Consider extending provider configuration option 'oci_operation_timeout'.", currentState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
+		client.Log.Error(fmt.Sprintf("[oci_key_common.go -> waitForKeyStateChange] TIMED OUT after %d retries: key_id: %s last_state: %s", numRetries, keyID, keyState))
 		client.Log.Error(details)
 		diags.AddError(details, "")
 	} else if keyState != keyStateEnabled && keyState != keyStateDisabled {
+		client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForKeyStateChange] Resolved: key_id: %s state changed from '%s' to '%s' (warning: not ENABLED/DISABLED)", keyID, currentState, keyState))
 		msg := "OCI key is neither enabled or disabled."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 		client.Log.Warn(details)
 		diags.AddWarning(details, "")
+	} else {
+		client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForKeyStateChange] Resolved: key_id: %s state changed from '%s' to '%s'.", keyID, currentState, keyState))
 	}
 	client.Log.Debug("[oci_key_common.go -> waitForKeyStateChange][response:" + redactOCIResponse(response) + "]")
 }
@@ -668,6 +715,9 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 // The wait ends when all versions have been updated, or when 30 seconds have
 // passed since the last observed change (whichever comes first).
 func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> restoreKeyFromBackup][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> restoreKeyFromBackup][" + id + "]")
+
 	// Snapshot pre-restore updatedAt for each version.
 	versionsURL := common.URL_OCI + "/keys/" + keyID + "/versions"
 	preJSON, err := client.ListWithFilters(ctx, id, versionsURL, url.Values{})
@@ -684,6 +734,7 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 		uat := gjson.Get(v.String(), "updatedAt").String()
 		preSnapshot[vid] = uat
 	}
+	client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> restoreKeyFromBackup] key_id: %s pre-restore snapshot: %d versions", keyID, len(preSnapshot)))
 
 	// Perform the restore.
 	_, err = ociPostNoDataWithRetry(ctx, client, id, common.URL_OCI+"/keys/"+keyID+"/restore")
@@ -697,28 +748,38 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 
 	// If there were no versions to watch, nothing to wait for.
 	if len(preSnapshot) == 0 {
+		client.Log.Debug("[oci_key_common.go -> restoreKeyFromBackup] no pre-restore versions to watch.")
 		return
 	}
+	waitForOCIKeyVersions(ctx, id, client, keyID, versionsURL, preSnapshot)
+}
 
-	// Wait for all version updatedAt fields to change, with a 30-second idle
-	// timeout (30s since the last observed change, or since the restore if no
-	// change has been seen yet).
+// waitForOCIKeyVersions polls the key versions list until every version whose ID appears
+// in preSnapshot has a different updatedAt value, signalling that CM has processed the
+// restore. The poll ends early if all versions have been updated, or after a 30-second
+// idle window (no new changes observed).
+func waitForOCIKeyVersions(ctx context.Context, id string, client *common.Client, keyID string, versionsURL string, preSnapshot map[string]string) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> waitForOCIKeyVersions][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> waitForOCIKeyVersions][" + id + "]")
+
 	const idleTimeout = 30 * time.Second
 	const pollInterval = 2 * time.Second
 	changed := make(map[string]bool, len(preSnapshot))
 	lastChangeTime := time.Now()
+	loop := 0
 
 	for {
 		time.Sleep(pollInterval)
 
 		postJSON, listErr := client.ListWithFilters(ctx, id, versionsURL, url.Values{})
 		if listErr != nil {
-			client.Log.Warn("Error listing OCI key versions while waiting for restore: " + listErr.Error())
+			client.Log.Warn(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyVersions] loop: %d error listing OCI key versions: %s", loop, listErr.Error()))
 		} else {
 			for _, v := range gjson.Get(postJSON, "resources").Array() {
 				vid := gjson.Get(v.String(), "id").String()
 				uat := gjson.Get(v.String(), "updatedAt").String()
 				if !changed[vid] && uat != preSnapshot[vid] {
+					client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyVersions] loop: %d oldUpdatedAt: %s newUpdatedAt: %s version %s", loop, preSnapshot[vid], uat, vid))
 					changed[vid] = true
 					lastChangeTime = time.Now()
 				}
@@ -726,12 +787,13 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 		}
 
 		if len(changed) == len(preSnapshot) {
-			// All versions have been updated.
+			client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyVersions] resolved loop: %d all %d key versions updated after restore", loop, len(preSnapshot)))
 			break
 		}
 		if time.Since(lastChangeTime) > idleTimeout {
-			client.Log.Warn("Timed out waiting for all key versions to be updated after restore.")
+			client.Log.Warn(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyVersions] TIMED OUT after %d polls. %d/%d versions updated. key_id: %s", loop, len(changed), len(preSnapshot), keyID))
 			break
 		}
+		loop++
 	}
 }
