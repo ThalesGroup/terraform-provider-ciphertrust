@@ -170,6 +170,9 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"updated_at": schema.StringAttribute{
 				Description: "Date/time the log forwarder was last updated.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
@@ -292,35 +295,10 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	}
 }
 
-// Read refreshes the Terraform state with the latest data.
-func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state CMLogForwardersTFSDK
-	id := uuid.New().String()
-	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Read][" + id + "]")
-
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddError(
-				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Log Forwarder"),
-				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Log Forwarder", state.ID.ValueString()),
-			)
-			return
-		}
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Read][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Error Reading CipherTrust Log Forwarder",
-			"Could not read Log Forwarder: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
+// hydrateLogForwarderState populates all fields of state from a CM GET/PATCH response body.
+// Called by both Read() and Update() so Update() always writes live CM values rather than
+// the plan-shaped (potentially incomplete) payload.
+func hydrateLogForwarderState(response string, state *CMLogForwardersTFSDK) {
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Type = types.StringValue(gjson.Get(response, "type").String())
@@ -329,7 +307,6 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	// Hydrate elasticsearch_params
 	if gjson.Get(response, "elasticsearch_params").Exists() {
 		var esIndices CMLogForwardersESOrLokiParamsTFSDK
 		if r := gjson.Get(response, "elasticsearch_params.indices.activity_kmip"); r.Exists() {
@@ -359,7 +336,6 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.ElasticsearchParams = nil
 	}
 
-	// Hydrate loki_params
 	if gjson.Get(response, "loki_params").Exists() {
 		var lokiLabels CMLogForwardersESOrLokiParamsTFSDK
 		if r := gjson.Get(response, "loki_params.labels.activity_kmip"); r.Exists() {
@@ -389,7 +365,6 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.LokiParams = nil
 	}
 
-	// Hydrate syslog_params. CM returns {"syslog_params": {"forward_logs": {...}}}.
 	if gjson.Get(response, "syslog_params").Exists() {
 		var syslogInner CMLogForwardersSyslogParamsTFSDK
 		if r := gjson.Get(response, "syslog_params.forward_logs.activity_kmip"); r.Exists() {
@@ -418,6 +393,38 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	} else {
 		state.SyslogParams = nil
 	}
+}
+
+// Read refreshes the Terraform state with the latest data.
+func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMLogForwardersTFSDK
+	id := uuid.New().String()
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Read][" + id + "]")
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Log Forwarder"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Log Forwarder", state.ID.ValueString()),
+			)
+			return
+		}
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Log Forwarder",
+			"Could not read Log Forwarder: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	hydrateLogForwarderState(response, &state)
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
@@ -431,9 +438,16 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	var plan CMLogForwardersTFSDK
+	var state CMLogForwardersTFSDK
 	payload := make(map[string]interface{})
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -505,7 +519,9 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+	// Only include name when it actually changed — CM rejects PATCH with an unchanged name
+	// ("Connection exists with the same name"), but accepts a genuine rename (TFIN-577 Bug 1).
+	if plan.Name.ValueString() != state.Name.ValueString() {
 		payload["name"] = plan.Name.ValueString()
 	}
 	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
@@ -522,7 +538,7 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(
+	_, err = r.client.UpdateDataV2(
 		ctx,
 		plan.ID.ValueString(),
 		common.URL_CM_LOG_FORWARDS,
@@ -536,12 +552,24 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	// Re-fetch live values after PATCH so state reflects the true CM state, not the
+	// plan-shaped payload. This prevents false drift when only a subset of nested
+	// params (e.g. two of four elasticsearch_params.indices fields) was sent — CM's
+	// merge-PATCH preserves omitted sub-fields, but writing plan back would null them
+	// out in state, triggering "changed outside of Terraform" on the next plan (TFIN-577 Bug 3).
+	liveResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
+	if err != nil {
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error reading Log Forwarder after update: ",
+			"Update succeeded but could not re-read live state: "+err.Error(),
+		)
+		return
+	}
 
-	diags = resp.State.Set(ctx, plan)
+	hydrateLogForwarderState(liveResponse, &state)
+
+	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
