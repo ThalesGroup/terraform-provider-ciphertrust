@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -122,7 +121,7 @@ func (d *dataSourceCTEPolicySecurityRule) Schema(_ context.Context, _ datasource
 
 func (d *dataSourceCTEPolicySecurityRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_securityrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_securityrules.go -> Read][" + id + "]")
 	var state CTEPolicySecurityRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
@@ -131,7 +130,7 @@ func (d *dataSourceCTEPolicySecurityRule) Read(ctx context.Context, req datasour
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/securityrules")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_securityrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_securityrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Security Rules from CM",
 			err.Error(),
@@ -143,7 +142,7 @@ func (d *dataSourceCTEPolicySecurityRule) Read(ctx context.Context, req datasour
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_securityrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_securityrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Security Rules from CM",
 			err.Error(),
@@ -177,7 +176,7 @@ func (d *dataSourceCTEPolicySecurityRule) Read(ctx context.Context, req datasour
 		state.Rules = append(state.Rules, securityRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_securityrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_securityrules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

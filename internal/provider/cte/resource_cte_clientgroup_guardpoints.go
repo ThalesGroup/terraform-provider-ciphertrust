@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -177,7 +176,7 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 
 func (r *resourceCTEClientGroupGP) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_guardpoints.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_clientgroup_guardpoints.go -> Create][" + id + "]")
 
 	var plan CTEClientGroupGuardPointTFSDK
 	diags := req.Plan.Get(ctx, &plan)
@@ -244,7 +243,7 @@ func (r *resourceCTEClientGroupGP) Create(ctx context.Context, req resource.Crea
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_guardpoints.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_guardpoints.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError("Invalid data input: CTE ClientGroup Guardpoint Creation", err.Error())
 			return
 		}
@@ -256,7 +255,7 @@ func (r *resourceCTEClientGroupGP) Create(ctx context.Context, req resource.Crea
 			payloadJSON,
 		)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_guardpoints.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_guardpoints.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error creating CTE ClientGroup Guardpoint on CipherTrust Manager: ",
 				"Could not create CTE ClientGroup Guardpoint, unexpected error: "+err.Error(),
@@ -285,7 +284,7 @@ func (r *resourceCTEClientGroupGP) Create(ctx context.Context, req resource.Crea
 	sort.Strings(allIDs)
 	plan.ID = types.StringValue(strings.Join(allIDs, ","))
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_guardpoints.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_guardpoints.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 }
@@ -298,7 +297,7 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 	var state CTEClientGroupGuardPointTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_clientgroup_guardpoints.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_clientgroup_guardpoints.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -311,7 +310,7 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 	response, err := r.client.GetById(ctx, id, "", common.URL_CTE_CLIENT_GROUP+"/"+clientGroupID+"/guardpoints")
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			tflog.Debug(ctx, "[resource_cte_clientgroup_guardpoints.go -> Read] parent client group "+clientGroupID+" not found (404), removing from state")
+			r.client.Log.Debug("[resource_cte_clientgroup_guardpoints.go -> Read] parent client group " + clientGroupID + " not found (404), removing from state")
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -388,7 +387,7 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 			}
 		}
 		if !anyTrackedPathStillExists {
-			tflog.Debug(ctx, "[resource_cte_clientgroup_guardpoints.go -> Read] all guard_points for client group "+clientGroupID+" no longer exist on CipherTrust Manager (out-of-band deletion), removing from state")
+			r.client.Log.Debug("[resource_cte_clientgroup_guardpoints.go -> Read] all guard_points for client group " + clientGroupID + " no longer exist on CipherTrust Manager (out-of-band deletion), removing from state")
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -398,7 +397,7 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 	sort.Strings(allIDs)
 	state.ID = types.StringValue(strings.Join(allIDs, ","))
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_guardpoints.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_guardpoints.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }
@@ -464,7 +463,7 @@ func (r *resourceCTEClientGroupGP) Update(ctx context.Context, req resource.Upda
 			return
 		}
 
-		tflog.Trace(ctx, "[resource_cte_clientgroup_guardpoints.go -> Update/Unguard] unguarded IDs: "+strings.Join(removedIDs, ","))
+		r.client.Log.Trace("[resource_cte_clientgroup_guardpoints.go -> Update/Unguard] unguarded IDs: " + strings.Join(removedIDs, ","))
 	}
 
 	// ---------------------------------------------------------------
@@ -645,7 +644,7 @@ func (r *resourceCTEClientGroupGP) Update(ctx context.Context, req resource.Upda
 				return
 			}
 
-			tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_guardpoints.go -> Update]["+gpID+"]")
+			r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_guardpoints.go -> Update][" + gpID + "]")
 		}
 
 		// Write the resolved ID back into the plan map entry.
@@ -684,7 +683,7 @@ func (r *resourceCTEClientGroupGP) Delete(ctx context.Context, req resource.Dele
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_clientgroup_guardpoints.go -> Delete/Unguard]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_guardpoints.go -> Delete/Unguard]")
 		resp.Diagnostics.AddError("Invalid data input: CTE Client Guardpoint Delete/Unguard", err.Error())
 		return
 	}
@@ -696,7 +695,7 @@ func (r *resourceCTEClientGroupGP) Delete(ctx context.Context, req resource.Dele
 		payloadJSON,
 		"",
 	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_clientgroup_guardpoints.go -> Delete/Unguard]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_clientgroup_guardpoints.go -> Delete/Unguard][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if !handleDeleteNotFound(err, "CTE Client Group Guardpoint "+state.ID.ValueString(), &resp.Diagnostics) {
 			resp.Diagnostics.AddError(
@@ -763,7 +762,7 @@ func buildParamsPayload(p CTEClientGuardPointParamsTFSDK) CTEClientGuardPointPar
 
 func (r *resourceCTEClientGroupGP) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client_group_gp.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client_group_gp.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_client_group_gp.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_client_group_gp.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("client_group_id"), req, resp)
 }

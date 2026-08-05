@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -125,7 +124,7 @@ func (r *resourceCTECSIGroup) Schema(_ context.Context, _ resource.SchemaRequest
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_csigroup.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_csigroup.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTECSIGroupTFSDK
@@ -150,7 +149,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CSIGroup Creation",
 			err.Error(),
@@ -160,7 +159,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 
 	response, err := r.client.PostData(ctx, id, common.URL_CTE_CSIGROUP, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CSIGroup  on CipherTrust Manager: ",
 			"Could not create CSIGroup, unexpected error: "+err.Error(),
@@ -178,7 +177,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 		}
 		gpPayloadJSON, err := json.Marshal(gpPayload)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError("Invalid data input: CSIGroup Add Guard Policies", err.Error())
 			return
 		}
@@ -190,7 +189,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 			gpPayloadJSON,
 		)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Create]["+id+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
 				"Error adding guard policies to CSIGroup on CipherTrust Manager: ",
 				"Could not add guard policies, unexpected error: "+err.Error(),
@@ -216,7 +215,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_csigroup.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -227,7 +226,7 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_csigroup.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_csigroup.go -> Read][" + id + "]")
 
 	var state CTECSIGroupTFSDK
 	diags := req.State.Get(ctx, &state)
@@ -262,7 +261,7 @@ func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest
 		common.URL_CTE_CSIGROUP,
 	)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CSI Group guard policies on CipherTrust Manager:",
 			"Could not read guard policies for CSI Group id: "+state.ID.ValueString()+" unexpected error: "+err.Error(),
@@ -313,7 +312,7 @@ func (r *resourceCTECSIGroup) Read(ctx context.Context, req resource.ReadRequest
 
 	state.GuardPolicies = refreshedPolicies
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_csigroup.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -365,7 +364,7 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 
 			payloadJSON, err := json.Marshal(payload)
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Update]["+plan.ID.ValueString()+"]")
+				r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Update][" + plan.ID.ValueString() + "]")
 				resp.Diagnostics.AddError(
 					"Invalid data input: CTE Process Set Update",
 					err.Error(),
@@ -375,7 +374,7 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 
 			response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_CTE_CSIGROUP, payloadJSON, "id")
 			if err != nil {
-				tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> Update]["+plan.ID.ValueString()+"]")
+				r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> Update][" + plan.ID.ValueString() + "]")
 				resp.Diagnostics.AddError(
 					"Error creating CTE Process Set on CipherTrust Manager: ",
 					"Could not create CTE Process Set, unexpected error: "+err.Error(),
@@ -399,7 +398,7 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 					addPayload.PolicyList = []string{policyID}
 					addPayloadJSON, err := json.Marshal(addPayload)
 					if err != nil {
-						tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> update-guard-policy]["+plan.ID.ValueString()+"]")
+						r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> update-guard-policy][" + plan.ID.ValueString() + "]")
 						resp.Diagnostics.AddError("Invalid data input: CSIGroup Add Guard Policy", err.Error())
 						return
 					}
@@ -411,7 +410,7 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 						addPayloadJSON,
 					)
 					if err != nil {
-						tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> update-guard-policy]["+plan.ID.ValueString()+"]")
+						r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> update-guard-policy][" + plan.ID.ValueString() + "]")
 						resp.Diagnostics.AddError("Error adding guard policy to CSIGroup on CipherTrust Manager: ", err.Error())
 						return
 					}
@@ -427,7 +426,7 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 						planEntry.GuardEnabled = types.BoolValue(gpAPIResponse.GuardPoints[0].GuardPoint.GuardEnabled)
 						plan.GuardPolicies[policyID] = planEntry
 					}
-					tflog.Debug(ctx, "Added guard policy: "+policyID)
+					r.client.Log.Debug("Added guard policy: " + policyID)
 
 				} else {
 					// Existing policy — carry over gp_id from state
@@ -436,14 +435,14 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 
 					// Only PATCH if guard_enabled changed
 					if planEntry.GuardEnabled.ValueBool() == stateEntry.GuardEnabled.ValueBool() {
-						tflog.Debug(ctx, "Guard policy unchanged, skipping PATCH: "+stateEntry.GPID.ValueString())
+						r.client.Log.Debug("Guard policy unchanged, skipping PATCH: " + stateEntry.GPID.ValueString())
 						continue
 					}
 
 					updatePayload := CTECSIGroupJSON{GuardEnabled: planEntry.GuardEnabled.ValueBool()}
 					updatePayloadJSON, err := json.Marshal(updatePayload)
 					if err != nil {
-						tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> update-guard-policy]["+plan.ID.ValueString()+"]")
+						r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> update-guard-policy][" + plan.ID.ValueString() + "]")
 						resp.Diagnostics.AddError("Invalid data input: CSIGroup Update Guard Policy", err.Error())
 						return
 					}
@@ -451,11 +450,11 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 					apiURL := fmt.Sprintf("%s/guardpoints", common.URL_CTE_CSIGROUP)
 					_, err = r.client.UpdateDataV2(ctx, stateEntry.GPID.ValueString(), apiURL, updatePayloadJSON)
 					if err != nil {
-						tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> update-guard-policy]["+plan.ID.ValueString()+"]")
+						r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> update-guard-policy][" + plan.ID.ValueString() + "]")
 						resp.Diagnostics.AddError("Error updating guard policy on CipherTrust Manager: ", err.Error())
 						return
 					}
-					tflog.Debug(ctx, "Updated guard policy: "+stateEntry.GPID.ValueString())
+					r.client.Log.Debug("Updated guard policy: " + stateEntry.GPID.ValueString())
 				}
 			}
 
@@ -468,11 +467,11 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 						common.URL_CTE_CSIGROUP+"/guardpoints/"+stateEntry.GPID.ValueString(),
 					)
 					if err != nil {
-						tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_csigroup.go -> remove-guard-policy]["+plan.ID.ValueString()+"]")
+						r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_csigroup.go -> remove-guard-policy][" + plan.ID.ValueString() + "]")
 						resp.Diagnostics.AddError("Error removing guard policy from CSIGroup on CipherTrust Manager: ", err.Error())
 						return
 					}
-					tflog.Debug(ctx, "Deleted guard policy: "+stateEntry.GPID.ValueString())
+					r.client.Log.Debug("Deleted guard policy: " + stateEntry.GPID.ValueString())
 				}
 			}
 		}
@@ -504,7 +503,7 @@ func (r *resourceCTECSIGroup) Delete(ctx context.Context, req resource.DeleteReq
 	// Delete existing CSI StorageGroup
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_CSIGROUP, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_csigroup.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE CSISecurityGroup "+state.ID.ValueString(), &resp.Diagnostics) {
 			return
@@ -537,7 +536,7 @@ func (d *resourceCTECSIGroup) Configure(_ context.Context, req resource.Configur
 
 func (r *resourceCTECSIGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_csigroup.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_csigroup.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_csigroup.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_csigroup.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

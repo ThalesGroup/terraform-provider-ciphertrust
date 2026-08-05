@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -99,12 +98,12 @@ func (d *dataSourceCTEProcessSets) Schema(_ context.Context, _ datasource.Schema
 
 func (d *dataSourceCTEProcessSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_process_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_process_sets.go -> Read][" + id + "]")
 	var state CTEProcessSetsDataSourceModel
 
 	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_PROCESS_SET)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_process_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_process_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE process sets from CM",
 			err.Error(),
@@ -116,7 +115,7 @@ func (d *dataSourceCTEProcessSets) Read(ctx context.Context, req datasource.Read
 
 	err = json.Unmarshal([]byte(jsonStr), &processSets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_process_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_process_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE process sets from CM",
 			err.Error(),
@@ -160,7 +159,7 @@ func (d *dataSourceCTEProcessSets) Read(ctx context.Context, req datasource.Read
 		state.ProcessSets = append(state.ProcessSets, processSetState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_process_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_process_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

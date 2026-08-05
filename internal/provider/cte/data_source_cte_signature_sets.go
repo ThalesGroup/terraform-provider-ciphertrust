@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -102,12 +101,12 @@ func (d *dataSourceCTESignatureSets) Schema(_ context.Context, _ datasource.Sche
 
 func (d *dataSourceCTESignatureSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_signature_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_signature_sets.go -> Read][" + id + "]")
 	var state CTESignatureSetsDataSourceModel
 
 	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_SIGNATURE_SET)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_signature_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_signature_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE signature sets from CM",
 			err.Error(),
@@ -119,7 +118,7 @@ func (d *dataSourceCTESignatureSets) Read(ctx context.Context, req datasource.Re
 
 	err = json.Unmarshal([]byte(jsonStr), &signatureSets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_signature_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_signature_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE signature sets from CM",
 			err.Error(),
@@ -162,7 +161,7 @@ func (d *dataSourceCTESignatureSets) Read(ctx context.Context, req datasource.Re
 		state.SignatureSets = append(state.SignatureSets, signatureSetState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_signature_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_signature_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

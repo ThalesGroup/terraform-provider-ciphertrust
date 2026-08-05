@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -108,7 +107,7 @@ func (r *resourceCTESignatureSet) Schema(_ context.Context, _ resource.SchemaReq
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTESignatureSet) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_signature_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_signature_set.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTESignatureSetTFSDK
@@ -141,7 +140,7 @@ func (r *resourceCTESignatureSet) Create(ctx context.Context, req resource.Creat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_signature_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_signature_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Signature Set Creation",
 			err.Error(),
@@ -151,7 +150,7 @@ func (r *resourceCTESignatureSet) Create(ctx context.Context, req resource.Creat
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_SIGNATURE_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_signature_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_signature_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Signature Set on CipherTrust Manager: ",
 			"Could not create CTE Signature Set, unexpected error: "+err.Error(),
@@ -165,7 +164,7 @@ func (r *resourceCTESignatureSet) Create(ctx context.Context, req resource.Creat
 	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	plan.Application = types.StringValue(gjson.Get(response, "application").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_signature_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_signature_set.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -178,11 +177,8 @@ func (r *resourceCTESignatureSet) Read(ctx context.Context, req resource.ReadReq
 	var state CTESignatureSetTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_signature_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_signature_set.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -217,11 +213,8 @@ func (r *resourceCTESignatureSet) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_signature_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_signature_set.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -275,7 +268,7 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 		payloaddelete.Sources = removedList
 		payloadJSONd, err := json.Marshal(payloaddelete)
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_signature_set.go -> delete-sources]["+plan.ID.ValueString()+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_signature_set.go -> delete-sources][" + plan.ID.ValueString() + "]")
 			diags.AddError(
 				"[resource_cte_signature_set.go -> Signature set delete sources]",
 				err.Error(),
@@ -288,7 +281,7 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 			payloadJSONd,
 			"id")
 		if err != nil {
-			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_signature_set.go -> Delete]["+plan.ID.ValueString()+"]")
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_signature_set.go -> Delete][" + plan.ID.ValueString() + "]")
 			diags.AddError(
 				"Error deleting clients list from the Signature set on CipherTrust Manager: ",
 				"Could not delete clients list from the Signature set, unexpected error: "+err.Error()+fmt.Sprintf("%s", removedList),
@@ -308,7 +301,7 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_signature_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_signature_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Signature Set Update",
 			err.Error(),
@@ -318,7 +311,7 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_SIGNATURE_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_signature_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_signature_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Signature Set on CipherTrust Manager: ",
 			"Could not update CTE Signature Set, unexpected error: "+err.Error(),
@@ -351,7 +344,7 @@ func (r *resourceCTESignatureSet) Delete(ctx context.Context, req resource.Delet
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_SIGNATURE_SET, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_signature_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_signature_set.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if handleDeleteNotFound(err, "CTE Signature Set "+state.ID.ValueString(), &resp.Diagnostics) {
 			return
@@ -425,7 +418,7 @@ func setCTESignatureSetState(
 
 func (r *resourceCTESignatureSet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_signature_set.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_signature_set.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_signature_set.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_signature_set.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

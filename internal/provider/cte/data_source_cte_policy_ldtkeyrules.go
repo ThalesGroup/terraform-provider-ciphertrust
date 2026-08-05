@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -90,7 +89,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Schema(_ context.Context, _ datasource.S
 
 func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 	var state CTEPolicyLDTKeyRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
@@ -99,7 +98,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource
 		id,
 		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/ldtkeyrules")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy LDT Key Rules from CM",
 			err.Error(),
@@ -111,7 +110,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy LDT Key Rules from CM",
 			err.Error(),
@@ -134,7 +133,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource
 		state.Rules = append(state.Rules, ldtKeyRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -157,7 +156,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Schema(_ context.Context, _ dataso
 
 func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_ldtgroupcomms_clients_list.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_ldtgroupcomms_clients_list.go -> Read][" + id + "]")
 	var state CTELDTGroupCommSvcClientsDataSourceModel
 	req.Config.Get(ctx, &state)
 
@@ -167,7 +166,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 		common.URL_LDT_GROUP_COMM_SVC+"/"+state.GroupName.ValueString()+"/clients")
 
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_ldtgroupcomms_clients_list.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_ldtgroupcomms_clients_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Clients from CM",
 			err.Error(),
@@ -179,7 +178,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 
 	err = json.Unmarshal([]byte(jsonStr), &clients)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_ldtgroupcomms_clients_list.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_ldtgroupcomms_clients_list.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Clients from CM",
 			err.Error(),
@@ -227,7 +226,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 		state.Clients = append(state.Clients, clientState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_ldtgroupcomms_clients_list.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_ldtgroupcomms_clients_list.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
