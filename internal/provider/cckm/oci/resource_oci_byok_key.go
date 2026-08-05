@@ -162,6 +162,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
+						Computed:    true,
 						Description: "Defined tags for the key. To remove all tags set defined_tags = [].",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
@@ -183,6 +184,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"freeform_tags": schema.MapAttribute{
 						Optional:    true,
+						Computed:    true,
 						ElementType: types.StringType,
 						Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
 					},
