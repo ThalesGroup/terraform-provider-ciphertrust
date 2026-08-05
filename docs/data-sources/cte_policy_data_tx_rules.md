@@ -17,26 +17,26 @@ description: |-
 
 ### Required
 
-- `policy` (String)
+- `policy` (String) ID of the parent CTE Client Policy whose data transformation rules are to be listed.
 
 ### Read-Only
 
-- `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+- `rules` (Attributes List) List of data transformation rules configured on the policy. (see [below for nested schema](#nestedatt--rules))
 
 <a id="nestedatt--rules"></a>
 ### Nested Schema for `rules`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `created_at` (String)
-- `dev_account` (String)
-- `id` (String)
-- `key_id` (String)
-- `new_key_rule` (Boolean)
-- `order_number` (Number)
-- `policy_id` (String)
-- `resource_set_id` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the data transformation rule.
+- `application` (String) Application associated with the data transformation rule.
+- `created_at` (String) Date and time the data transformation rule was created.
+- `dev_account` (String) Dev account of the data transformation rule.
+- `id` (String) ID of the data transformation rule within the parent CTE Client Policy.
+- `key_id` (String) Identifier of the key to link with the rule.
+- `new_key_rule` (Boolean) Whether this is a new key rule.
+- `order_number` (Number) Precedence order of the rule in the parent policy.
+- `policy_id` (String) ID of the parent CTE Client Policy.
+- `resource_set_id` (String) ID of the resource set to link with the rule.
+- `updated_at` (String) Date and time the data transformation rule was last updated.
+- `uri` (String) URI of the data transformation rule.

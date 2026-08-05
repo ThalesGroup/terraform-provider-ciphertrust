@@ -38,26 +38,33 @@ func (d *dataSourceCTEPolicyIDTKeyRule) Schema(_ context.Context, _ datasource.S
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose IDT key rules are to be listed.",
+				Required:    true,
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of IDT (Information Dispersal Technology) key rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the IDT key rule within the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"current_key": schema.StringAttribute{
-							Computed: true,
+							Description: "Identifier of the current key linked with the rule.",
+							Computed:    true,
 						},
 						"transformation_key": schema.StringAttribute{
-							Computed: true,
+							Description: "Identifier of the transformation key linked with the rule.",
+							Computed:    true,
 						},
 						"order_number": schema.Int64Attribute{
-							Computed: true,
+							Description: "Precedence order of the rule in the parent policy.",
+							Computed:    true,
 						},
 					},
 				},

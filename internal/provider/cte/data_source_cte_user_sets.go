@@ -39,55 +39,71 @@ func (d *dataSourceCTEUserSets) Schema(_ context.Context, _ datasource.SchemaReq
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"user_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of user sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the user set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the user set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the user set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the user set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the user set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the user set.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the user set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"users": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of users belonging to the user set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the user within the user set.",
+										Optional:    true,
 									},
 									"gid": schema.Int64Attribute{
-										Optional: true,
+										Description: "Group ID (GID) of the user.",
+										Optional:    true,
 									},
 									"gname": schema.StringAttribute{
-										Optional: true,
+										Description: "Group name of the user.",
+										Optional:    true,
 									},
 									"os_domain": schema.StringAttribute{
-										Optional: true,
+										Description: "OS domain of the user.",
+										Optional:    true,
 									},
 									"uid": schema.Int64Attribute{
-										Optional: true,
+										Description: "User ID (UID) of the user.",
+										Optional:    true,
 									},
 									"uname": schema.StringAttribute{
-										Optional: true,
+										Description: "Username of the user.",
+										Optional:    true,
 									},
 								},
 							},

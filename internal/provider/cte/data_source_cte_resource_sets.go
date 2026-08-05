@@ -39,55 +39,71 @@ func (d *dataSourceCTEResourceSets) Schema(_ context.Context, _ datasource.Schem
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"resource_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of resource sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the resource set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the resource set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the resource set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the resource set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the resource set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the resource set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the resource set.",
+							Computed:    true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the resource set, Directory or Classification.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the resource set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"resources": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of resources (directories/files) belonging to the resource set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the resource within the resource set.",
+										Optional:    true,
 									},
 									"directory": schema.StringAttribute{
-										Optional: true,
+										Description: "Directory of the resource.",
+										Optional:    true,
 									},
 									"file": schema.StringAttribute{
-										Optional: true,
+										Description: "File name or pattern of the resource.",
+										Optional:    true,
 									},
 									"include_subfolders": schema.BoolAttribute{
-										Optional: true,
+										Description: "Whether to include subfolders of the directory in the resource.",
+										Optional:    true,
 									},
 									"hdfs": schema.BoolAttribute{
-										Optional: true,
+										Description: "Whether this resource is HDFS (Hadoop Distributed File System).",
+										Optional:    true,
 									},
 								},
 							},

@@ -39,56 +39,73 @@ func (d *dataSourceCTESignatureSets) Schema(_ context.Context, _ datasource.Sche
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"signature_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of signature sets matching the given filters.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the signature set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the signature set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the signature set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature set was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature set was last updated.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the signature set.",
+							Computed:    true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the signature set. Valid values are signature-set (application signing) and hadoop-signature-set (Hadoop data protection).",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the signature set.",
+							Computed:    true,
 						},
 						"reference_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Reference version of the signature set.",
+							Computed:    true,
 						},
 						"source_list": schema.ListAttribute{
+							Description: "List of directories/files added to the signature set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"signing_status": schema.StringAttribute{
-							Computed: true,
+							Description: "Signing status of the signature set.",
+							Computed:    true,
 						},
 						"percentage_complete": schema.Int64Attribute{
-							Computed: true,
+							Description: "Percentage of the signing operation completed for the signature set.",
+							Computed:    true,
 						},
 						"updated_by": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user who last updated the signature set.",
+							Computed:    true,
 						},
 						"docker_img_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker image scanned to generate the signature set, if applicable.",
+							Computed:    true,
 						},
 						"docker_cont_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker container scanned to generate the signature set, if applicable.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the signature set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},

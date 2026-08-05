@@ -38,10 +38,12 @@ func (d *dataSourceCTEPolicySecurityRule) Schema(_ context.Context, _ datasource
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose security rules are to be listed.",
+				Required:    true,
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of security rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -49,37 +51,48 @@ func (d *dataSourceCTEPolicySecurityRule) Schema(_ context.Context, _ datasource
 							Description: "ID of the Security Rule within the parent CTE Client Policy",
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the security rule.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the security rule.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the security rule.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the security rule.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the security rule was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the security rule was last updated.",
+							Computed:    true,
 						},
 						"effect": schema.StringAttribute{
-							Computed: true,
+							Description: "Effect(s) of the security rule, comma-separated combination of permit, deny, audit and applykey.",
+							Computed:    true,
 						},
 						"action": schema.StringAttribute{
-							Computed: true,
+							Description: "Actions to apply the effect to, comma-separated combination of read, write, all_ops, key_op, sec_erase, mkdir, rmdir, rename and unlink.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"order_number": schema.Int64Attribute{
-							Computed: true,
+							Description: "Precedence order of the rule in the parent policy.",
+							Computed:    true,
 						},
 						"process_signed": schema.StringAttribute{
-							Computed: true,
+							Description: "Whether the process is signed.",
+							Computed:    true,
 						},
 						"exclude_process_set": schema.BoolAttribute{
 							Computed:    true,
@@ -110,7 +123,8 @@ func (d *dataSourceCTEPolicySecurityRule) Schema(_ context.Context, _ datasource
 							Description: "ID of the user set to link to the policy.",
 						},
 						"generation": schema.StringAttribute{
-							Computed: true,
+							Description: "Generation of the security rule.",
+							Computed:    true,
 						},
 					},
 				},

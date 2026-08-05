@@ -37,55 +37,71 @@ func (d *dataSourceCTEPolicy) Schema(_ context.Context, _ datasource.SchemaReque
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy_name": schema.StringAttribute{
-				Optional: true,
+				Description: "Name of the CTE policy to filter by. If omitted, all CTE policies are returned.",
+				Optional:    true,
 			},
 			"cte_policies": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CTE policies matching the given filter.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the CTE policy.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the CTE policy.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the CTE policy.",
+							Computed:    true,
 						},
 						"policy_type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the CTE policy, Standard, LDT, IDT, Cloud_Object_Storage or CSI.",
+							Computed:    true,
 						},
 						"metadata": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: "Metadata of the CTE policy.",
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"restrict_update": schema.BoolAttribute{
-									Computed: true,
+									Description: "Whether to restrict updates to the CTE policy.",
+									Computed:    true,
 								},
 							},
 						},
 						"never_deny": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the policy allows all data access operations, disabling security controls. This should be enabled only when applying key configurations initially.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the CTE policy.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CTE policy was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CTE policy was last updated.",
+							Computed:    true,
 						},
 						"policy_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Version of the CTE policy.",
+							Computed:    true,
 						},
 						"policy_key_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Key version of the CTE policy.",
+							Computed:    true,
 						},
 						"migrated_policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the policy this CTE policy was migrated from, if applicable.",
+							Computed:    true,
 						},
 						"updated_by": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user who last updated the CTE policy.",
+							Computed:    true,
 						},
 					},
 				},

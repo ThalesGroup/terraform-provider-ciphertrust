@@ -38,10 +38,12 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Schema(_ context.Context, _ datasource.S
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose LDT key rules are to be listed.",
+				Required:    true,
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of LDT (Live Data Transformation) key rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{

@@ -17,21 +17,21 @@ description: |-
 
 ### Read-Only
 
-- `csi_group` (Attributes List) (see [below for nested schema](#nestedatt--csi_group))
+- `csi_group` (Attributes List) List of CSI (Container Storage Interface) groups. (see [below for nested schema](#nestedatt--csi_group))
 
 <a id="nestedatt--csi_group"></a>
 ### Nested Schema for `csi_group`
 
 Read-Only:
 
-- `account` (String)
-- `client_profile_id` (String)
-- `client_profile_name` (String)
-- `created_at` (String)
-- `description` (String)
-- `id` (String)
-- `k8s_namespace` (String)
-- `k8s_storage_class` (String)
-- `name` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the CSI group.
+- `client_profile_id` (String) ID of the client profile associated with the CSI group.
+- `client_profile_name` (String) Name of the client profile associated with the CSI group.
+- `created_at` (String) Date and time the CSI group was created.
+- `description` (String) Description of the CSI group.
+- `id` (String) The unique identifier of the CSI group.
+- `k8s_namespace` (String) Kubernetes namespace associated with the CSI group.
+- `k8s_storage_class` (String) Kubernetes storage class associated with the CSI group.
+- `name` (String) Name of the CSI group.
+- `updated_at` (String) Date and time the CSI group was last updated.
+- `uri` (String) URI of the CSI group.
