@@ -1637,9 +1637,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 	}
 
-	// Bug 4 fix — hydrate meta unconditionally
+	// Hydrate meta only when the user has a meta block configured (state has meta != nil).
+	// CM may auto-inject meta.ownerId for keys created with assign_self_as_owner=true even
+	// when the user never configured a meta block. Silently importing that auto-injected value
+	// into state would cause MergePatchObject to fire "Cannot Clear Field After Creation" on
+	// every subsequent plan, leaving the user stuck. Keying on plan.Metadata (loaded from
+	// prior state above) instead of metaResult avoids this: if the user never configured meta,
+	// plan.Metadata is nil and we leave it nil regardless of what the server returned.
 	metaResult := gjson.Get(response, "meta")
-	if metaResult.Exists() && metaResult.Type != gjson.Null {
+	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
 		var metaVal KeyMetadataTFSDK
 		if r := gjson.Get(response, "meta.ownerId"); r.Exists() && r.String() != "" {
 			metaVal.OwnerId = types.StringValue(r.String())
@@ -1703,9 +1709,11 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			metaVal.CTE = nil
 		}
 		plan.Metadata = &metaVal
-	} else {
+	} else if plan.Metadata != nil {
+		// User had meta configured but server no longer returns it — clear from state.
 		plan.Metadata = nil
 	}
+	// else: plan.Metadata was nil (user has no meta block) — leave nil regardless of server response.
 
 	// public_key_parameters is a Create-only request field; GET /vault/keys2/{id} never
 	// returns it (swagger-keys.yaml Key schema has no publicKeyParameters property).
