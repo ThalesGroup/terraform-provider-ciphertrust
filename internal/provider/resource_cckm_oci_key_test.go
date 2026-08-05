@@ -590,28 +590,28 @@ func TestCckmOCIKeyNative(t *testing.T) {
 				PreConfig:   func() { logTestStep(t.Name(), "Step 10") },
 				Config:      badAlgorithmConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 11: changing length must be rejected at plan time.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 11") },
 				Config:      badLengthConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 12: changing vault must be rejected at plan time.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
 				Config:      badVaultConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 13: changing cckm_key_id on the version must be rejected at plan time.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 13") },
 				Config:      badCckmKeyIdConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 14: re-apply a clean config to confirm key and version are still ENABLED

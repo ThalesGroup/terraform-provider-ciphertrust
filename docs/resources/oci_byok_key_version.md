@@ -74,13 +74,13 @@ resource "ciphertrust_oci_byok_key_version" "version" {
 
 ### Required
 
-- `cckm_key_id` (String) CipherTrust Manager Key ID.
-- `source_key_id` (String) ID of the key that will be uploaded from a key source to OCI.
+- `cckm_key_id` (String) (Immutable) CipherTrust Manager Key ID.
+- `source_key_id` (String) (Immutable) ID of the key that will be uploaded from a key source to OCI.
 
 ### Optional
 
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the OCI BYOK key version when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
-- `source_key_tier` (String) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the OCI BYOK key version when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `source_key_tier` (String) (Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
 
 ### Read-Only
 

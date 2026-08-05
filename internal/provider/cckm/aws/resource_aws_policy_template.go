@@ -9,6 +9,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -27,7 +28,6 @@ var (
 	_ resource.Resource                = &resourceAWSPolicyTemplate{}
 	_ resource.ResourceWithConfigure   = &resourceAWSPolicyTemplate{}
 	_ resource.ResourceWithImportState = &resourceAWSPolicyTemplate{}
-	_ resource.ResourceWithModifyPlan  = &resourceAWSPolicyTemplate{}
 )
 
 func NewResourceAWSPolicyTemplate() resource.Resource {
@@ -70,12 +70,15 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			"account_id": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "AWS account used to create the key policy.",
+				Description: "(Immutable) AWS account used to create the key policy.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"auto_push": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "(Updatable) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.",
+				Description: "On update, automatically push policy changes. Must be set to true if 'is_verified' is true.",
 				Default:     booldefault.StaticBool(false),
 			},
 			"is_verified": schema.BoolAttribute{
@@ -85,32 +88,35 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			"external_accounts": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.",
+				Description: "AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.",
 			},
 			"key_admins": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key administrators - users.",
+				Description: "Key administrators - users.",
 			},
 			"key_admins_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key administrators - roles.",
+				Description: "Key administrators - roles.",
 			},
 			"key_users": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key users - users.",
+				Description: "Key users - users.",
 			},
 			"key_users_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key users - roles.",
+				Description: "Key users - roles.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
+				Description: "(Immutable) ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"kms_name": schema.StringAttribute{
 				Computed:    true,
@@ -118,12 +124,15 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name for the policy template.",
+				Description: "(Immutable) Name for the policy template.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"policy": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
-				Description: "(Updatable) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. " +
+				Description: "AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. " +
 					"If no policy parameters are specified the default policy is created.",
 				Validators: []validator.String{
 					stringvalidator.ConflictsWith(
@@ -330,51 +339,6 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 		}
-	}
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceAWSPolicyTemplate) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state AWSKeyPolicyTemplateTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	// Guard against false positives when account_id is not set in config (null in plan)
-	// but has a value in state (set by the API after create).
-	if !plan.AccountID.IsNull() && !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
-		changed = append(changed, "account_id")
-	}
-	// Guard against false positives when kms_id is not set in config (null in plan)
-	// but has a value in state (set by the API after create).
-	if !plan.KmsID.IsNull() && !plan.KmsID.IsUnknown() && plan.KmsID != state.KmsID {
-		changed = append(changed, "kms_id")
-	}
-	if plan.Name != state.Name {
-		changed = append(changed, "name")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
 	}
 }
 

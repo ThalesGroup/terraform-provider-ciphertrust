@@ -255,7 +255,7 @@ func TestCckmOCIVault(t *testing.T) {
 			{
 				Config:      modifyVaultConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				ResourceName:      vaultResource,

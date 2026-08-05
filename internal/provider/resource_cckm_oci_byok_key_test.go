@@ -328,14 +328,14 @@ func TestCckmOCIByokKey(t *testing.T) {
 				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      modifyKeyConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				// Step 3: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 3") },
 				Config:      modifyVersionConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				// Step 4: re-apply createResourceStr to reset the framework's current config after

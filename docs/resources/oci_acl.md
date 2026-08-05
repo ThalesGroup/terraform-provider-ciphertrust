@@ -33,7 +33,7 @@ resource "ciphertrust_oci_acl" "group_acl" {
 
 ### Required
 
-- `actions` (Set of String) (Updatable) The following table lists the accepted values:
+- `actions` (Set of String) The following table lists the accepted values:
 
 | APIs                            |  Actions               | Description |
 | -----------------------------   |  --------------------- | --------------------------------------------------- |
@@ -65,12 +65,12 @@ resource "ciphertrust_oci_acl" "group_acl" {
 The 'view' or 'viewhyokkey' permissions must be included with 'key' or 'hyok key' actions respectively.
 
 To remove a user or group from the vault ACL entirely, delete the resource.
-- `vault_id` (String) The CipherTrust Manager OCI vault resource ID in which to set the ACL
+- `vault_id` (String) (Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL
 
 ### Optional
 
-- `group` (String) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
-- `user_id` (String) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
+- `group` (String) (Immutable) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
+- `user_id` (String) (Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
 
 ### Read-Only
 

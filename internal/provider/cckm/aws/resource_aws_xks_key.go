@@ -8,6 +8,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -73,7 +74,10 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"bypass_policy_lockout_safety_check": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Whether to bypass the key policy lockout safety check.",
+				Description: "(Immutable) Whether to bypass the key policy lockout safety check.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"aws_param": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -83,13 +87,13 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional: true,
-				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. " +
+				Description: "Enable or disable the key. Only applied when the key is in a linked state. " +
 					"Cannot be set to false at creation time; disable the key via update after it is created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -225,25 +229,34 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
-						Description: "(Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
+						Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 					},
 					"custom_key_store_id": schema.StringAttribute{
 						Required:    true,
-						Description: "ID of the custom keystore where XKS key is to be created.",
+						Description: "(Immutable) ID of the custom keystore where XKS key is to be created.",
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"source_key_id": schema.StringAttribute{
 						Required:    true,
-						Description: "ID of the source key for AWS XKS key.",
+						Description: "(Immutable) ID of the source key for AWS XKS key.",
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"source_key_tier": schema.StringAttribute{
 						Required:    true,
-						Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
+						Description: "(Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.",
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"linked": schema.BoolAttribute{
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
-						Description: "(Updatable) Parameter to indicate if AWS XKS key is linked with AWS.",
+						Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
 					},
 				},
 			},
@@ -768,36 +781,6 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 	}
 
-	var changed []string
-
-	if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() &&
-		plan.BypassPolicyLockoutSafetyCheck != state.BypassPolicyLockoutSafetyCheck {
-		changed = append(changed, "bypass_policy_lockout_safety_check")
-	}
-
-	// Check immutable fields inside the local_hosted_params block.
-	if plan.LocalHostParams != nil && state.LocalHostParams != nil {
-		if plan.LocalHostParams.CustomKeyStoreID != state.LocalHostParams.CustomKeyStoreID {
-			changed = append(changed, "local_hosted_params.custom_key_store_id")
-		}
-		if plan.LocalHostParams.SourceKeyID != state.LocalHostParams.SourceKeyID {
-			changed = append(changed, "local_hosted_params.source_key_id")
-		}
-		if plan.LocalHostParams.SourceKeyTier != state.LocalHostParams.SourceKeyTier {
-			changed = append(changed, "local_hosted_params.source_key_tier")
-		}
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an existing AWS XKS key into Terraform state using its resource ID.

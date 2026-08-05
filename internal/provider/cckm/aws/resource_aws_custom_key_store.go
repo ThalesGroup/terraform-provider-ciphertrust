@@ -9,6 +9,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -121,8 +122,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"kms_id": schema.StringAttribute{
 				Required:    true,
-				Description: "ID of the AWS KMS account container in which to create the key store.",
+				Description: "(Immutable) ID of the AWS KMS account container in which to create the key store.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"type": schema.StringAttribute{
 				Computed: true,
@@ -135,25 +139,28 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) Unique name for the custom key store.",
+				Description: "Unique name for the custom key store.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of an available AWS region.",
+				Description: "(Immutable) Name of an available AWS region.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"enable_success_audit_event": schema.BoolAttribute{
 				Computed: true,
 				Optional: true,
 				Default:  booldefault.StaticBool(false),
-				Description: "(Updatable) Enable or disable audit recording of successful operations within an external key store. " +
+				Description: "Enable or disable audit recording of successful operations within an external key store. " +
 					"Default value is false. Recommended value is false as enabling it can affect performance.",
 			},
 			"linked_state": schema.BoolAttribute{
 				Computed: true,
 				Optional: true,
-				Description: "(Updatable) Indicates whether the custom key store is linked with AWS. " +
+				Description: "Indicates whether the custom key store is linked with AWS. " +
 					"Applicable to a custom key store of type EXTERNAL_KEY_STORE. " +
 					"Defaults to false when not set. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. " +
 					"Once linked, it is not possible to unlink a key store. " +
@@ -164,7 +171,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 				Optional:   true,
 				Computed:   true,
 				Validators: []validator.String{stringvalidator.OneOf([]string{StateConnectKeystore, StateDisconnectKeystore}...)},
-				Description: "(Updatable) Indicates whether to connect or disconnect the custom key store. " +
+				Description: "Indicates whether to connect or disconnect the custom key store. " +
 					"Cannot be set at creation time; connect or disconnect via update after the key store is created.",
 			},
 			"labels": schema.MapAttribute{
@@ -183,7 +190,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"cloud_hsm_cluster_id": schema.StringAttribute{
 						Computed: true,
 						Optional: true,
-						MarkdownDescription: "(Updatable) ID of a CloudHSM cluster for a custom key store. " +
+						MarkdownDescription: "ID of a CloudHSM cluster for a custom key store. " +
 							"Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. " +
 							"**Required** field for a custom key store of type AWS_CLOUDHSM.",
 					},
@@ -197,18 +204,20 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						Computed: true,
 					},
 					"custom_key_store_type": schema.StringAttribute{
-						//Required: true,
 						Optional: true,
 						Computed: true,
-						Description: "Specifies the type of custom key store. " +
+						Description: "(Immutable) Specifies the type of custom key store. " +
 							"For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. " +
 							"For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.",
 						Validators: []validator.String{stringvalidator.OneOf([]string{"EXTERNAL_KEY_STORE", "AWS_CLOUDHSM"}...)},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"key_store_password": schema.StringAttribute{
 						Computed: true,
 						Optional: true,
-						MarkdownDescription: "(Updatable) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. " +
+						MarkdownDescription: "The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. " +
 							"This parameter does not change the password in the CloudHSM cluster. " +
 							"User needs to configure the credentials on the CloudHSM cluster separately. " +
 							"**Required** field for custom key store of type AWS_CLOUDHSM.",
@@ -216,13 +225,16 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"trust_anchor_certificate": schema.StringAttribute{
 						Computed: true,
 						Optional: true,
-						MarkdownDescription: "The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. " +
+						MarkdownDescription: "(Immutable) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. " +
 							"**Required** field for a custom key store of type AWS_CLOUDHSM",
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"xks_proxy_connectivity": schema.StringAttribute{
 						Optional: true,
 						Computed: true,
-						MarkdownDescription: "(Updatable) Indicates how AWS KMS communicates with the Ciphertrust Manager. " +
+						MarkdownDescription: "Indicates how AWS KMS communicates with the Ciphertrust Manager. " +
 							"**Required** field for a custom key store of type EXTERNAL_KEY_STORE. " +
 							"Default value is PUBLIC_ENDPOINT.",
 						Validators: []validator.String{stringvalidator.OneOf([]string{"VPC_ENDPOINT_SERVICE", "PUBLIC_ENDPOINT"}...)},
@@ -230,7 +242,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"xks_proxy_uri_endpoint": schema.StringAttribute{
 						Optional: true,
 						Computed: true,
-						MarkdownDescription: "(Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. " +
+						MarkdownDescription: "Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. " +
 							"The DNS hostname can be either a load balancer directing requests to CipherTrust Manager or the CipherTrust Manager instance itself. " +
 							"**Required** for a custom key store of type EXTERNAL_KEY_STORE. " +
 							"For **CDSPaaS**, the endpoint is `https://xks.<cdspaas>.dpondemand.io`; " +
@@ -257,7 +269,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"xks_proxy_vpc_endpoint_service_name": schema.StringAttribute{
 						Computed: true,
 						Optional: true,
-						MarkdownDescription: "(Updatable) Indicates the VPC endpoint service name the custom key store uses. " +
+						MarkdownDescription: "Indicates the VPC endpoint service name the custom key store uses. " +
 							"**Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.",
 					},
 				},
@@ -274,7 +286,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 						Computed: true,
 						Optional: true,
 						Default:  booldefault.StaticBool(false),
-						Description: "(Updatable) This field indicates whether the custom key store is in a blocked or unblocked state. " +
+						Description: "This field indicates whether the custom key store is in a blocked or unblocked state. " +
 							"Default value is false, which indicates the key store is in an unblocked state. " +
 							"Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager).",
 					},
@@ -284,7 +296,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"health_check_key_id": schema.StringAttribute{
 						Optional: true,
 						Computed: true,
-						MarkdownDescription: "(Updatable) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. " +
+						MarkdownDescription: "ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. " +
 							"Crypto operation would be performed using this key before creating a custom key store. " +
 							"**Required** field for custom key store of type EXTERNAL_KEY_STORE.",
 					},
@@ -297,8 +309,11 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					},
 					"max_credentials": schema.Int32Attribute{
 						Optional: true,
-						MarkdownDescription: "Max number of credentials that can be associated with custom key store (min value 2. max value 20). " +
+						MarkdownDescription: "(Immutable) Max number of credentials that can be associated with custom key store (min value 2. max value 20). " +
 							"**Required** field for a custom key store of type EXTERNAL_KEY_STORE.",
+						PlanModifiers: []planmodifier.Int32{
+							modifiers.ImmutableInt32(),
+						},
 					},
 					"source_container_id": schema.StringAttribute{
 						Computed: true,
@@ -309,21 +324,24 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 					"source_key_tier": schema.StringAttribute{
 						Optional:    true,
 						Computed:    true,
-						Description: "Source for cryptographic keys in this key store. The only supported value is 'local' (CipherTrust Manager).",
+						Description: "(Immutable) Source for cryptographic keys in this key store. The only supported value is 'local' (CipherTrust Manager).",
 						Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 				},
 			},
 			"enable_credential_rotation": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "(Updatable) Enable the custom key store for scheduled credential rotation job. " +
+				Description: "Enable the custom key store for scheduled credential rotation job. " +
 					"Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager) that are in a linked state (linked_state = true) " +
 					"and whose connection state is CONNECTED or DISCONNECTED. " +
 					"Cannot be set at creation time; enable credential rotation via update after the key store is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.",
+						Description: "ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.",
 					},
 				},
 			},
@@ -870,69 +888,6 @@ func (r *resourceAWSCustomKeyStore) ModifyPlan(ctx context.Context, req resource
 		return
 	}
 
-	var changed []string
-
-	// Check immutable fields inside the aws_param block.
-	if !plan.AWSParams.IsNull() && !plan.AWSParams.IsUnknown() &&
-		!state.AWSParams.IsNull() && !state.AWSParams.IsUnknown() {
-		var planAWSParam, stateAWSParam AWSCustomKeyStoreParamTFSDK
-		resp.Diagnostics.Append(plan.AWSParams.As(ctx, &planAWSParam, basetypes.ObjectAsOptions{})...)
-		resp.Diagnostics.Append(state.AWSParams.As(ctx, &stateAWSParam, basetypes.ObjectAsOptions{})...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		if planAWSParam.CustomKeystoreType != stateAWSParam.CustomKeystoreType {
-			changed = append(changed, "aws_param.custom_key_store_type")
-		}
-		// Guard against false positives when the field was never set in config (null)
-		// but the API returned a value (e.g. empty string after create).
-		if !planAWSParam.TrustAnchorCertificate.IsNull() && !planAWSParam.TrustAnchorCertificate.IsUnknown() &&
-			planAWSParam.TrustAnchorCertificate != stateAWSParam.TrustAnchorCertificate {
-			changed = append(changed, "aws_param.trust_anchor_certificate")
-		}
-	}
-
-	// kms_id is immutable; ModifyPlan enforces this by returning an error if the value changes.
-	if plan.KMSID != state.KMSID {
-		changed = append(changed, "kms_id")
-	}
-
-	// Check immutable fields inside the local_hosted_params block.
-	if !plan.LocalHostedParams.IsNull() && !plan.LocalHostedParams.IsUnknown() &&
-		!state.LocalHostedParams.IsNull() && !state.LocalHostedParams.IsUnknown() {
-		var planLHP, stateLHP LocalHostedParamsTFSDK
-		resp.Diagnostics.Append(plan.LocalHostedParams.As(ctx, &planLHP, basetypes.ObjectAsOptions{})...)
-		resp.Diagnostics.Append(state.LocalHostedParams.As(ctx, &stateLHP, basetypes.ObjectAsOptions{})...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		// max_credentials is Optional-only; guard against false positives when
-		// the field was never set in config (null) but the API returned a value.
-		if !planLHP.MaxCredentials.IsNull() && !stateLHP.MaxCredentials.IsNull() &&
-			planLHP.MaxCredentials != stateLHP.MaxCredentials {
-			changed = append(changed, "local_hosted_params.max_credentials")
-		}
-		// Guard against false positives when the field was never set in config (null)
-		// but the API returned a value (e.g. empty string after create).
-		if planLHP.SourceKeyTier != stateLHP.SourceKeyTier {
-			changed = append(changed, "local_hosted_params.source_key_tier")
-		}
-	}
-
-	if plan.Region != state.Region {
-		changed = append(changed, "region")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an existing AWS custom key store into Terraform state using its resource ID.

@@ -51,16 +51,16 @@ resource "ciphertrust_aws_kms" "kms" {
 
 ### Required
 
-- `account_id` (String) ID of the AWS account.
-- `connection_id` (String) (Updatable) CipherTrust Manager AWS connection ID.
-- `name` (String) Unique name for the KMS.
-- `regions` (List of String) (Updatable) AWS regions to be added to the KMS.
+- `account_id` (String) (Immutable) ID of the AWS account.
+- `connection_id` (String) CipherTrust Manager AWS connection ID.
+- `name` (String) (Immutable) Unique name for the KMS.
+- `regions` (List of String) AWS regions to be added to the KMS.
 
 ### Optional
 
-- `archive` (Boolean) (Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**
-- `assume_role_arn` (String) (Updatable) Amazon Resource Name (ARN) of the role to be assumed.
-- `assume_role_external_id` (String) (Updatable) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
+- `archive` (Boolean) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**
+- `assume_role_arn` (String) Amazon Resource Name (ARN) of the role to be assumed.
+- `assume_role_external_id` (String) External ID for the role to be assumed. This parameter can be specified only with "assume_role_arn".
 
 ### Read-Only
 

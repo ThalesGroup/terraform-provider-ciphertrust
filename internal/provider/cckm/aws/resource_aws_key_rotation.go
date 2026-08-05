@@ -9,6 +9,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -101,7 +102,10 @@ func (r *resourceAWSKeyRotation) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager UUID of the AWS native symmetric key to rotate. This attribute cannot be changed after creation.",
+				Description: "(Immutable) CipherTrust Manager UUID of the AWS native symmetric key to rotate.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"trigger": schema.StringAttribute{
 				Required: true,
@@ -348,16 +352,6 @@ func (r *resourceAWSKeyRotation) ModifyPlan(ctx context.Context, req resource.Mo
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// key_id must not change after creation.
-	if plan.KeyID != state.KeyID {
-		resp.Diagnostics.AddError(
-			"key_id cannot be changed",
-			"The key_id attribute cannot be modified after this resource is created. "+
-				"Delete and recreate this resource to rotate a different key.",
-		)
 		return
 	}
 

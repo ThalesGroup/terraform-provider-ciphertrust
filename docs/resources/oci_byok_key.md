@@ -103,18 +103,18 @@ resource "ciphertrust_oci_byok_key" "key" {
 
 ### Required
 
-- `name` (String) (Updatable) Name for the key.
+- `name` (String) Name for the key.
 - `oci_key_params` (Attributes) OCI key attributes. (see [below for nested schema](#nestedatt--oci_key_params))
-- `source_key_id` (String) ID of the key that will be uploaded from a key source to OCI.
-- `vault` (String) CipherTrust Manager OCI vault resource ID.
+- `source_key_id` (String) (Immutable) ID of the key that will be uploaded from a key source to OCI.
+- `vault` (String) (Conditionally immutable) CipherTrust Manager OCI vault resource ID. This attribute can only be changed if the previously configured vault no longer exists in CipherTrust Manager.
 
 ### Optional
 
-- `enable_auto_rotation` (Attributes) (Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. (see [below for nested schema](#nestedatt--enable_auto_rotation))
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.
+- `enable_auto_rotation` (Attributes) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. (see [below for nested schema](#nestedatt--enable_auto_rotation))
+- `enable_key` (Boolean) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.
 - `restore_from_backup_trigger` (String) Triggers a restore of the key from its most recent OCI backup each time the trigger value changes. Applicable only to HSM-protected keys in OCI Virtual Private Vaults with backup (Object Storage bucket) configured.
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the OCI BYOK key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
-- `source_key_tier` (String) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the OCI BYOK key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `source_key_tier` (String) (Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
 
 ### Read-Only
 
@@ -139,13 +139,13 @@ resource "ciphertrust_oci_byok_key" "key" {
 
 Required:
 
-- `compartment_id` (String) (Updatable) The compartment's OCID.
-- `protection_mode` (String) The protection mode of the key. Options are: HSM or SOFTWARE.
+- `compartment_id` (String) The compartment's OCID.
+- `protection_mode` (String) (Immutable) The protection mode of the key. Options are: HSM or SOFTWARE.
 
 Optional:
 
-- `defined_tags` (Attributes Set) (Updatable) Defined tags for the key. To remove all tags set defined_tags = []. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
-- `freeform_tags` (Map of String) (Updatable) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
+- `defined_tags` (Attributes Set) Defined tags for the key. To remove all tags set defined_tags = []. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
+- `freeform_tags` (Map of String) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
 
 Read-Only:
 
@@ -178,8 +178,8 @@ Required:
 
 Required:
 
-- `job_config_id` (String) (Updatable) CipherTrust Manager resource ID of a key rotation scheduler.
-- `key_source` (String) (Updatable) Currently, the only option is 'ciphertrust'.
+- `job_config_id` (String) CipherTrust Manager resource ID of a key rotation scheduler.
+- `key_source` (String) Currently, the only option is 'ciphertrust'.
 
 
 <a id="nestedatt--version_summary"></a>
