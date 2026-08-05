@@ -2144,7 +2144,7 @@ func Test_CM_AccCMKey_RSALabelsNoReservedDrift(t *testing.T) {
 resource "ciphertrust_cm_key" "k" {
   name      = %q
   algorithm = "rsa"
-  size      = 2048
+  key_size  = 2048
   labels    = { env = "test" }
 }`, keyName)
 
