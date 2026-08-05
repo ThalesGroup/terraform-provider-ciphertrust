@@ -34,6 +34,9 @@ func (m aliasListIndexModifier) PlanModifyList(ctx context.Context, req planmodi
 	if req.State.Raw.IsNull() {
 		return // brand-new resource — nothing to correlate against
 	}
+	if req.Plan.Raw.IsNull() {
+		return // destroy plan — never block teardown
+	}
 	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
 		return
 	}

@@ -14,8 +14,16 @@ import (
 func Test_CM_ClearRejectStringModifier(t *testing.T) {
 	mod := clearRejectStringModifier{FieldName: "description"}
 
+	// nonNullPlan simulates a normal in-progress plan (not a destroy). req.Plan must be
+	// explicitly non-null: tftypes.Value{}'s zero value has IsNull()==true, which would
+	// trigger the destroy guard added in TFIN-574 and suppress the reject logic.
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.String) planmodifier.StringResponse {
-		req := planmodifier.StringRequest{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.StringRequest{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.StringResponse{PlanValue: planVal}
 		mod.PlanModifyString(context.Background(), req, &resp)
 		return resp
@@ -67,8 +75,13 @@ func Test_CM_ClearRejectStringModifier(t *testing.T) {
 func Test_CM_ClearRejectInt64Modifier(t *testing.T) {
 	mod := clearRejectInt64Modifier{FieldName: "usage_mask"}
 
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.Int64) planmodifier.Int64Response {
-		req := planmodifier.Int64Request{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.Int64Request{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.Int64Response{PlanValue: planVal}
 		mod.PlanModifyInt64(context.Background(), req, &resp)
 		return resp
@@ -123,8 +136,13 @@ func Test_CM_ClearRejectMapModifier(t *testing.T) {
 	nonEmptyMap := types.MapValueMust(types.StringType, map[string]attr.Value{"env": types.StringValue("prod")})
 	emptyMap, _ := types.MapValue(types.StringType, map[string]attr.Value{})
 
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.Map) planmodifier.MapResponse {
-		req := planmodifier.MapRequest{State: stateRaw, StateValue: stateVal, PlanValue: planVal}
+		req := planmodifier.MapRequest{State: stateRaw, Plan: nonNullPlan, StateValue: stateVal, PlanValue: planVal}
 		resp := planmodifier.MapResponse{PlanValue: planVal}
 		mod.PlanModifyMap(context.Background(), req, &resp)
 		return resp
@@ -172,4 +190,76 @@ func Test_CM_ClearRejectMapModifier(t *testing.T) {
 			t.Errorf("unexpected error for unknown plan value: %v", resp.Diagnostics)
 		}
 	})
+}
+
+// Destroy-plan guard tests (TFIN-574): clearReject* modifiers must not block
+// terraform destroy even when a guarded field was previously set.
+func Test_CM_ClearRejectStringModifier_DestroyAllowed(t *testing.T) {
+	mod := clearRejectStringModifier{FieldName: "rotation_frequency_days"}
+	ctx := context.Background()
+
+	liveState := tfsdk.State{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{"x": tftypes.String}},
+		map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
+	)}
+	destroyPlan := tfsdk.Plan{Raw: tftypes.NewValue(tftypes.Object{}, nil)}
+
+	req := planmodifier.StringRequest{
+		State:      liveState,
+		Plan:       destroyPlan,
+		StateValue: types.StringValue("30"),
+		PlanValue:  types.StringNull(),
+	}
+	resp := planmodifier.StringResponse{PlanValue: types.StringNull()}
+	mod.PlanModifyString(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Errorf("clearRejectStringModifier must not block destroy: %v", resp.Diagnostics)
+	}
+}
+
+func Test_CM_ClearRejectInt64Modifier_DestroyAllowed(t *testing.T) {
+	mod := clearRejectInt64Modifier{FieldName: "usage_mask"}
+	ctx := context.Background()
+
+	liveState := tfsdk.State{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{"x": tftypes.String}},
+		map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
+	)}
+	destroyPlan := tfsdk.Plan{Raw: tftypes.NewValue(tftypes.Object{}, nil)}
+
+	req := planmodifier.Int64Request{
+		State:      liveState,
+		Plan:       destroyPlan,
+		StateValue: types.Int64Value(12),
+		PlanValue:  types.Int64Null(),
+	}
+	resp := planmodifier.Int64Response{PlanValue: types.Int64Null()}
+	mod.PlanModifyInt64(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Errorf("clearRejectInt64Modifier must not block destroy: %v", resp.Diagnostics)
+	}
+}
+
+func Test_CM_ClearRejectMapModifier_DestroyAllowed(t *testing.T) {
+	mod := clearRejectMapModifier{FieldName: "labels"}
+	ctx := context.Background()
+
+	liveState := tfsdk.State{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{"x": tftypes.String}},
+		map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
+	)}
+	destroyPlan := tfsdk.Plan{Raw: tftypes.NewValue(tftypes.Object{}, nil)}
+
+	labelsMap, _ := types.MapValue(types.StringType, map[string]attr.Value{"env": types.StringValue("test")})
+	req := planmodifier.MapRequest{
+		State:      liveState,
+		Plan:       destroyPlan,
+		StateValue: labelsMap,
+		PlanValue:  types.MapNull(types.StringType),
+	}
+	resp := planmodifier.MapResponse{PlanValue: types.MapNull(types.StringType)}
+	mod.PlanModifyMap(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Errorf("clearRejectMapModifier must not block destroy: %v", resp.Diagnostics)
+	}
 }

@@ -1995,42 +1995,6 @@ resource "ciphertrust_cm_key" "test" {
 	})
 }
 
-// Test_CM_CipherTrust_CMKey_DescriptionClearRejected verifies that removing description
-// from config after it was set produces a hard AddError diagnostic instead of a false
-// success — CM's PATCH endpoint would otherwise silently leave the live value unchanged
-// while Terraform reported the clear as applied.
-func Test_CM_CipherTrust_CMKey_DescriptionClearRejected(t *testing.T) {
-	RequireCM(t)
-	name := "tf-test-desc-clear-" + uuid.New().String()[:8]
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_cm_key" "test" {
-  algorithm   = "aes"
-  key_size    = 256
-  name        = %q
-  description = "initial desc"
-}`, name),
-				Check: checkStep(t, "description set",
-					resource.TestCheckResourceAttr("ciphertrust_cm_key.test", "description", "initial desc"),
-				),
-			},
-			{
-				// Remove description entirely — must produce AddError, not succeed.
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_cm_key" "test" {
-  algorithm = "aes"
-  key_size  = 256
-  name      = %q
-}`, name),
-				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
-			},
-		},
-	})
-}
-
 // Test_CM_CipherTrust_CMKey_UsageMaskClearRejected verifies that removing usage_mask
 // from config after it was set produces a hard AddError diagnostic instead of a false
 // success.
@@ -2133,6 +2097,120 @@ resource "ciphertrust_cm_key" "test" {
   name      = %q
 }`, name),
 				ExpectError: regexp.MustCompile(`(?i)cannot clear field`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMKey_DescriptionClearConverges verifies that removing description from
+// config sends an explicit empty-string PATCH to CM and clears the field (TFIN-573).
+// Previously clearRejectStringModifier blocked this; CM actually accepts the clear.
+func Test_CM_AccCMKey_DescriptionClearConverges(t *testing.T) {
+	RequireCM(t)
+	keyName := "tf-key-desc-clear-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with description set.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name        = %q
+  algorithm   = "aes"
+  key_size    = 256
+  description = "description to clear"
+}`, keyName),
+				Check: checkStep(t, "set description",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "description", "description to clear"),
+				),
+			},
+			{
+				// Step 2: remove description from config.
+				// Provider sends PATCH {"description":""} → CM clears → state = null → plan is empty.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+}`, keyName),
+				Check: checkStep(t, "description cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "description"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMKey_RSALabelsNoReservedDrift verifies that the ncryptify-reserved/composite-key
+// label CM auto-adds to RSA keys is filtered out of state and does not cause perpetual
+// plan drift when the user configures any labels on an RSA key (TFIN-576).
+func Test_CM_AccCMKey_RSALabelsNoReservedDrift(t *testing.T) {
+	RequireCM(t)
+	keyName := "tf-key-rsa-labels-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "rsa"
+  key_size  = 2048
+  labels    = { env = "test" }
+}`, keyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "rsa labels: create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.env", "test"),
+					// The ncryptify-reserved/composite-key label must NOT appear in state.
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "labels.ncryptify-reserved/composite-key"),
+				),
+			},
+			{
+				// Idempotency: second plan must be empty — no drift from the reserved label.
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMKey_AssignSelfAsOwnerNoMetaDrift verifies that creating a key with
+// assign_self_as_owner=true but no meta block does not cause perpetual drift.
+// CM auto-injects meta.ownerId server-side; Read() must not import it into state when
+// the user never configured a meta block — otherwise MergePatchObject fires
+// "Cannot Clear Field After Creation" on every subsequent plan (TFIN-573 class C-1/C-2).
+func Test_CM_AccCMKey_AssignSelfAsOwnerNoMetaDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tf-key-selfowner-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  algorithm            = "aes"
+  key_size             = 256
+  name                 = %q
+  assign_self_as_owner = true
+  # no meta block — server auto-injects meta.ownerId; must not appear in state
+}`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create with assign_self_as_owner, no meta in config",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "meta.0.owner_id"),
+				),
+			},
+			{
+				// Idempotency: second plan must be empty — no drift from auto-injected meta.ownerId.
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

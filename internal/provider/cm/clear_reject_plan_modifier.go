@@ -45,6 +45,9 @@ func (m clearRejectStringModifier) PlanModifyString(_ context.Context, req planm
 	if req.State.Raw.IsNull() {
 		return // create path
 	}
+	if req.Plan.Raw.IsNull() {
+		return // destroy — never block unconditional teardown (TFIN-574)
+	}
 	if req.PlanValue.IsUnknown() {
 		return // value not yet known (e.g. depends on another resource) — not a clear attempt
 	}
@@ -82,6 +85,9 @@ func (m clearRejectInt64Modifier) PlanModifyInt64(_ context.Context, req planmod
 	if req.State.Raw.IsNull() {
 		return // create path
 	}
+	if req.Plan.Raw.IsNull() {
+		return // destroy — never block unconditional teardown (TFIN-574)
+	}
 	if !req.PlanValue.IsNull() {
 		return // explicit value, including 0 — not a clear attempt
 	}
@@ -115,6 +121,9 @@ func (m clearRejectMapModifier) MarkdownDescription(ctx context.Context) string 
 func (m clearRejectMapModifier) PlanModifyMap(_ context.Context, req planmodifier.MapRequest, resp *planmodifier.MapResponse) {
 	if req.State.Raw.IsNull() {
 		return // create path
+	}
+	if req.Plan.Raw.IsNull() {
+		return // destroy — never block unconditional teardown (TFIN-574)
 	}
 	if req.PlanValue.IsUnknown() {
 		return // value not yet known (e.g. depends on another resource) — not a clear attempt

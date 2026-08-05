@@ -44,9 +44,18 @@ func nonNullAliasRawState() tfsdk.State {
 func Test_CM_AliasListIndexModifier(t *testing.T) {
 	mod := aliasListIndexModifier{}
 
+	// nonNullPlan simulates an in-progress plan (not a destroy). The Plan.Raw must be
+	// explicitly non-null so the destroy guard (req.Plan.Raw.IsNull()) does not fire:
+	// tftypes.Value{}'s zero value has a nil inner value, which IsNull() treats as null.
+	nonNullPlan := tfsdk.Plan{Raw: tftypes.NewValue(
+		tftypes.Object{AttributeTypes: map[string]tftypes.Type{}},
+		map[string]tftypes.Value{},
+	)}
+
 	run := func(stateRaw tfsdk.State, stateVal, planVal types.List) planmodifier.ListResponse {
 		req := planmodifier.ListRequest{
 			State:      stateRaw,
+			Plan:       nonNullPlan,
 			StateValue: stateVal,
 			PlanValue:  planVal,
 		}
@@ -115,6 +124,24 @@ func Test_CM_AliasListIndexModifier(t *testing.T) {
 		}
 		if got[1].Alias.ValueString() != "a2-new" || !got[1].Index.IsUnknown() {
 			t.Errorf("expected a2-new's index to be Unknown, got %+v (IsUnknown=%v)", got[1], got[1].Index.IsUnknown())
+		}
+	})
+
+	t.Run("destroy plan: modifier returns early, no index correlation attempted", func(t *testing.T) {
+		state := aliasListValue(t, []KeyAliasTFSDK{
+			{Alias: types.StringValue("a1"), Index: types.StringValue("0"), Type: types.StringValue("string")},
+		})
+		destroyPlan := tfsdk.Plan{Raw: tftypes.NewValue(tftypes.Object{}, nil)}
+		req := planmodifier.ListRequest{
+			State:      nonNullAliasRawState(),
+			Plan:       destroyPlan,
+			StateValue: state,
+			PlanValue:  types.ListNull(aliasElemType),
+		}
+		resp := planmodifier.ListResponse{PlanValue: types.ListNull(aliasElemType)}
+		mod.PlanModifyList(context.Background(), req, &resp)
+		if resp.Diagnostics.HasError() {
+			t.Errorf("destroy plan must not produce errors: %v", resp.Diagnostics)
 		}
 	})
 
