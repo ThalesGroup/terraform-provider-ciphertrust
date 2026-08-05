@@ -804,3 +804,47 @@ resource "ciphertrust_password_policy" "test" {
 		},
 	})
 }
+
+// Test_CM_PasswordPolicy_NegativeValueRejectedAtPlan verifies that every Int64
+// field that lacks a floor validator (TFIN-578) rejects negative values at plan
+// time with a clear "at least 0" diagnostic, preventing the "provider produced
+// inconsistent result after apply" crash that occurs when CM silently coerces
+// negative values to the prior server value.
+//
+// These are schema-validator tests: PlanOnly=true, no live CM call needed.
+func Test_CM_PasswordPolicy_NegativeValueRejectedAtPlan(t *testing.T) {
+	tests := []struct {
+		field string
+		hcl   string
+	}{
+		{"inclusive_min_digits", "inclusive_min_digits = -1"},
+		{"inclusive_min_lower_case", "inclusive_min_lower_case = -1"},
+		{"inclusive_min_upper_case", "inclusive_min_upper_case = -1"},
+		{"inclusive_min_other", "inclusive_min_other = -1"},
+		{"inclusive_max_total_length", "inclusive_max_total_length = -1"},
+		{"password_change_min_days", "password_change_min_days = -1"},
+		{"password_history_threshold", "password_history_threshold = -1"},
+		{"password_lifetime", "password_lifetime = -1"},
+		{"password_expiry_notification_days", "password_expiry_notification_days = -1"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.field, func(t *testing.T) {
+			resource.UnitTest(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  %s
+}
+`, tc.hcl),
+						PlanOnly:    true,
+						ExpectError: regexp.MustCompile(`(?i)at least 0`),
+					},
+				},
+			})
+		})
+	}
+}
