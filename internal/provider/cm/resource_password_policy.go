@@ -113,6 +113,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"inclusive_max_total_length": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -123,6 +126,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"inclusive_min_digits": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -131,6 +137,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"inclusive_min_lower_case": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -139,6 +148,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"inclusive_min_other": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -164,6 +176,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"inclusive_min_upper_case": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -172,6 +187,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"password_change_min_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -181,6 +199,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"password_history_threshold": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -189,6 +210,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"password_lifetime": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
@@ -198,6 +222,9 @@ func (r *resourceCMPasswordPolicy) Schema(_ context.Context, _ resource.SchemaRe
 			"password_expiry_notification_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
+				Validators: []validator.Int64{
+					int64validator.AtLeast(0),
+				},
 				PlanModifiers: []planmodifier.Int64{
 					int64planmodifier.UseStateForUnknown(),
 				},
