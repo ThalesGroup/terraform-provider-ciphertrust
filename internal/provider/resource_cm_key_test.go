@@ -2108,7 +2108,7 @@ func Test_CM_AccCMKey_DescriptionClearConverges(t *testing.T) {
 resource "ciphertrust_cm_key" "k" {
   name        = %q
   algorithm   = "aes"
-  size        = 256
+  key_size    = 256
   description = "description to clear"
 }`, keyName),
 				Check: checkStep(t, "set description",
@@ -2122,7 +2122,7 @@ resource "ciphertrust_cm_key" "k" {
 resource "ciphertrust_cm_key" "k" {
   name      = %q
   algorithm = "aes"
-  size      = 256
+  key_size  = 256
 }`, keyName),
 				Check: checkStep(t, "description cleared",
 					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "description"),
