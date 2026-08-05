@@ -834,7 +834,7 @@ func listKeyMaterialSourceKeyIDs(ctx context.Context, id string, client *common.
 	if err != nil {
 		return nil
 	}
-	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> listKeyMaterialSourceKeyIDs] keyID: %s rotationsJSON: %s", keyID, rotationsJSON))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> listKeyMaterialSourceKeyIDs] keyID: %s rotationsJSON: %s", keyID, strings.TrimSpace(rotationsJSON)))
 	var sourceKeyIDs []string
 	for _, item := range gjson.Get(rotationsJSON, "resources").Array() {
 		if s := item.Get("source_key_identifier").String(); s != "" {
