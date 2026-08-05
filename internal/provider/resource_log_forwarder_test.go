@@ -805,3 +805,198 @@ resource "ciphertrust_log_forwarder" "test" {
 		},
 	})
 }
+
+// Test_CM_AccLogForwarder_UpdateWithoutNameNoReject verifies that updating a mutable
+// field (syslog_params) without changing the name does not fail with
+// "Connection exists with the same name" (TFIN-577 Bug 1 regression guard).
+func Test_CM_AccLogForwarder_UpdateWithoutNameNoReject(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-nonamereset-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip        = true
+      server_audit_records = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "update syslog_params without rename",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_RenameSucceeds verifies that changing name in config
+// performs a successful in-place rename via PATCH (TFIN-577 Bug 1 happy path).
+func Test_CM_AccLogForwarder_RenameSucceeds(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-rename-" + uuid.New().String()[:8]
+	rNameNew := rName + "-v2"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "create with original name",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rNameNew),
+				Check: checkStep(t, "renamed",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rNameNew),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_UpdatedAtNoPerpetualDrift verifies that a second terraform
+// plan after a successful update shows no diff — updated_at must not be left as
+// (known after apply) indefinitely (TFIN-577 Bug 2).
+func Test_CM_AccLogForwarder_UpdatedAtNoPerpetualDrift(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-updatedrift-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "updated_at"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_PartialSyslogUpdateNoStateDrift verifies that updating only
+// a subset of syslog_params.forward_logs fields does not corrupt state for the
+// fields that were omitted from the update payload (TFIN-577 Bug 3).
+func Test_CM_AccLogForwarder_PartialSyslogUpdateNoStateDrift(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-partial-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip        = true
+      activity_nae         = true
+      client_audit_records = true
+      server_audit_records = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "all four fields set",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.server_audit_records", "true"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params {
+    forward_logs {
+      activity_kmip = true
+      activity_nae  = false
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "partial update — omitted fields preserved in live state",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_nae", "false"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.client_audit_records", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.server_audit_records", "true"),
+				),
+			},
+		},
+	})
+}
