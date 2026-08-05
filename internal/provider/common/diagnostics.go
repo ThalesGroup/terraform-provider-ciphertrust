@@ -29,8 +29,8 @@ const NotFoundReadErrorDetailFmt = "The %s resource with ID %q was not found (HT
 // returns HTTP 404 during a Delete operation.
 const NotFoundDeleteWarningSummary = "Resource Not Found During Deletion — Removed from State"
 
-// NotFoundDeleteWarningDetail is the detail string for AddWarning when a resource
+// NotFoundDeleteWarningDetailFmt is the detail string for AddWarning when a resource
 // returns HTTP 404 during a Delete operation.
-const NotFoundDeleteWarningDetail = "The resource was not found on CipherTrust Manager (HTTP 404) during deletion. " +
-	"It was likely removed outside of Terraform. " +
+// Placeholders (in order): resource type string, resource ID.
+const NotFoundDeleteWarningDetailFmt = "The %s resource with ID %q was not found (HTTP 404) during deletion. " +
 	"Treating as successfully deleted and removing from Terraform state."

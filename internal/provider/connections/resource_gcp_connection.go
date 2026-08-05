@@ -457,7 +457,7 @@ func (r *resourceGCPConnection) Delete(ctx context.Context, req resource.DeleteR
 			r.client.Log.Debug("GCP connection already deleted out-of-band on CM")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "GCP Connection", state.ID.ValueString()),
 			)
 			return
 		}

@@ -719,7 +719,7 @@ func (r *resourceAzureConnection) Delete(ctx context.Context, req resource.Delet
 			r.client.Log.Debug("Azure connection already deleted out-of-band on CM")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "Azure Connection", state.ID.ValueString()),
 			)
 			return
 		}

@@ -365,7 +365,7 @@ func (r *resourceCMPolicyAttachment) Delete(ctx context.Context, req resource.De
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy_attachments.go -> Delete][" + state.ID.ValueString() + "]")
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Policy Attachment", state.ID.ValueString()),
 			)
 			return
 		}

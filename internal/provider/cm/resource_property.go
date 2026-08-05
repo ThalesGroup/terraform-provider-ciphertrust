@@ -325,7 +325,7 @@ func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequ
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Property", state.Name.ValueString()),
 			)
 			return
 		}

@@ -320,7 +320,7 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "NTP Server", state.Host.ValueString()),
 			)
 			return
 		}

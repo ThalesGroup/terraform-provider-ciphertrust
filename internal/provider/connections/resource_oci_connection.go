@@ -549,7 +549,7 @@ func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.Del
 		if strings.Contains(err.Error(), "status: 404") {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "OCI Connection", state.ID.ValueString()),
 			)
 			return
 		}

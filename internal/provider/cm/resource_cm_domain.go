@@ -629,7 +629,7 @@ func (r *resourceCMDomain) Delete(ctx context.Context, req resource.DeleteReques
 		if strings.Contains(err.Error(), notFoundError) {
 			resp.Diagnostics.AddWarning(
 				common.NotFoundDeleteWarningSummary,
-				common.NotFoundDeleteWarningDetail,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Domain", state.ID.ValueString()),
 			)
 			return
 		}
