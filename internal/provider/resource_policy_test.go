@@ -529,3 +529,132 @@ resource "ciphertrust_policies" "test" {
 		},
 	})
 }
+
+// Test_CM_AccCMPolicy_ImmutableResources verifies that changing resources after
+// creation produces a plan-time immutable error (TFIN-515 Bug 1).
+func Test_CM_AccCMPolicy_ImmutableResources(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name      = %q
+  effect    = "deny"
+  actions   = ["ReadKey"]
+  resources = ["kylo:*:vault:keys:original"]
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "resources.0", "kylo:*:vault:keys:original"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name      = %q
+  effect    = "deny"
+  actions   = ["ReadKey"]
+  resources = ["kylo:*:vault:keys:changed"]
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableConditions verifies that changing conditions after
+// creation produces a plan-time immutable error (TFIN-515 Bug 2).
+func Test_CM_AccCMPolicy_ImmutableConditions(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  effect  = "deny"
+  actions = ["ReadKey"]
+  conditions = [{
+    op     = "equals"
+    path   = "subject/username"
+    values = ["alice"]
+  }]
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.0.op", "equals"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  effect  = "deny"
+  actions = ["ReadKey"]
+  conditions = [{
+    op     = "equals"
+    path   = "subject/username"
+    values = ["bob"]
+  }]
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_IncludeDescendantAccountsNoCreateCrash verifies that creating
+// a policy with include_descendant_accounts = true does not crash with
+// "provider produced inconsistent result after apply" (TFIN-515 Bug 3).
+// CM does not echo this field in POST or GET responses; the provider must preserve
+// the configured value rather than nulling it out.
+func Test_CM_AccCMPolicy_IncludeDescendantAccountsNoCreateCrash(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name                        = %q
+  effect                      = "deny"
+  actions                     = ["ReadKey"]
+  include_descendant_accounts = true
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "include_descendant_accounts", "true"),
+				),
+			},
+			{
+				// Idempotency: second plan must be empty — no drift from missing field in CM response.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name                        = %q
+  effect                      = "deny"
+  actions                     = ["ReadKey"]
+  include_descendant_accounts = true
+}
+`, policyName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
