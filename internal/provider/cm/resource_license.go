@@ -57,10 +57,8 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"license": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
-				Description: "(Immutable) License String",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				WriteOnly:   true,
+				Description: "(Immutable) License String. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). ciphertrust_license does not support updates — to change the license, destroy and recreate the resource.",
 			},
 			"bind_type": schema.StringAttribute{
 				Optional: true,
@@ -165,7 +163,18 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	payload.License = plan.License.ValueString()
+	// license is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.License is always null
+	// here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config CMLicenseTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	payload.License = config.License.ValueString()
 	if plan.BindType.ValueString() != "" && plan.BindType.ValueString() != types.StringNull().ValueString() {
 		payload.BindType = plan.BindType.ValueString()
 	}
@@ -273,6 +282,10 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	}
 	// If plan.BindType already has a value from the user's config, keep it
 
+	// license is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.License = types.StringNull()
+
 	r.client.Log.Debug("[resource_license.go -> Create Output][" + response + "]")
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Create][" + id + "]")
@@ -298,22 +311,6 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	// Capture write-only field before any mutation.
-	// CM GET /v1/licensing/licenses/{id} does not return the license string —
-	// confirmed absent from the Swagger Licenses definition (present only in
-	// PostLicense for the POST request body).
-	//
-	// Restoring the prior state value prevents ImmutableString() from seeing a
-	// spurious "" → <license> transition on every plan/refresh cycle after the
-	// initial create.
-	//
-	// During terraform destroy, Terraform computes the plan value for a Required
-	// attribute as the current state value (no config change is being applied).
-	// With state.License preserved as the real license string,
-	// req.StateValue == req.PlanValue in ImmutableString.PlanModifyString(), so
-	// no immutability error fires and destroy proceeds normally.
-	priorLicense := state.License
-
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -333,10 +330,8 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	// license is write-only: absent from the Swagger Licenses GET response schema.
-	// Restore the prior state value so ImmutableString() sees an unchanged value
-	// on every plan/refresh cycle after the initial create.
-	state.License = priorLicense
+	// license is write-only — never stored in state, so there is nothing to
+	// hydrate or preserve here. state.License is always null.
 
 	// Optional+Computed — only hydrate when user configured bind_type (state non-null).
 	// CM returns a non-empty default bind_type even when the user omitted it;

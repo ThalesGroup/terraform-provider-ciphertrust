@@ -231,7 +231,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Description: "(Immutable) Information which is used to create a Key using HKDF.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.ImmutableObjectExceptWriteOnly("salt"),
 				},
 				Attributes: map[string]schema.Attribute{
 					"hash_algorithm": schema.StringAttribute{
@@ -254,8 +254,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Description: "Info is an optional hex value for HKDF based derivation.",
 					},
 					"salt": schema.StringAttribute{
-						Optional:    true,
-						Description: "Salt is an optional hex value for HKDF based derivation.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Salt is an optional hex value for HKDF based derivation. Write-only: " +
+							"never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+							"There is no supported way to change this after creation.",
 					},
 				},
 			},
@@ -297,12 +301,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"material": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
-				Description: "(Immutable) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\\n'.",
+				Optional:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				Description: "If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\\n'. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change a key's material after creation — destroy and recreate the resource to import different material.",
 			},
 			"muid": schema.StringAttribute{
 				Optional:    true,
@@ -430,12 +432,14 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"password": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "(Immutable) For pkcs12 format, either password or secretDataLink should be specified. This should be the base64 encoded value of the password.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "For pkcs12 format, either password or secretDataLink should be specified. " +
+					"This should be the base64 encoded value of the password. Write-only: never stored in " +
+					"Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way " +
+					"to change this after creation — destroy and recreate the resource to import with a " +
+					"different password.",
 			},
 			"process_start_date": schema.StringAttribute{
 				Optional:    true,
@@ -706,7 +710,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Description: "(Immutable) Information which is used to wrap a Key using HKDF.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.ImmutableObjectExceptWriteOnly("salt"),
 				},
 				Attributes: map[string]schema.Attribute{
 					"hash_algorithm": schema.StringAttribute{
@@ -729,8 +733,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Description: "Info is an optional hex value for HKDF based derivation.",
 					},
 					"salt": schema.StringAttribute{
-						Optional:    true,
-						Description: "Salt is an optional hex value for HKDF based derivation.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Salt is an optional hex value for HKDF based derivation. Write-only: " +
+							"never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+							"There is no supported way to change this after creation.",
 					},
 				},
 			},
@@ -868,6 +876,18 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	// material, password, hkdf_create_parameters.salt, and wrap_hkdf.salt are write-only:
+	// the framework nulls them out of PlannedState during PlanResourceChange, before
+	// Create() ever runs, so their plan values are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMKeyTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if plan.ActivationDate.ValueString() != "" {
 		payload.ActivationDate = plan.ActivationDate.ValueString()
 	}
@@ -934,8 +954,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.MacSignKeyIdentifierType.ValueString() != "" {
 		payload.MacSignKeyIdentifierType = plan.MacSignKeyIdentifierType.ValueString()
 	}
-	if plan.Material.ValueString() != "" {
-		payload.Material = plan.Material.ValueString()
+	if v := config.Material.ValueString(); v != "" {
+		payload.Material = v
 	}
 	if plan.MUID.ValueString() != "" {
 		payload.MUID = plan.MUID.ValueString()
@@ -949,8 +969,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if !plan.Padded.IsNull() && !plan.Padded.IsUnknown() {
 		payload.Padded = plan.Padded.ValueBool()
 	}
-	if plan.Password.ValueString() != "" {
-		payload.Password = plan.Password.ValueString()
+	if v := config.Password.ValueString(); v != "" {
+		payload.Password = v
 	}
 	if plan.ProcessStartDate.ValueString() != "" {
 		payload.ProcessStartDate = plan.ProcessStartDate.ValueString()
@@ -1060,8 +1080,11 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if plan.HKDFCreateParameters.Info.ValueString() != "" {
 			hkdfCreateParameters.Info = plan.HKDFCreateParameters.Info.ValueString()
 		}
-		if plan.HKDFCreateParameters.Salt.ValueString() != "" {
-			hkdfCreateParameters.Salt = plan.HKDFCreateParameters.Salt.ValueString()
+		// salt is write-only: read from config, not plan.
+		if config.HKDFCreateParameters != nil {
+			if v := config.HKDFCreateParameters.Salt.ValueString(); v != "" {
+				hkdfCreateParameters.Salt = v
+			}
 		}
 		payload.HKDFCreateParameters = &hkdfCreateParameters
 	}
@@ -1198,8 +1221,11 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if plan.HKDFWrap.Info.ValueString() != "" {
 			wrapHKDF.Info = plan.HKDFWrap.Info.ValueString()
 		}
-		if plan.HKDFWrap.Salt.ValueString() != "" {
-			wrapHKDF.Salt = plan.HKDFWrap.Salt.ValueString()
+		// salt is write-only: read from config, not plan.
+		if config.HKDFWrap != nil {
+			if v := config.HKDFWrap.Salt.ValueString(); v != "" {
+				wrapHKDF.Salt = v
+			}
 		}
 		payload.HKDFWrap = &wrapHKDF
 	}
@@ -1337,6 +1363,18 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 				plan.Aliases = hydratedAliases
 			}
 		}
+	}
+
+	// material, password, hkdf_create_parameters.salt, and wrap_hkdf.salt are write-only —
+	// the framework nulls them from outgoing state/plan artifacts automatically, but null
+	// them explicitly too for clarity.
+	plan.Material = types.StringNull()
+	plan.Password = types.StringNull()
+	if plan.HKDFCreateParameters != nil {
+		plan.HKDFCreateParameters.Salt = types.StringNull()
+	}
+	if plan.HKDFWrap != nil {
+		plan.HKDFWrap.Salt = types.StringNull()
 	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Create][" + id + "]")

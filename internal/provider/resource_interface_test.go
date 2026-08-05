@@ -776,27 +776,33 @@ resource "ciphertrust_interface" "test" {
 				// CM requires a real token when auto_registration=true.
 				// The token is injected via TF_VAR_registration_token so it never appears
 				// in the HCL config string (and therefore never in test framework logs).
+				// registration_token is write-only: registration_token_version must be bumped
+				// for Terraform to detect a change and actually send the token to CM.
 				PreConfig: func() {
 					t.Setenv("TF_VAR_registration_token", regToken)
 				},
 				Config: fmt.Sprintf(providerConfig+`
 variable "registration_token" {}
 resource "ciphertrust_interface" "test" {
-  port               = %d
-  interface_type     = "nae"
-  auto_registration  = true
-  registration_token = var.registration_token
+  port                       = %d
+  interface_type             = "nae"
+  auto_registration          = true
+  registration_token         = var.registration_token
+  registration_token_version = 1
 }`, port),
 				Check: checkStep(t, "add-token",
 					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_registration", "true"),
 				),
 			},
 			{
-				// Step 3: remove both fields — must succeed and CM must reflect the clear.
+				// Step 3: remove registration_token and bump registration_token_version — the
+				// version bump is what signals CM to clear the write-only field; auto_registration
+				// is also removed.
 				Config: fmt.Sprintf(providerConfig+`
 resource "ciphertrust_interface" "test" {
-  port           = %d
-  interface_type = "nae"
+  port                       = %d
+  interface_type             = "nae"
+  registration_token_version = 2
 }`, port),
 				Check: func(s *terraform.State) error {
 					// Assert TF state shows both fields absent.

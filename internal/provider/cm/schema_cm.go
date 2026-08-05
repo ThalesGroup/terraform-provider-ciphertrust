@@ -538,10 +538,11 @@ type CMInterfacTrustedCAsTFSDK struct {
 }
 
 type CMInterfacCertificateTFSDK struct {
-	CertChain types.String `tfsdk:"certificate_chain"`
-	Generate  types.Bool   `tfsdk:"generate"`
-	Format    types.String `tfsdk:"format"`
-	Password  types.String `tfsdk:"password"`
+	CertChain       types.String `tfsdk:"certificate_chain"`
+	Generate        types.Bool   `tfsdk:"generate"`
+	Format          types.String `tfsdk:"format"`
+	Password        types.String `tfsdk:"password"`
+	PasswordVersion types.Int64  `tfsdk:"password_version"`
 }
 
 type NamesParamsTFSDK struct {
@@ -586,6 +587,7 @@ type CMInterfaceTFSDK struct {
 	Name                    types.String                      `tfsdk:"name"`
 	NetworkInterface        types.String                      `tfsdk:"network_interface"`
 	RegToken                types.String                      `tfsdk:"registration_token"`
+	RegTokenVersion         types.Int64                       `tfsdk:"registration_token_version"`
 	TrustedCAs              *CMInterfacTrustedCAsTFSDK        `tfsdk:"trusted_cas"`
 	Certificate             *CMInterfacCertificateTFSDK       `tfsdk:"certificate"`
 	LocalAutogenAttributes  *CMInterfaceLocalAutogenAttrTFSDK `tfsdk:"local_auto_gen_attributes"`
@@ -697,10 +699,11 @@ type CMLicenseJSON struct {
 }
 
 type CMNTPTFSDK struct {
-	ID      types.String `tfsdk:"id"`
-	Host    types.String `tfsdk:"host"`
-	Key     types.String `tfsdk:"key"`
-	KeyType types.String `tfsdk:"key_type"`
+	ID         types.String `tfsdk:"id"`
+	Host       types.String `tfsdk:"host"`
+	Key        types.String `tfsdk:"key"`
+	KeyVersion types.Int64  `tfsdk:"key_version"`
+	KeyType    types.String `tfsdk:"key_type"`
 }
 
 type CMNTPJSON struct {

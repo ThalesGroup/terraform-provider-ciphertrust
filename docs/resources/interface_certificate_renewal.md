@@ -39,11 +39,11 @@ resource "ciphertrust_interface_certificate_renewal" "renew" {
 
 ### Optional
 
-- `certificate` (String) The certificate and key data in PEM format or base64 encoded PKCS12 format. A chain of certs may be included - it must be in ascending order (server to root ca). Not used when generate is true.
-- `format` (String) The format of the certificate data (PEM or PKCS12). Required unless generate is true.
-- `generate` (Boolean) Create a new self-signed certificate instead of importing certificate/format.
-- `password` (String, Sensitive) Password to the encrypted key, if the certificate data is an encrypted PKCS12.
-- `skip_validation` (Boolean) Disables the certificate chain validation. Default set to false by CipherTrust Manager.
+- `certificate` (String) (Immutable) The certificate and key data in PEM format or base64 encoded PKCS12 format. A chain of certs may be included - it must be in ascending order (server to root ca). Not used when generate is true. Changing this value causes resource replacement.
+- `format` (String) (Immutable) The format of the certificate data (PEM or PKCS12). Required unless generate is true. Changing this value causes resource replacement.
+- `generate` (Boolean) (Immutable) Create a new self-signed certificate instead of importing certificate/format. Changing this value causes resource replacement.
+- `password` (String, Sensitive) Password to the encrypted key, if the certificate data is an encrypted PKCS12. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). No RequiresReplace modifier on this attribute — since it is write-only, its own value can never be diffed against a prior value. `trigger` is the signal that controls when a renewal (and re-send of `password`) happens; change `trigger` to perform another renewal.
+- `skip_validation` (Boolean) (Immutable) Disables the certificate chain validation. Default set to false by CipherTrust Manager. Changing this value causes resource replacement.
 
 ### Read-Only
 

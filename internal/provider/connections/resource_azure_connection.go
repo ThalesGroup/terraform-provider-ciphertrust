@@ -53,13 +53,15 @@ func NewResourceAzureConnection() resource.Resource {
 }
 
 // ModifyPlan surfaces a warning when client_secret is removed from config while
-// it was previously set (TFIN-563). UseStateForUnknown() silently preserves the
-// prior value — the secret stays active on CM — but without any signal to the user.
-// We emit a warning (not an error) so that:
-//   - Normal updates that omit client_secret (the expected pattern) still succeed
-//     cleanly but now inform the user what is happening.
-//   - The behavior is consistent with the explicit client_secret="" path, which
-//     is blocked by clientSecretClearBlocked() in Update().
+// it was previously set (TFIN-563). client_secret is write-only — its own value is
+// never stored, so client_secret_version (a plain stored attribute) is the signal
+// that a secret was previously configured; see clientSecretClearBlocked() for the
+// analogous check in Update(). We emit a warning (not an error) here so that:
+//   - Normal updates that omit client_secret (the expected pattern, version left
+//     unchanged) still succeed cleanly but now inform the user what is happening.
+//   - Omitting client_secret while also bumping client_secret_version is previewed
+//     here and rejected as a hard error by clientSecretClearBlocked() in Update(),
+//     since that combination signals an (unsupported) attempt to clear the secret.
 func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
 		return // create or destroy
@@ -70,13 +72,13 @@ func (r *resourceAzureConnection) ModifyPlan(ctx context.Context, req resource.M
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if !state.ClientSecret.IsNull() && config.ClientSecret.IsNull() {
+	if !state.ClientSecretVersion.IsNull() && config.ClientSecret.ValueString() == "" {
 		resp.Diagnostics.AddWarning(
 			"client_secret removed from config — existing value preserved",
 			"client_secret was removed from your configuration but the previously set value "+
 				"will be preserved in state and remain active on CipherTrust Manager. "+
 				"CipherTrust Manager does not support clearing client_secret. "+
-				"To rotate the secret, set client_secret to a new value. "+
+				"To rotate the secret, set client_secret to a new value and bump client_secret_version. "+
 				"To switch to certificate-based auth, destroy and recreate the connection.",
 		)
 	}
@@ -166,18 +168,24 @@ func (r *resourceAzureConnection) Schema(_ context.Context, _ resource.SchemaReq
 			},
 			"client_secret": schema.StringAttribute{
 				Optional:  true,
-				Computed:  true,
 				Sensitive: true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				WriteOnly: true,
 				Description: "Secret key for the Azure application. Required in Azure Stack connection. " +
-					"Write-only: CM never returns this field on GET, so its live value cannot be verified " +
-					"after apply and out-of-band changes are not detectable by terraform plan. " +
-					"Omitting this attribute in a later apply preserves the prior value (a plan warning is emitted). " +
-					"Explicitly setting it to \"\" is also blocked — CM does not support clearing it. " +
-					"To rotate the secret, set client_secret to a new value. " +
-					"To remove client_secret-based auth entirely, destroy and recreate the connection.",
+					"Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+					"CM never returns this field on GET, so Terraform cannot detect out-of-band rotation on its " +
+					"own; to resend a rotated secret, change `client_secret` and bump `client_secret_version` in " +
+					"the same apply (omitting it while leaving `client_secret_version` unchanged emits a plan " +
+					"warning and preserves the prior secret). Once set, this field cannot be cleared back to " +
+					"empty by explicitly setting it to \"\": CM does not support clearing it, and the provider " +
+					"rejects the attempt at apply time rather than silently leaving state and CM's live value " +
+					"out of sync.",
+			},
+			"client_secret_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Arbitrary version number stored in state and used to trigger re-sending " +
+					"`client_secret` to CipherTrust Manager. Since `client_secret` is write-only, Terraform " +
+					"cannot detect a change in its value on its own; increment this on every apply where you " +
+					"want the current `client_secret` value re-sent.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Optional:    true,
@@ -320,6 +328,17 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
+	// client_secret is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.ClientSecret is always
+	// null here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config AzureConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	if plan.ClientID.ValueString() != "" && plan.ClientID.ValueString() != types.StringNull().ValueString() {
 		payload.ClientID = plan.ClientID.ValueString()
 	}
@@ -352,8 +371,8 @@ func (r *resourceAzureConnection) Create(ctx context.Context, req resource.Creat
 		payload.Certificate = plan.Certificate.ValueString()
 	}
 
-	if plan.ClientSecret.ValueString() != "" && plan.ClientSecret.ValueString() != types.StringNull().ValueString() {
-		payload.ClientSecret = plan.ClientSecret.ValueString()
+	if v := config.ClientSecret.ValueString(); v != "" {
+		payload.ClientSecret = v
 	}
 
 	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
@@ -518,13 +537,25 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	if clientSecretClearBlocked(state, plan) {
+	// client_secret is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Update() ever runs, so plan.ClientSecret is always
+	// null here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config AzureConnectionTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if clientSecretClearBlocked(state, plan, config.ClientSecret) {
 		resp.Diagnostics.AddError(
 			"client_secret cannot be cleared",
 			"CipherTrust Manager does not support clearing client_secret once it has been set: the "+
 				"previously configured secret would remain active on CM even though Terraform state "+
-				"would show it as cleared. To rotate the secret, set client_secret to a new value. "+
-				"To remove client_secret-based auth entirely, destroy and recreate the connection.",
+				"would show it as cleared. To rotate the secret, set client_secret to a new value and "+
+				"bump client_secret_version. To remove client_secret-based auth entirely, destroy and "+
+				"recreate the connection.",
 		)
 		return
 	}
@@ -553,8 +584,13 @@ func (r *resourceAzureConnection) Update(ctx context.Context, req resource.Updat
 		payload.ClientID = plan.ClientID.ValueString()
 	}
 
-	if plan.ClientSecret.ValueString() != "" && plan.ClientSecret.ValueString() != types.StringNull().ValueString() {
-		payload.ClientSecret = plan.ClientSecret.ValueString()
+	// client_secret is write-only (never stored in state), so its own value can never be
+	// diffed against a prior value — client_secret_version is the explicit, state-tracked
+	// signal that the caller wants the current client_secret value re-sent to CM.
+	if !plan.ClientSecretVersion.Equal(state.ClientSecretVersion) {
+		if v := config.ClientSecret.ValueString(); v != "" {
+			payload.ClientSecret = v
+		}
 	}
 
 	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
@@ -715,13 +751,18 @@ func (d *resourceAzureConnection) Configure(_ context.Context, req resource.Conf
 	d.client = client
 }
 
-// clientSecretClearBlocked reports whether the plan is attempting to clear a
-// previously-set client_secret. CM never returns this write-only field on GET, so the
-// provider cannot verify whether a clear PATCH actually took effect. Rather than writing
-// an unverifiable null into state, Update rejects the attempt outright.
-func clientSecretClearBlocked(state, plan AzureConnectionTFSDK) bool {
-	hadSecret := !state.ClientSecret.IsNull() && state.ClientSecret.ValueString() != ""
-	clearing := plan.ClientSecret.IsNull() || plan.ClientSecret.ValueString() == ""
+// clientSecretClearBlocked reports whether the caller is attempting to clear a
+// previously-set client_secret. client_secret is write-only, so neither plan nor state
+// ever holds its value directly — client_secret_version being previously set is the
+// signal that a secret exists, and a version bump with no accompanying value in config
+// is the signal that the caller intends to clear it. CM never returns this write-only
+// field on GET, so the provider cannot verify whether a clear PATCH actually took
+// effect. Rather than writing an unverifiable null into state, Update rejects the
+// attempt outright.
+func clientSecretClearBlocked(state, plan AzureConnectionTFSDK, configSecret types.String) bool {
+	hadSecret := !state.ClientSecretVersion.IsNull()
+	versionBumped := !plan.ClientSecretVersion.Equal(state.ClientSecretVersion)
+	clearing := versionBumped && (configSecret.IsNull() || configSecret.ValueString() == "")
 	return hadSecret && clearing
 }
 
@@ -790,13 +831,7 @@ func getAzureParamsFromResponse(response string, diag *diag.Diagnostics, data *A
 		data.CertDuration = types.Int64Null()
 	}
 	data.Products = common.ParseArray(response, "products")
-	// client_secret is now Optional+Computed (so omitting it in a later apply preserves the
-	// prior state value via UseStateForUnknown instead of being read as an intent to clear).
-	// On Create, a connection that never sets client_secret (e.g. certificate-based auth) has
-	// no prior state to fall back on, so it arrives here still unknown — resolve it to null or
-	// Terraform errors with "provider produced an unknown value after apply". CM never returns
-	// this write-only field, so there is nothing to read it back from either way.
-	if data.ClientSecret.IsUnknown() {
-		data.ClientSecret = types.StringNull()
-	}
+	// client_secret is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	data.ClientSecret = types.StringNull()
 }

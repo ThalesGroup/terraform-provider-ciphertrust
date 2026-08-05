@@ -332,6 +332,88 @@ func (m immutableObjectModifier) PlanModifyObject(_ context.Context, req planmod
 	resp.PlanValue = req.StateValue
 }
 
+// ImmutableObjectExceptWriteOnly returns an Object plan modifier that behaves like
+// ImmutableObject, but ignores the named child attributes when computing equality.
+// Use this when an otherwise-immutable nested object contains a WriteOnly child:
+// WriteOnly attribute values are always null in state (the framework nullifies them on
+// the way out), but PlanModifyObject runs before that nullification, so req.PlanValue
+// still carries the real configured value for the write-only child. Comparing the whole
+// object directly (as ImmutableObject does) would then always find a "difference" purely
+// from that field and misfire an immutability error on every subsequent plan — the same
+// class of bug fixed for a bare WriteOnly string attribute by removing ImmutableString()
+// in commit d3c9e26. Excluding the named children from the comparison keeps immutability
+// enforcement on the object's other fields while letting the write-only fields vary
+// freely (their own value can never be diffed against a prior value anyway).
+func ImmutableObjectExceptWriteOnly(writeOnlyChildren ...string) planmodifier.Object {
+	return immutableObjectExceptWriteOnlyModifier{writeOnlyChildren: writeOnlyChildren}
+}
+
+type immutableObjectExceptWriteOnlyModifier struct {
+	writeOnlyChildren []string
+}
+
+func (m immutableObjectExceptWriteOnlyModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation, except for write-only child attributes."
+}
+
+func (m immutableObjectExceptWriteOnlyModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m immutableObjectExceptWriteOnlyModifier) PlanModifyObject(_ context.Context, req planmodifier.ObjectRequest, resp *planmodifier.ObjectResponse) {
+	// Destroy plan — do not block teardown (TFIN-552).
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	if req.StateValue.IsNull() {
+		return
+	}
+	if req.PlanValue.IsUnknown() {
+		return
+	}
+	if objectsEqualIgnoring(req.PlanValue, req.StateValue, m.writeOnlyChildren) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"This object attribute cannot be changed after creation. "+
+			"To change this attribute, destroy and recreate the resource.",
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// objectsEqualIgnoring reports whether two Object values are equal, ignoring the named
+// child attribute names entirely (neither their presence nor their values affect the
+// result).
+func objectsEqualIgnoring(a, b types.Object, ignore []string) bool {
+	if a.IsNull() != b.IsNull() || a.IsUnknown() != b.IsUnknown() {
+		return false
+	}
+	skip := make(map[string]bool, len(ignore))
+	for _, name := range ignore {
+		skip[name] = true
+	}
+	aAttrs, bAttrs := a.Attributes(), b.Attributes()
+	for name, aVal := range aAttrs {
+		if skip[name] {
+			continue
+		}
+		bVal, ok := bAttrs[name]
+		if !ok || !aVal.Equal(bVal) {
+			return false
+		}
+	}
+	for name := range bAttrs {
+		if skip[name] {
+			continue
+		}
+		if _, ok := aAttrs[name]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // MergePatchObject returns an Object plan modifier for attributes backed by a CM endpoint
 // that uses JSON merge-PATCH semantics: a key present in the PATCH body is set/replaced
 // in place, but a key absent from the body leaves the server's existing value untouched.

@@ -227,9 +227,9 @@ resource "ciphertrust_license" "test" {
 	})
 }
 
-// Test_CM_License_NoChangeAfterApply is a regression test for a false-positive immutability diff.
-// After a successful create, a no-change plan must produce no diff, and destroy
-// must complete without the "Attribute is immutable" error.
+// Test_CM_License_NoChangeAfterApply verifies that after a successful create, a
+// no-change plan produces no diff and destroy completes cleanly. license is write-only
+// (never stored in state), so there is no ImmutableString comparison to false-positive on.
 func Test_CM_License_NoChangeAfterApply(t *testing.T) {
 	RequireCM(t)
 
@@ -277,12 +277,11 @@ resource "ciphertrust_license" "test" {
 				Config: config,
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_license.test", "license", license),
+					resource.TestCheckNoResourceAttr("ciphertrust_license.test", "license"),
 				),
 			},
 			{
-				// Directly asserts the fix: ImmutableString must not fire
-				// when state.License == plan.License on the second plan.
+				// license is write-only — re-supplying the same value in config produces no diff.
 				Config:             config,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
