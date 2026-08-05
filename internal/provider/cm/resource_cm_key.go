@@ -184,12 +184,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"description": schema.StringAttribute{
 				Optional: true,
-				Description: "It store information about key. Once set, this field cannot be cleared back " +
-					"to empty by omitting it from config — CM does not honour empty-string PATCH requests " +
-					"for this field.",
-				PlanModifiers: []planmodifier.String{
-					clearRejectStringModifier{FieldName: "description"},
-				},
+				// clearRejectStringModifier removed (TFIN-573): CM genuinely accepts and persists
+				// PATCH {"description": ""} — confirmed live. Removing from config clears the field.
+				Description: "Information about the key. Can be cleared by removing from config — " +
+					"CM accepts an empty-string PATCH to clear this field.",
 			},
 			"destroy_date": schema.StringAttribute{
 				Optional:    true,
@@ -898,8 +896,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.DefaultIV.ValueString() != "" {
 		payload.DefaultIV = plan.DefaultIV.ValueString()
 	}
-	if plan.Description.ValueString() != "" {
-		payload.Description = plan.Description.ValueString()
+	// Create: only include description when explicitly set — omit when unset (nil = omitempty drops it).
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && plan.Description.ValueString() != "" {
+		v := plan.Description.ValueString()
+		payload.Description = &v
 	}
 	if plan.DestroyDate.ValueString() != "" {
 		payload.DestroyDate = plan.DestroyDate.ValueString()
@@ -1551,11 +1551,17 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	// When state is null (labels never configured), keep null regardless of what the
 	// server returns. This prevents server-auto-added internal labels (e.g.,
 	// "ncryptify-reserved/composite-key") from appearing in state and causing drift.
+	// When state IS non-null, filter out ncryptify-reserved/* keys: CM auto-adds these
+	// to composite/asymmetric (RSA/EC) keys and its merge-PATCH cannot remove them,
+	// so copying them to state causes a permanent unresolvable diff (TFIN-576).
 	if !state.Labels.IsNull() {
 		labelsResult := gjson.Get(response, "labels")
 		if labelsResult.Exists() && labelsResult.Type != gjson.Null {
 			m := make(map[string]string)
 			for k, v := range labelsResult.Map() {
+				if strings.HasPrefix(k, "ncryptify-reserved/") {
+					continue // CM-internal: cannot be set or removed by users
+				}
 				m[k] = v.String()
 			}
 			if len(m) == 0 {
@@ -1776,9 +1782,17 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	if plan.DeactivationDate.ValueString() != "" {
 		payload.DeactivationDate = plan.DeactivationDate.ValueString()
 	}
-	if plan.Description.ValueString() != "" {
-		payload.Description = plan.Description.ValueString()
+	// Update: 3-way transition for description (TFIN-573).
+	// CM accepts PATCH {"description": ""} to clear — confirmed live.
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		v := plan.Description.ValueString()
+		payload.Description = &v
+	} else if !state.Description.IsNull() {
+		// Transitioning from set to null: send "" to CM to clear the field.
+		v := ""
+		payload.Description = &v
 	}
+	// else: description was never set — payload.Description stays nil (omitempty omits it).
 	if plan.KeyId.ValueString() != "" {
 		payload.KeyId = plan.KeyId.ValueString()
 	}

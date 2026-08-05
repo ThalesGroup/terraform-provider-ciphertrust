@@ -307,7 +307,7 @@ type CMKeyJSON struct {
 	Curveid                  string                   `json:"curveid,omitempty"`
 	DeactivationDate         string                   `json:"deactivationDate,omitempty"`
 	DefaultIV                string                   `json:"defaultIV,omitempty"`
-	Description              string                   `json:"description,omitempty"`
+	Description              *string                  `json:"description,omitempty"` // pointer: nil=omit, ptr("")=explicit clear
 	DestroyDate              string                   `json:"destroyDate,omitempty"`
 	EmptyMaterial            bool                     `json:"emptyMaterial,omitempty"`
 	Encoding                 string                   `json:"encoding,omitempty"`

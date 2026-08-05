@@ -2127,3 +2127,80 @@ resource "ciphertrust_cm_key" "test" {
 		},
 	})
 }
+
+// Test_CM_AccCMKey_DescriptionClearConverges verifies that removing description from
+// config sends an explicit empty-string PATCH to CM and clears the field (TFIN-573).
+// Previously clearRejectStringModifier blocked this; CM actually accepts the clear.
+func Test_CM_AccCMKey_DescriptionClearConverges(t *testing.T) {
+	RequireCM(t)
+	keyName := "tf-key-desc-clear-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with description set.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name        = %q
+  algorithm   = "aes"
+  size        = 256
+  description = "description to clear"
+}`, keyName),
+				Check: checkStep(t, "set description",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "description", "description to clear"),
+				),
+			},
+			{
+				// Step 2: remove description from config.
+				// Provider sends PATCH {"description":""} → CM clears → state = null → plan is empty.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  size      = 256
+}`, keyName),
+				Check: checkStep(t, "description cleared",
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "description"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMKey_RSALabelsNoReservedDrift verifies that the ncryptify-reserved/composite-key
+// label CM auto-adds to RSA keys is filtered out of state and does not cause perpetual
+// plan drift when the user configures any labels on an RSA key (TFIN-576).
+func Test_CM_AccCMKey_RSALabelsNoReservedDrift(t *testing.T) {
+	RequireCM(t)
+	keyName := "tf-key-rsa-labels-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "rsa"
+  size      = 2048
+  labels    = { env = "test" }
+}`, keyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "rsa labels: create",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.env", "test"),
+					// The ncryptify-reserved/composite-key label must NOT appear in state.
+					resource.TestCheckNoResourceAttr("ciphertrust_cm_key.k", "labels.ncryptify-reserved/composite-key"),
+				),
+			},
+			{
+				// Idempotency: second plan must be empty — no drift from the reserved label.
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
