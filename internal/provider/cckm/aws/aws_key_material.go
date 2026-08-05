@@ -256,8 +256,8 @@ func fetchRotationHistoryNativeSummary(ctx context.Context, id string, client *c
 }
 
 // fetchFullRotationHistoryJSON calls the rotations endpoint for keyID and returns the raw JSON
-// response string. Returns ("", true) when the API call itself fails (apiFailed); an empty
-// resources array is returned as ("", false) for the caller to handle gracefully.
+// response string. Returns ("", true) when the API call itself fails (apiFailed). When the API
+// succeeds but resources is empty, the full JSON string is returned with apiFailed=false.
 func fetchFullRotationHistoryJSON(ctx context.Context, id string, client *common.Client, keyID string) (string, bool) {
 
 	filters := url.Values{
@@ -499,13 +499,14 @@ func waitForReplicasMaterialCurrent(ctx context.Context, id string, client *comm
 
 // waitForMaterialRotation polls the rotate-material/status endpoint until overall_status is
 // "success" or "failed", or until 30 polls x shortAwsKeyOpSleep seconds have elapsed.
-// Returns true when the caller should continue (success or timeout), false on a hard failure:
-//   - true when overall_status is "success"
+// Returns true (retryOperation) when the caller should re-classify and retry the outer loop;
+// returns false when no retry is needed (either success or a hard error was added to diags):
+//   - false when overall_status is "success" (no retry needed)
+//   - true when overall_status is "failed" and error_details contains a recoverable condition
+//     such as "key material already exists", "has not been imported", or "is pending import"
+//     (a log warning is written; no diagnostic is added)
+//   - false when overall_status is "failed" with an unrecoverable error (error added to diags)
 //   - true when the timeout is reached (rotation may still complete asynchronously)
-//   - false when overall_status is "failed" and error_details does NOT contain
-//     "key material already exists" (an error is added to diags)
-//   - false when overall_status is "failed" and error_details contains
-//     "key material already exists" (a warning is added to diags, not an error)
 func waitForMaterialRotation(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) bool {
 	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForMaterialRotation][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForMaterialRotation][" + id + "]")
@@ -833,7 +834,7 @@ func listKeyMaterialSourceKeyIDs(ctx context.Context, id string, client *common.
 	if err != nil {
 		return nil
 	}
-	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> listKeyMaterialSourceKeyIDs] keyID: %s rotationsJSON: %s", keyID, rotationsJSON))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> listKeyMaterialSourceKeyIDs] keyID: %s rotationsJSON: %s", keyID, strings.TrimSpace(rotationsJSON)))
 	var sourceKeyIDs []string
 	for _, item := range gjson.Get(rotationsJSON, "resources").Array() {
 		if s := item.Get("source_key_identifier").String(); s != "" {

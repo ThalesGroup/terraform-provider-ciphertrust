@@ -175,6 +175,7 @@ func replicateKeyCommon(
 				waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &historyDiags)
 			}
 		}
+		waitForReplicaRegionInPrimaryKeyMRConfig(ctx, id, client, primaryKeyID, replicaRegion, &historyDiags)
 		for _, d := range historyDiags {
 			diags.AddWarning(d.Summary(), d.Detail())
 		}
@@ -616,12 +617,54 @@ func updatePrimaryRegion(ctx context.Context, id string, client *common.Client, 
 	waitForPrimaryRegionUpdateConfirmed(ctx, id, client, primaryKeyID, newPrimaryKeyID, newPrimaryRegion, allKeyIDs, diags)
 }
 
+// waitForReplicaRegionInPrimaryKeyMRConfig polls the primary key's cached metadata until
+// aws_param.MultiRegionConfiguration.ReplicaKeys includes replicaRegion, or until a
+// timeout is reached. No refresh call is made - CCKM updates the cache asynchronously.
+func waitForReplicaRegionInPrimaryKeyMRConfig(
+	ctx context.Context,
+	id string,
+	client *common.Client,
+	primaryKeyID string,
+	replicaRegion string,
+	diags *diag.Diagnostics,
+) {
+	client.Log.Debug(common.MSG_METHOD_START + "[aws_multiregion.go -> waitForReplicaRegionInPrimaryKeyMRConfig][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_multiregion.go -> waitForReplicaRegionInPrimaryKeyMRConfig][" + id + "]")
+
+	deadline := time.Now().Add(60 * time.Second)
+	found := false
+	loop := 0
+	for !found && time.Now().Before(deadline) {
+		time.Sleep(time.Duration(shortAwsKeyOpSleep) * time.Second)
+		pj, getErr := client.GetById(ctx, id, primaryKeyID, common.URL_AWS_KEY)
+		if getErr == nil {
+			mrConfig := gjson.Get(pj, "aws_param.MultiRegionConfiguration").Raw
+			client.Log.Debug(fmt.Sprintf("[aws_multiregion.go -> waitForReplicaRegionInPrimaryKeyMRConfig] loop: %d primaryKeyID: %s MultiRegionConfiguration: %s", loop, primaryKeyID, mrConfig))
+			for _, rk := range gjson.Get(pj, "aws_param.MultiRegionConfiguration.ReplicaKeys").Array() {
+				if rk.Get("Region").String() == replicaRegion {
+					found = true
+					break
+				}
+			}
+		}
+		loop++
+	}
+	if !found {
+		msg := fmt.Sprintf("[aws_multiregion.go -> waitForReplicaRegionInPrimaryKeyMRConfig] TIMED OUT waiting for region %s to appear in primary ReplicaKeys. The primary multi-region configuration cache may be stale.", replicaRegion)
+		details := utils.ApiError(msg, map[string]interface{}{"primary_key_id": primaryKeyID, "replica_region": replicaRegion})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "")
+	} else {
+		client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> waitForReplicaRegionInPrimaryKeyMRConfig] resolved loop: %d region %s confirmed in primary ReplicaKeys primaryKeyID: %s", loop-1, replicaRegion, primaryKeyID))
+	}
+}
+
 // waitForPrimaryRegionUpdateConfirmed polls all keys in the MR set until every one confirms the
 // new primary region, using at most 2 refresh calls on the primary key to nudge CCKM/AWS.
 //
 // Outer loop (up to 2 refreshes):
 //
-//	Inner loop (up to 200 polls): read every key (even ones already confirmed) and check.
+//	Inner loop (up to 30 polls): read every key (even ones already confirmed) and check.
 //	  Log loop counters and current updatedAt for each key. Return immediately when all confirmed.
 //	If not all confirmed: call /refresh on the primary key, then wait until every key's updatedAt
 //	  has changed from the value last seen in the inner loop before proceeding to the next outer iteration.
