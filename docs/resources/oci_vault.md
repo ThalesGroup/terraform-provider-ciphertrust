@@ -42,14 +42,14 @@ resource "ciphertrust_oci_vault" "vault" {
 
 ### Required
 
-- `connection_id` (String) (Updatable) CipherTrust Manager OCI connection ID.
-- `region` (String) The vault's region.
-- `vault_id` (String) The vault's OCID.
+- `connection_id` (String) CipherTrust Manager OCI connection ID.
+- `region` (String) (Immutable) The vault's region.
+- `vault_id` (String) (Immutable) The vault's OCID.
 
 ### Optional
 
-- `bucket_name` (String) (Updatable) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.
-- `bucket_namespace` (String) (Updatable) Namespace of the OCI bucket, bucket_name. This parameter is **Required** if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.
+- `bucket_name` (String) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.
+- `bucket_namespace` (String) Namespace of the OCI bucket, bucket_name. This parameter is **Required** if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.
 
 ### Read-Only
 

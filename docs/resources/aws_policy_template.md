@@ -74,19 +74,19 @@ resource "ciphertrust_aws_key" "aws_key" {
 
 ### Required
 
-- `name` (String) Name for the policy template.
+- `name` (String) (Immutable) Name for the policy template.
 
 ### Optional
 
-- `account_id` (String) AWS account used to create the key policy.
-- `auto_push` (Boolean) (Updatable) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
-- `external_accounts` (Set of String) (Updatable) AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.
-- `key_admins` (Set of String) (Updatable) Key administrators - users.
-- `key_admins_roles` (Set of String) (Updatable) Key administrators - roles.
-- `key_users` (Set of String) (Updatable) Key users - users.
-- `key_users_roles` (Set of String) (Updatable) Key users - roles.
-- `kms_id` (String) ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.
-- `policy` (String) (Updatable) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. If no policy parameters are specified the default policy is created.
+- `account_id` (String) (Immutable) AWS account used to create the key policy.
+- `auto_push` (Boolean) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.
+- `external_accounts` (Set of String) AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.
+- `key_admins` (Set of String) Key administrators - users.
+- `key_admins_roles` (Set of String) Key administrators - roles.
+- `key_users` (Set of String) Key users - users.
+- `key_users_roles` (Set of String) Key users - roles.
+- `kms_id` (String) (Immutable) ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.
+- `policy` (String) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. If no policy parameters are specified the default policy is created.
 
 ### Read-Only
 

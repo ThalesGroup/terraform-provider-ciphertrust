@@ -128,20 +128,20 @@ resource "ciphertrust_aws_byok_key" "byok_key_mr_replica" {
 
 ### Required
 
-- `region` (String) AWS region in which to create the key.
+- `region` (String) (Immutable) AWS region in which to create the key.
 
 ### Optional
 
 - `aws_param` (Attributes) AWS key parameters. Input fields are sent to the API on create/update; all fields are populated from the API response. (see [below for nested schema](#nestedatt--aws_param))
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; disable via update after the key has been created.
-- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
-- `key_policy` (Attributes) (Updatable) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
-- `kms_id` (String) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key.
-- `primary_region` (String) (Updatable) Updates the primary region of a multi-region key. Only valid during updates.
+- `enable_key` (Boolean) Enable or disable the key. Default is true. Cannot be set to false at creation time; disable via update after the key has been created.
+- `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
+- `key_policy` (Attributes) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
+- `kms_id` (String) (Conditionally immutable) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.
+- `primary_region` (String) Updates the primary region of a multi-region key. Only valid during updates.
 - `replicate_key` (Attributes) Replicate a primary EXTERNAL multi-region key to a new region. Key material will be imported from the primary key. (see [below for nested schema](#nestedatt--replicate_key))
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
-- `source_key_identifier` (String) CipherTrust Manager key ID to upload to AWS as BYOK material. Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. Populated on read from the API once material has been imported.
-- `source_key_tier` (String) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). Leave blank when not importing key material.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `source_key_identifier` (String) (Immutable) CipherTrust Manager key ID to upload to AWS as BYOK material. Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. Populated on read from the API once material has been imported.
+- `source_key_tier` (String) (Immutable) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). Leave blank when not importing key material.
 
 ### Read-Only
 
@@ -175,13 +175,13 @@ resource "ciphertrust_aws_byok_key" "byok_key_mr_replica" {
 
 Optional:
 
-- `alias` (Set of String) (Updatable) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].
-- `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `customer_master_key_spec` (String) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
-- `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
-- `key_usage` (String) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.
-- `multi_region` (Boolean) Creates or identifies a multi-region key.
-- `tags` (Map of String) (Updatable) A list of tags assigned to the AWS key. To remove all tags set tags = {}.
+- `alias` (Set of String) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].
+- `bypass_policy_lockout_safety_check` (Boolean) (Immutable) Whether to bypass the key policy lockout safety check.
+- `customer_master_key_spec` (String) (Immutable) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
+- `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
+- `key_usage` (String) (Immutable) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.
+- `multi_region` (Boolean) (Immutable) Creates or identifies a multi-region key.
+- `tags` (Map of String) A list of tags assigned to the AWS key. To remove all tags set tags = {}.
 - `valid_to` (String) Date the key material expires (RFC3339). Set when uploading key material to apply an expiry; populated from the API response after creation.
 
 Read-Only:

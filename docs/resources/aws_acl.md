@@ -33,7 +33,7 @@ resource "ciphertrust_aws_acl" "group_acl" {
 
 ### Required
 
-- `actions` (Set of String) (Updatable) The following table lists the accepted values:
+- `actions` (Set of String) The following table lists the accepted values:
 
 |APIs                             |  Actions Required             | Description |
 |-------------------------------  |  ---------------------------- | ---------------------------------------------------|
@@ -89,12 +89,12 @@ It's not necessary to add any view permissions as they will be automatically add
 To remove a user or group from the KMS ACL entirely, delete the resource.
 
 For backwards compatibility the deprecated 'view' permission will be automatically converted to 'viewnative' and 'viewbyok' permissions.
-- `kms_id` (String) The CipherTrust Manager AWS KMS ID in which to set the ACL
+- `kms_id` (String) (Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL
 
 ### Optional
 
-- `group` (String) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
-- `user_id` (String) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
+- `group` (String) (Immutable) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
+- `user_id` (String) (Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
 
 ### Read-Only
 

@@ -151,17 +151,17 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
 
 ### Required
 
-- `kms_id` (String) ID of the AWS KMS account container in which to create the key store.
-- `name` (String) (Updatable) Unique name for the custom key store.
-- `region` (String) Name of an available AWS region.
+- `kms_id` (String) (Immutable) ID of the AWS KMS account container in which to create the key store.
+- `name` (String) Unique name for the custom key store.
+- `region` (String) (Immutable) Name of an available AWS region.
 
 ### Optional
 
 - `aws_param` (Attributes) Parameters related to AWS interaction with a custom key store. (see [below for nested schema](#nestedatt--aws_param))
-- `connect_disconnect_keystore` (String) (Updatable) Indicates whether to connect or disconnect the custom key store. Cannot be set at creation time; connect or disconnect via update after the key store is created.
-- `enable_credential_rotation` (Attributes) (Updatable) Enable the custom key store for scheduled credential rotation job. Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager) that are in a linked state (linked_state = true) and whose connection state is CONNECTED or DISCONNECTED. Cannot be set at creation time; enable credential rotation via update after the key store is created. (see [below for nested schema](#nestedatt--enable_credential_rotation))
-- `enable_success_audit_event` (Boolean) (Updatable) Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.
-- `linked_state` (Boolean) (Updatable) Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Defaults to false when not set. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Once linked, it is not possible to unlink a key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked. For AWS_CLOUDHSM key stores this field is computed; do not set it explicitly.
+- `connect_disconnect_keystore` (String) Indicates whether to connect or disconnect the custom key store. Cannot be set at creation time; connect or disconnect via update after the key store is created.
+- `enable_credential_rotation` (Attributes) Enable the custom key store for scheduled credential rotation job. Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager) that are in a linked state (linked_state = true) and whose connection state is CONNECTED or DISCONNECTED. Cannot be set at creation time; enable credential rotation via update after the key store is created. (see [below for nested schema](#nestedatt--enable_credential_rotation))
+- `enable_success_audit_event` (Boolean) Enable or disable audit recording of successful operations within an external key store. Default value is false. Recommended value is false as enabling it can affect performance.
+- `linked_state` (Boolean) Indicates whether the custom key store is linked with AWS. Applicable to a custom key store of type EXTERNAL_KEY_STORE. Defaults to false when not set. When false, creating a custom key store in the CCKM does not trigger the AWS KMS to create a new key store. Once linked, it is not possible to unlink a key store. Also, the new custom key store will not synchronize with any key stores within the AWS KMS until the new key store is linked. For AWS_CLOUDHSM key stores this field is computed; do not set it explicitly.
 - `local_hosted_params` (Attributes) Parameters related to local hosting of a custom key store. (see [below for nested schema](#nestedatt--local_hosted_params))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
@@ -184,13 +184,13 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
 
 Optional:
 
-- `cloud_hsm_cluster_id` (String) (Updatable) ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. **Required** field for a custom key store of type AWS_CLOUDHSM.
-- `custom_key_store_type` (String) Specifies the type of custom key store. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.
-- `key_store_password` (String) (Updatable) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. **Required** field for custom key store of type AWS_CLOUDHSM.
-- `trust_anchor_certificate` (String) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. **Required** field for a custom key store of type AWS_CLOUDHSM
-- `xks_proxy_connectivity` (String) (Updatable) Indicates how AWS KMS communicates with the Ciphertrust Manager. **Required** field for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.
-- `xks_proxy_uri_endpoint` (String) (Updatable) Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. The DNS hostname can be either a load balancer directing requests to CipherTrust Manager or the CipherTrust Manager instance itself. **Required** for a custom key store of type EXTERNAL_KEY_STORE. For **CDSPaaS**, the endpoint is `https://xks.<cdspaas>.dpondemand.io`; for **on-premises** deployments, use the HTTPS address of the CipherTrust Manager instance.
-- `xks_proxy_vpc_endpoint_service_name` (String) (Updatable) Indicates the VPC endpoint service name the custom key store uses. **Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.
+- `cloud_hsm_cluster_id` (String) ID of a CloudHSM cluster for a custom key store. Enter cluster ID of an active CloudHSM cluster that is not already associated with a custom key store. **Required** field for a custom key store of type AWS_CLOUDHSM.
+- `custom_key_store_type` (String) (Immutable) Specifies the type of custom key store. For a custom key store backed by an AWS CloudHSM cluster, the key store type is AWS_CLOUDHSM. For a custom key store backed by an HSM or key manager outside of AWS, the key store type is EXTERNAL_KEY_STORE.
+- `key_store_password` (String) The password of the kmsuser crypto user (CU) account configured in the specified CloudHSM cluster. This parameter does not change the password in the CloudHSM cluster. User needs to configure the credentials on the CloudHSM cluster separately. **Required** field for custom key store of type AWS_CLOUDHSM.
+- `trust_anchor_certificate` (String) (Immutable) The contents of a CA certificate or a self-signed certificate file created during the initialization of a CloudHSM cluster. **Required** field for a custom key store of type AWS_CLOUDHSM
+- `xks_proxy_connectivity` (String) Indicates how AWS KMS communicates with the Ciphertrust Manager. **Required** field for a custom key store of type EXTERNAL_KEY_STORE. Default value is PUBLIC_ENDPOINT.
+- `xks_proxy_uri_endpoint` (String) Specifies the protocol (always HTTPS) and DNS hostname to which KMS sends XKS API requests. The DNS hostname can be either a load balancer directing requests to CipherTrust Manager or the CipherTrust Manager instance itself. **Required** for a custom key store of type EXTERNAL_KEY_STORE. For **CDSPaaS**, the endpoint is `https://xks.<cdspaas>.dpondemand.io`; for **on-premises** deployments, use the HTTPS address of the CipherTrust Manager instance.
+- `xks_proxy_vpc_endpoint_service_name` (String) Indicates the VPC endpoint service name the custom key store uses. **Required** field when the xks_proxy_connectivity is VPC_ENDPOINT_SERVICE.
 
 Read-Only:
 
@@ -209,7 +209,7 @@ Read-Only:
 
 Required:
 
-- `job_config_id` (String) (Updatable) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.
+- `job_config_id` (String) ID of the scheduler configuration job that will schedule the AWS XKS credential rotation.
 
 
 <a id="nestedatt--local_hosted_params"></a>
@@ -217,10 +217,10 @@ Required:
 
 Optional:
 
-- `blocked` (Boolean) (Updatable) This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager).
-- `health_check_key_id` (String) (Updatable) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. **Required** field for custom key store of type EXTERNAL_KEY_STORE.
-- `max_credentials` (Number) Max number of credentials that can be associated with custom key store (min value 2. max value 20). **Required** field for a custom key store of type EXTERNAL_KEY_STORE.
-- `source_key_tier` (String) Source for cryptographic keys in this key store. The only supported value is 'local' (CipherTrust Manager).
+- `blocked` (Boolean) This field indicates whether the custom key store is in a blocked or unblocked state. Default value is false, which indicates the key store is in an unblocked state. Only applicable to LOCAL custom key stores (XKS proxy hosted on CipherTrust Manager).
+- `health_check_key_id` (String) ID of an existing LUNA key (if source key tier is 'hsm-luna') or CipherTrust Manager key (if source key tier is 'local') to use for health check of the custom key store. Crypto operation would be performed using this key before creating a custom key store. **Required** field for custom key store of type EXTERNAL_KEY_STORE.
+- `max_credentials` (Number) (Immutable) Max number of credentials that can be associated with custom key store (min value 2. max value 20). **Required** field for a custom key store of type EXTERNAL_KEY_STORE.
+- `source_key_tier` (String) (Immutable) Source for cryptographic keys in this key store. The only supported value is 'local' (CipherTrust Manager).
 
 Read-Only:
 

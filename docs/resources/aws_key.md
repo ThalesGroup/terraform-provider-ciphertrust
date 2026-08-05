@@ -139,19 +139,19 @@ resource "ciphertrust_aws_key" "replicated_key" {
 
 ### Required
 
-- `region` (String) AWS region in which to create the AWS key.
+- `region` (String) (Immutable) AWS region in which to create the AWS key.
 
 ### Optional
 
-- `auto_rotate` (Boolean) (Updatable) Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.
+- `auto_rotate` (Boolean) Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.
 - `aws_param` (Attributes) AWS key parameters. Input fields are sent to the API on create/update; all fields are populated from the API response. (see [below for nested schema](#nestedatt--aws_param))
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true. Cannot be set to false during key creation; configure via update after the key has been created.
-- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
-- `key_policy` (Attributes) (Updatable) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
-- `kms_id` (String) ID of the KMS to use when creating the key. **Required** unless replicating a multi-region key.
-- `primary_region` (String) (Updatable) Updates the primary region of a multi-region key.
+- `enable_key` (Boolean) Enable or disable the key. Default is true. Cannot be set to false during key creation; configure via update after the key has been created.
+- `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
+- `key_policy` (Attributes) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
+- `kms_id` (String) (Conditionally immutable) ID of the KMS to use when creating the key. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.
+- `primary_region` (String) Updates the primary region of a multi-region key.
 - `replicate_key` (Attributes) Replicate key parameters. (see [below for nested schema](#nestedatt--replicate_key))
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
 ### Read-Only
 
@@ -183,14 +183,14 @@ resource "ciphertrust_aws_key" "replicated_key" {
 
 Optional:
 
-- `alias` (Set of String) (Updatable) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].
-- `auto_rotation_period_in_days` (Number) (Updatable) Rotation period in days for AWS auto-rotation. Only applicable to native symmetric keys.
-- `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `customer_master_key_spec` (String) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
-- `description` (String) (Updatable) Description of the AWS key. Descriptions can be updated but not removed.
-- `key_usage` (String) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.
-- `multi_region` (Boolean) Creates or identifies a multi-region key.
-- `tags` (Map of String) (Updatable) A list of tags assigned to the AWS key. To remove all tags set tags = {}.
+- `alias` (Set of String) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].
+- `auto_rotation_period_in_days` (Number) Rotation period in days for AWS auto-rotation. Only applicable to native symmetric keys.
+- `bypass_policy_lockout_safety_check` (Boolean) (Immutable) Whether to bypass the key policy lockout safety check.
+- `customer_master_key_spec` (String) (Immutable) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: SYMMETRIC_DEFAULT, RSA_2048, RSA_3072, RSA_4096, ECC_NIST_P256, ECC_NIST_P384, ECC_NIST_P521, ECC_SECG_P256K1, HMAC_224, HMAC_256, HMAC_384, HMAC_512. Default is SYMMETRIC_DEFAULT.
+- `description` (String) Description of the AWS key. Descriptions can be updated but not removed.
+- `key_usage` (String) (Immutable) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.
+- `multi_region` (Boolean) (Immutable) Creates or identifies a multi-region key.
+- `tags` (Map of String) A list of tags assigned to the AWS key. To remove all tags set tags = {}.
 
 Read-Only:
 

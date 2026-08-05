@@ -154,8 +154,8 @@ Required:
 
 Optional:
 
-- `key_material_description` (String) (Updatable) Description for the key material. Removing this field from the plan will clear the description from the material.
-- `valid_to` (String) (Updatable) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. Removing this field from the plan will clear the expiry date and set the expiration model to KEY_MATERIAL_DOES_NOT_EXPIRE. If key material expires and enters PendingImport state, all future key-material operations (rotation, new imports) are blocked until the entry is either removed from the set or valid_to is updated to a future date and re-applied.
+- `key_material_description` (String) Description for the key material. Removing this field from the plan will clear the description from the material.
+- `valid_to` (String) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. Removing this field from the plan will clear the expiry date and set the expiration model to KEY_MATERIAL_DOES_NOT_EXPIRE. If key material expires and enters PendingImport state, all future key-material operations (rotation, new imports) are blocked until the entry is either removed from the set or valid_to is updated to a future date and re-applied.
 
 
 <a id="nestedatt--rotation_history"></a>
