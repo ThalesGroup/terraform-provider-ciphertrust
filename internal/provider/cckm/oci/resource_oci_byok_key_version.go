@@ -11,6 +11,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -30,7 +31,6 @@ var (
 	_ resource.Resource                = &resourceCCKMOCIByokVersion{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMOCIByokVersion{}
 	_ resource.ResourceWithImportState = &resourceCCKMOCIByokVersion{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMOCIByokVersion{}
 )
 
 func NewResourceCCKMOCIByokVersion() resource.Resource {
@@ -69,8 +69,9 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 				Description: "The account which owns this resource.",
 			},
 			"cckm_key_id": schema.StringAttribute{
-				Required:    true,
-				Description: "CipherTrust Manager Key ID.",
+				Required:      true,
+				Description:   "(Immutable) CipherTrust Manager Key ID.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -150,7 +151,7 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the OCI BYOK key version " +
+				Description: "Number of days to wait before permanently deleting the OCI BYOK key version " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -158,19 +159,21 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
-				Required:    true,
-				Description: "ID of the key that will be uploaded from a key source to OCI.",
+				Required:      true,
+				Description:   "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"source_key_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the key that will be uploaded from the key source to OCI.",
 			},
 			"source_key_tier": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("local"),
-				Description: "Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
-				Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				Optional:      true,
+				Computed:      true,
+				Default:       stringdefault.StaticString("local"),
+				Description:   "(Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
+				Validators:    []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
@@ -362,50 +365,6 @@ func (r *resourceCCKMOCIByokVersion) Delete(ctx context.Context, req resource.De
 	versionID := state.ID.ValueString()
 	days := state.ScheduleForDeletionDays.ValueInt64()
 	deleteKeyVersion(ctx, id, r.client, keyID, versionID, days, &resp.Diagnostics)
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceCCKMOCIByokVersion) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state models.BYOKKeyVersionTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.CCKMKeyID != state.CCKMKeyID {
-		changed = append(changed, "cckm_key_id")
-	}
-
-	if plan.SourceKeyID != state.SourceKeyID {
-		changed = append(changed, "source_key_id")
-	}
-
-	// source_key_tier is Optional+Computed; skip when the plan value is not yet known.
-	if !plan.SourceKeyTier.IsUnknown() && plan.SourceKeyTier != state.SourceKeyTier {
-		changed = append(changed, "source_key_tier")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an OCI BYOK key version using the composite ID format: cckm_key_id.version_id.

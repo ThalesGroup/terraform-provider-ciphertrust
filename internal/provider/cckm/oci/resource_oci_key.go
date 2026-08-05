@@ -10,6 +10,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -85,15 +86,15 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"enable_auto_rotation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
+				Description: "Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) CipherTrust Manager resource ID of a key rotation scheduler.",
+						Description: "CipherTrust Manager resource ID of a key rotation scheduler.",
 					},
 					"key_source": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) Currently, the only option is 'ciphertrust'.",
+						Description: "Currently, the only option is 'ciphertrust'.",
 						Validators:  []validator.String{stringvalidator.OneOf([]string{"ciphertrust"}...)},
 					},
 				},
@@ -101,7 +102,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
+				Description: "Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"id": schema.StringAttribute{
@@ -120,35 +121,37 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) Name for the key.",
+				Description: "Name for the key.",
 			},
 			"oci_key_params": schema.SingleNestedAttribute{
 				Required:    true,
 				Description: "OCI key attributes.",
 				Attributes: map[string]schema.Attribute{
 					"algorithm": schema.StringAttribute{
-						Required:    true,
-						Description: "The algorithm used by the key's versions to encrypt or decrypt. Options are AES, RSA and ECDSA.",
-						Validators:  []validator.String{stringvalidator.OneOf([]string{"AES", "RSA", "ECDSA"}...)},
+						Required:      true,
+						Description:   "(Immutable) The algorithm used by the key's versions to encrypt or decrypt. Options are AES, RSA and ECDSA.",
+						Validators:    []validator.String{stringvalidator.OneOf([]string{"AES", "RSA", "ECDSA"}...)},
+						PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 					},
 					"compartment_id": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) The compartment's OCID in which to create the key.",
+						Description: "The compartment's OCID in which to create the key.",
 					},
 					"current_key_version": schema.StringAttribute{
 						Computed:    true,
 						Description: "The OCID of the key's current version.",
 					},
 					"curve_id": schema.StringAttribute{
-						Optional:    true,
-						Computed:    true,
-						Description: "The curve ID of the ECDSA key. Options are NIST_P256, NIST_P384 and NIST_P521.",
-						Validators:  []validator.String{stringvalidator.OneOf([]string{"NIST_P256", "NIST_P384", "NIST_P521"}...)},
+						Optional:      true,
+						Computed:      true,
+						Description:   "(Immutable) The curve ID of the ECDSA key. Options are NIST_P256, NIST_P384 and NIST_P521.",
+						Validators:    []validator.String{stringvalidator.OneOf([]string{"NIST_P256", "NIST_P384", "NIST_P521"}...)},
+						PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 					},
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
 						Computed:    true,
-						Description: "(Updatable) Defined tags for the key. To remove all tags set defined_tags = [].",
+						Description: "Defined tags for the key. To remove all tags set defined_tags = [].",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"tag": schema.StringAttribute{
@@ -171,7 +174,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 						Optional:    true,
 						Computed:    true,
 						ElementType: types.StringType,
-						Description: "(Updatable) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
+						Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
 					},
 					"is_primary": schema.BoolAttribute{
 						Computed:    true,
@@ -183,17 +186,19 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					},
 					"length": schema.Int64Attribute{
 						Required: true,
-						Description: "The length of the key in bytes. Options are: " +
+						Description: "(Immutable) The length of the key in bytes. Options are: " +
 							"AES (16, 24, 32), RSA (256, 384, 512), ECDSA (32, 48, 66).",
+						PlanModifiers: []planmodifier.Int64{modifiers.ImmutableInt64()},
 					},
 					"lifecycle_state": schema.StringAttribute{
 						Computed:    true,
 						Description: "The key's current lifecycle state.",
 					},
 					"protection_mode": schema.StringAttribute{
-						Required:    true,
-						Description: "The protection mode of the key. Options are: HSM or SOFTWARE.",
-						Validators:  []validator.String{stringvalidator.OneOf([]string{"HSM", "SOFTWARE"}...)},
+						Required:      true,
+						Description:   "(Immutable) The protection mode of the key. Options are: HSM or SOFTWARE.",
+						Validators:    []validator.String{stringvalidator.OneOf([]string{"HSM", "SOFTWARE"}...)},
+						PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 					},
 					"replication_id": schema.StringAttribute{
 						Computed:    true,
@@ -233,7 +238,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the OCI key " +
+				Description: "Number of days to wait before permanently deleting the OCI key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -254,7 +259,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"vault": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager OCI vault resource ID.",
+				Description: "(Conditionally immutable) CipherTrust Manager OCI vault resource ID. This attribute can only be changed if the previously configured vault no longer exists in CipherTrust Manager.",
 			},
 			"vault_id": schema.StringAttribute{
 				Computed:    true,
@@ -543,58 +548,27 @@ func (r *resourceCCKMOCIKey) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	// Defensive nil checks.
-	if plan.KeyParams == nil || state.KeyParams == nil {
+	// vault is immutable; allow change only when the previous vault no longer exists (404).
+	if plan.Vault == state.Vault {
 		return
 	}
-
-	var changed []string
-
-	if plan.KeyParams.Algorithm != state.KeyParams.Algorithm {
-		changed = append(changed, "oci_key_params.algorithm")
-	}
-
-	// curve_id is Optional+Computed (no default); skip when the plan value is not yet known.
-	if !plan.KeyParams.CurveID.IsUnknown() && plan.KeyParams.CurveID != state.KeyParams.CurveID {
-		changed = append(changed, "oci_key_params.curve_id")
-	}
-
-	if plan.KeyParams.Length != state.KeyParams.Length {
-		changed = append(changed, "oci_key_params.length")
-	}
-
-	if plan.KeyParams.ProtectionMode != state.KeyParams.ProtectionMode {
-		changed = append(changed, "oci_key_params.protection_mode")
-	}
-
-	if plan.Vault != state.Vault {
-		vaultCMID := state.Vault.ValueString()
-		if vaultCMID != "" {
-			id := uuid.New().String()
-			_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
-			if err != nil && strings.Contains(err.Error(), notFoundError) {
-				msg := "Previous OCI vault was not found, allowing vault update."
-				details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
-				r.client.Log.Warn(details)
-				resp.Diagnostics.AddWarning(details, "")
-			} else {
-				changed = append(changed, "vault")
-			}
-		} else {
-			changed = append(changed, "vault")
+	vaultCMID := state.Vault.ValueString()
+	if vaultCMID != "" {
+		id := uuid.New().String()
+		_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
+		if err != nil && strings.Contains(err.Error(), notFoundError) {
+			msg := "Previous OCI vault was not found, allowing vault update."
+			details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
+			r.client.Log.Warn(details)
+			resp.Diagnostics.AddWarning(details, "")
+			return
 		}
 	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"vault cannot be modified after creation. "+
+			"Delete and recreate the resource to apply this change.",
+	)
 }
 
 func (r *resourceCCKMOCIKey) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

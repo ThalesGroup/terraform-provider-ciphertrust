@@ -201,13 +201,13 @@ func TestCckmAWSCustomKeyStoreCreateUpdate(t *testing.T) {
 			{
 				Config:      awsConnectionResource + immutableTypeConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			// Step 8: verify ModifyPlan rejects max_credentials change (immutable).
 			{
 				Config:      awsConnectionResource + immutableMaxCredsConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			// Step 9: verify ModifyPlan rejects connect_disconnect_keystore at creation time.
 			// The resource name is new so Terraform plans a create, triggering the guard.

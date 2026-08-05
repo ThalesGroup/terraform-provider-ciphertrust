@@ -9,6 +9,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -75,46 +76,55 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "AWS region in which to create the key.",
+				Description: "(Immutable) AWS region in which to create the key.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"source_key_identifier": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "CipherTrust Manager key ID to upload to AWS as BYOK material. " +
+				Description: "(Immutable) CipherTrust Manager key ID to upload to AWS as BYOK material. " +
 					"Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. " +
 					"Populated on read from the API once material has been imported.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"source_key_tier": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
-				Description: "Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). " +
+				Description: "(Immutable) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). " +
 					"Leave blank when not importing key material.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("local"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
 				},
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Enable or disable the key. Default is true. " +
+				Description: "Enable or disable the key. Default is true. " +
 					"Cannot be set to false at creation time; disable via update after the key has been created.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key.",
+				Description: "(Conditionally immutable) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) Updates the primary region of a multi-region key. Only valid during updates.",
+				Description: "Updates the primary region of a multi-region key. Only valid during updates.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -660,24 +670,7 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	planParam := byokAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics)
-	stateParam := byokAwsParamFromObject(ctx, state.AWSParam, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	var changed []string
-	if planParam != nil && stateParam != nil {
-		if !planParam.CustomerMasterKeySpec.IsNull() && !planParam.CustomerMasterKeySpec.IsUnknown() &&
-			planParam.CustomerMasterKeySpec != stateParam.CustomerMasterKeySpec {
-			changed = append(changed, "customer_master_key_spec")
-		}
-		if !planParam.KeyUsage.IsNull() && !planParam.KeyUsage.IsUnknown() &&
-			planParam.KeyUsage != stateParam.KeyUsage {
-			changed = append(changed, "key_usage")
-		}
-	}
-
 	id := uuid.NewString()
 	if !plan.KMSID.IsNull() && !plan.KMSID.IsUnknown() && plan.KMSID != state.KMSID {
 		kmsID := state.KMSID.ValueString()
@@ -694,32 +687,9 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 		}
 	}
 
-	if planParam != nil && stateParam != nil &&
-		!planParam.MultiRegion.IsNull() && !planParam.MultiRegion.IsUnknown() &&
-		planParam.MultiRegion != stateParam.MultiRegion {
-		changed = append(changed, "multi_region")
-	}
-
-	if plan.Region != state.Region {
-		changed = append(changed, "region")
-	}
-
 	if plan.ReplicateKey != nil && state.ReplicateKey != nil {
 		if plan.ReplicateKey.KeyID != state.ReplicateKey.KeyID {
 			changed = append(changed, "replicate_key.key_id")
-		}
-	}
-
-	// source_key_identifier and source_key_tier are set once on create (via upload-key) and are
-	// thereafter managed exclusively by the aws_key_material resource. Prevent changes here.
-	stateSourceKeyID := state.SourceKeyID.ValueString()
-	if stateSourceKeyID != "" {
-		planSourceKeyID := plan.SourceKeyID.ValueString()
-		if !plan.SourceKeyID.IsNull() && !plan.SourceKeyID.IsUnknown() && planSourceKeyID != stateSourceKeyID {
-			changed = append(changed, "source_key_identifier")
-		}
-		if !plan.SourceKeyTier.IsNull() && !plan.SourceKeyTier.IsUnknown() && plan.SourceKeyTier != state.SourceKeyTier {
-			changed = append(changed, "source_key_tier")
 		}
 	}
 
@@ -738,7 +708,7 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 
 	if len(changed) > 0 {
 		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
+			"Attribute is immutable",
 			fmt.Sprintf(
 				"The following attributes cannot be modified after creation: %s. "+
 					"Delete and recreate the resource to apply these changes.",

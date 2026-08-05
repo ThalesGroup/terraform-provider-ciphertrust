@@ -10,6 +10,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -69,7 +70,10 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"account_id": schema.StringAttribute{
 				Required:    true,
-				Description: "ID of the AWS account.",
+				Description: "(Immutable) ID of the AWS account.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"acls": schema.SetNestedAttribute{
 				Computed:    true,
@@ -99,7 +103,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"archive": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
+				Description: "Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
 			},
 			"arn": schema.StringAttribute{
 				Computed:    true,
@@ -107,15 +111,15 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) Amazon Resource Name (ARN) of the role to be assumed.",
+				Description: "Amazon Resource Name (ARN) of the role to be assumed.",
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
+				Description: "External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager AWS connection ID.",
+				Description: "CipherTrust Manager AWS connection ID.",
 				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"connection_name": schema.StringAttribute{
@@ -143,12 +147,15 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique name for the KMS.",
+				Description: "(Immutable) Unique name for the KMS.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"regions": schema.ListAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) AWS regions to be added to the KMS.",
+				Description: "AWS regions to be added to the KMS.",
 			},
 			"status": schema.StringAttribute{
 				Computed:    true,
@@ -440,33 +447,18 @@ func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	var plan, state KMSModelTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.AccountID != state.AccountID {
-		changed = append(changed, "account_id")
-	}
-	if plan.Name != state.Name {
-		changed = append(changed, "name")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
+	// CDSPaaS does not support archiving a KMS.
+	if r.client != nil && r.client.IsCDSPaaS {
+		var plan KMSModelTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if !resp.Diagnostics.HasError() && !plan.Archive.IsNull() && !plan.Archive.IsUnknown() && plan.Archive.ValueBool() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("archive"),
+				"'archive' is not supported on CDSPaaS",
+				"The 'archive' attribute is only supported on on-premises CipherTrust Manager. "+
+					"CDSPaaS does not support archiving a KMS; this attribute must be omitted or set to false.",
+			)
+		}
 	}
 }
 

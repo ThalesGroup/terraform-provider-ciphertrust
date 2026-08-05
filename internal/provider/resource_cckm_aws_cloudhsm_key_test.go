@@ -286,7 +286,7 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 				// Verify ModifyPlan fires an error when custom_key_store_id is changed.
 				Config:      awsConnectionResource + modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 		},
 	})

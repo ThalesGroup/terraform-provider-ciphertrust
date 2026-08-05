@@ -268,7 +268,7 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 				// Verify ModifyPlan fires an error when kms is changed.
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 		},
 	})

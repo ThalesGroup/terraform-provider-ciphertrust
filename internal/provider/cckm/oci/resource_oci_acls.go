@@ -11,6 +11,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -29,7 +30,6 @@ var (
 	_ resource.Resource                = &resourceCCKMOCIAcl{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMOCIAcl{}
 	_ resource.ResourceWithImportState = &resourceCCKMOCIAcl{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMOCIAcl{}
 )
 
 func NewResourceCCKMOCIAcl() resource.Resource {
@@ -99,12 +99,13 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			"actions": schema.SetAttribute{
 				Required:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "(Updatable) " + ociACLTable,
+				MarkdownDescription: "" + ociACLTable,
 				Validators:          []validator.Set{setvalidator.SizeAtLeast(1)},
 			},
 			"group": schema.StringAttribute{
-				Optional:    true,
-				Description: "The CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+				Optional:      true,
+				Description:   "(Immutable) The CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -112,13 +113,15 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"user_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
+				Optional:      true,
+				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"vault_id": schema.StringAttribute{
-				Required:    true,
-				Description: "The CipherTrust Manager OCI vault resource ID in which to set the ACL",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Required:      true,
+				Description:   "(Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL",
+				Validators:    []validator.String{stringvalidator.LengthAtLeast(1)},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 		},
 	}
@@ -326,53 +329,6 @@ func (r *resourceCCKMOCIAcl) Delete(ctx context.Context, req resource.DeleteRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-// group, user_id, and vault_id together form the composite resource ID and cannot be changed.
-func (r *resourceCCKMOCIAcl) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state models.VaultAclTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	// Guard against false positives when group is not set in config (null in plan)
-	// while state holds an empty string returned by the API (e.g. when user_id was used instead).
-	if !plan.Group.IsNull() && !plan.Group.IsUnknown() && plan.Group != state.Group {
-		changed = append(changed, "group")
-	}
-	// Guard against false positives when user_id is not set in config (null in plan)
-	// while state holds an empty string returned by the API (e.g. when group was used instead).
-	if !plan.UserID.IsNull() && !plan.UserID.IsUnknown() && plan.UserID != state.UserID {
-		changed = append(changed, "user_id")
-	}
-
-	if plan.VaultID != state.VaultID {
-		changed = append(changed, "vault_id")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
 	}
 }
 

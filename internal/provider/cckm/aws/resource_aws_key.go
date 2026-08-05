@@ -10,6 +10,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -87,23 +88,26 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "AWS region in which to create the AWS key.",
+				Description: "(Immutable) AWS region in which to create the AWS key.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"auto_rotate": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "(Updatable) Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.",
+				Description: "Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.",
 				Default:     booldefault.StaticBool(false),
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false during key creation; configure via update after the key has been created.",
+				Description: "Enable or disable the key. Default is true. Cannot be set to false during key creation; configure via update after the key has been created.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "ID of the KMS to use when creating the key. **Required** unless replicating a multi-region key.",
+				Description: "(Conditionally immutable) ID of the KMS to use when creating the key. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -114,12 +118,12 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) Updates the primary region of a multi-region key.",
+				Description: "Updates the primary region of a multi-region key.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -655,28 +659,7 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		return
 	}
 
-	planParam := nativeKeyAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics)
-	stateParam := nativeKeyAwsParamFromObject(ctx, state.AWSParam, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	var changed []string
-	if planParam != nil && stateParam != nil {
-		if !planParam.BypassPolicyLockoutSafetyCheck.IsNull() && !planParam.BypassPolicyLockoutSafetyCheck.IsUnknown() &&
-			planParam.BypassPolicyLockoutSafetyCheck != stateParam.BypassPolicyLockoutSafetyCheck {
-			changed = append(changed, "aws_param.bypass_policy_lockout_safety_check")
-		}
-		if !planParam.CustomerMasterKeySpec.IsNull() && !planParam.CustomerMasterKeySpec.IsUnknown() &&
-			planParam.CustomerMasterKeySpec != stateParam.CustomerMasterKeySpec {
-			changed = append(changed, "aws_param.customer_master_key_spec")
-		}
-		if !planParam.KeyUsage.IsNull() && !planParam.KeyUsage.IsUnknown() &&
-			planParam.KeyUsage != stateParam.KeyUsage {
-			changed = append(changed, "aws_param.key_usage")
-		}
-	}
-
 	id := uuid.NewString()
 	if !plan.KMSID.IsNull() && !plan.KMSID.IsUnknown() &&
 		plan.KMSID != state.KMSID {
@@ -692,17 +675,6 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 				changed = append(changed, "kms_id")
 			}
 		}
-	}
-
-	if planParam != nil && stateParam != nil {
-		if !planParam.MultiRegion.IsNull() && !planParam.MultiRegion.IsUnknown() &&
-			planParam.MultiRegion != stateParam.MultiRegion {
-			changed = append(changed, "aws_param.multi_region")
-		}
-	}
-
-	if plan.Region != state.Region {
-		changed = append(changed, "region")
 	}
 
 	// replicate_key block: compare source fields when block is present in both plan and state.
@@ -727,7 +699,7 @@ func (r *resourceAWSKey) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 
 	if len(changed) > 0 {
 		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
+			"Attribute is immutable",
 			fmt.Sprintf(
 				"The following attributes cannot be modified after creation: %s. "+
 					"Delete and recreate the resource to apply these changes.",

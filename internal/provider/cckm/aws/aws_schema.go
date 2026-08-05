@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -786,7 +788,7 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].",
+			Description: "Alias(es) of the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To allow for key rotation changing or removing original aliases, all aliases already assigned to another key will be ignored. To remove all aliases set alias = [].",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(
@@ -798,29 +800,41 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 		},
 		"bypass_policy_lockout_safety_check": schema.BoolAttribute{
 			Optional:    true,
-			Description: "Whether to bypass the key policy lockout safety check.",
+			Description: "(Immutable) Whether to bypass the key policy lockout safety check.",
+			PlanModifiers: []planmodifier.Bool{
+				modifiers.ImmutableBool(),
+			},
 		},
 		"customer_master_key_spec": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", ") + ". Default is SYMMETRIC_DEFAULT.",
+			Description: "(Immutable) Whether the KMS key contains a symmetric key or an asymmetric key pair. Valid values: " + strings.Join(awsKeySpecs, ", ") + ". Default is SYMMETRIC_DEFAULT.",
 			Validators:  []validator.String{stringvalidator.OneOf(awsKeySpecs...)},
+			PlanModifiers: []planmodifier.String{
+				modifiers.ImmutableString(),
+			},
 		},
 		"description": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "(Updatable) Description of the AWS key. Descriptions can be updated but not removed.",
+			Description: "Description of the AWS key. Descriptions can be updated but not removed.",
 			Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
 		},
 		"key_usage": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.",
+			Description: "(Immutable) Specifies the intended use of the key. Options are ENCRYPT_DECRYPT, SIGN_VERIFY and GENERATE_VERIFY_MAC.",
+			PlanModifiers: []planmodifier.String{
+				modifiers.ImmutableString(),
+			},
 		},
 		"multi_region": schema.BoolAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "Creates or identifies a multi-region key.",
+			Description: "(Immutable) Creates or identifies a multi-region key.",
+			PlanModifiers: []planmodifier.Bool{
+				modifiers.ImmutableBool(),
+			},
 		},
 		"current_key_material_id": schema.StringAttribute{
 			Computed:    true,
@@ -834,7 +848,7 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) A list of tags assigned to the AWS key. To remove all tags set tags = {}.",
+			Description: "A list of tags assigned to the AWS key. To remove all tags set tags = {}.",
 		},
 		// Computed-only fields sourced from aws_param in the CCKM API response.
 		"arn": schema.StringAttribute{
@@ -909,7 +923,7 @@ func nativeKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 	attrs["auto_rotation_period_in_days"] = schema.Int64Attribute{
 		Optional:    true,
 		Computed:    true,
-		Description: "(Updatable) Rotation period in days for AWS auto-rotation. Only applicable to native symmetric keys.",
+		Description: "Rotation period in days for AWS auto-rotation. Only applicable to native symmetric keys.",
 	}
 	attrs["next_rotation_date"] = schema.StringAttribute{
 		Computed:    true,
@@ -976,7 +990,7 @@ var keyPolicyAttributeMap = map[string]schema.Attribute{
 func keyPolicySchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "(Updatable) Key policy parameters.",
+		Description: "Key policy parameters.",
 		Attributes:  keyPolicyAttributeMap,
 	}
 }
@@ -986,7 +1000,7 @@ func keyPolicySchemaAttribute() schema.Attribute {
 func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "(Updatable) Key policy parameters. Only applicable to keys in a linked state.",
+		Description: "Key policy parameters. Only applicable to keys in a linked state.",
 		Attributes:  keyPolicyAttributeMap,
 	}
 }
@@ -996,7 +1010,7 @@ func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 func enableRotationSchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "(Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created.",
+		Description: "Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created.",
 		Attributes: map[string]schema.Attribute{
 			"job_config_id": schema.StringAttribute{
 				Required:    true,
@@ -1223,7 +1237,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
+			Description: "Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
 			Validators: []validator.Set{
 				setvalidator.ValueStringsAre(
 					stringvalidator.RegexMatches(
@@ -1236,13 +1250,13 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 		"description": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "(Updatable) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.",
+			Description: "Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.",
 		},
 		"tags": schema.MapAttribute{
 			Optional:    true,
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "(Updatable) Tags assigned to the key. To remove all tags set tags = {}.",
+			Description: "Tags assigned to the key. To remove all tags set tags = {}.",
 		},
 		// Computed-only fields sourced from aws_param in the CCKM API response
 		"arn": schema.StringAttribute{
@@ -1324,7 +1338,7 @@ func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 		Optional:    true,
 		Computed:    true,
 		ElementType: types.StringType,
-		Description: "(Updatable) Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
+		Description: "Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
 		Validators: []validator.Set{
 			setvalidator.ValueStringsAre(
 				stringvalidator.RegexMatches(
@@ -1338,7 +1352,7 @@ func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 		Optional:    true,
 		Computed:    true,
 		ElementType: types.StringType,
-		Description: "(Updatable) Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.",
+		Description: "Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.",
 	}
 	attrs["xks_key_configuration"] = schema.SingleNestedAttribute{
 		Computed:    true,

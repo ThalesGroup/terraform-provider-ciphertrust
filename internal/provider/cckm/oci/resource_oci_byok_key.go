@@ -11,6 +11,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -103,20 +104,20 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
+				Description: "Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.",
 				Default:     booldefault.StaticBool(true),
 			},
 			"enable_auto_rotation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
+				Description: "Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created.",
 				Attributes: map[string]schema.Attribute{
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) CipherTrust Manager resource ID of a key rotation scheduler.",
+						Description: "CipherTrust Manager resource ID of a key rotation scheduler.",
 					},
 					"key_source": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) Currently, the only option is 'ciphertrust'.",
+						Description: "Currently, the only option is 'ciphertrust'.",
 						Validators:  []validator.String{stringvalidator.OneOf("ciphertrust")},
 					},
 				},
@@ -137,7 +138,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) Name for the key.",
+				Description: "Name for the key.",
 			},
 			"oci_key_params": schema.SingleNestedAttribute{
 				Required:    true,
@@ -149,7 +150,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"compartment_id": schema.StringAttribute{
 						Required:    true,
-						Description: "(Updatable) The compartment's OCID.",
+						Description: "The compartment's OCID.",
 					},
 					"current_key_version": schema.StringAttribute{
 						Computed:    true,
@@ -161,7 +162,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
-						Description: "(Updatable) Defined tags for the key. To remove all tags set defined_tags = [].",
+						Description: "Defined tags for the key. To remove all tags set defined_tags = [].",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"tag": schema.StringAttribute{
@@ -183,7 +184,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"freeform_tags": schema.MapAttribute{
 						Optional:    true,
 						ElementType: types.StringType,
-						Description: "(Updatable) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
+						Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
 					},
 					"is_primary": schema.BoolAttribute{
 						Computed:    true,
@@ -202,9 +203,10 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 						Description: "The key's current lifecycle state.",
 					},
 					"protection_mode": schema.StringAttribute{
-						Required:    true,
-						Description: "The protection mode of the key. Options are: HSM or SOFTWARE.",
-						Validators:  []validator.String{stringvalidator.OneOf([]string{"HSM", "SOFTWARE"}...)},
+						Required:      true,
+						Description:   "(Immutable) The protection mode of the key. Options are: HSM or SOFTWARE.",
+						Validators:    []validator.String{stringvalidator.OneOf([]string{"HSM", "SOFTWARE"}...)},
+						PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 					},
 					"replication_id": schema.StringAttribute{
 						Computed:    true,
@@ -244,7 +246,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the OCI BYOK key " +
+				Description: "Number of days to wait before permanently deleting the OCI BYOK key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -252,15 +254,17 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
-				Required:    true,
-				Description: "ID of the key that will be uploaded from a key source to OCI.",
+				Required:      true,
+				Description:   "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"source_key_tier": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("local"),
-				Description: "Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
-				Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				Optional:      true,
+				Computed:      true,
+				Default:       stringdefault.StaticString("local"),
+				Description:   "(Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
+				Validators:    []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"tenancy": schema.StringAttribute{
 				Computed:    true,
@@ -276,7 +280,7 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"vault": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager OCI vault resource ID.",
+				Description: "(Conditionally immutable) CipherTrust Manager OCI vault resource ID. This attribute can only be changed if the previously configured vault no longer exists in CipherTrust Manager.",
 			},
 			"vault_id": schema.StringAttribute{
 				Computed:    true,
@@ -567,49 +571,27 @@ func (r *resourceCCKMOCIByokKey) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
-	var changed []string
-
-	if plan.KeyParams.ProtectionMode != state.KeyParams.ProtectionMode {
-		changed = append(changed, "oci_key_params.protection_mode")
+	// vault is immutable; allow change only when the previous vault no longer exists (404).
+	if plan.Vault == state.Vault {
+		return
 	}
-
-	if plan.SourceKeyIdentifier != state.SourceKeyIdentifier {
-		changed = append(changed, "source_key_id")
-	}
-
-	// source_key_tier is Optional+Computed; skip when the plan value is not yet known.
-	if !plan.SourceKeyTier.IsUnknown() && plan.SourceKeyTier != state.SourceKeyTier {
-		changed = append(changed, "source_key_tier")
-	}
-
-	if plan.Vault != state.Vault {
-		vaultCMID := state.Vault.ValueString()
-		if vaultCMID != "" {
-			id := uuid.New().String()
-			_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
-			if err != nil && strings.Contains(err.Error(), notFoundError) {
-				msg := "Previous OCI vault was not found, allowing vault update."
-				details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
-				r.client.Log.Warn(details)
-				resp.Diagnostics.AddWarning(details, "")
-			} else {
-				changed = append(changed, "vault")
-			}
-		} else {
-			changed = append(changed, "vault")
+	vaultCMID := state.Vault.ValueString()
+	if vaultCMID != "" {
+		id := uuid.New().String()
+		_, err := r.client.GetById(ctx, id, vaultCMID, common.URL_OCI+"/vaults")
+		if err != nil && strings.Contains(err.Error(), notFoundError) {
+			msg := "Previous OCI vault was not found, allowing vault update."
+			details := utils.ApiError(msg, map[string]interface{}{"vault": vaultCMID})
+			r.client.Log.Warn(details)
+			resp.Diagnostics.AddWarning(details, "")
+			return
 		}
 	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		"vault cannot be modified after creation. "+
+			"Delete and recreate the resource to apply this change.",
+	)
 }
 
 // ImportState imports an existing OCI BYOK key into Terraform state using its CipherTrust Manager resource ID.

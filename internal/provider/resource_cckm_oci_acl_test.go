@@ -254,7 +254,7 @@ func TestCckmOCIAcl(t *testing.T) {
 				// Verify ModifyPlan fires an error when vault_id is changed on an existing ACL.
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				Config: deleteAclsConfigStr,

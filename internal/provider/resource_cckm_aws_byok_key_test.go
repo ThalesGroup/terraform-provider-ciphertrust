@@ -241,7 +241,7 @@ func TestCckmAWSByokKeyAES(t *testing.T) {
 				// Step 5: verify ModifyPlan rejects a customer_master_key_spec change.
 				Config:      base + modifyPlanKeySpecConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 		},
 	})

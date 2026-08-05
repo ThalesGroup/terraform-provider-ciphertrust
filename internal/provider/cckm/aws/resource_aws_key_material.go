@@ -137,7 +137,7 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 						// Optional attributes
 						"valid_to": schema.StringAttribute{
 							Optional: true,
-							Description: "(Updatable) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. " +
+							Description: "Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. " +
 								"Removing this field from the plan will clear the expiry date and set the expiration model to KEY_MATERIAL_DOES_NOT_EXPIRE. " +
 								"If key material expires and enters PendingImport state, all future key-material operations (rotation, new imports) " +
 								"are blocked until the entry is either removed from the set or valid_to is updated to a future date and re-applied.",
@@ -149,7 +149,7 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 						},
 						"key_material_description": schema.StringAttribute{
 							Optional:    true,
-							Description: "(Updatable) Description for the key material. Removing this field from the plan will clear the description from the material.",
+							Description: "Description for the key material. Removing this field from the plan will clear the description from the material.",
 						},
 					},
 				},

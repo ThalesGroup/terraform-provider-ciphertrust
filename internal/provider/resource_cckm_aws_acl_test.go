@@ -222,7 +222,7 @@ func TestCckmAWSAcl(t *testing.T) {
 				// Verify ModifyPlan fires an error when kms_id is changed on an existing ACL.
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// user_acl is destroyed (all user actions revoked) and then the user

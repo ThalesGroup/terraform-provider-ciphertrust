@@ -453,7 +453,7 @@ func TestCckmAWSKeyNative(t *testing.T) {
 			{
 				Config:      awsConnectionResource + modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 		},
 	})

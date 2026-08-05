@@ -181,9 +181,19 @@ func TestCckmAWSKms(t *testing.T) {
 	accountID := "data.ciphertrust_aws_account_details.account_details.account_id"
 	invalidAccountID := "000000000000"
 
+	isCDSPaaS := os.Getenv("CDSPAAS") == "true"
+
 	createKmsConfigStr := fmt.Sprintf(createKmsConfig, connNameA, connNameB, kmsNameA)
-	// update regions and archive the kms
-	updateKmsConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, connectionID, kmsNameA, "archive = true")
+	// update regions; archive only on CM (CDSPaaS does not support archiving a KMS)
+	archiveAttr := "archive = true"
+	expectedArchive := "true"
+	expectedStatus := "ARCHIVED"
+	if isCDSPaaS {
+		archiveAttr = "archive = false"
+		expectedArchive = "false"
+		expectedStatus = "ACTIVE"
+	}
+	updateKmsConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, connectionID, kmsNameA, archiveAttr)
 	// un-archive the kms
 	recoverKmsConfigStr := fmt.Sprintf(updateKmsConfig, connNameA, connNameB, accountID, connectionID, kmsNameA, "archive = false")
 	// change the kms'es connection
@@ -219,13 +229,13 @@ func TestCckmAWSKms(t *testing.T) {
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"updated_at"},
 			},
-			// Reduce regions and archive
+			// Reduce regions; on CDSPaaS archive is not supported so archive stays false and status stays ACTIVE.
 			{
 				Config: updateKmsConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "regions.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "archive", "true"),
-					resource.TestCheckResourceAttr(resourceName, "status", "ARCHIVED"),
+					resource.TestCheckResourceAttr(resourceName, "archive", expectedArchive),
+					resource.TestCheckResourceAttr(resourceName, "status", expectedStatus),
 				),
 			},
 			// Unarchive via update
@@ -249,7 +259,7 @@ func TestCckmAWSKms(t *testing.T) {
 				// Verify ModifyPlan fires an error when account_id is changed.
 				Config:      modifyPlanConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Verify ModifyPlan fires an error when archive = true is set at creation time.

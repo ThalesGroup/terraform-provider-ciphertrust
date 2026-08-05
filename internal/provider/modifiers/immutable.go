@@ -120,6 +120,51 @@ func (m immutableInt64Modifier) PlanModifyInt64(_ context.Context, req planmodif
 	resp.PlanValue = req.StateValue
 }
 
+// ImmutableInt32 returns a plan modifier that prevents an int32 attribute from
+// changing after the resource is created.
+func ImmutableInt32() planmodifier.Int32 {
+	return immutableInt32Modifier{}
+}
+
+type immutableInt32Modifier struct{}
+
+func (m immutableInt32Modifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableInt32Modifier) MarkdownDescription(_ context.Context) string {
+	return "Attribute is immutable after resource creation."
+}
+
+func (m immutableInt32Modifier) PlanModifyInt32(_ context.Context, req planmodifier.Int32Request, resp *planmodifier.Int32Response) {
+	// Brand-new resource: no prior resource state -- allow any value.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	// Destroy plan -- do not block teardown.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	// Allow plan values that are null or unknown.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	// No change -- allow.
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		fmt.Sprintf(
+			"This attribute cannot be changed after creation (old: %d, new: %d). "+
+				"To change this attribute, destroy and recreate the resource.",
+			req.StateValue.ValueInt32(),
+			req.PlanValue.ValueInt32(),
+		),
+	)
+	resp.PlanValue = req.StateValue
+}
+
 // ImmutableBool returns a plan modifier that prevents a bool attribute from
 // changing after the resource is created.
 func ImmutableBool() planmodifier.Bool {

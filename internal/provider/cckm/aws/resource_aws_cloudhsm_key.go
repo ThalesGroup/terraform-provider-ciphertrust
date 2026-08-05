@@ -8,6 +8,7 @@ import (
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -73,7 +74,10 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"bypass_policy_lockout_safety_check": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Whether to bypass the key policy lockout safety check.",
+				Description: "(Immutable) Whether to bypass the key policy lockout safety check.",
+				PlanModifiers: []planmodifier.Bool{
+					modifiers.ImmutableBool(),
+				},
 			},
 			"aws_param": schema.SingleNestedAttribute{
 				Optional: true,
@@ -85,12 +89,12 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional:    true,
-				Description: "(Updatable) Enable or disable the key. Cannot be set to false at creation time; disable via update after the key has been created.",
+				Description: "Enable or disable the key. Cannot be set to false at creation time; disable via update after the key has been created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -206,7 +210,10 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"custom_key_store_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager ID of the CloudHSM keystore where key is to be created.",
+				Description: "(Immutable) CipherTrust Manager ID of the CloudHSM keystore where key is to be created.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"linked": schema.BoolAttribute{
 				Computed:    true,
@@ -215,7 +222,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"key_policy": keyStoreKeyPolicySchemaAttribute(),
 			"enable_rotation": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "(Updatable) Register the key with a CipherTrust Manager scheduled rotation job. " +
+				Description: "Register the key with a CipherTrust Manager scheduled rotation job. " +
 					"The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. " +
 					"Cannot be configured during key creation; configure via update after the key has been created.",
 				Attributes: map[string]schema.Attribute{
@@ -638,27 +645,6 @@ func (r *resourceAWSCloudHSMKey) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
-	var changed []string
-
-	if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() &&
-		plan.BypassPolicyLockoutSafetyCheck != state.BypassPolicyLockoutSafetyCheck {
-		changed = append(changed, "bypass_policy_lockout_safety_check")
-	}
-
-	if plan.CustomKeyStoreID != state.CustomKeyStoreID {
-		changed = append(changed, "custom_key_store_id")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an existing AWS CloudHSM key into Terraform state using its resource ID.
