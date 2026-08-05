@@ -29,6 +29,8 @@ type dataSourceCTEClients struct {
 
 type CTEClientsDataSourceModel struct {
 	Filters types.Map             `tfsdk:"filters"`
+	Limit   types.Int64           `tfsdk:"limit"`
+	Skip    types.Int64           `tfsdk:"skip"`
 	Clients []CTEClientsListTFSDK `tfsdk:"clients"`
 }
 
@@ -152,6 +154,14 @@ func (d *dataSourceCTEClients) Schema(_ context.Context, _ datasource.SchemaRequ
 				ElementType: types.StringType,
 				Optional:    true,
 			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CTE clients to return. If unset, all matching clients are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CTE clients to skip before returning results, for pagination. Defaults to 0.",
+			},
 		},
 	}
 }
@@ -177,10 +187,13 @@ func (d *dataSourceCTEClients) Read(ctx context.Context, req datasource.ReadRequ
 		}
 	}
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_CTE_CLIENT+"/?"+strings.Join(kvs, ""))
+		common.URL_CTE_CLIENT+"/?"+strings.Join(kvs, ""),
+		skipVal,
+		limitVal)
 
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_clients.go -> Read][" + id + "]")
@@ -190,6 +203,7 @@ func (d *dataSourceCTEClients) Read(ctx context.Context, req datasource.ReadRequ
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE clients", total, limitVal)
 
 	clients := []CTEClientsListJSON{}
 

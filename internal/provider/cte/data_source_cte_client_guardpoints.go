@@ -27,6 +27,8 @@ type dataSourceCTEClientGuardPoint struct {
 
 type CTEClientGuardPointDataSourceModel struct {
 	ClientName       types.String                   `tfsdk:"client_name"`
+	Limit            types.Int64                    `tfsdk:"limit"`
+	Skip             types.Int64                    `tfsdk:"skip"`
 	ClientGuardPoint []CTEClientGuardPointListTFSDK `tfsdk:"client_guardpoint"`
 }
 
@@ -39,6 +41,14 @@ func (d *dataSourceCTEClientGuardPoint) Schema(_ context.Context, _ datasource.S
 		Attributes: map[string]schema.Attribute{
 			"client_name": schema.StringAttribute{
 				Required: true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of client guardpoints to return. If unset, all guardpoints are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of client guardpoints to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"client_guardpoint": schema.ListNestedAttribute{
 				Computed: true,
@@ -174,7 +184,8 @@ func (d *dataSourceCTEClientGuardPoint) Read(ctx context.Context, req datasource
 	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cteclientguardpoint.go -> Read][" + id + "]")
 	var state CTEClientGuardPointDataSourceModel
 	req.Config.Get(ctx, &state)
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints")
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints", skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cteclientguardpoint.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -183,6 +194,7 @@ func (d *dataSourceCTEClientGuardPoint) Read(ctx context.Context, req datasource
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client guardpoints", total, limitVal)
 	client_guardpoints := []CTEClientGuardPointListJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &client_guardpoints)
 	if err != nil {

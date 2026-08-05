@@ -25,6 +25,8 @@ type dataSourceCTECSIGroup struct {
 }
 
 type CTECSIGroupDataSourceModel struct {
+	Limit     types.Int64            `tfsdk:"limit"`
+	Skip      types.Int64            `tfsdk:"skip"`
 	CSIGroups []CTECSIGroupListTFSDK `tfsdk:"csi_group"`
 }
 
@@ -35,6 +37,14 @@ func (d *dataSourceCTECSIGroup) Metadata(_ context.Context, req datasource.Metad
 func (d *dataSourceCTECSIGroup) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CSI groups to return. If unset, all CSI groups are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CSI groups to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"csi_group": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -85,7 +95,8 @@ func (d *dataSourceCTECSIGroup) Read(ctx context.Context, req datasource.ReadReq
 	var state CTECSIGroupDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CSIGROUP)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_CSIGROUP, skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_ctecsigroup.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -94,6 +105,7 @@ func (d *dataSourceCTECSIGroup) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE CSI groups", total, limitVal)
 
 	csi_groups := []CTECSIGroupListJSON{}
 

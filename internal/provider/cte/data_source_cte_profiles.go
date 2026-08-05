@@ -27,6 +27,8 @@ type dataSourceCTEProfiles struct {
 }
 
 type CTEProfilesDataSourceModel struct {
+	Limit    types.Int64            `tfsdk:"limit"`
+	Skip     types.Int64            `tfsdk:"skip"`
 	Profiles []CTEProfilesListTFSDK `tfsdk:"cte_profiles"`
 }
 
@@ -37,6 +39,14 @@ func (d *dataSourceCTEProfiles) Metadata(_ context.Context, req datasource.Metad
 func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CTE client profiles to return. If unset, all profiles are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CTE client profiles to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"cte_profiles": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -420,8 +430,10 @@ func (d *dataSourceCTEProfiles) Read(ctx context.Context, req datasource.ReadReq
 	id := uuid.New().String()
 	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_profiles.go -> Read][" + id + "]")
 	var state CTEProfilesDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_PROFILE)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_PROFILE, skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_profiles.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -430,6 +442,7 @@ func (d *dataSourceCTEProfiles) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client profiles", total, limitVal)
 
 	profiles := []CTEProfilesListJSON{}
 

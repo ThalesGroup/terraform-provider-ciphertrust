@@ -28,6 +28,8 @@ type dataSourceCTELDTGroupCommSvcClients struct {
 
 type CTELDTGroupCommSvcClientsDataSourceModel struct {
 	GroupName types.String          `tfsdk:"group_name"`
+	Limit     types.Int64           `tfsdk:"limit"`
+	Skip      types.Int64           `tfsdk:"skip"`
 	Clients   []CTEClientsListTFSDK `tfsdk:"clients"`
 }
 
@@ -40,6 +42,14 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Schema(_ context.Context, _ dataso
 		Attributes: map[string]schema.Attribute{
 			"group_name": schema.StringAttribute{
 				Required: true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of clients to return. If unset, all clients in the LDT communication group are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of clients to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"clients": schema.ListNestedAttribute{
 				Computed: true,
@@ -160,10 +170,13 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 	var state CTELDTGroupCommSvcClientsDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_LDT_GROUP_COMM_SVC+"/"+state.GroupName.ValueString()+"/clients")
+		common.URL_LDT_GROUP_COMM_SVC+"/"+state.GroupName.ValueString()+"/clients",
+		skipVal,
+		limitVal)
 
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_ldtgroupcomms_clients_list.go -> Read][" + id + "]")
@@ -173,6 +186,7 @@ func (d *dataSourceCTELDTGroupCommSvcClients) Read(ctx context.Context, req data
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE LDT communication group clients", total, limitVal)
 
 	clients := []CTEClientsListJSON{}
 

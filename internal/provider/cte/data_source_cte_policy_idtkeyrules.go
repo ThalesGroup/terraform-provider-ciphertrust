@@ -27,6 +27,8 @@ type dataSourceCTEPolicyIDTKeyRule struct {
 
 type CTEPolicyIDTKeyRuleDataSourceModel struct {
 	PolicyID types.String                    `tfsdk:"policy"`
+	Limit    types.Int64                     `tfsdk:"limit"`
+	Skip     types.Int64                     `tfsdk:"skip"`
 	Rules    []CTEPolicyIDTKeyRulesListTFSDK `tfsdk:"rules"`
 }
 
@@ -39,6 +41,14 @@ func (d *dataSourceCTEPolicyIDTKeyRule) Schema(_ context.Context, _ datasource.S
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
 				Required: true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of IDT key rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of IDT key rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
 				Computed: true,
@@ -73,10 +83,13 @@ func (d *dataSourceCTEPolicyIDTKeyRule) Read(ctx context.Context, req datasource
 	req.Config.Get(ctx, &state)
 	d.client.Log.Info("AnuragJain =====> " + state.PolicyID.ValueString())
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/idtkeyrules")
+		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/idtkeyrules",
+		skipVal,
+		limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_idtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -85,6 +98,7 @@ func (d *dataSourceCTEPolicyIDTKeyRule) Read(ctx context.Context, req datasource
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policy IDT key rules", total, limitVal)
 
 	rules := []CTEPolicyIDTKeyRulesJSON{}
 

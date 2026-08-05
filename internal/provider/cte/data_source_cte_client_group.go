@@ -25,6 +25,8 @@ type dataSourceCTEClientGroup struct {
 }
 
 type CTEClientGroupDataSourceModel struct {
+	Limit        types.Int64               `tfsdk:"limit"`
+	Skip         types.Int64               `tfsdk:"skip"`
 	ClientGroups []CTEClientGroupListTFSDK `tfsdk:"client_groups"`
 }
 
@@ -35,6 +37,14 @@ func (d *dataSourceCTEClientGroup) Metadata(_ context.Context, req datasource.Me
 func (d *dataSourceCTEClientGroup) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of client groups to return. If unset, all client groups are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of client groups to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"client_groups": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -129,7 +139,8 @@ func (d *dataSourceCTEClientGroup) Read(ctx context.Context, req datasource.Read
 	var state CTEClientGroupDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT_GROUP)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_CLIENT_GROUP, skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cteclientgroup.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -138,6 +149,7 @@ func (d *dataSourceCTEClientGroup) Read(ctx context.Context, req datasource.Read
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client groups", total, limitVal)
 
 	client_groups := []CTEClientGroupListJSON{}
 

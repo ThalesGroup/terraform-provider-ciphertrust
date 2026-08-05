@@ -26,6 +26,8 @@ type dataSourceCTEPolicy struct {
 
 type CTEPolicyDataSourceModel struct {
 	PolicyName types.String         `tfsdk:"policy_name"`
+	Limit      types.Int64          `tfsdk:"limit"`
+	Skip       types.Int64          `tfsdk:"skip"`
 	Policies   []CTEPolicyListTFSDK `tfsdk:"cte_policies"`
 }
 
@@ -38,6 +40,14 @@ func (d *dataSourceCTEPolicy) Schema(_ context.Context, _ datasource.SchemaReque
 		Attributes: map[string]schema.Attribute{
 			"policy_name": schema.StringAttribute{
 				Optional: true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CTE policies to return. If unset, all matching policies are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CTE policies to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"cte_policies": schema.ListNestedAttribute{
 				Computed: true,
@@ -101,7 +111,8 @@ func (d *dataSourceCTEPolicy) Read(ctx context.Context, req datasource.ReadReque
 	req.Config.Get(ctx, &state)
 	d.client.Log.Info("PrathamMaini =====> " + state.PolicyName.ValueString())
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString())
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString(), skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -110,6 +121,7 @@ func (d *dataSourceCTEPolicy) Read(ctx context.Context, req datasource.ReadReque
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policies", total, limitVal)
 
 	policies := []CTEPolicyListJSON{}
 
