@@ -122,8 +122,13 @@ resource "ciphertrust_policies" "test" {
 					})
 					_, _ = client.UpdateDataV2(context.Background(), policyID, common.URL_CM_POLICIES, modifiedPayload)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				// All policy fields (actions, resources, conditions) now carry ImmutableList/
+				// ImmutableString modifiers (TFIN-515). When CM changes them out-of-band the
+				// refresh reads new server values into state; the subsequent plan sees config !=
+				// refreshed-state on an immutable field and emits AddError rather than a plain
+				// diff. ExpectError reflects the actual post-TFIN-515 behaviour.
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
