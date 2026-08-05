@@ -6,11 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	datasourceschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -323,5 +326,52 @@ func Test_AzureConnectionUpdate_ClearingSecretViaVersionBumpIsBlocked(t *testing
 
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected Update() to reject clearing client_secret via a version bump with no value, got no diagnostics")
+	}
+}
+
+// tfsdkTags returns every "tfsdk" struct tag declared on t, recursing into embedded
+// structs (e.g. CMCreateConnectionResponseCommonTFSDK).
+func tfsdkTags(t reflect.Type) []string {
+	var tags []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.Anonymous {
+			tags = append(tags, tfsdkTags(field.Type)...)
+			continue
+		}
+		if tag, ok := field.Tag.Lookup("tfsdk"); ok {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+// Test_AzureConnectionDataSource_SchemaMatchesStruct is a regression test for the class
+// of bug that broke Test_CM_CiphertrustAzureConnectionDataSource(_NoFiltersAndAttributes):
+// the data source's Read() populates AzureConnectionTFSDK (shared with the resource), and
+// the framework panics/errors at struct->object conversion time if that struct has any
+// tfsdk-tagged field the data source's "azure" nested object type doesn't declare — e.g.
+// adding client_secret_version to the resource (for the WriteOnly conversion) without
+// mirroring it into the data source schema. This walks every tfsdk tag on
+// AzureConnectionTFSDK and asserts it exists as an attribute in the data source schema.
+func Test_AzureConnectionDataSource_SchemaMatchesStruct(t *testing.T) {
+	d := NewDataSourceAzureConnection()
+	var resp datasource.SchemaResponse
+	d.Schema(context.Background(), datasource.SchemaRequest{}, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics building schema: %v", resp.Diagnostics)
+	}
+
+	azureAttr, ok := resp.Schema.Attributes["azure"].(datasourceschema.ListNestedAttribute)
+	if !ok {
+		t.Fatalf("expected 'azure' to be datasourceschema.ListNestedAttribute, got %T", resp.Schema.Attributes["azure"])
+	}
+
+	for _, tag := range tfsdkTags(reflect.TypeOf(AzureConnectionTFSDK{})) {
+		if _, ok := azureAttr.NestedObject.Attributes[tag]; !ok {
+			t.Errorf("AzureConnectionTFSDK field tagged %q has no matching attribute in the "+
+				"ciphertrust_azure_connection_list data source schema — Read() will fail to "+
+				"convert the struct into the data source's object type", tag)
+		}
 	}
 }

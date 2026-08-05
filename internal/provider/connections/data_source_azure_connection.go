@@ -130,6 +130,10 @@ func (d *dataSourceAzureConnection) Schema(_ context.Context, _ datasource.Schem
 							Sensitive:   true,
 							Description: "Secret key for the Azure application. Required in Azure Stack connection. CM never returns this field on GET, so it is not populated by this data source.",
 						},
+						"client_secret_version": schema.Int64Attribute{
+							Computed:    true,
+							Description: "Not populated by this data source — client_secret is write-only and resource-only.",
+						},
 						"cloud_name": schema.StringAttribute{
 							Computed:    true,
 							Description: cloudNameDescription,
@@ -261,6 +265,7 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 			AzureStackServerCert:     types.StringValue(azure.AzureStackServerCert),
 			Certificate:              types.StringValue(azure.Certificate),
 			CertificateThumbprint:    types.StringValue(azure.CertificateThumbprint),
+			ClientSecretVersion:      types.Int64Null(),
 			CloudName:                types.StringValue(azure.CloudName),
 			Description:              types.StringValue(azure.Description),
 			ExternalCertificateUsed:  types.BoolValue(azure.ExternalCertificateUsed),
