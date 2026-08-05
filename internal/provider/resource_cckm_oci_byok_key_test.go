@@ -682,7 +682,7 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 	})
 }
 
-func TestCckmOCIByokInvalidCreateConfigs(t *testing.T) {
+func TestCckmOCIByokKeyInvalidCreateConfigs(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
 
