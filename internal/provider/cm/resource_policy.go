@@ -72,7 +72,10 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"conditions": schema.ListNestedAttribute{
 				Optional:    true,
-				Description: "Conditions are rules for matching the other attributes of the operation",
+				Description: "(Immutable) Conditions are rules for matching the other attributes of the operation. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"negate": schema.BoolAttribute{
@@ -126,8 +129,11 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"resources": schema.ListAttribute{
 				Optional:    true,
-				Description: "Resources is a list of URI strings, which must be in URI format.",
+				Description: "(Immutable) Resources is a list of URI strings, which must be in URI format. Changing this value forces the resource to be destroyed and recreated.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,
@@ -283,9 +289,9 @@ func (r *resourceCMPolicy) Create(ctx context.Context, req resource.CreateReques
 	if !plan.IncludeDescendantAccounts.IsNull() {
 		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
 			plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-		} else {
-			plan.IncludeDescendantAccounts = types.BoolNull()
 		}
+		// CM does not echo include_descendant_accounts in the POST response (confirmed live).
+		// Preserve the plan value — ImmutableBool() ensures it cannot change post-creation.
 	}
 
 	if plan.Resources != nil {
@@ -424,9 +430,9 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	if !state.IncludeDescendantAccounts.IsNull() {
 		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
 			state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-		} else {
-			state.IncludeDescendantAccounts = types.BoolNull()
 		}
+		// CM does not return include_descendant_accounts in GET responses (confirmed live).
+		// Preserve the state value — ImmutableBool() ensures it cannot change post-creation.
 	}
 
 	if state.Resources != nil {
@@ -502,11 +508,17 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
+// All configurable fields carry immutability plan modifiers, so Update() is
+// unreachable under normal operation — it exists as a defensive backstop.
+// AddError (not AddWarning) ensures any unexpected reach of this path fails
+// loudly rather than silently succeeding with stale state.
 func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy.go -> Update]")
-	resp.Diagnostics.AddWarning(
-		"Cannot update a CM policy.",
-		"The policy cannot be updated once set.",
+	resp.Diagnostics.AddError(
+		"Cannot update a CM policy",
+		"The CM admin policy API (/v1/admin/policies) has no documented update endpoint — "+
+			"only Create, Get, List, and Delete are supported. All policy fields are immutable: "+
+			"change any field by destroying and recreating the resource.",
 	)
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy.go -> Update]")
 }
