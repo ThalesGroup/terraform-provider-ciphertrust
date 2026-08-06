@@ -22,7 +22,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -414,14 +413,18 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Computed:    true,
 						Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
 						ElementType: types.StringType,
-						PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
+						// UseStateForUnknown omitted: kms is user-configurable and the set
+						// elements change when the user adds/removes KMS IDs. Preserving the
+						// old set in the plan then delivering a new one causes "provider
+						// produced inconsistent result" (TFIN-582). Noise at the object level
+						// is suppressed by the parent's NewObjectUseStateForUnknown().
 					},
 					"oci_vaults": schema.SetAttribute{
 						Optional:    true,
 						Computed:    true,
 						Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
 						ElementType: types.StringType,
-						PlanModifiers: []planmodifier.Set{setplanmodifier.UseStateForUnknown()},
+						// UseStateForUnknown omitted: same reason as kms above.
 					},
 					"synchronize_all": schema.BoolAttribute{
 						Computed:    true,
