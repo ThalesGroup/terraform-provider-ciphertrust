@@ -171,3 +171,24 @@ provider "ciphertrust" {}
   The following devices can be used to create keys for the above public clouds.
 
   - CipherTrust Manager
+
+## Important Limitations
+
+### Terraform Validates Configuration Before Every Apply, Including Destroy
+
+This is a limitation of Terraform's plugin framework, not of this provider:
+Terraform validates the values in your `.tf` configuration on every run —
+including `terraform destroy` — before it ever talks to the provider. A
+resource block with an invalid value will fail validation and block the
+destroy, even though destroy doesn't otherwise care what the values are.
+
+**Example:**
+- Created resource with: `max_connections = 100`
+- Edited config to: `max_connections = "invalid"`
+- Run `terraform destroy` → Terraform's validation fails before the provider is invoked
+- Must revert config to valid value, then destroy works
+
+**Workaround:** Before destroying, ensure all attributes in your
+configuration have valid values, even if they differ from the actual
+resource state. This is standard Terraform behavior and applies to any
+provider that defines attribute validators, not just this one.
