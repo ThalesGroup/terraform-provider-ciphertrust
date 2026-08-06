@@ -3,24 +3,30 @@
 page_title: "ciphertrust_oci_key_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of CipherTrust Manager OCI keys.
-  Give a filter of 'limit=-1' to list more than 10 matches.
+  Use this data source to retrieve a list of OCI keys stored in CipherTrust Manager. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI keys (such as key_name, algorithm, or tenancy). Set limit = "-1" to return all matching keys.
 ---
 
 # ciphertrust_oci_key_list (Data Source)
 
-Use this data source to retrieve a list of CipherTrust Manager OCI keys.
-
-Give a filter of 'limit=-1' to list more than 10 matches.
+Use this data source to retrieve a list of OCI keys stored in CipherTrust Manager. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI keys (such as `key_name`, `algorithm`, or `tenancy`). Set `limit = "-1"` to return all matching keys.
 
 ## Example Usage
 
 ```terraform
-data "ciphertrust_oci_key_list" "ciphertrust_keys" {
-  # Optional parameters
+# Sort OCI keys by creation date, newest first.
+data "ciphertrust_oci_key_list" "sorted" {
   filters = {
-    vault_name = "vault-name"
-    limit      = "-1"
+    sort = "-createdAt"
+  }
+}
+
+# List active AES keys in a specific vault, returning all matches.
+data "ciphertrust_oci_key_list" "active_aes_in_vault" {
+  filters = {
+    vault_name      = "prod-vault"
+    algorithm       = "AES"
+    lifecycle_state = "ENABLED"
+    limit           = "-1"
   }
 }
 ```
@@ -30,28 +36,59 @@ data "ciphertrust_oci_key_list" "ciphertrust_keys" {
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing OCI keys.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI keys.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter                    | type    | description |
+|---------------------------|---------|-------------|
+| skip                      | integer | Index of the first result to return (default: 0). |
+| limit                     | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort                      | string  | Fields to sort by. Valid sort fields are `display_name`, `region`, `key_id`, `algorithm`, `length`, `updatedAt`, `createdAt`, `time_created`, `time_of_deletion`, `linked_state`, `blocked`, `local_hyok_key_id`, and `name`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| id                        | string  | Filter by CipherTrust Manager internal ID of the OCI key. |
+| key_name                  | string  | Filter by OCI key display name or OCI HYOK key name. |
+| algorithm                 | string  | Filter by OCI key algorithm. |
+| length                    | integer | Filter by OCI key length. |
+| key_id                    | string  | Filter by OCI key OCID. |
+| vault_name                | string  | Filter by OCI vault name. |
+| protection_mode           | string  | Filter by OCI key protection mode. |
+| job_config_id             | string  | Filter by job config ID. |
+| lifecycle_state           | string  | Filter by OCI key lifecycle state. |
+| tenancy                   | string  | Filter by OCI tenancy. |
+| compartment_name          | string  | Filter by compartment name. |
+| vault_id                  | string  | Filter by vault OCID. |
+| cckm_vault_id             | string  | Filter by CipherTrust Manager vault ID. |
+| curve_id                  | string  | Filter by curve ID. |
+| gone                      | string  | Filter by gone status. |
+| region                    | string  | Filter by region. |
+| local_hyok_key_id         | string  | Filter by local HYOK key ID. |
+| local_hyok_key_version_id | string  | Filter by local HYOK key version ID. |
+| local_key_store_id        | string  | Filter by local key store ID. |
+| linked_state              | boolean | Filter by whether the key is in a linked state (`true` or `false`). |
+| key_material_origin       | string  | Filter by key material origin. Valid values are `native`, `cckm`, `HYOK-CCKM`, and `HYOK-External`. |
+| blocked                   | boolean | Filter by whether the key is blocked (`true` or `false`). |
+| state                     | string  | Filter by key state. Valid values are `ACTIVE` and `DISABLED`. |
 
 ### Read-Only
 
-- `keys` (Attributes List) (see [below for nested schema](#nestedatt--keys))
-- `matched` (Number) The number of keys which matched the filters.
+- `keys` (Attributes List) The list of OCI keys stored in CipherTrust Manager. (see [below for nested schema](#nestedatt--keys))
+- `matched` (Number) The total number of records matching the given filters.
 
 <a id="nestedatt--keys"></a>
 ### Nested Schema for `keys`
 
 Read-Only:
 
-- `account` (String) The account which owns this resource.
+- `account` (String) The account that owns this resource.
 - `auto_rotate` (Boolean) Whether the key is enabled for auto-rotation.
 - `cckm_vault_id` (String) CipherTrust Manager vault ID.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_name` (String) The compartment's name.
 - `created_at` (String) Date/time the key was created in CipherTrust Manager.
-- `external_key_params` (Attributes) The attributes are related to BYOK keys. (see [below for nested schema](#nestedatt--keys--external_key_params))
+- `external_key_params` (Attributes) Attributes for BYOK (Bring Your Own Key) keys. (see [below for nested schema](#nestedatt--keys--external_key_params))
 - `id` (String) The key's CipherTrust Manager resource ID.
 - `key_material_origin` (String) CipherTrust Manager origin of the key's material.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `oci_key_params` (Attributes) OCI key attributes. (see [below for nested schema](#nestedatt--keys--oci_key_params))
 - `refreshed_at` (String) Date/time the key was refreshed.
 - `region` (String) The key's region.
@@ -66,10 +103,10 @@ Read-Only:
 
 Read-Only:
 
-- `blocked` (Boolean) Whether the key is blocked or not.
-- `linked_state` (Boolean) Whether key is in linked state or not.
+- `blocked` (Boolean) Whether the key is blocked.
+- `linked_state` (Boolean) Whether the key is in a linked state.
 - `name` (String) The name of the key.
-- `policy` (String) The key's policy
+- `policy` (String) The key's policy.
 - `state` (String) The key's current state.
 
 
@@ -116,4 +153,4 @@ Read-Only:
 - `source_key_id` (String) CipherTrust Manager key ID used to create the version.
 - `source_key_name` (String) Name of the key used to create the version.
 - `source_key_tier` (String) Source of the key used to create the version.
-- `version_id` (String) The key version's OCID
+- `version_id` (String) The key version's OCID.

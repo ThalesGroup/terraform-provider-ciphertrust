@@ -173,7 +173,7 @@ resource "ciphertrust_aws_custom_keystore" "cloudhsm_keystore" {
 - `credential_version` (Number) Version number of the current credentials.
 - `id` (String) The ID of this resource.
 - `kms_name` (String) Name of the AWS KMS account container associated with this key store.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `oldest_credentials_id` (String) ID of the oldest credentials associated with the key store.
 - `type` (String)
 - `updated_at` (String)

@@ -9,11 +9,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -60,11 +58,6 @@ func (d *dataSourceGetOCIBuckets) Schema(_ context.Context, _ datasource.SchemaR
 			"compartment_id": schema.StringAttribute{
 				Required:    true,
 				Description: "Compartment OCID whose buckets are to be listed.",
-			},
-			"limit": schema.Int64Attribute{
-				Optional:    true,
-				Description: "Maximum total number of buckets to return. If omitted, all buckets are returned.",
-				Validators:  []validator.Int64{int64validator.AtLeast(1)},
 			},
 			"buckets": schema.ListNestedAttribute{
 				Computed:    true,
@@ -117,8 +110,7 @@ func (d *dataSourceGetOCIBuckets) Schema(_ context.Context, _ datasource.SchemaR
 }
 
 // Read retrieves all OCI buckets for the given connection and compartment,
-// automatically paginating via ociNextPage until all results are collected
-// (or the optional limit is reached).
+// automatically paginating until all results are collected.
 func (d *dataSourceGetOCIBuckets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_buckets.go -> Read][" + id + "]")
@@ -134,50 +126,40 @@ func (d *dataSourceGetOCIBuckets) Read(ctx context.Context, req datasource.ReadR
 		Connection:    state.Connection.ValueString(),
 		CompartmentID: state.CompartmentID.ValueString(),
 	}
-	limit := state.Limit.ValueInt64()
-	if limit != 0 {
-		payload.Limit = &limit
-	}
 
 	var data []models.OCIBucketJSON
-	page := d.fetchBuckets(ctx, id, payload, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if page != nil {
+	for {
+		page := d.fetchBuckets(ctx, id, payload, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if page == nil {
+			break
+		}
 		data = append(data, page.Data...)
-		nextPage := page.OciNextPage
-		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-			np := nextPage
-			payload.OciNextPage = &np
-			page = d.fetchBuckets(ctx, id, payload, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			if page == nil {
-				break
-			}
-			data = append(data, page.Data...)
-			nextPage = page.OciNextPage
+		if page.OciNextPage == "" {
+			break
 		}
+		np := page.OciNextPage
+		payload.OciNextPage = &np
+	}
 
-		for _, b := range data {
-			bucket := models.OCIBucketTFSDK{
-				Namespace:     types.StringValue(b.Namespace),
-				Name:          types.StringValue(b.Name),
-				CompartmentID: types.StringValue(b.CompartmentID),
-				TimeCreated:   types.StringValue(b.TimeCreated),
-			}
-			setFreeformTagsState(ctx, b.FreeformTags, &bucket.FreeformTags, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			setDefinedTagsState(ctx, b.DefinedTags, &bucket.DefinedTags, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			state.Buckets = append(state.Buckets, bucket)
+	for _, b := range data {
+		bucket := models.OCIBucketTFSDK{
+			Namespace:     types.StringValue(b.Namespace),
+			Name:          types.StringValue(b.Name),
+			CompartmentID: types.StringValue(b.CompartmentID),
+			TimeCreated:   types.StringValue(b.TimeCreated),
 		}
+		setFreeformTagsState(ctx, b.FreeformTags, &bucket.FreeformTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		setDefinedTagsState(ctx, b.DefinedTags, &bucket.DefinedTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Buckets = append(state.Buckets, bucket)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }

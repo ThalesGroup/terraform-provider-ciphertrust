@@ -1,16 +1,14 @@
-# List all AWS XKS keys (up to default limit of 10)
-data "ciphertrust_aws_xks_keys_list" "all_keys" {}
-
-# List AWS XKS keys filtered by region
-data "ciphertrust_aws_xks_keys_list" "keys_by_region" {
+# Sort XKS keys by creation date, newest first.
+data "ciphertrust_aws_xks_keys_list" "sorted" {
   filters = {
-    region = "ap-south-2"
+    sort = "-createdAt"
   }
 }
 
-# List all AWS XKS keys (no limit)
-data "ciphertrust_aws_xks_keys_list" "all_keys_no_limit" {
+# List XKS keys by region and alias.
+data "ciphertrust_aws_xks_keys_list" "by_region_and_alias" {
   filters = {
-    limit = "-1"
+    region = "us-east-1"
+    alias  = "my-xks-key"
   }
 }

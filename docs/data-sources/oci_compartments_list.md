@@ -3,28 +3,28 @@
 page_title: "ciphertrust_oci_compartments_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager.
-  Give a filter of 'limit=-1' to list more than 10 matches.
-  Available filters: id, name, compartment_id (compartment OCID), tenancy.
+  Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI compartments (such as name, compartment_id, or tenancy). Set limit = "-1" to return all matching compartments.
 ---
 
 # ciphertrust_oci_compartments_list (Data Source)
 
-Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager.
-
-Give a filter of 'limit=-1' to list more than 10 matches.
-
-Available filters: id, name, compartment_id (compartment OCID), tenancy.
+Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI compartments (such as `name`, `compartment_id`, or `tenancy`). Set `limit = "-1"` to return all matching compartments.
 
 ## Example Usage
 
 ```terraform
-data "ciphertrust_oci_compartments_list" "all" {}
-
-data "ciphertrust_oci_compartments_list" "by_name" {
-  # Optional filters: id, name, compartment_id, tenancy
+# Sort compartments by creation date, newest first.
+data "ciphertrust_oci_compartments_list" "sorted" {
   filters = {
-    name = "my-compartment"
+    sort = "-createdAt"
+  }
+}
+
+# List compartments by tenancy and name.
+data "ciphertrust_oci_compartments_list" "by_tenancy_and_name" {
+  filters = {
+    tenancy = "my-tenancy"
+    name    = "prod-compartment"
   }
 }
 ```
@@ -34,26 +34,38 @@ data "ciphertrust_oci_compartments_list" "by_name" {
 
 ### Optional
 
-- `filters` (Map of String) A map of key:value filter pairs. Supported keys: id, name, compartment_id (the parent compartment OCID), tenancy.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI compartments.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter         | type    | description |
+|----------------|---------|-------------|
+| skip           | integer | Index of the first result to return (default: 0). |
+| limit          | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort           | string  | Fields to sort by. Valid sort fields are `createdAt` and `updatedAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| id             | string  | Filter the results by id. |
+| name           | string  | Filter the results by OCI display name. |
+| compartment_id | string  | Filter the results by compartment OCID. |
+| tenancy        | string  | Filter the results by OCI tenancy. |
 
 ### Read-Only
 
 - `compartments` (Attributes List) The list of OCI compartments stored in CipherTrust Manager. (see [below for nested schema](#nestedatt--compartments))
-- `matched` (Number) The total number of compartments that matched the filters.
+- `matched` (Number) The total number of records matching the given filters.
 
 <a id="nestedatt--compartments"></a>
 ### Nested Schema for `compartments`
 
 Read-Only:
 
-- `compartment_id` (String) The parent compartment OCID.
+- `compartment_id` (String) The compartment's OCID.
 - `created_at` (String) Date/time the compartment record was created in CipherTrust Manager.
 - `defined_tags` (Attributes Set) The compartment's defined tags. (see [below for nested schema](#nestedatt--compartments--defined_tags))
 - `description` (String) The compartment's description.
 - `freeform_tags` (Map of String) The compartment's freeform tags.
 - `id` (String) CipherTrust Manager resource ID of the compartment.
 - `is_accessible` (Boolean) Whether the compartment is accessible to the requesting user.
-- `lifecycle_state` (String) The compartment's current lifecycle state (e.g. ACTIVE).
+- `lifecycle_state` (String) The compartment's current lifecycle state (for example, `ACTIVE`).
 - `name` (String) The compartment's name.
 - `parent_compartment_id` (String) The OCID of this compartment's parent.
 - `tenancy` (String) The tenancy name associated with the compartment.

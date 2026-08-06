@@ -126,7 +126,7 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 - `key_users_roles` (Set of String) Key users - roles.
 - `kms_id` (String) ID of the KMS.
 - `kms_name` (String) Name of the KMS.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `local_key_id` (String) CipherTrust Manager key identifier of the external key.
 - `local_key_name` (String) CipherTrust Manager key name of the external key.

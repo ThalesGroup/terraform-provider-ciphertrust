@@ -35,11 +35,14 @@ data "ciphertrust_aws_iam_users_list" "engineering" {
 
 ### Optional
 
+- `marker` (String) Pagination marker from a previous response. Use this to retrieve the next page of results.
 - `max_items` (Number) Maximum number of IAM users to return. If omitted, all users are returned.
 - `path_prefix` (String) Path prefix for filtering IAM users (e.g. /division_abc/).
 
 ### Read-Only
 
+- `is_truncated` (Boolean) Whether the results were truncated. If true, use next_marker to retrieve the next page.
+- `next_marker` (String) Marker to use in the next request to retrieve the next page of results.
 - `users` (Attributes List) List of IAM users. (see [below for nested schema](#nestedatt--users))
 
 <a id="nestedatt--users"></a>
