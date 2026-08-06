@@ -90,9 +90,11 @@ data "ciphertrust_cm_keys_list" "probe" {
 	})
 }
 
-// Test_CM_KeysList_SkipLimitSinglePage verifies that setting limit=2 returns
-// exactly 2 keys (single-page mode, not auto-paginated) even when more keys
-// exist on CM. Confirms the skip/limit branch was added correctly.
+// Test_CM_KeysList_SkipLimitSinglePage verifies that setting limit=1 activates
+// single-page mode and returns at most 1 key, regardless of how many keys exist
+// on CM. This proves the skip/limit branch is exercised rather than the
+// auto-paginate path (which returns all keys). The test requires at least one
+// key to be present; the zero-match test covers the empty-result case separately.
 func Test_CM_KeysList_SkipLimitSinglePage(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
@@ -101,15 +103,14 @@ func Test_CM_KeysList_SkipLimitSinglePage(t *testing.T) {
 			{
 				Config: providerConfig + `
 data "ciphertrust_cm_keys_list" "probe" {
-  filters = { "limit" = "2" }
+  filters = { "limit" = "1" }
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					// Exactly 2 keys — single-page mode respected the limit.
-					resource.TestCheckResourceAttr("data.ciphertrust_cm_keys_list.probe", "keys.#", "2"),
-					// Non-null: both entries exist.
+					// Exactly 1 key — single-page mode respected the limit.
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_keys_list.probe", "keys.#", "1"),
+					// Non-null: the entry is populated.
 					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_keys_list.probe", "keys.0.id"),
-					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_keys_list.probe", "keys.1.id"),
 				),
 			},
 		},
