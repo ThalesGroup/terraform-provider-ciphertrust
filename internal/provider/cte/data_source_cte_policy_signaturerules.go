@@ -40,7 +40,8 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose signature rules are to be listed.",
+				Required:    true,
 			},
 			"limit": schema.Int64Attribute{
 				Optional:    true,
@@ -51,7 +52,8 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 				Description: "Number of signature rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of signature rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -59,25 +61,32 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 							Description: "ID of the Signature Rule within the parent CTE Client Policy",
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the signature rule.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the signature rule.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature rule was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature rule was last updated.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"signature_set_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the signature set linked to the rule.",
+							Computed:    true,
 						},
 						"signature_set_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the signature set linked to the rule.",
+							Computed:    true,
 						},
 					},
 				},

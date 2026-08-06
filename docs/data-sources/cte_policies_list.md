@@ -60,34 +60,34 @@ output "cte_policies" {
 
 ### Optional
 
-- `policy_name` (String)
+- `policy_name` (String) Name of the CTE policy to filter by. If omitted, all CTE policies are returned.
 
 ### Read-Only
 
-- `cte_policies` (Attributes List) (see [below for nested schema](#nestedatt--cte_policies))
+- `cte_policies` (Attributes List) List of CTE policies matching the given filter. (see [below for nested schema](#nestedatt--cte_policies))
 
 <a id="nestedatt--cte_policies"></a>
 ### Nested Schema for `cte_policies`
 
 Read-Only:
 
-- `created_at` (String)
-- `description` (String)
-- `id` (String)
-- `metadata` (Attributes) (see [below for nested schema](#nestedatt--cte_policies--metadata))
-- `migrated_policy_id` (String)
-- `name` (String)
-- `never_deny` (Boolean)
-- `policy_key_version` (Number)
-- `policy_type` (String)
-- `policy_version` (Number)
-- `updated_at` (String)
-- `updated_by` (String)
-- `uri` (String)
+- `created_at` (String) Date and time the CTE policy was created.
+- `description` (String) Description of the CTE policy.
+- `id` (String) The unique identifier of the CTE policy.
+- `metadata` (Attributes) Metadata of the CTE policy. (see [below for nested schema](#nestedatt--cte_policies--metadata))
+- `migrated_policy_id` (String) ID of the policy this CTE policy was migrated from, if applicable.
+- `name` (String) Name of the CTE policy.
+- `never_deny` (Boolean) Whether the policy allows all data access operations, disabling security controls. This should be enabled only when applying key configurations initially.
+- `policy_key_version` (Number) Key version of the CTE policy.
+- `policy_type` (String) Type of the CTE policy, Standard, LDT, IDT, Cloud_Object_Storage or CSI.
+- `policy_version` (Number) Version of the CTE policy.
+- `updated_at` (String) Date and time the CTE policy was last updated.
+- `updated_by` (String) Name of the user who last updated the CTE policy.
+- `uri` (String) URI of the CTE policy.
 
 <a id="nestedatt--cte_policies--metadata"></a>
 ### Nested Schema for `cte_policies.metadata`
 
 Read-Only:
 
-- `restrict_update` (Boolean)
+- `restrict_update` (Boolean) Whether to restrict updates to the CTE policy.

@@ -58,34 +58,34 @@ output "resource_sets" {
 
 ### Read-Only
 
-- `resource_sets` (Attributes List) (see [below for nested schema](#nestedatt--resource_sets))
+- `resource_sets` (Attributes List) List of resource sets. (see [below for nested schema](#nestedatt--resource_sets))
 
 <a id="nestedatt--resource_sets"></a>
 ### Nested Schema for `resource_sets`
 
 Optional:
 
-- `resources` (Attributes List) (see [below for nested schema](#nestedatt--resource_sets--resources))
+- `resources` (Attributes List) List of resources (directories/files) belonging to the resource set. (see [below for nested schema](#nestedatt--resource_sets--resources))
 
 Read-Only:
 
-- `account` (String)
-- `created_at` (String)
-- `description` (String)
-- `id` (String)
-- `labels` (Map of String)
-- `name` (String)
-- `type` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the resource set.
+- `created_at` (String) Date and time the resource set was created.
+- `description` (String) Description of the resource set.
+- `id` (String) The unique identifier of the resource set.
+- `labels` (Map of String) Labels applied to the resource set.
+- `name` (String) Name of the resource set.
+- `type` (String) Type of the resource set, Directory or Classification.
+- `updated_at` (String) Date and time the resource set was last updated.
+- `uri` (String) URI of the resource set.
 
 <a id="nestedatt--resource_sets--resources"></a>
 ### Nested Schema for `resource_sets.resources`
 
 Optional:
 
-- `directory` (String)
-- `file` (String)
-- `hdfs` (Boolean)
-- `include_subfolders` (Boolean)
-- `index` (Number)
+- `directory` (String) Directory of the resource.
+- `file` (String) File name or pattern of the resource.
+- `hdfs` (Boolean) Whether this resource is HDFS (Hadoop Distributed File System).
+- `include_subfolders` (Boolean) Whether to include subfolders of the directory in the resource.
+- `index` (Number) Index of the resource within the resource set.

@@ -46,41 +46,53 @@ func (d *dataSourceCTECSIGroup) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "Number of CSI groups to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"csi_group": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CSI (Container Storage Interface) groups.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the CSI group.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the CSI group.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the CSI group.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the CSI group.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the CSI group.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CSI group was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CSI group was last updated.",
+							Computed:    true,
 						},
 						"k8s_namespace": schema.StringAttribute{
-							Computed: true,
+							Description: "Kubernetes namespace associated with the CSI group.",
+							Computed:    true,
 						},
 						"k8s_storage_class": schema.StringAttribute{
-							Computed: true,
+							Description: "Kubernetes storage class associated with the CSI group.",
+							Computed:    true,
 						},
 						"client_profile_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the client profile associated with the CSI group.",
+							Computed:    true,
 						},
 						"client_profile_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the client profile associated with the CSI group.",
+							Computed:    true,
 						},
 					},
 				},

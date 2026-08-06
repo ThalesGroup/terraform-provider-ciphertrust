@@ -40,7 +40,8 @@ func (d *dataSourceCTEPolicyKeyRule) Schema(_ context.Context, _ datasource.Sche
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose key rules are to be listed.",
+				Required:    true,
 			},
 			"limit": schema.Int64Attribute{
 				Optional:    true,
@@ -51,44 +52,57 @@ func (d *dataSourceCTEPolicyKeyRule) Schema(_ context.Context, _ datasource.Sche
 				Description: "Number of key rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of key rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the key rule within the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the key rule.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the key rule.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the key rule.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the key rule.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the key rule was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the key rule was last updated.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"order_number": schema.Int64Attribute{
-							Computed: true,
+							Description: "Precedence order of the rule in the parent policy.",
+							Computed:    true,
 						},
 						"key_id": schema.StringAttribute{
-							Computed: true,
+							Description: "Identifier of the key to link with the rule.",
+							Computed:    true,
 						},
 						"new_key_rule": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether this is a new key rule.",
+							Computed:    true,
 						},
 						"resource_set_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the resource set to link with the rule.",
+							Computed:    true,
 						},
 					},
 				},

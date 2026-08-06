@@ -63,48 +63,48 @@ output "cte_list" {
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) A map of key:value pairs matching CipherTrust Manager API query parameters for filtering the clients list, e.g. "name". Values containing commas are split and applied as repeated filters.
 
 ### Read-Only
 
-- `clients` (Attributes List) (see [below for nested schema](#nestedatt--clients))
+- `clients` (Attributes List) List of clients matching the given filters. (see [below for nested schema](#nestedatt--clients))
 
 <a id="nestedatt--clients"></a>
 ### Nested Schema for `clients`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `capabilities` (String)
-- `client_errors` (String)
-- `client_health_status` (String)
-- `client_locked` (Boolean)
-- `client_reg_id` (String)
-- `client_type` (String)
-- `client_version` (String)
-- `client_warnings` (String)
-- `communication_enabled` (Boolean)
-- `created_at` (String)
-- `description` (String)
-- `dev_account` (String)
-- `dps_enabled` (Boolean)
-- `enabled_capabilities` (String)
-- `errors` (String)
-- `fam_enabled` (Boolean)
-- `fam_state` (String)
-- `id` (String)
-- `ldt_enabled` (Boolean)
-- `name` (String)
-- `os_sub_type` (String)
-- `os_type` (String)
-- `password_creation_method` (String)
-- `profile_id` (String)
-- `profile_name` (String)
-- `protection_mode` (String)
-- `registration_allowed` (Boolean)
-- `server_host_name` (String)
-- `system_locked` (Boolean)
-- `updated_at` (String)
-- `uri` (String)
-- `warnings` (String)
+- `account` (String) Account of the client.
+- `application` (String) Application associated with the client.
+- `capabilities` (String) Capabilities of the client.
+- `client_errors` (String) Client-specific errors reported by the client.
+- `client_health_status` (String) Health status of the client.
+- `client_locked` (Boolean) Whether the client is locked. If enabled, this client will not be updated by the CipherTrust Manager.
+- `client_reg_id` (String) Registration ID of the client.
+- `client_type` (String) Type of the client, FS (FileSystem) or CTE-U (CTE for user spaces).
+- `client_version` (String) Version of the CTE agent installed on the client.
+- `client_warnings` (String) Client-specific warnings reported by the client.
+- `communication_enabled` (Boolean) Whether communication with the client is enabled.
+- `created_at` (String) Date and time the client was created.
+- `description` (String) Description of the client.
+- `dev_account` (String) Dev account of the client.
+- `dps_enabled` (Boolean) Whether designated primary set is enabled on the client.
+- `enabled_capabilities` (String) Comma-separated list of enabled capabilities on the client such as ldt, dar (data at rest) and dsm (data security manager).
+- `errors` (String) Errors reported by the client.
+- `fam_enabled` (Boolean) Whether FAM (File Access Manager) is enabled on the client.
+- `fam_state` (String) State of FAM (File Access Manager) on the client.
+- `id` (String) The unique identifier of the client.
+- `ldt_enabled` (Boolean) Whether LDT (Live Data Transformation) is enabled on the client.
+- `name` (String) Name of the client.
+- `os_sub_type` (String) OS sub-type of the client.
+- `os_type` (String) OS type of the client.
+- `password_creation_method` (String) Password creation method of the client, MANUAL or GENERATE.
+- `profile_id` (String) ID of the client profile associated with the client.
+- `profile_name` (String) Name of the client profile associated with the client.
+- `protection_mode` (String) Protection mode of the client, online or offline.
+- `registration_allowed` (Boolean) Whether client's registration with the CipherTrust Manager is allowed.
+- `server_host_name` (String) Hostname of the CipherTrust Manager the client is registered to.
+- `system_locked` (Boolean) Whether the system is locked. If enabled, GuardPoints on this client cannot be removed.
+- `updated_at` (String) Date and time the client was last updated.
+- `uri` (String) URI of the client.
+- `warnings` (String) Warnings reported by the client.

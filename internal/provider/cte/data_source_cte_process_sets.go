@@ -49,52 +49,67 @@ func (d *dataSourceCTEProcessSets) Schema(_ context.Context, _ datasource.Schema
 				Description: "Number of process sets to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"process_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of process sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the process set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the process set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the process set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the process set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the process set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the process set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the process set.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the process set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"processes": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of processes belonging to the process set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the process within the process set.",
+										Optional:    true,
 									},
 									"directory": schema.StringAttribute{
-										Optional: true,
+										Description: "Directory containing the process executable.",
+										Optional:    true,
 									},
 									"signature": schema.StringAttribute{
-										Optional: true,
+										Description: "Signature associated with the process, used to identify the process.",
+										Optional:    true,
 									},
 									"file": schema.StringAttribute{
-										Optional: true,
+										Description: "Name of the process executable file.",
+										Optional:    true,
 									},
 									"resource_set_id": schema.StringAttribute{
-										Optional: true,
+										Description: "ID of the resource set linked to the process.",
+										Optional:    true,
 									},
 								},
 							},

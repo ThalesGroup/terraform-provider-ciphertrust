@@ -48,32 +48,41 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "Number of CTE client profiles to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"cte_profiles": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CTE client profiles.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the profile.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the profile.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the profile.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the profile.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the profile was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the profile.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the profile was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the profile.",
+							Computed:    true,
 						},
 						"cache_settings": schema.SingleNestedAttribute{
 							Computed:    true,
@@ -397,25 +406,32 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 							Description: "Configure log upload to the Syslog server.",
 							Attributes: map[string]schema.Attribute{
 								"upload_threshold": schema.StringAttribute{
-									Computed: true,
+									Description: "Applicable threshold for log upload.",
+									Computed:    true,
 								},
 								"drop_if_busy": schema.BoolAttribute{
-									Computed: true,
+									Description: "Whether to drop the log upload if the upload channel is busy.",
+									Computed:    true,
 								},
 								"max_interval": schema.Int64Attribute{
-									Computed: true,
+									Description: "Maximum interval in seconds between log uploads.",
+									Computed:    true,
 								},
 								"min_interval": schema.Int64Attribute{
-									Computed: true,
+									Description: "Minimum interval in seconds between log uploads.",
+									Computed:    true,
 								},
 								"max_messages": schema.Int64Attribute{
-									Computed: true,
+									Description: "Maximum number of messages per log upload.",
+									Computed:    true,
 								},
 								"job_completion_timeout": schema.Int64Attribute{
-									Computed: true,
+									Description: "Timeout in seconds to wait for a log upload job to complete.",
+									Computed:    true,
 								},
 								"connection_timeout": schema.Int64Attribute{
-									Computed: true,
+									Description: "Timeout in seconds for the log upload connection.",
+									Computed:    true,
 								},
 							},
 						},

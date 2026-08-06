@@ -46,85 +46,111 @@ func (d *dataSourceCTEClientGroup) Schema(_ context.Context, _ datasource.Schema
 				Description: "Number of client groups to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"client_groups": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CTE client groups.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the client group.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the client group.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the client group.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the client group.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the client group.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the client group was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the client group was last updated.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the client group.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the client group.",
+							Computed:    true,
 						},
 						"domain_list": schema.ListAttribute{
+							Description: "List of domains associated with the client group.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"account_list": schema.ListAttribute{
+							Description: "List of accounts associated with the client group.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"enable_domain_sharing": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether domain sharing is enabled for the client group.",
+							Computed:    true,
 						},
 						"native_domain": schema.StringAttribute{
-							Computed: true,
+							Description: "Native domain of the client group.",
+							Computed:    true,
 						},
 						"cluster_type": schema.StringAttribute{
-							Computed: true,
+							Description: "Cluster type of the client group, NON-CLUSTER, HDLM, VCS, SVM, GENERAL or OPENVMSJUKEBOX.",
+							Computed:    true,
 						},
 						"client_locked": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the client group is locked. If enabled, clients in this group will not be updated by the CipherTrust Manager.",
+							Computed:    true,
 						},
 						"system_locked": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the system is locked. If enabled, GuardPoints on clients in this group cannot be removed.",
+							Computed:    true,
 						},
 						"password_creation_method": schema.StringAttribute{
-							Computed: true,
+							Description: "Password creation method of the client group, MANUAL or GENERATE.",
+							Computed:    true,
 						},
 						"communication_enabled": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether communication with clients in this group is enabled.",
+							Computed:    true,
 						},
 						"auth_binaries": schema.StringAttribute{
-							Computed: true,
+							Description: "Comma-separated list of full paths of authorized binaries in the client group for MFA-enabled GuardPoints.",
+							Computed:    true,
 						},
 						"capabilities": schema.StringAttribute{
-							Computed: true,
+							Description: "Capabilities of the client group.",
+							Computed:    true,
 						},
 						"enabled_capabilities": schema.StringAttribute{
-							Computed: true,
+							Description: "Comma-separated list of enabled capabilities on the client group such as ldt, dar (data at rest) and dsm (data security manager).",
+							Computed:    true,
 						},
 						"profile_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the client profile associated with the client group.",
+							Computed:    true,
 						},
 						"profile_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the client profile associated with the client group.",
+							Computed:    true,
 						},
 						"ldt_status": schema.StringAttribute{
-							Computed: true,
+							Description: "LDT (Live Data Transformation) status of the client group.",
+							Computed:    true,
 						},
 						"enable_ldt_passive": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether LDT passive mode is enabled for the client group.",
+							Computed:    true,
 						},
 					},
 				},

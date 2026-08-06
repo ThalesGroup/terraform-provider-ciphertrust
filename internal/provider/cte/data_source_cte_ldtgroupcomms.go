@@ -39,7 +39,8 @@ func (d *dataSourceLDTGroupCommSvc) Schema(_ context.Context, _ datasource.Schem
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"group_name": schema.StringAttribute{
-				Optional: true,
+				Description: "Name of the LDT communication group to filter by. If omitted, all LDT communication groups are returned.",
+				Optional:    true,
 			},
 			"limit": schema.Int64Attribute{
 				Optional:    true,
@@ -50,38 +51,49 @@ func (d *dataSourceLDTGroupCommSvc) Schema(_ context.Context, _ datasource.Schem
 				Description: "Number of LDT communication groups to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"ldt_comm_groups": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of LDT (Live Data Transformation) communication groups matching the given filter.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the LDT communication group.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the LDT communication group.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the LDT communication group.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the LDT communication group.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the LDT communication group was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the LDT communication group was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the LDT communication group.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the LDT communication group.",
+							Computed:    true,
 						},
 						"health_status": schema.StringAttribute{
-							Computed: true,
+							Description: "Health status of the LDT communication group.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the LDT communication group.",
+							Computed:    true,
 						},
 					},
 				},

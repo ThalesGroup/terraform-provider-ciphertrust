@@ -58,35 +58,35 @@ output "client_groups" {
 
 ### Read-Only
 
-- `client_groups` (Attributes List) (see [below for nested schema](#nestedatt--client_groups))
+- `client_groups` (Attributes List) List of CTE client groups. (see [below for nested schema](#nestedatt--client_groups))
 
 <a id="nestedatt--client_groups"></a>
 ### Nested Schema for `client_groups`
 
 Read-Only:
 
-- `account` (String)
-- `account_list` (List of String)
-- `application` (String)
-- `auth_binaries` (String)
-- `capabilities` (String)
-- `client_locked` (Boolean)
-- `cluster_type` (String)
-- `communication_enabled` (Boolean)
-- `created_at` (String)
-- `description` (String)
-- `dev_account` (String)
-- `domain_list` (List of String)
-- `enable_domain_sharing` (Boolean)
-- `enable_ldt_passive` (Boolean)
-- `enabled_capabilities` (String)
-- `id` (String)
-- `ldt_status` (String)
-- `name` (String)
-- `native_domain` (String)
-- `password_creation_method` (String)
-- `profile_id` (String)
-- `profile_name` (String)
-- `system_locked` (Boolean)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the client group.
+- `account_list` (List of String) List of accounts associated with the client group.
+- `application` (String) Application associated with the client group.
+- `auth_binaries` (String) Comma-separated list of full paths of authorized binaries in the client group for MFA-enabled GuardPoints.
+- `capabilities` (String) Capabilities of the client group.
+- `client_locked` (Boolean) Whether the client group is locked. If enabled, clients in this group will not be updated by the CipherTrust Manager.
+- `cluster_type` (String) Cluster type of the client group, NON-CLUSTER, HDLM, VCS, SVM, GENERAL or OPENVMSJUKEBOX.
+- `communication_enabled` (Boolean) Whether communication with clients in this group is enabled.
+- `created_at` (String) Date and time the client group was created.
+- `description` (String) Description of the client group.
+- `dev_account` (String) Dev account of the client group.
+- `domain_list` (List of String) List of domains associated with the client group.
+- `enable_domain_sharing` (Boolean) Whether domain sharing is enabled for the client group.
+- `enable_ldt_passive` (Boolean) Whether LDT passive mode is enabled for the client group.
+- `enabled_capabilities` (String) Comma-separated list of enabled capabilities on the client group such as ldt, dar (data at rest) and dsm (data security manager).
+- `id` (String) The unique identifier of the client group.
+- `ldt_status` (String) LDT (Live Data Transformation) status of the client group.
+- `name` (String) Name of the client group.
+- `native_domain` (String) Native domain of the client group.
+- `password_creation_method` (String) Password creation method of the client group, MANUAL or GENERATE.
+- `profile_id` (String) ID of the client profile associated with the client group.
+- `profile_name` (String) Name of the client profile associated with the client group.
+- `system_locked` (Boolean) Whether the system is locked. If enabled, GuardPoints on clients in this group cannot be removed.
+- `updated_at` (String) Date and time the client group was last updated.
+- `uri` (String) URI of the client group.
