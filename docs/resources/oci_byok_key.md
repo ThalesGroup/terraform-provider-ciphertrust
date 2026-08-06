@@ -144,8 +144,8 @@ Required:
 
 Optional:
 
-- `defined_tags` (Attributes Set) Defined tags for the key. To remove all tags set defined_tags = []. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
-- `freeform_tags` (Map of String) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
+- `defined_tags` (Attributes Set) The defined tags associated with the key. Removing this attribute from the configuration does not remove existing tags. To remove all defined tags, explicitly set `defined_tags = []`. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
+- `freeform_tags` (Map of String) Freeform tags for the key as key:value pairs. Removing this attribute from the configuration does not remove existing tags. To clear all freeform tags, explicitly set freeform_tags = {}.
 
 Read-Only:
 
@@ -166,10 +166,10 @@ Read-Only:
 <a id="nestedatt--oci_key_params--defined_tags"></a>
 ### Nested Schema for `oci_key_params.defined_tags`
 
-Required:
+Optional:
 
-- `tag` (String) The tag's namespace as defined in OCI.
-- `values` (Map of String) The key:value pairs to associate with the tag as defined in OCI.
+- `tag` (String) The OCI tag namespace.
+- `values` (Map of String) The key:value pairs associated with the tag namespace.
 
 
 

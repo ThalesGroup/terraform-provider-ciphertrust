@@ -1,16 +1,14 @@
-# List all custom key stores (up to default limit of 10)
-data "ciphertrust_aws_custom_keystore_list" "all" {}
-
-# List custom key stores filtered by name
-data "ciphertrust_aws_custom_keystore_list" "by_name" {
+# Sort custom key stores alphabetically by name.
+data "ciphertrust_aws_custom_keystore_list" "sorted" {
   filters = {
-    name = "my-keystore"
+    sort = "name"
   }
 }
 
-# List all custom key stores (no limit)
-data "ciphertrust_aws_custom_keystore_list" "all_no_limit" {
+# List external key stores in a specific region.
+data "ciphertrust_aws_custom_keystore_list" "xks_in_region" {
   filters = {
-    limit = "-1"
+    region                = "us-east-1"
+    custom_key_store_type = "EXTERNAL_KEY_STORE"
   }
 }

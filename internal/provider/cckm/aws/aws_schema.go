@@ -673,6 +673,7 @@ type AWSKeyDataSourceCommonTFSDK struct {
 	Region            types.String `tfsdk:"region"`
 	CloudName         types.String `tfsdk:"cloud_name"`
 	CreatedAt         types.String `tfsdk:"created_at"`
+	Gone              types.Bool   `tfsdk:"gone"`
 	ExternalAccounts  types.Set    `tfsdk:"external_accounts"`
 	KeyAdmins         types.Set    `tfsdk:"key_admins"`
 	KeyAdminsRoles    types.Set    `tfsdk:"key_admins_roles"`

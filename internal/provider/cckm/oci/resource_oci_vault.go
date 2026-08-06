@@ -124,17 +124,17 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"defined_tags": schema.SetNestedAttribute{
 				Computed:    true,
-				Description: "The defined tags of the vault. To remove all tags set defined_tags = [].",
+				Description: "The defined tags associated with the vault.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"tag": schema.StringAttribute{
 							Computed:    true,
-							Description: "A tag assigned to the vault.",
+							Description: "The OCI tag namespace.",
 						},
 						"values": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
-							Description: "The key:value pairs added to the tag.",
+							Description: "The key:value pairs associated with the tag namespace.",
 						},
 					},
 				},
@@ -142,7 +142,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"freeform_tags": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
+				Description: "The freeform tags of the vault.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,

@@ -60,8 +60,8 @@ resource "ciphertrust_oci_vault" "vault" {
 - `compartment_name` (String) Compartment name.
 - `connection_name` (String) The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.
 - `created_at` (String) Date/time the vault was created in CipherTrust Manager.
-- `defined_tags` (Attributes Set) The defined tags of the vault. To remove all tags set defined_tags = []. (see [below for nested schema](#nestedatt--defined_tags))
-- `freeform_tags` (Map of String) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
+- `defined_tags` (Attributes Set) The defined tags associated with the vault. (see [below for nested schema](#nestedatt--defined_tags))
+- `freeform_tags` (Map of String) The freeform tags of the vault.
 - `id` (String) The vault's CipherTrust Managers resource ID.
 - `is_primary` (Boolean) Whether the vault is a primary vault or a replica vault.
 - `lifecycle_state` (String) The vault's current lifecycle state.
@@ -92,5 +92,5 @@ Read-Only:
 
 Read-Only:
 
-- `tag` (String) A tag assigned to the vault.
-- `values` (Map of String) The key:value pairs added to the tag.
+- `tag` (String) The OCI tag namespace.
+- `values` (Map of String) The key:value pairs associated with the tag namespace.

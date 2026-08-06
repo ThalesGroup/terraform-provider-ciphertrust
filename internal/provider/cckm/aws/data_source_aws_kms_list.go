@@ -16,6 +16,22 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// awsKmsFiltersTable documents the supported query parameters for the filters map.
+// All values are supplied as strings in the Terraform filters map regardless of the
+// underlying API type shown below.
+const awsKmsFiltersTable = "\n\n> **Note:** Although some filters represent integers, all filter values must be specified as strings. " +
+	"For example, use `\"-1\"` rather than `-1`.\n\n" +
+	"| filter      | type    | description |\n" +
+	"|-------------|---------|-------------|\n" +
+	"| skip        | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit       | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort        | string  | Fields to sort by. Valid sort fields are `createdAt`, `synced_at`, and `updatedAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| id          | string  | Filter by KMS ID. |\n" +
+	"| name        | string  | Filter by KMS name. |\n" +
+	"| account_id  | string  | Filter by AWS account ID. |\n" +
+	"| cloud_name  | string  | Filter by cloud name. Valid values are `aws`, `aws-us-gov`, `aws-cn`, and `aws-eusc`. |\n" +
+	"| status      | string  | Filter by KMS status. |"
+
 var (
 	_ datasource.DataSource              = &dataSourceAWSKms{}
 	_ datasource.DataSourceWithConfigure = &dataSourceAWSKms{}
@@ -56,24 +72,26 @@ func (d *dataSourceAWSKms) Metadata(_ context.Context, req datasource.MetadataRe
 
 func (d *dataSourceAWSKms) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of CipherTrust Manager AWS KMS resources.\n\n" +
-			"Give a filter of 'limit=-1' to list all KMS resources that match the filter. Default is 10 matches.",
+		Description: "Use this data source to retrieve a list of AWS KMS resources. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS KMS resources (such as `name`, `account_id`, or `status`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager AWS KMS resources.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS KMS resources." + awsKmsFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of KMS resources which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"kms": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"account": schema.StringAttribute{
-							Description: "The account which owns this resource.",
+							Description: "The account that owns this resource.",
 							Computed:    true,
 						},
 						"account_id": schema.StringAttribute{

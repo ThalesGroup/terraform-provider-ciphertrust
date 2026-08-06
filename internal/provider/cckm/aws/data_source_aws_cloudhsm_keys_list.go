@@ -50,14 +50,14 @@ func (d *dataSourceAWSCloudHSMKey) Metadata(_ context.Context, req datasource.Me
 func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of AWS CloudHSM keys. " +
-			"Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters " +
-			"for listing AWS keys (e.g. region, alias, keyid). " +
-			"Use 'limit=-1' to return more than 10 matches.",
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS CloudHSM keys (such as `region`, `alias`, or `keyid`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A map of key:value pairs matching CipherTrust Manager API query parameters for listing AWS CloudHSM keys.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS CloudHSM keys." + awsKeyFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,

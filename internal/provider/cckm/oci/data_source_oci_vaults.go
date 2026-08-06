@@ -16,6 +16,31 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const ociVaultsFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, " +
+	"all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter              | type    | description |\n" +
+	"|---------------------|---------|-------------|\n" +
+	"| skip                | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit               | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort                | string  | Fields to sort by. Valid sort fields are `display_name`, `vault_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| id                  | string  | Filter by CipherTrust Manager internal ID. |\n" +
+	"| display_name        | string  | Filter by vault display name. |\n" +
+	"| vault_name          | string  | Filter by vault name. |\n" +
+	"| linked_state        | boolean | Filter by whether the vault is in a linked state (`true` or `false`). |\n" +
+	"| issuer_id           | string  | Filter by issuer ID. |\n" +
+	"| state               | string  | Filter by state (for external vaults only). |\n" +
+	"| external_vault_type | string  | Filter by external vault type. |\n" +
+	"| cloud_name          | string  | Filter by cloud name. |\n" +
+	"| vault_id            | string  | Filter by vault OCID. |\n" +
+	"| vault_type          | string  | Filter by vault type. Valid values are `DEFAULT`, `EXTERNAL`, and `VIRTUAL_PRIVATE`. |\n" +
+	"| tenancy             | string  | Filter by OCI tenancy. |\n" +
+	"| compartment_name    | string  | Filter by compartment name. |\n" +
+	"| lifecycle_state     | string  | Filter by lifecycle state. |\n" +
+	"| region              | string  | Filter by region. |\n" +
+	"| source_key_tier     | string  | Filter by source key tier. Valid only for the `EXTERNAL` vault type. |\n" +
+	"| blocked             | boolean | Filter by whether the vault is blocked (`true` or `false`). |"
+
 var (
 	_ datasource.DataSource              = &dataSourceOCIVault{}
 	_ datasource.DataSourceWithConfigure = &dataSourceOCIVault{}
@@ -56,29 +81,32 @@ func (d *dataSourceOCIVault) Configure(_ context.Context, req datasource.Configu
 
 func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of OCI vaults managed by CipherTrust Manager.\n\n" +
-			"Give a filter of 'limit=-1' to list more than 10 matches.",
+		Description: "Use this data source to retrieve a list of OCI vaults stored in CipherTrust Manager. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing OCI vaults (such as `vault_name`, `vault_type`, or `tenancy`). " +
+			"Set `limit = \"-1\"` to return all matching vaults.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager OCI vaults.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI vaults." + ociVaultsFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of vaults which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"vaults": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The list of OCI vaults stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"account": schema.StringAttribute{
-							Computed:    true,
-							Description: "The account which owns this resource.",
-						},
-						"acls": schema.SetNestedAttribute{
-							Computed:    true,
-							Description: "List of ACLs that have been added to the vault.",
+					"account": schema.StringAttribute{
+						Computed:    true,
+						Description: "The account that owns this resource.",
+					},
+					"acls": schema.SetNestedAttribute{
+						Computed:    true,
+						Description: "ACLs associated with the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"actions": schema.SetAttribute{
@@ -109,10 +137,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "CipherTrust Manager cloud name.",
 						},
-						"compartment_name": schema.StringAttribute{
-							Computed:    true,
-							Description: "Compartment name.",
-						},
+					"compartment_name": schema.StringAttribute{
+						Computed:    true,
+						Description: "The compartment's name.",
+					},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
 							Description: "The compartment's OCID.",
@@ -134,15 +162,15 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Description: "The defined tags of the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
-									"tag": schema.StringAttribute{
-										Computed:    true,
-										Description: "A tag assigned to the vault.",
-									},
-									"values": schema.MapAttribute{
-										Computed:    true,
-										ElementType: types.StringType,
-										Description: "The key:value pairs to added to the tag.",
-									},
+								"tag": schema.StringAttribute{
+									Computed:    true,
+									Description: "The tag's namespace.",
+								},
+								"values": schema.MapAttribute{
+									Computed:    true,
+									ElementType: types.StringType,
+									Description: "The key:value pairs associated with the tag.",
+								},
 								},
 							},
 						},
@@ -155,10 +183,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "The vault's CipherTrust Manager resource ID.",
 						},
-						"is_primary": schema.BoolAttribute{
-							Computed:    true,
-							Description: "Whether the key belongs to a primary vault or a replica vault.",
-						},
+					"is_primary": schema.BoolAttribute{
+						Computed:    true,
+						Description: "Whether the vault is a primary vault (as opposed to a replica vault).",
+					},
 						"lifecycle_state": schema.StringAttribute{
 							Computed:    true,
 							Description: "The vault's current lifecycle state.",
@@ -183,10 +211,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "The replication ID associated with a vault operation.",
 						},
-						"restored_from_vault_id": schema.StringAttribute{
-							Computed:    true,
-							Description: "OCID of the vault this vault was restored from.",
-						},
+					"restored_from_vault_id": schema.StringAttribute{
+						Computed:    true,
+						Description: "The OCID of the vault from which this vault was restored.",
+					},
 						"tenancy": schema.StringAttribute{
 							Computed:    true,
 							Description: "The tenancy name.",
@@ -211,10 +239,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "CipherTrust Manager's unique identifier for the resource.",
 						},
-						"wrappingkey_id": schema.StringAttribute{
-							Computed:    true,
-							Description: "Vault's wrapping key OCID.",
-						},
+					"wrappingkey_id": schema.StringAttribute{
+						Computed:    true,
+						Description: "The vault's wrapping key OCID.",
+					},
 					},
 				},
 			},

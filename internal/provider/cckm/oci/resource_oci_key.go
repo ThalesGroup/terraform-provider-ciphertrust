@@ -151,17 +151,17 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					"defined_tags": schema.SetNestedAttribute{
 						Optional:    true,
 						Computed:    true,
-						Description: "Defined tags for the key. To remove all tags set defined_tags = [].",
+						Description: "The defined tags associated with the key. Removing this attribute from the configuration does not remove existing tags. To remove all defined tags, explicitly set `defined_tags = []`.",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"tag": schema.StringAttribute{
 									Optional:    true,
-									Description: "The tag's namespace as defined in OCI.",
+									Description: "The OCI tag namespace.",
 								},
 								"values": schema.MapAttribute{
 									Optional:    true,
 									ElementType: types.StringType,
-									Description: "The key:value pairs to associate with the tag as defined in OCI.",
+									Description: "The key:value pairs associated with the tag namespace.",
 								},
 							},
 						},
@@ -174,7 +174,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 						Optional:    true,
 						Computed:    true,
 						ElementType: types.StringType,
-						Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
+						Description: "Freeform tags for the key as key:value pairs. Removing this attribute from the configuration does not remove existing tags. To clear all freeform tags, explicitly set freeform_tags = {}.",
 					},
 					"is_primary": schema.BoolAttribute{
 						Computed:    true,

@@ -157,7 +157,7 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				Description: "A list of key:value pairs associated with the key.",
+				Description: "A map of key/value pairs associated with the key.",
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,

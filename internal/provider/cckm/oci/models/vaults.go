@@ -164,7 +164,6 @@ type DataSourceGetOCIVaultsTFSDK struct {
 	Connection    types.String                 `tfsdk:"connection_id"`
 	CompartmentID types.String                 `tfsdk:"compartment_id"`
 	Region        types.String                 `tfsdk:"region"`
-	Limit         types.Int64                  `tfsdk:"limit"`
 	Vaults        []DataSourceGetOCIVaultTFSDK `tfsdk:"vaults"`
 }
 
@@ -240,6 +239,5 @@ type OCIBucketTFSDK struct {
 type ListOCIBucketsTFSDK struct {
 	Connection    types.String     `tfsdk:"connection_id"`
 	CompartmentID types.String     `tfsdk:"compartment_id"`
-	Limit         types.Int64      `tfsdk:"limit"`
 	Buckets       []OCIBucketTFSDK `tfsdk:"buckets"`
 }

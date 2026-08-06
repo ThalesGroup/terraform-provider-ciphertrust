@@ -45,10 +45,13 @@ func (d *dataSourceAWSIAMUsersList) Configure(_ context.Context, req datasource.
 
 // AWSIAMUsersDataSourceModel is the Terraform state model for this data source.
 type AWSIAMUsersDataSourceModel struct {
-	KmsID      types.String      `tfsdk:"kms_id"`
-	MaxItems   types.Int64       `tfsdk:"max_items"`
-	PathPrefix types.String      `tfsdk:"path_prefix"`
-	Users      []AWSIAMUserTFSDK `tfsdk:"users"`
+	KmsID       types.String      `tfsdk:"kms_id"`
+	Marker      types.String      `tfsdk:"marker"`
+	MaxItems    types.Int64       `tfsdk:"max_items"`
+	PathPrefix  types.String      `tfsdk:"path_prefix"`
+	IsTruncated types.Bool        `tfsdk:"is_truncated"`
+	NextMarker  types.String      `tfsdk:"next_marker"`
+	Users       []AWSIAMUserTFSDK `tfsdk:"users"`
 }
 
 // AWSIAMUserTFSDK represents a single IAM user in Terraform state.
@@ -81,6 +84,10 @@ func (d *dataSourceAWSIAMUsersList) Schema(_ context.Context, _ datasource.Schem
 				Required:    true,
 				Description: "ID of the CipherTrust Manager AWS KMS whose IAM users are to be listed.",
 			},
+			"marker": schema.StringAttribute{
+				Optional:    true,
+				Description: "Pagination marker from a previous response. Use this to retrieve the next page of results.",
+			},
 			"max_items": schema.Int64Attribute{
 				Optional:    true,
 				Description: "Maximum number of IAM users to return. If omitted, all users are returned.",
@@ -88,6 +95,14 @@ func (d *dataSourceAWSIAMUsersList) Schema(_ context.Context, _ datasource.Schem
 			"path_prefix": schema.StringAttribute{
 				Optional:    true,
 				Description: "Path prefix for filtering IAM users (e.g. /division_abc/).",
+			},
+			"is_truncated": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the results were truncated. If true, use next_marker to retrieve the next page.",
+			},
+			"next_marker": schema.StringAttribute{
+				Computed:    true,
+				Description: "Marker to use in the next request to retrieve the next page of results.",
 			},
 			"users": schema.ListNestedAttribute{
 				Computed:    true,
@@ -125,7 +140,7 @@ func (d *dataSourceAWSIAMUsersList) Schema(_ context.Context, _ datasource.Schem
 	}
 }
 
-// Read fetches all AWS IAM users, paginating via IsTruncated/Marker until all results are collected.
+// Read fetches AWS IAM users for the given KMS. Use max_items and marker to control pagination.
 func (d *dataSourceAWSIAMUsersList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_iam_users_list.go -> Read][" + id + "]")
@@ -138,67 +153,46 @@ func (d *dataSourceAWSIAMUsersList) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
-	var maxItems int64
+	payload := awsIAMUsersRequest{
+		KmsID: state.KmsID.ValueString(),
+	}
+	if !state.Marker.IsNull() && !state.Marker.IsUnknown() {
+		payload.Marker = state.Marker.ValueString()
+	}
 	if !state.MaxItems.IsNull() && !state.MaxItems.IsUnknown() {
-		maxItems = state.MaxItems.ValueInt64()
+		payload.MaxItems = state.MaxItems.ValueInt64()
+	}
+	if !state.PathPrefix.IsNull() && !state.PathPrefix.IsUnknown() {
+		payload.PathPrefix = state.PathPrefix.ValueString()
 	}
 
-	var allUsers []AWSIAMUserTFSDK
-	marker := ""
-
-	for {
-		payload := awsIAMUsersRequest{
-			KmsID:  state.KmsID.ValueString(),
-			Marker: marker,
-		}
-		if maxItems > 0 {
-			remaining := maxItems - int64(len(allUsers))
-			payload.MaxItems = remaining
-		}
-		if !state.PathPrefix.IsNull() && !state.PathPrefix.IsUnknown() {
-			payload.PathPrefix = state.PathPrefix.ValueString()
-		}
-
-		payloadJSON, err := json.Marshal(payload)
-		if err != nil {
-			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_users_list.go -> Read][" + id + "]")
-			resp.Diagnostics.AddError("Error building request for AWS IAM users", err.Error())
-			return
-		}
-
-		response, err := d.client.PostDataV2(ctx, id, urlAWSIAMUsers, payloadJSON)
-		if err != nil {
-			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_users_list.go -> Read][" + id + "]")
-			resp.Diagnostics.AddError("Error reading AWS IAM users from CipherTrust Manager", err.Error())
-			return
-		}
-
-		for _, u := range gjson.Get(response, "Users").Array() {
-			allUsers = append(allUsers, AWSIAMUserTFSDK{
-				Arn:              types.StringValue(u.Get("Arn").String()),
-				CreateDate:       types.StringValue(u.Get("CreateDate").String()),
-				Path:             types.StringValue(u.Get("Path").String()),
-				UserID:           types.StringValue(u.Get("UserId").String()),
-				UserName:         types.StringValue(u.Get("UserName").String()),
-				PasswordLastUsed: types.StringValue(u.Get("PasswordLastUsed").String()),
-			})
-			if maxItems > 0 && int64(len(allUsers)) >= maxItems {
-				break
-			}
-		}
-
-		isTruncated := gjson.Get(response, "IsTruncated").Bool()
-		nextMarker := gjson.Get(response, "Marker").String()
-
-		if !isTruncated || nextMarker == "" {
-			break
-		}
-		if maxItems > 0 && int64(len(allUsers)) >= maxItems {
-			break
-		}
-		marker = nextMarker
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_users_list.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError("Error building request for AWS IAM users", err.Error())
+		return
 	}
 
-	state.Users = allUsers
+	response, err := d.client.PostDataV2(ctx, id, urlAWSIAMUsers, payloadJSON)
+	if err != nil {
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_users_list.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError("Error reading AWS IAM users from CipherTrust Manager", err.Error())
+		return
+	}
+
+	var users []AWSIAMUserTFSDK
+	for _, u := range gjson.Get(response, "Users").Array() {
+		users = append(users, AWSIAMUserTFSDK{
+			Arn:              types.StringValue(u.Get("Arn").String()),
+			CreateDate:       types.StringValue(u.Get("CreateDate").String()),
+			Path:             types.StringValue(u.Get("Path").String()),
+			UserID:           types.StringValue(u.Get("UserId").String()),
+			UserName:         types.StringValue(u.Get("UserName").String()),
+			PasswordLastUsed: types.StringValue(u.Get("PasswordLastUsed").String()),
+		})
+	}
+	state.IsTruncated = types.BoolValue(gjson.Get(response, "IsTruncated").Bool())
+	state.NextMarker = types.StringValue(gjson.Get(response, "Marker").String())
+	state.Users = users
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

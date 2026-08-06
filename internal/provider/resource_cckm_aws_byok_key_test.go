@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -278,7 +279,6 @@ func TestCckmAWSByokKeyCreateRejections(t *testing.T) {
 			name       = "%s"
 			operation  = "cckm_key_rotation"
 			run_at     = "0 9 * * sat"
-			run_on     = "any"
 			start_date = "2026-03-07T14:24:00Z"
 		}
 		resource "ciphertrust_aws_byok_key" "byok_key" {
@@ -820,6 +820,9 @@ func TestCckmAWSByokKeyMultiRegionAndPrimaryRegion(t *testing.T) {
 //     key_state=Enabled.
 //  6. RefreshState - confirm plan is stable.
 func TestCckmAWSByokKeyMultiRegionReplication(t *testing.T) {
+	if os.Getenv("CDSPAAS") == "true" {
+		t.Skip("Skipping on CDSPAAS")
+	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()

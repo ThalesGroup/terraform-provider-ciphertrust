@@ -177,7 +177,7 @@ func (r *resourceAWSCustomKeyStore) Schema(ctx context.Context, _ resource.Schem
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				Description: "A list of key:value pairs associated with the key.",
+				Description: "A map of key/value pairs associated with the key.",
 			},
 			"aws_param": schema.SingleNestedAttribute{
 				Optional: true,

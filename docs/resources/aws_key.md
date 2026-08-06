@@ -167,7 +167,7 @@ resource "ciphertrust_aws_key" "replicated_key" {
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
 - `kms_name` (String) Name of the KMS. Populated from the API response.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `multi_region_configuration` (Attributes) Multi-region configuration for the key. Set only when multi_region is true. (see [below for nested schema](#nestedatt--multi_region_configuration))
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.

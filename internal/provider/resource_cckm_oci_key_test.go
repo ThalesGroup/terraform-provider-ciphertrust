@@ -755,7 +755,6 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 		data "ciphertrust_get_oci_buckets" "buckets" {
 			connection_id  = ciphertrust_oci_connection.oci_connection.id
 			compartment_id = ciphertrust_oci_vault.vault.compartment_id
-			limit          = 1
 		}
 
 		resource "ciphertrust_oci_vault" "vp_vault" {

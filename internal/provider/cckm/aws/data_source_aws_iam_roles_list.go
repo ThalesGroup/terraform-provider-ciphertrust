@@ -45,10 +45,13 @@ func (d *dataSourceAWSIAMRolesList) Configure(_ context.Context, req datasource.
 
 // AWSIAMRolesDataSourceModel is the Terraform state model for this data source.
 type AWSIAMRolesDataSourceModel struct {
-	KmsID      types.String      `tfsdk:"kms_id"`
-	MaxItems   types.Int64       `tfsdk:"max_items"`
-	PathPrefix types.String      `tfsdk:"path_prefix"`
-	Roles      []AWSIAMRoleTFSDK `tfsdk:"roles"`
+	KmsID       types.String      `tfsdk:"kms_id"`
+	Marker      types.String      `tfsdk:"marker"`
+	MaxItems    types.Int64       `tfsdk:"max_items"`
+	PathPrefix  types.String      `tfsdk:"path_prefix"`
+	IsTruncated types.Bool        `tfsdk:"is_truncated"`
+	NextMarker  types.String      `tfsdk:"next_marker"`
+	Roles       []AWSIAMRoleTFSDK `tfsdk:"roles"`
 }
 
 // AWSIAMRoleTFSDK represents a single IAM role in Terraform state.
@@ -66,9 +69,9 @@ type AWSIAMRoleTFSDK struct {
 // awsIAMRolesRequest is the JSON body sent to the navic API.
 type awsIAMRolesRequest struct {
 	KmsID      string `json:"kms"`
-	Marker     string `json:"marker,omitempty"`
-	MaxItems   int64  `json:"max_items,omitempty"`
-	PathPrefix string `json:"path_prefix,omitempty"`
+	Marker     string `json:"marker"`
+	MaxItems   int64  `json:"max_items"`
+	PathPrefix string `json:"path_prefix"`
 }
 
 func (d *dataSourceAWSIAMRolesList) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -83,6 +86,10 @@ func (d *dataSourceAWSIAMRolesList) Schema(_ context.Context, _ datasource.Schem
 				Required:    true,
 				Description: "ID of the CipherTrust Manager AWS KMS whose IAM roles are to be listed.",
 			},
+			"marker": schema.StringAttribute{
+				Optional:    true,
+				Description: "Pagination marker from a previous response. Use this to retrieve the next page of results.",
+			},
 			"max_items": schema.Int64Attribute{
 				Optional:    true,
 				Description: "Maximum number of IAM roles to return. If omitted, all roles are returned.",
@@ -90,6 +97,14 @@ func (d *dataSourceAWSIAMRolesList) Schema(_ context.Context, _ datasource.Schem
 			"path_prefix": schema.StringAttribute{
 				Optional:    true,
 				Description: "Path prefix for filtering IAM roles (e.g. /division_abc/).",
+			},
+			"is_truncated": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the results were truncated. If true, use next_marker to retrieve the next page.",
+			},
+			"next_marker": schema.StringAttribute{
+				Computed:    true,
+				Description: "Marker to use in the next request to retrieve the next page of results.",
 			},
 			"roles": schema.ListNestedAttribute{
 				Computed:    true,
@@ -135,7 +150,7 @@ func (d *dataSourceAWSIAMRolesList) Schema(_ context.Context, _ datasource.Schem
 	}
 }
 
-// Read fetches all AWS IAM roles, paginating via IsTruncated/Marker until all results are collected.
+// Read fetches AWS IAM roles for the given KMS. Use max_items and marker to control pagination.
 func (d *dataSourceAWSIAMRolesList) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_aws_iam_roles_list.go -> Read][" + id + "]")
@@ -148,69 +163,48 @@ func (d *dataSourceAWSIAMRolesList) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
-	var maxItems int64
+	payload := awsIAMRolesRequest{
+		KmsID: state.KmsID.ValueString(),
+	}
+	if !state.Marker.IsNull() && !state.Marker.IsUnknown() {
+		payload.Marker = state.Marker.ValueString()
+	}
 	if !state.MaxItems.IsNull() && !state.MaxItems.IsUnknown() {
-		maxItems = state.MaxItems.ValueInt64()
+		payload.MaxItems = state.MaxItems.ValueInt64()
+	}
+	if !state.PathPrefix.IsNull() && !state.PathPrefix.IsUnknown() {
+		payload.PathPrefix = state.PathPrefix.ValueString()
 	}
 
-	var allRoles []AWSIAMRoleTFSDK
-	marker := ""
-
-	for {
-		payload := awsIAMRolesRequest{
-			KmsID:  state.KmsID.ValueString(),
-			Marker: marker,
-		}
-		if maxItems > 0 {
-			remaining := maxItems - int64(len(allRoles))
-			payload.MaxItems = remaining
-		}
-		if !state.PathPrefix.IsNull() && !state.PathPrefix.IsUnknown() {
-			payload.PathPrefix = state.PathPrefix.ValueString()
-		}
-
-		payloadJSON, err := json.Marshal(payload)
-		if err != nil {
-			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
-			resp.Diagnostics.AddError("Error building request for AWS IAM roles", err.Error())
-			return
-		}
-
-		response, err := d.client.PostDataV2(ctx, id, urlAWSIAMRoles, payloadJSON)
-		if err != nil {
-			d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
-			resp.Diagnostics.AddError("Error reading AWS IAM roles from CipherTrust Manager", err.Error())
-			return
-		}
-
-		for _, r := range gjson.Get(response, "Roles").Array() {
-			allRoles = append(allRoles, AWSIAMRoleTFSDK{
-				Arn:                      types.StringValue(r.Get("Arn").String()),
-				AssumeRolePolicyDocument: types.StringValue(r.Get("AssumeRolePolicyDocument").String()),
-				CreateDate:               types.StringValue(r.Get("CreateDate").String()),
-				Description:              types.StringValue(r.Get("Description").String()),
-				MaxSessionDuration:       types.Int64Value(r.Get("MaxSessionDuration").Int()),
-				Path:                     types.StringValue(r.Get("Path").String()),
-				RoleID:                   types.StringValue(r.Get("RoleId").String()),
-				RoleName:                 types.StringValue(r.Get("RoleName").String()),
-			})
-			if maxItems > 0 && int64(len(allRoles)) >= maxItems {
-				break
-			}
-		}
-
-		isTruncated := gjson.Get(response, "IsTruncated").Bool()
-		nextMarker := gjson.Get(response, "Marker").String()
-
-		if !isTruncated || nextMarker == "" {
-			break
-		}
-		if maxItems > 0 && int64(len(allRoles)) >= maxItems {
-			break
-		}
-		marker = nextMarker
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError("Error building request for AWS IAM roles", err.Error())
+		return
 	}
 
-	state.Roles = allRoles
+	response, err := d.client.PostDataV2(ctx, id, urlAWSIAMRoles, payloadJSON)
+	if err != nil {
+		d.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [data_source_aws_iam_roles_list.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError("Error reading AWS IAM roles from CipherTrust Manager", err.Error())
+		return
+	}
+
+	var roles []AWSIAMRoleTFSDK
+	for _, r := range gjson.Get(response, "Roles").Array() {
+		roles = append(roles, AWSIAMRoleTFSDK{
+			Arn:                      types.StringValue(r.Get("Arn").String()),
+			AssumeRolePolicyDocument: types.StringValue(r.Get("AssumeRolePolicyDocument").String()),
+			CreateDate:               types.StringValue(r.Get("CreateDate").String()),
+			Description:              types.StringValue(r.Get("Description").String()),
+			MaxSessionDuration:       types.Int64Value(r.Get("MaxSessionDuration").Int()),
+			Path:                     types.StringValue(r.Get("Path").String()),
+			RoleID:                   types.StringValue(r.Get("RoleId").String()),
+			RoleName:                 types.StringValue(r.Get("RoleName").String()),
+		})
+	}
+	state.IsTruncated = types.BoolValue(gjson.Get(response, "IsTruncated").Bool())
+	state.NextMarker = types.StringValue(gjson.Get(response, "Marker").String())
+	state.Roles = roles
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

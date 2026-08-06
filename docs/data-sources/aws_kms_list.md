@@ -3,33 +3,28 @@
 page_title: "ciphertrust_aws_kms_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of CipherTrust Manager AWS KMS resources.
-  Give a filter of 'limit=-1' to list all KMS resources that match the filter. Default is 10 matches.
+  Use this data source to retrieve a list of AWS KMS resources. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS KMS resources (such as name, account_id, or status). Set limit = "-1" to return all matching keys.
 ---
 
 # ciphertrust_aws_kms_list (Data Source)
 
-Use this data source to retrieve a list of CipherTrust Manager AWS KMS resources.
-
-Give a filter of 'limit=-1' to list all KMS resources that match the filter. Default is 10 matches.
+Use this data source to retrieve a list of AWS KMS resources. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS KMS resources (such as `name`, `account_id`, or `status`). Set `limit = "-1"` to return all matching keys.
 
 ## Example Usage
 
 ```terraform
-# List all AWS KMS resources (up to default limit of 10)
-data "ciphertrust_aws_kms_list" "all_kms" {}
-
-# List AWS KMS resources matching a name
-data "ciphertrust_aws_kms_list" "kms_by_name" {
+# Sort KMS resources by last updated, newest first.
+data "ciphertrust_aws_kms_list" "sorted" {
   filters = {
-    name = "my-kms"
+    sort = "-updatedAt"
   }
 }
 
-# List all AWS KMS resources (no limit)
-data "ciphertrust_aws_kms_list" "all_kms_no_limit" {
+# List KMS resources for a specific account and cloud partition.
+data "ciphertrust_aws_kms_list" "by_account_and_cloud" {
   filters = {
-    limit = "-1"
+    account_id = "123456789012"
+    cloud_name = "aws"
   }
 }
 ```
@@ -39,19 +34,32 @@ data "ciphertrust_aws_kms_list" "all_kms_no_limit" {
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager AWS KMS resources.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS KMS resources.
+
+> **Note:** Although some filters represent integers, all filter values must be specified as strings. For example, use `"-1"` rather than `-1`.
+
+| filter      | type    | description |
+|-------------|---------|-------------|
+| skip        | integer | Index of the first result to return (default: 0). |
+| limit       | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort        | string  | Fields to sort by. Valid sort fields are `createdAt`, `synced_at`, and `updatedAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| id          | string  | Filter by KMS ID. |
+| name        | string  | Filter by KMS name. |
+| account_id  | string  | Filter by AWS account ID. |
+| cloud_name  | string  | Filter by cloud name. Valid values are `aws`, `aws-us-gov`, `aws-cn`, and `aws-eusc`. |
+| status      | string  | Filter by KMS status. |
 
 ### Read-Only
 
 - `kms` (Attributes List) (see [below for nested schema](#nestedatt--kms))
-- `matched` (Number) The number of KMS resources which matched the filters.
+- `matched` (Number) The total number of records matching the given filters.
 
 <a id="nestedatt--kms"></a>
 ### Nested Schema for `kms`
 
 Read-Only:
 
-- `account` (String) The account which owns this resource.
+- `account` (String) The account that owns this resource.
 - `account_id` (String) ID of the AWS account.
 - `acls` (Attributes Set) List of ACLs that have been added to the KMS. (see [below for nested schema](#nestedatt--kms--acls))
 - `application` (String) The application this resource belongs to.

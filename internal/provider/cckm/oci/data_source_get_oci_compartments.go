@@ -9,11 +9,9 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -56,11 +54,6 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager OCI connection name or ID.",
-			},
-			"limit": schema.Int64Attribute{
-				Optional:    true,
-				Description: "Number of records to return in a paginated 'List' call. It might not return the exact number as the first page might return one more than provided limit because of the inclusion of the root compartment (tenancy).",
-				Validators:  []validator.Int64{int64validator.AtLeast(1)},
 			},
 			"compartments": schema.ListNestedAttribute{
 				Description: "A list of compartments available to the connection.",
@@ -128,9 +121,8 @@ func (d *dataSourceGetOCICompartments) Schema(_ context.Context, _ datasource.Sc
 	}
 }
 
-// Read retrieves OCI compartments available to the connection by calling the CM
-// get-compartments API. Automatically paginates until all results are returned
-// (or the optional limit is reached).
+// Read retrieves all OCI compartments available to the connection,
+// automatically paginating until all results are collected.
 func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_compartments.go -> Read][" + id + "]")
@@ -141,42 +133,26 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	connection := state.Connection.ValueString()
+
 	payload := models.GetOCICompartmentsPayloadJSON{
-		Connection: connection,
-	}
-	limit := state.Limit.ValueInt64()
-	if limit != 0 {
-		payload.Limit = &limit
+		Connection: state.Connection.ValueString(),
 	}
 
 	var data []models.GetOCICompartmentJSON
-	compartments := d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if compartments != nil {
-		data = append(data, compartments.Data...)
-		nextPage := compartments.NextPage
-		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-			payload.NextPage = &nextPage
-			compartments = d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			if compartments == nil {
-				break
-			}
-			data = append(data, compartments.Data...)
-			nextPage = compartments.NextPage
+	for {
+		page := d.fetchCompartments(ctx, id, payload, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-	}
-
-	// Provider-side enforcement: the OCI API may ignore the per-request limit and
-	// return all compartments in one page. Truncate here so callers always receive
-	// at most limit results.
-	if limit > 0 && int64(len(data)) > limit {
-		data = data[:limit]
+		if page == nil {
+			break
+		}
+		data = append(data, page.Data...)
+		if page.NextPage == "" {
+			break
+		}
+		np := page.NextPage
+		payload.NextPage = &np
 	}
 
 	for _, compartment := range data {
