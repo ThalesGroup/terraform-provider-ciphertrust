@@ -189,5 +189,5 @@ the resource can be removed.
 
 **Workaround:** Before destroying, ensure all attributes in your
 configuration have valid values, even if they differ from the actual
-resource state. This applies broadly across Terraform providers that
-define attribute validators.
+resource state. This is common across Terraform providers that define
+attribute validators, so it's worth keeping in mind generally.
