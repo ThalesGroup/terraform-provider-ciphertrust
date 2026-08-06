@@ -10,8 +10,11 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
@@ -27,7 +30,7 @@ const keysListPageSize = 10
 // key across all pages. userFilters are merged with the pagination params on
 // every request so caller-supplied filters (e.g. name=foo) are preserved.
 func fetchAllKeys(ctx context.Context, client *common.Client, uuid string, userFilters url.Values) ([]map[string]any, error) {
-	var allKeys []map[string]any
+	allKeys := []map[string]any{} // non-nil so zero-match returns [] not null
 	skip := 0
 	for {
 		filters := url.Values{}
@@ -91,7 +94,20 @@ func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, r
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "Optional filters passed as query parameters to the CM keys list API, e.g. \"name\", \"algorithm\", \"id\", \"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"version\", or \"state\". The '?' and '*' wildcard characters may be used in \"name\". Note: \"skip\" and \"limit\" cannot be set here — the data source always paginates internally starting at skip=0 in pages of 10 to retrieve the full result set.",
+				Description: "Optional filters passed as query parameters to the CM keys list API. " +
+					"Supported keys: \"name\" (supports '?' and '*' wildcards), \"algorithm\", \"id\", " +
+					"\"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"parameterSet\", \"version\", " +
+					"\"uri\", \"state\", \"fields\", \"metaContains\", \"objectType\". " +
+					"\"skip\" and \"limit\" are intentionally excluded: this data source always " +
+					"paginates internally (skip=0, page size 10) to return the complete result set — " +
+					"user-supplied values would be silently overridden and could cause incomplete results.",
+				Validators: []validator.Map{
+					mapvalidator.KeysAre(stringvalidator.OneOf(
+						"name", "algorithm", "id", "uuid", "muid", "keyId",
+						"size", "curveid", "parameterSet", "version",
+						"uri", "state", "fields", "metaContains", "objectType",
+					)),
+				},
 			},
 			"keys": schema.ListNestedAttribute{
 				Computed:    true,
@@ -223,6 +239,9 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
+	// Initialize to a non-nil empty slice so a zero-match result serializes as []
+	// rather than null, keeping length() and for_each usable on the output.
+	state.Keys = []CMKeysListTFSDK{}
 	for _, key := range data {
 		keyState := CMKeysListTFSDK{}
 		if key["id"] != nil {
