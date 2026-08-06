@@ -1339,7 +1339,7 @@ func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 		Optional:    true,
 		Computed:    true,
 		ElementType: types.StringType,
-		Description: "Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].",
+		Description: "Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = []. Setting alias on an unlinked key requires CipherTrust Manager 2.23 or later.",
 		Validators: []validator.Set{
 			setvalidator.ValueStringsAre(
 				stringvalidator.RegexMatches(

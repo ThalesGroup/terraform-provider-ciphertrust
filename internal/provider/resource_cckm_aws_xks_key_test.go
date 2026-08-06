@@ -91,7 +91,8 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 		}
 		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_max_params" {
 			aws_param = {
-				alias       = [local.alias]
+				# Place holder for alias < invalid in CM < 2.23
+				%s
 				description = "create description"
 			}
 			local_hosted_params = {
@@ -105,15 +106,24 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 			enable_key = %t
 		}`
 
+	// alias on an unlinked key is only stored and returned by CM 2.23 and later.
+	// On older CM the API omits aws_param.Alias from the GET response for unlinked keys.
+	keyAlias := `alias       = [local.alias]`
+	numExpectedAliases := "1"
+	if getCipherTrustVersion() < 223 {
+		keyAlias = ""
+		numExpectedAliases = "0"
+	}
+
 	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
-	createXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, false, true, 8, true)
+	createXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, false, keyAlias, true, 8, true)
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr + createXksKeyConfigStr
 
-	updateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, false, 9, true)
+	updateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, keyAlias, false, 9, true)
 	validUpdateConfigStr := awsConnectionResource + createKeyStoreConfigStr + updateXksKeyConfigStr
 
 	// Unable to disable a key not in a linked state
-	invalidUpdateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, false, 9, false)
+	invalidUpdateXksKeyConfigStr := fmt.Sprintf(xksKeyConfig, cmKeyName, true, keyAlias, false, 9, false)
 	invalidUpdateConfigStr := awsConnectionResource + createKeyStoreConfigStr + invalidUpdateXksKeyConfigStr
 
 	keyResourceMaxParams := "ciphertrust_aws_xks_key.unlinked_cm_source_max_params"
@@ -127,7 +137,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				Config: createConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "true"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", numExpectedAliases),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "8"),
@@ -155,7 +165,7 @@ func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 				Config: validUpdateConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "blocked", "false"),
-					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.alias.#", numExpectedAliases),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.key_state", "Enabled"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "aws_param.description", "create description"),
 					resource.TestCheckResourceAttr(keyResourceMaxParams, "schedule_for_deletion_days", "9"),

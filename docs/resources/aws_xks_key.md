@@ -160,7 +160,7 @@ Optional:
 
 Optional:
 
-- `alias` (Set of String) Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].
+- `alias` (Set of String) Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = []. Setting alias on an unlinked key requires CipherTrust Manager 2.23 or later.
 - `description` (String) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.
 - `tags` (Map of String) Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.
 
