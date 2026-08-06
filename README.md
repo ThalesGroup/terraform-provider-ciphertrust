@@ -174,21 +174,20 @@ provider "ciphertrust" {}
 
 ## Important Limitations
 
-### Terraform Validates Configuration Before Every Apply, Including Destroy
+### Validators Can Block Destroy Operations
 
-This is a limitation of Terraform's plugin framework, not of this provider:
-Terraform validates the values in your `.tf` configuration on every run —
-including `terraform destroy` — before it ever talks to the provider. A
-resource block with an invalid value will fail validation and block the
-destroy, even though destroy doesn't otherwise care what the values are.
+Terraform validates the values in your `.tf` configuration on every run,
+including `terraform destroy`, before that configuration is passed along.
+If your configuration contains invalid values, destroy will fail before
+the resource can be removed.
 
 **Example:**
 - Created resource with: `max_connections = 100`
 - Edited config to: `max_connections = "invalid"`
-- Run `terraform destroy` → Terraform's validation fails before the provider is invoked
+- Run `terraform destroy` → validation fails
 - Must revert config to valid value, then destroy works
 
 **Workaround:** Before destroying, ensure all attributes in your
 configuration have valid values, even if they differ from the actual
-resource state. This is standard Terraform behavior and applies to any
-provider that defines attribute validators, not just this one.
+resource state. This applies broadly across Terraform providers that
+define attribute validators.
