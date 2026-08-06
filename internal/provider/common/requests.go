@@ -191,6 +191,76 @@ func (c *Client) GetAllPaged(ctx context.Context, uuid string, endpoint string) 
 	return string(out), nil
 }
 
+// GetAllPagedWithLimit is like GetAllPaged but honors caller-supplied skip/limit
+// bounds on the returned result set, instead of always walking every page.
+// When limit <= 0 the caller has not requested a bound: this behaves exactly
+// like GetAllPaged, walking every page from the beginning and returning the
+// complete result set (preserving existing behavior for callers/configs that
+// don't set a limit). When limit > 0, paging starts at the given skip offset
+// and stops as soon as at least limit items have been accumulated, trimming
+// the result to exactly limit items -- avoiding pulling the full result set
+// page by page on large deployments.
+// The second return value is the server-reported "total" (from the last page
+// that included one), or -1 if no page ever reported a total.
+func (c *Client) GetAllPagedWithLimit(ctx context.Context, uuid string, endpoint string, skip, limit int64) (string, int64, error) {
+	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> GetAllPagedWithLimit][Request ID: "+uuid+
+		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")
+
+	resources := []json.RawMessage{}
+	total := int64(-1)
+	cur := skip
+	if cur < 0 {
+		cur = 0
+	}
+	for i := 0; i < pagedListMaxIterations; i++ {
+		pagedEndpoint := appendPagination(endpoint, int(cur), cteListPageSize)
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, pagedEndpoint), nil)
+		if err != nil {
+			tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllPagedWithLimit]["+uuid+"]")
+			return "", total, err
+		}
+
+		body, err := c.doRequest(ctx, uuid, req, nil)
+		if err != nil {
+			tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllPagedWithLimit]["+uuid+"]")
+			return "", total, err
+		}
+
+		bodyStr := string(body)
+		if t := gjson.Get(bodyStr, "total"); t.Exists() {
+			total = t.Int()
+		}
+
+		page := gjson.Get(bodyStr, "resources").Array()
+		if len(page) == 0 {
+			break
+		}
+		for _, r := range page {
+			resources = append(resources, json.RawMessage(r.Raw))
+		}
+		cur += int64(len(page))
+
+		if limit > 0 && int64(len(resources)) >= limit {
+			break
+		}
+		if total >= 0 && cur >= total {
+			break
+		}
+	}
+
+	if limit > 0 && int64(len(resources)) > limit {
+		resources = resources[:limit]
+	}
+
+	out, err := json.Marshal(resources)
+	if err != nil {
+		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllPagedWithLimit]["+uuid+"]")
+		return "", total, err
+	}
+	tflog.Trace(ctx, MSG_METHOD_END+"[requests.go -> GetAllPagedWithLimit]["+uuid+"]")
+	return string(out), total, nil
+}
+
 func (c *Client) ListWithFilters(ctx context.Context, uuid string, endpoint string, filters url.Values) (string, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[requests.go -> ListWithFilters][Request ID: "+uuid+
 		"****** URL: "+fmt.Sprintf("%s/%s", c.CipherTrustURL, endpoint)+"]")

@@ -28,6 +28,8 @@ type dataSourceCTEResourceSets struct {
 }
 
 type CTEResourceSetsDataSourceModel struct {
+	Limit       types.Int64                `tfsdk:"limit"`
+	Skip        types.Int64                `tfsdk:"skip"`
 	ResourceSet []CTEResourceSetsListTFSDK `tfsdk:"resource_sets"`
 }
 
@@ -38,6 +40,14 @@ func (d *dataSourceCTEResourceSets) Metadata(_ context.Context, req datasource.M
 func (d *dataSourceCTEResourceSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of resource sets to return. If unset, all resource sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of resource sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"resource_sets": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -103,8 +113,10 @@ func (d *dataSourceCTEResourceSets) Read(ctx context.Context, req datasource.Rea
 	id := uuid.New().String()
 	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_resource_sets.go -> Read][" + id + "]")
 	var state CTEResourceSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_RESOURCE_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_RESOURCE_SET, skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_resource_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -113,6 +125,7 @@ func (d *dataSourceCTEResourceSets) Read(ctx context.Context, req datasource.Rea
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE resource sets", total, limitVal)
 
 	resourceSets := []CTEResourceSetsListJSON{}
 

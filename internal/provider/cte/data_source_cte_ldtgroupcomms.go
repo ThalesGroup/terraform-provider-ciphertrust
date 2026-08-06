@@ -26,6 +26,8 @@ type dataSourceLDTGroupCommSvc struct {
 
 type CTELDTGroupCommSvcDataSourceModel struct {
 	GroupName     types.String               `tfsdk:"group_name"`
+	Limit         types.Int64                `tfsdk:"limit"`
+	Skip          types.Int64                `tfsdk:"skip"`
 	LDTCommGroups []LDTGroupCommSvcListTFSDK `tfsdk:"ldt_comm_groups"`
 }
 
@@ -38,6 +40,14 @@ func (d *dataSourceLDTGroupCommSvc) Schema(_ context.Context, _ datasource.Schem
 		Attributes: map[string]schema.Attribute{
 			"group_name": schema.StringAttribute{
 				Optional: true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of LDT communication groups to return. If unset, all matching groups are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of LDT communication groups to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"ldt_comm_groups": schema.ListNestedAttribute{
 				Computed: true,
@@ -87,7 +97,8 @@ func (d *dataSourceLDTGroupCommSvc) Read(ctx context.Context, req datasource.Rea
 	req.Config.Get(ctx, &state)
 	d.client.Log.Info("PrathamMaini =====> " + state.GroupName.ValueString())
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_LDT_GROUP_COMM_SVC+"?name="+state.GroupName.ValueString())
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_LDT_GROUP_COMM_SVC+"?name="+state.GroupName.ValueString(), skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_ldtgruoupcomms.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -96,6 +107,7 @@ func (d *dataSourceLDTGroupCommSvc) Read(ctx context.Context, req datasource.Rea
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE LDT communication groups", total, limitVal)
 
 	ldt_comm_groups := []LDTGroupCommSvcListJSON{}
 

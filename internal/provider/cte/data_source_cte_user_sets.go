@@ -28,6 +28,8 @@ type dataSourceCTEUserSets struct {
 }
 
 type CTEUserSetsDataSourceModel struct {
+	Limit   types.Int64            `tfsdk:"limit"`
+	Skip    types.Int64            `tfsdk:"skip"`
 	UserSet []CTEUserSetsListTFSDK `tfsdk:"user_sets"`
 }
 
@@ -38,6 +40,14 @@ func (d *dataSourceCTEUserSets) Metadata(_ context.Context, req datasource.Metad
 func (d *dataSourceCTEUserSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of user sets to return. If unset, all user sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of user sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"user_sets": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -103,8 +113,10 @@ func (d *dataSourceCTEUserSets) Read(ctx context.Context, req datasource.ReadReq
 	id := uuid.New().String()
 	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_user_sets.go -> Read][" + id + "]")
 	var state CTEUserSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_USER_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_USER_SET, skipVal, limitVal)
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_user_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -113,6 +125,7 @@ func (d *dataSourceCTEUserSets) Read(ctx context.Context, req datasource.ReadReq
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE user sets", total, limitVal)
 
 	usersets := []CTEUserSetsListJSON{}
 
