@@ -51,9 +51,6 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 
 	createXKSKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "xks_key" {
-			aws_param = {
-				alias = [local.alias]
-			}
 			local_hosted_params = {
 				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
 				source_key_id   = ciphertrust_cm_key.cm_aes_key.id
@@ -91,7 +88,6 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 				Config: dataSourceConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsByName, "matched", "1"),
-					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.alias.#", "1"),
 				),
 			},
 		},

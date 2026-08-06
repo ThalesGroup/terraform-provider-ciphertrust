@@ -93,10 +93,10 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 				Description: "The list of OCI key versions stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-					"account": schema.StringAttribute{
-						Computed:    true,
-						Description: "The account that owns this resource.",
-					},
+						"account": schema.StringAttribute{
+							Computed:    true,
+							Description: "The account that owns this resource.",
+						},
 						"created_at": schema.StringAttribute{
 							Computed:    true,
 							Description: "Date/time the key version was created in CipherTrust Manager.",
@@ -109,10 +109,10 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 							Computed:    true,
 							Description: "CipherTrust Manager origin of the key version's material.",
 						},
-					"refreshed_at": schema.StringAttribute{
-						Computed:    true,
-						Description: "Date/time the key version was refreshed.",
-					},
+						"refreshed_at": schema.StringAttribute{
+							Computed:    true,
+							Description: "Date/time the key version was refreshed.",
+						},
 						"source_key_id": schema.StringAttribute{
 							Computed:    true,
 							Description: "CipherTrust Manager key ID used to create the version.",
@@ -157,18 +157,18 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 									Computed:    true,
 									Description: "CipherTrust Manager origin of the key version's material.",
 								},
-							"public_key": schema.StringAttribute{
-								Computed:    true,
-								Description: "The key version's public key.",
-							},
+								"public_key": schema.StringAttribute{
+									Computed:    true,
+									Description: "The key version's public key.",
+								},
 								"replication_id": schema.StringAttribute{
 									Computed:    true,
 									Description: "The replication ID associated with a key version operation.",
 								},
-							"restored_from_key_version_id": schema.StringAttribute{
-								Computed:    true,
-								Description: "The OCID of the key version from which this key version was restored.",
-							},
+								"restored_from_key_version_id": schema.StringAttribute{
+									Computed:    true,
+									Description: "The OCID of the key version from which this key version was restored.",
+								},
 								"time_created": schema.StringAttribute{
 									Computed:    true,
 									Description: "The time the key version was created.",
@@ -181,15 +181,15 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 									Computed:    true,
 									Description: "The vault's OCID.",
 								},
-							"version_id": schema.StringAttribute{
-								Computed:    true,
-								Description: "The key version's OCID.",
-							},
+								"version_id": schema.StringAttribute{
+									Computed:    true,
+									Description: "The key version's OCID.",
+								},
 							},
 						},
-					"byok_key_version_params": schema.SingleNestedAttribute{
-						Computed:    true,
-						Description: "Attributes for BYOK key versions.",
+						"byok_key_version_params": schema.SingleNestedAttribute{
+							Computed:    true,
+							Description: "Attributes for BYOK key versions.",
 							Attributes: map[string]schema.Attribute{
 								"oci_key_id": schema.StringAttribute{
 									Computed:    true,

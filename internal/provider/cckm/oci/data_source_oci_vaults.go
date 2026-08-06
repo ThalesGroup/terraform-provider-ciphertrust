@@ -100,13 +100,13 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 				Description: "The list of OCI vaults stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-					"account": schema.StringAttribute{
-						Computed:    true,
-						Description: "The account that owns this resource.",
-					},
-					"acls": schema.SetNestedAttribute{
-						Computed:    true,
-						Description: "ACLs associated with the vault.",
+						"account": schema.StringAttribute{
+							Computed:    true,
+							Description: "The account that owns this resource.",
+						},
+						"acls": schema.SetNestedAttribute{
+							Computed:    true,
+							Description: "ACLs associated with the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"actions": schema.SetAttribute{
@@ -137,10 +137,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "CipherTrust Manager cloud name.",
 						},
-					"compartment_name": schema.StringAttribute{
-						Computed:    true,
-						Description: "The compartment's name.",
-					},
+						"compartment_name": schema.StringAttribute{
+							Computed:    true,
+							Description: "The compartment's name.",
+						},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
 							Description: "The compartment's OCID.",
@@ -162,15 +162,15 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Description: "The defined tags of the vault.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
-								"tag": schema.StringAttribute{
-									Computed:    true,
-									Description: "The tag's namespace.",
-								},
-								"values": schema.MapAttribute{
-									Computed:    true,
-									ElementType: types.StringType,
-									Description: "The key:value pairs associated with the tag.",
-								},
+									"tag": schema.StringAttribute{
+										Computed:    true,
+										Description: "The tag's namespace.",
+									},
+									"values": schema.MapAttribute{
+										Computed:    true,
+										ElementType: types.StringType,
+										Description: "The key:value pairs associated with the tag.",
+									},
 								},
 							},
 						},
@@ -183,10 +183,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "The vault's CipherTrust Manager resource ID.",
 						},
-					"is_primary": schema.BoolAttribute{
-						Computed:    true,
-						Description: "Whether the vault is a primary vault (as opposed to a replica vault).",
-					},
+						"is_primary": schema.BoolAttribute{
+							Computed:    true,
+							Description: "Whether the vault is a primary vault (as opposed to a replica vault).",
+						},
 						"lifecycle_state": schema.StringAttribute{
 							Computed:    true,
 							Description: "The vault's current lifecycle state.",
@@ -211,10 +211,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "The replication ID associated with a vault operation.",
 						},
-					"restored_from_vault_id": schema.StringAttribute{
-						Computed:    true,
-						Description: "The OCID of the vault from which this vault was restored.",
-					},
+						"restored_from_vault_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "The OCID of the vault from which this vault was restored.",
+						},
 						"tenancy": schema.StringAttribute{
 							Computed:    true,
 							Description: "The tenancy name.",
@@ -239,10 +239,10 @@ func (d *dataSourceOCIVault) Schema(_ context.Context, _ datasource.SchemaReques
 							Computed:    true,
 							Description: "CipherTrust Manager's unique identifier for the resource.",
 						},
-					"wrappingkey_id": schema.StringAttribute{
-						Computed:    true,
-						Description: "The vault's wrapping key OCID.",
-					},
+						"wrappingkey_id": schema.StringAttribute{
+							Computed:    true,
+							Description: "The vault's wrapping key OCID.",
+						},
 					},
 				},
 			},

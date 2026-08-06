@@ -107,10 +107,10 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 				Description: "The list of OCI keys stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-					"account": schema.StringAttribute{
-						Computed:    true,
-						Description: "The account that owns this resource.",
-					},
+						"account": schema.StringAttribute{
+							Computed:    true,
+							Description: "The account that owns this resource.",
+						},
 						"auto_rotate": schema.BoolAttribute{
 							Computed:    true,
 							Description: "Whether the key is enabled for auto-rotation.",
@@ -139,11 +139,11 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 							Computed:    true,
 							Description: "CipherTrust Manager origin of the key's material.",
 						},
-					"labels": schema.MapAttribute{
-						ElementType: types.StringType,
-						Computed:    true,
-						Description: "A map of key/value pairs associated with the key.",
-					},
+						"labels": schema.MapAttribute{
+							ElementType: types.StringType,
+							Computed:    true,
+							Description: "A map of key/value pairs associated with the key.",
+						},
 						"oci_key_params": schema.SingleNestedAttribute{
 							Computed:    true,
 							Description: "OCI key attributes.",
@@ -256,26 +256,26 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 							Computed:    true,
 							Description: "The vault's OCID.",
 						},
-					"external_key_params": schema.SingleNestedAttribute{
-						Computed:    true,
-						Description: "Attributes for BYOK (Bring Your Own Key) keys.",
-						Attributes: map[string]schema.Attribute{
-							"blocked": schema.BoolAttribute{
-								Computed:    true,
-								Description: "Whether the key is blocked.",
-							},
-							"linked_state": schema.BoolAttribute{
-								Computed:    true,
-								Description: "Whether the key is in a linked state.",
-							},
+						"external_key_params": schema.SingleNestedAttribute{
+							Computed:    true,
+							Description: "Attributes for BYOK (Bring Your Own Key) keys.",
+							Attributes: map[string]schema.Attribute{
+								"blocked": schema.BoolAttribute{
+									Computed:    true,
+									Description: "Whether the key is blocked.",
+								},
+								"linked_state": schema.BoolAttribute{
+									Computed:    true,
+									Description: "Whether the key is in a linked state.",
+								},
 								"name": schema.StringAttribute{
 									Computed:    true,
 									Description: "The name of the key.",
 								},
-							"policy": schema.StringAttribute{
-								Computed:    true,
-								Description: "The key's policy.",
-							},
+								"policy": schema.StringAttribute{
+									Computed:    true,
+									Description: "The key's policy.",
+								},
 								"state": schema.StringAttribute{
 									Computed:    true,
 									Description: "The key's current state.",
@@ -307,10 +307,10 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 										Computed:    true,
 										Description: "Source of the key used to create the version.",
 									},
-								"version_id": schema.StringAttribute{
-									Computed:    true,
-									Description: "The key version's OCID.",
-								},
+									"version_id": schema.StringAttribute{
+										Computed:    true,
+										Description: "The key version's OCID.",
+									},
 								},
 							},
 						},
