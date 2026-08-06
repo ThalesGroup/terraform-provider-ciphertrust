@@ -38,10 +38,8 @@ func TestCckmOCIAcl(t *testing.T) {
 		}
 		data "ciphertrust_get_oci_compartments" "compartments" {
 			connection_id = ciphertrust_oci_connection.connection.id
-			limit = 1
 		}
 		data "ciphertrust_get_oci_vaults" "vaults" {
-			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.id
 			compartment_id = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
 			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
