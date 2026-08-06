@@ -89,3 +89,29 @@ data "ciphertrust_cm_keys_list" "probe" {
 		},
 	})
 }
+
+// Test_CM_KeysList_SkipLimitSinglePage verifies that setting limit=2 returns
+// exactly 2 keys (single-page mode, not auto-paginated) even when more keys
+// exist on CM. Confirms the skip/limit branch was added correctly.
+func Test_CM_KeysList_SkipLimitSinglePage(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+data "ciphertrust_cm_keys_list" "probe" {
+  filters = { "limit" = "2" }
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Exactly 2 keys — single-page mode respected the limit.
+					resource.TestCheckResourceAttr("data.ciphertrust_cm_keys_list.probe", "keys.#", "2"),
+					// Non-null: both entries exist.
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_keys_list.probe", "keys.0.id"),
+					resource.TestCheckResourceAttrSet("data.ciphertrust_cm_keys_list.probe", "keys.1.id"),
+				),
+			},
+		},
+	})
+}

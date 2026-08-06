@@ -89,7 +89,9 @@ func (d *dataSourceKeys) Metadata(_ context.Context, req datasource.MetadataRequ
 
 func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.",
+		Description: "Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). " +
+			"When neither \"skip\" nor \"limit\" is set, the data source paginates automatically (pages of 10) and returns every matching key. " +
+			"When either \"skip\" or \"limit\" is set, a single page is returned exactly as CM responds — useful for sampling or offset-based access.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -97,15 +99,15 @@ func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, r
 				Description: "Optional filters passed as query parameters to the CM keys list API. " +
 					"Supported keys: \"name\" (supports '?' and '*' wildcards), \"algorithm\", \"id\", " +
 					"\"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"parameterSet\", \"version\", " +
-					"\"uri\", \"state\", \"fields\", \"metaContains\", \"objectType\". " +
-					"\"skip\" and \"limit\" are intentionally excluded: this data source always " +
-					"paginates internally (skip=0, page size 10) to return the complete result set — " +
-					"user-supplied values would be silently overridden and could cause incomplete results.",
+					"\"uri\", \"state\", \"fields\", \"metaContains\", \"objectType\", \"skip\", \"limit\". " +
+					"If \"skip\" or \"limit\" is set, only a single page is fetched as specified. " +
+					"Otherwise the data source paginates internally (skip=0, pages of 10) and returns the complete result set.",
 				Validators: []validator.Map{
 					mapvalidator.KeysAre(stringvalidator.OneOf(
 						"name", "algorithm", "id", "uuid", "muid", "keyId",
 						"size", "curveid", "parameterSet", "version",
 						"uri", "state", "fields", "metaContains", "objectType",
+						"skip", "limit",
 					)),
 				},
 			},
@@ -229,14 +231,34 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		userFilters.Set(k, v.(types.String).ValueString())
 	}
 
-	data, err := fetchAllKeys(ctx, d.client, id, userFilters)
-	if err != nil {
-		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Unable to read keys from CM",
-			err.Error(),
-		)
-		return
+	// Branch on skip/limit: single-page when the caller controls pagination,
+	// auto-paginate when they don't (mirrors cm_groups_list behaviour).
+	var data []map[string]any
+	if userFilters.Get("skip") != "" || userFilters.Get("limit") != "" {
+		body, err := d.client.ListWithFilters(ctx, id, common.URL_KEY_MANAGEMENT, userFilters)
+		if err != nil {
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read single-page][" + id + "]")
+			resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+			return
+		}
+		raw := gjson.Get(body, "resources").Raw
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+				return
+			}
+		}
+		if data == nil {
+			data = []map[string]any{}
+		}
+	} else {
+		var err error
+		data, err = fetchAllKeys(ctx, d.client, id, userFilters)
+		if err != nil {
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read][" + id + "]")
+			resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+			return
+		}
 	}
 
 	// Initialize to a non-nil empty slice so a zero-match result serializes as []
