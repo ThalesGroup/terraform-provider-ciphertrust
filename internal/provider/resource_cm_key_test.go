@@ -367,6 +367,51 @@ resource "ciphertrust_cm_key" "k" {
 	})
 }
 
+// Test_CM_AccCMKey_labelsUpdate verifies that changing labels through a genuine
+// Terraform config update (not an out-of-band API call) is applied correctly:
+// an existing label's value can change, and a new label can be added, in the
+// same apply, exercising the real Update() PATCH path.
+func Test_CM_AccCMKey_labelsUpdate(t *testing.T) {
+	RequireCM(t)
+	keyName := "tf-acc-key-labels-update-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  labels    = { "env" = "test" }
+}
+`, keyName),
+				Check: checkStep(t, "labels update: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.env", "test"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.%", "1"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+  labels    = { "env" = "prod", "team" = "security" }
+}
+`, keyName),
+				Check: checkStep(t, "labels update: apply",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.env", "prod"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.team", "security"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "labels.%", "2"),
+				),
+			},
+		},
+	})
+}
+
 func Test_CM_AccCMKey_aliasDrift(t *testing.T) {
 	RequireCM(t)
 	client, ok := createCMClient()
