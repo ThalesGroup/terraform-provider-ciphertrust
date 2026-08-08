@@ -1152,9 +1152,9 @@ func TestCckmAWSKeyMaterialMRRepairPendingImportAndRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	//if getCipherTrustVersion() < 224 {
-	//	t.Skip("Skipping on CipherTrust version < 224")
-	//}
+	if getCipherTrustVersion() < 224 {
+		t.Skip("Skipping on CipherTrust version < 224")
+	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
 		t.Skip()
@@ -2142,7 +2142,6 @@ func callByokImportMaterialOutOfBand(keyID, sourceKeyID, sourceKeyTier, importTy
 
 func refreshKeyAndWait(testName string, keyID string, sourceKeyIDs []string) {
 	logTestStep(testName, fmt.Sprintf("refreshKeyAndWait: keyID: %s", keyID))
-	fmt.Printf("refreshKeyAndWait: keyID: %s sourceKeyIDs: %v\n", keyID, sourceKeyIDs)
 	client, ok := createCMClient()
 	if !ok {
 		fmt.Println("refreshKeyAndWait: could not create CM client")

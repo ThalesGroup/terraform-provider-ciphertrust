@@ -275,7 +275,7 @@ func fetchCMVersion(ctx context.Context, c *Client) error {
 	response, err := c.GetById(ctx, "", "", URL_SYSTEMINFO)
 	if err != nil {
 		tflog.Error(ctx, "fetchCMVersion -> failed to fetch CM system info: "+err.Error())
-		return fmt.Errorf("failed to fetch CM system info: %w", err)
+		return fmt.Errorf("failed to fetch CM system info: %s", err.Error())
 	}
 	version := gjson.Get(response, "version").String()
 	if version == "" {
@@ -296,8 +296,8 @@ func fetchCMVersion(ctx context.Context, c *Client) error {
 	}
 	v, err := strconv.Atoi(parts[0] + parts[1])
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("fetchCMVersion -> failed to parse CM version %q: %w", version, err))
-		return fmt.Errorf("failed to parse CM version %q: %w", version, err)
+		tflog.Error(ctx, fmt.Sprintf("fetchCMVersion -> failed to parse CM version %q: %s", version, err.Error()))
+		return fmt.Errorf("failed to parse CM version %q: %s", version, err.Error())
 	}
 	c.CMVersion = v
 	c.CMFullVersion = version

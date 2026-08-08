@@ -1351,30 +1351,27 @@ func TestCckmAWSKeyMultiRegionNativeMultiReplica(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create the primary and all three replicas in one apply.
-				// waitForReplicaRegionInAllMRKeys ensures the CM background task has propagated
-				// each new replica region to all existing keys before returning. The primary and
-				// prior replicas should therefore already show the correct replica_keys.# count.
-				// replica3 is the last to be created and is excluded from its own wait, so its
-				// replica_keys.# is checked in Step 2 (RefreshState) rather than here.
+				// replica_keys.# is not checked here for any key because each key's Terraform
+				// state is set during its own Create call, before later replicas are created.
+				// waitForReplicaRegionInAllMRKeys confirms the CM API is up to date, but that
+				// does not update state for already-created resources. All replica_keys.# counts
+				// are verified in Step 2 (RefreshState) after Read is called on every resource.
 				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
 				Config:    awsConnectionResource + createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(primaryResource, "id"),
 					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
-					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.replica_keys.#", "3"),
 					resource.TestCheckResourceAttr(primaryResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
 
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
 					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.key_state", "Enabled"),
 
 					resource.TestCheckResourceAttrSet(replica2Resource, "id"),
 					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
 					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
 					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttr(replica2Resource, "aws_param.key_state", "Enabled"),
