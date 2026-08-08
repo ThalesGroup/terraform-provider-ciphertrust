@@ -596,6 +596,11 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		client.Log = providerLogger
 		resp.DataSourceData = client
 		resp.ResourceData = client
+		if !client.IsCDSPaaS {
+			client.Log.Info(fmt.Sprintf("CipherTrust Manager k170v version %s", client.CMFullVersion))
+		} else {
+			client.Log.Info("CipherTrust Data Security Platform as a Service (CDSPaas)")
+		}
 	} else {
 		client, err := common.NewCMClientBoot(ctx, id, &address, tlsOpts, rest_api_timeout)
 		if err != nil {

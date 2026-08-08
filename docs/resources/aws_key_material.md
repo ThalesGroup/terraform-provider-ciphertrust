@@ -5,7 +5,8 @@ subcategory: ""
 description: |-
   Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.
   This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.
-  Multi-region key support requires CipherTrust Manager 2.23 or later. Single-region key support requires CipherTrust Manager 2.21 or later.
+  CipherTrust Manager version requirements:
+  Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later.Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later.CipherTrust Manager versions earlier than 2.23 are not supported by this resource.
   Key features:
   Import key material into AWS EXTERNAL symmetric keys.Rotate to new key material by adding additional key_material entries.Automatically recover key material that enters an intermediate state due to failed or out-of-band operations.Support multi-region symmetric keys, automatically keeping replica key material synchronized with the primary key.Adopt key material that was created outside Terraform by adding a matching key_material entry.
   Terraform actively reconciles all configured key material with the live CipherTrust Manager rotation history. If configured material enters one of the following states, Terraform automatically attempts recovery during the next apply:
@@ -23,7 +24,11 @@ Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTr
 
 This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.
 
-Multi-region key support requires CipherTrust Manager 2.23 or later. Single-region key support requires CipherTrust Manager 2.21 or later.
+**CipherTrust Manager version requirements:**
+
+* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later.
+* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later.
+* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.
 
 Key features:
 

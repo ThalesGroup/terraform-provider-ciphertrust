@@ -34,3 +34,13 @@ const NotFoundDeleteWarningSummary = "Resource Not Found During Deletion — Rem
 // Placeholders (in order): resource type string, resource ID.
 const NotFoundDeleteWarningDetailFmt = "The %s resource with ID %q was not found (HTTP 404) during deletion. " +
 	"Treating as successfully deleted and removing from Terraform state."
+
+// UnsupportedCMVersion returns a standard error message for features that require
+// a minimum CipherTrust Manager version.
+// feature is the resource or operation name (e.g. "ciphertrust_aws_key_material"),
+// currentVersion is the full version string from Client.CMVersionStr,
+// and minimumVersion is the required minimum version string (e.g. "2.23").
+func UnsupportedCMVersion(feature, currentVersion, minimumVersion string) string {
+	return feature + " requires CipherTrust Manager " + minimumVersion + " or later. " +
+		"The connected CipherTrust Manager is running version " + currentVersion + "."
+}

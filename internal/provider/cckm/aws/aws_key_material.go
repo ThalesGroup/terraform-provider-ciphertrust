@@ -352,7 +352,7 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 	client.Log.Debug(common.MSG_METHOD_START + "[aws_key_material.go -> waitForMaterialStateResolved][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_key_material.go -> waitForMaterialStateResolved][" + id + "]")
 
-	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] enter: field: %s leavingState: %s arrivingState: %s keyID: %s srcKey: %s", stateField, leavingState, arrivingState, keyID, sourceKeyIdentifier))
+	client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] field: %s leavingState: %s arrivingState: %s keyID: %s srcKey: %s", stateField, leavingState, arrivingState, keyID, sourceKeyIdentifier))
 
 	const (
 		maxPolls    = 30

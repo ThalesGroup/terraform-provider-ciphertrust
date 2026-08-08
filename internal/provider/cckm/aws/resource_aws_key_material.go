@@ -90,8 +90,10 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		Description: "Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.\n\n" +
 			"This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.\n\n" +
-			"Multi-region key support requires CipherTrust Manager 2.23 or later. " +
-			"Single-region key support requires CipherTrust Manager 2.21 or later.\n\n" +
+			"**CipherTrust Manager version requirements:**\n\n" +
+			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later.\n" +
+			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later.\n" +
+			"* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.\n\n" +
 			"Key features:\n\n" +
 			"* Import key material into AWS EXTERNAL symmetric keys.\n" +
 			"* Rotate to new key material by adding additional `key_material` entries.\n" +
@@ -213,6 +215,16 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	// Version guard: on CM 2.23, only single-region is supported; MRK requires CM 2.24+.
+	// The < 2.23 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
+	// can inspect the actual key type from the CipherTrust Manager API response.
+	// CMVersion == 0 means version could not be determined at startup - skip version gates.
+	isMRKey := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
+	if r.client.CMVersion > 0 && r.client.CMVersion < 224 && isMRKey {
+		resp.Diagnostics.AddError(common.UnsupportedCMVersion("ciphertrust_aws_key_material for multi-region keys", r.client.CMFullVersion, "2.24"), "")
+		return
+	}
+
 	// Validate that the target AWS key is an EXTERNAL (BYOK) key with SYMMETRIC_DEFAULT encryption.
 	// Only EXTERNAL origin keys support key material import, and only SYMMETRIC_DEFAULT
 	// keys are supported by this resource.
@@ -387,6 +399,18 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 	// Create path: state is null.
 	if req.State.Raw.IsNull() {
+		// CM version gate: ciphertrust_aws_key_material requires CM 2.23+.
+		// This check runs at plan time so the user gets a clear error before any
+		// API calls are made. CMVersion == 0 means version could not be determined
+		// at startup - skip the gate to avoid blocking on version-fetch failure.
+		if r.client != nil && r.client.CMVersion > 0 && r.client.CMVersion < 223 {
+			resp.Diagnostics.AddError(
+				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.23"),
+				"",
+			)
+			return
+		}
+
 		var createPlan AWSKeyMaterialTFSDK
 		resp.Diagnostics.Append(req.Plan.Get(ctx, &createPlan)...)
 		if resp.Diagnostics.HasError() {
@@ -1372,6 +1396,24 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 
 	client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] primaryKeyID: %s sourceKeyID: %s", cmKeyID, srcID))
 
+	// CM < 224: rotate-material ignores source_key_identifier and calls RotateKeyOnDemand
+	// directly without first staging pending material - AWS rejects the call. Use the
+	// CM 2.23 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
+	// material as PENDING_ROTATION, then return false so the outer retry loop re-classifies
+	// and repairKeyMaterialRotations activates it via rotate-material with an empty body.
+	// CM < 224: rotate-material with source_key_identifier is not supported.
+	// CMVersion == 0 means unknown - fall through to the standard path.
+	if client.CMVersion > 0 && client.CMVersion < 224 {
+		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CM %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
+		ImportByokKeyMaterial(ctx, id, client, cmKeyID, srcID, srcTier, validTo, keyMaterialDescription, "NEW_KEY_MATERIAL", diags)
+		if diags.HasError() {
+			return false
+		}
+		waitForRotationHistoryRecord(ctx, id, client, cmKeyID, srcID, srcTier, diags)
+		// Return false (no error) - the outer loop re-classifies, sees PENDING_ROTATION,
+		// and calls repairKeyMaterialRotations to complete activation.
+		return false
+	}
 	rotPayload := RotateMaterialPayloadJSON{
 		SourceKeyID:            srcID,
 		SourceKeyTier:          srcTier,

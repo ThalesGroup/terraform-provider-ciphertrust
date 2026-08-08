@@ -1019,10 +1019,7 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				kms_id = ciphertrust_aws_kms.kms.id
 				region = ciphertrust_aws_kms.kms.regions[0]
 			}
-			resource "ciphertrust_aws_key" "replica"{
-				depends_on = [
-					ciphertrust_aws_key.primary_key,
-				]
+			resource "ciphertrust_aws_key" "replica" {
 				aws_param = {
 					alias       = ["%s"]
 					description = "replica one"
@@ -1032,7 +1029,31 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				}
 				region = ciphertrust_aws_kms.kms.regions[1]
 				replicate_key = {
-					key_id       = ciphertrust_aws_key.primary_key.id
+					key_id = ciphertrust_aws_key.primary_key.id
+				}
+			}
+			resource "ciphertrust_aws_key" "replica2" {
+				aws_param = {
+					alias = ["%s"]
+					tags = {
+						RegionTwoTagKey = "RegionTwoTagValue"
+					}
+				}
+				region = ciphertrust_aws_kms.kms.regions[2]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.primary_key.id
+				}
+			}
+			resource "ciphertrust_aws_key" "replica3" {
+				aws_param = {
+					alias = ["%s"]
+					tags = {
+						RegionThreeTagKey = "RegionThreeTagValue"
+					}
+				}
+				region = ciphertrust_aws_kms.kms.regions[3]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.primary_key.id
 				}
 			}`
 	updateConfig := `
@@ -1051,7 +1072,7 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				region = ciphertrust_aws_kms.kms.regions[0]
 				primary_region = ciphertrust_aws_kms.kms.regions[1]
 			}
-			resource "ciphertrust_aws_key" "replica"{
+			resource "ciphertrust_aws_key" "replica" {
 				aws_param = {
 					alias       = ["%s"]
 					description = "replica one"
@@ -1059,24 +1080,56 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 						RegionOneTagKey = "RegionOneTagValue"
 					}
 				}
-				region         = ciphertrust_aws_kms.kms.regions[1]
+				region = ciphertrust_aws_kms.kms.regions[1]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.primary_key.id
+				}
+			}
+			resource "ciphertrust_aws_key" "replica2" {
+				aws_param = {
+					alias = ["%s"]
+					tags = {
+						RegionTwoTagKey = "RegionTwoTagValue"
+					}
+				}
+				region = ciphertrust_aws_kms.kms.regions[2]
+				replicate_key = {
+					key_id = ciphertrust_aws_key.primary_key.id
+				}
+			}
+			resource "ciphertrust_aws_key" "replica3" {
+				aws_param = {
+					alias = ["%s"]
+					tags = {
+						RegionThreeTagKey = "RegionThreeTagValue"
+					}
+				}
+				region = ciphertrust_aws_kms.kms.regions[3]
 				replicate_key = {
 					key_id = ciphertrust_aws_key.primary_key.id
 				}
 			}`
-	aliasA := awsKeyNamePrefix + uuid.New().String()[8:]
-	aliasB := awsKeyNamePrefix + uuid.New().String()[8:]
-	replicaAlias := awsKeyNamePrefix + uuid.New().String()[8:]
+	aliasA := "tf" + uuid.New().String()[8:]
+	aliasB := "tf" + uuid.New().String()[8:]
+	replicaAlias := "tf" + uuid.New().String()[8:]
+	replica2Alias := "tf" + uuid.New().String()[8:]
+	replica3Alias := "tf" + uuid.New().String()[8:]
 	keyResource := "ciphertrust_aws_key.primary_key"
 	replicaResource := "ciphertrust_aws_key.replica"
-	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias)
-	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias)
+	replica2Resource := "ciphertrust_aws_key.replica2"
+	replica3Resource := "ciphertrust_aws_key.replica3"
+	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias, replica2Alias, replica3Alias)
+	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias, replica2Alias, replica3Alias)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: createResources,
+				// Step 1: create the primary and all three replicas in one apply.
+				// replica_keys.# on the primary is not checked here because the primary
+				// is read before the replicas exist; the count is verified in Step 2.
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    createResources,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
@@ -1085,13 +1138,13 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey1", "CreateTagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
 
 					resource.TestCheckResourceAttrSet(replicaResource, "id"),
 					resource.TestCheckResourceAttr(replicaResource, "key_admins.#", "0"),
 					resource.TestCheckResourceAttr(replicaResource, "key_users.#", "0"),
 					resource.TestCheckResourceAttr(replicaResource, "key_admins_roles.#", "0"),
 					resource.TestCheckResourceAttr(replicaResource, "key_users_roles.#", "0"),
-					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.0", replicaAlias),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.description", "replica one"),
@@ -1100,15 +1153,34 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+
+					resource.TestCheckResourceAttrSet(replica2Resource, "id"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.alias.0", replica2Alias),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replica2Resource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.tags.RegionTwoTagKey", "RegionTwoTagValue"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+
+					resource.TestCheckResourceAttrSet(replica3Resource, "id"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.alias.#", "1"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.alias.0", replica3Alias),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttrSet(replica3Resource, "aws_param.policy"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.tags.RegionThreeTagKey", "RegionThreeTagValue"),
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 				),
 			},
 			{
-				// Update state before import as primary region has changed. The Check
-				// confirms stable attributes are correct so the subsequent
-				// ImportStateVerify steps compare against known-good values.
-				Config: createResources,
+				// Step 2: refresh state so all keys are re-read.
+				// Verify the full multi_region_configuration for all 4 keys including replica_keys.#=3.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 2") },
+				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "3"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.customer_master_key_spec", "RSA_2048"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
@@ -1118,14 +1190,27 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.CreateTagKey2", "CreateTagValue2"),
 
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttrSet(replicaResource, "aws_param.policy"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.RegionOneTagKey", "RegionOneTagValue"),
+
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
+
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica3Resource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
 				),
 			},
 			{
+				PreConfig:               func() { logTestStep(t.Name(), "Step 3") },
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -1133,6 +1218,7 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				ImportStateIdFunc:       getResourceAttr(keyResource, "id"),
 			},
 			{
+				PreConfig:               func() { logTestStep(t.Name(), "Step 4") },
 				ResourceName:            replicaResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -1140,24 +1226,193 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				ImportStateIdFunc:       getResourceAttr(replicaResource, "id"),
 			},
 			{
-				// After update: the primary key will no longer be the primary
-				// A refresh is required to update the state of the replica
-				Config: updateResources,
+				PreConfig:               func() { logTestStep(t.Name(), "Step 5") },
+				ResourceName:            replica2Resource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(replica2Resource, "id"),
+			},
+			{
+				PreConfig:               func() { logTestStep(t.Name(), "Step 6") },
+				ResourceName:            replica3Resource,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAwsKey,
+				ImportStateIdFunc:       getResourceAttr(replica3Resource, "id"),
+			},
+			{
+				// Step 7: promote replica (regions[1]) to primary via primary_region.
+				// The original primary becomes a REPLICA. A refresh is needed to observe
+				// the new primary's updated multi_region_key_type.
+				PreConfig: func() { logTestStep(t.Name(), "Step 7") },
+				Config:    updateResources,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "1"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
 					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
 				),
 			},
 			{
+				// Step 8: refresh state to confirm the promoted replica is now PRIMARY.
+				// All 4 keys must agree on the new primary's region and ARN, and every key
+				// must list all 3 replica regions in replica_keys.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 8") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(keyResource, "multi_region_configuration.primary_key.arn"),
+
 					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
+
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
+
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica3Resource, "multi_region_configuration.primary_key.arn"),
+
+					// All 4 keys must agree on the new primary's region and ARN.
+					resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+					resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+				),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeyMultiRegionNativeMultiReplica creates a native multi-region primary key and
+// replicates it to three regions in one apply, then verifies the multi-region configuration
+// is fully propagated to all keys in the MR set. This exercises waitForReplicaRegionInAllMRKeys
+// which ensures the CM background task has updated every existing key before the provider returns.
+func TestCckmAWSKeyMultiRegionNativeMultiReplica(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	alias := "tf" + uuid.New().String()[8:]
+	replicaAlias := "tf" + uuid.New().String()[8:]
+	replica2Alias := "tf" + uuid.New().String()[8:]
+	replica3Alias := "tf" + uuid.New().String()[8:]
+
+	createConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_key" "mr_primary" {
+			aws_param = {
+				alias        = ["%s"]
+				multi_region = true
+			}
+			kms_id = ciphertrust_aws_kms.kms.id
+			region = ciphertrust_aws_kms.kms.regions[0]
+		}
+		resource "ciphertrust_aws_key" "mr_replica" {
+			aws_param = { alias = ["%s"] }
+			region    = ciphertrust_aws_kms.kms.regions[1]
+			replicate_key = {
+				key_id = ciphertrust_aws_key.mr_primary.id
+			}
+		}
+		resource "ciphertrust_aws_key" "mr_replica2" {
+			aws_param = { alias = ["%s"] }
+			region    = ciphertrust_aws_kms.kms.regions[2]
+			replicate_key = {
+				key_id = ciphertrust_aws_key.mr_primary.id
+			}
+		}
+		resource "ciphertrust_aws_key" "mr_replica3" {
+			aws_param = { alias = ["%s"] }
+			region    = ciphertrust_aws_kms.kms.regions[3]
+			replicate_key = {
+				key_id = ciphertrust_aws_key.mr_primary.id
+			}
+		}`, alias, replicaAlias, replica2Alias, replica3Alias)
+
+	primaryResource := "ciphertrust_aws_key.mr_primary"
+	replicaResource := "ciphertrust_aws_key.mr_replica"
+	replica2Resource := "ciphertrust_aws_key.mr_replica2"
+	replica3Resource := "ciphertrust_aws_key.mr_replica3"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create the primary and all three replicas in one apply.
+				// waitForReplicaRegionInAllMRKeys ensures the CM background task has propagated
+				// each new replica region to all existing keys before returning. The primary and
+				// prior replicas should therefore already show the correct replica_keys.# count.
+				// replica3 is the last to be created and is excluded from its own wait, so its
+				// replica_keys.# is checked in Step 2 (RefreshState) rather than here.
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    awsConnectionResource + createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(primaryResource, "id"),
+					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
+
+					resource.TestCheckResourceAttrSet(replicaResource, "id"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replicaResource, "aws_param.key_state", "Enabled"),
+
+					resource.TestCheckResourceAttrSet(replica2Resource, "id"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replica2Resource, "aws_param.key_state", "Enabled"),
+
+					resource.TestCheckResourceAttrSet(replica3Resource, "id"),
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
+					resource.TestCheckResourceAttr(replica3Resource, "aws_param.key_state", "Enabled"),
+				),
+			},
+			{
+				// Step 2: refresh state. All 4 keys must now show replica_keys.#=3 and
+				// must all agree on the same primary_key.region and primary_key.arn.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 2") },
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+					resource.TestCheckResourceAttr(primaryResource, "multi_region_configuration.replica_keys.#", "3"),
+
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
+
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
+
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.replica_keys.#", "3"),
+					resource.TestCheckResourceAttrSet(replica3Resource, "multi_region_configuration.primary_key.arn"),
+
+					// All replicas must agree on the same primary_key region and ARN.
+					resource.TestCheckResourceAttrPair(replicaResource, "multi_region_configuration.primary_key.region", primaryResource, "region"),
+					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.region", primaryResource, "region"),
+					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.region", primaryResource, "region"),
+					resource.TestCheckResourceAttrPair(replicaResource, "multi_region_configuration.primary_key.arn", primaryResource, "aws_param.arn"),
+					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.arn", primaryResource, "aws_param.arn"),
+					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.arn", primaryResource, "aws_param.arn"),
 				),
 			},
 		},
