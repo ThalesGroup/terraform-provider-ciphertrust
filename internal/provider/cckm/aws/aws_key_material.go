@@ -359,6 +359,13 @@ func waitForMaterialStateResolved(ctx context.Context, id string, client *common
 		pollSeconds = shortAwsKeyOpSleep
 	)
 
+	// Pre-loop check: if the sourceKeyIdentifier is not in history at all, return early.
+	// waitForRotationHistoryRecord already exhausted its wait, so the entry will not appear.
+	if !replicaHasRotationHistoryEntry(ctx, id, client, keyID, sourceKeyIdentifier) {
+		client.Log.Debug(fmt.Sprintf("[aws_key_material.go -> waitForMaterialStateResolved] pre-check: entry for sourceKeyIdentifier %s not found, returning early. keyID: %s", sourceKeyIdentifier, keyID))
+		return false
+	}
+
 	// Give CCKM/AWS a head start before the first poll.
 	time.Sleep(time.Duration(pollSeconds) * time.Second)
 
@@ -819,6 +826,28 @@ func snapshotKeyForRefresh(ctx context.Context, id string, client *common.Client
 	// sentinelSourceKeyID stays empty - the poll loop uses the first resource.
 	target.sentinelUpdatedAt = resources[0].Get("updatedAt").String()
 	return target
+}
+
+// replicaHasRotationHistoryEntry returns true when keyID has at least one rotation
+// history record whose source_key_identifier matches sourceKeyIdentifier.
+// Returns false when the API fails or no matching entry is found.
+// Used to determine whether material ever arrived on a replica key before committing
+// to a lengthy poll (e.g. waitForReplicatedKeyIsEnabled).
+func replicaHasRotationHistoryEntry(ctx context.Context, id string, client *common.Client, keyID string, sourceKeyIdentifier string) bool {
+	list, apiFailed := fetchRotationHistoryByokFull(ctx, id, client, keyID)
+	if apiFailed {
+		return false
+	}
+	var entries []RotationHistoryEntryFullTFSDK
+	if convDiags := list.ElementsAs(ctx, &entries, false); convDiags.HasError() {
+		return false
+	}
+	for _, e := range entries {
+		if e.SourceKeyIdentifier.ValueString() == sourceKeyIdentifier {
+			return true
+		}
+	}
+	return false
 }
 
 // listKeyMaterialSourceKeyIDs lists the rotation history for a key and returns the

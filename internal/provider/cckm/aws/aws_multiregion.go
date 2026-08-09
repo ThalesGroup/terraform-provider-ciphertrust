@@ -122,13 +122,20 @@ func replicateKeyCommon(
 		//  have fully settled, preventing a false CURRENT state on older materials
 		waitForAllMaterialsImportedToReplica(ctx, id, client, primaryKeyID, replicaKeyID, &replicateDiags)
 
-		// Wait for KeyState == Enabled: CCKM imports material asynchronously and the key
-		// may still show PendingImport even after import_state reaches IMPORTED.
-		// Use a separate diags so we can discard transient noise from the first attempt.
+		// Only poll for Enabled if material actually landed on the replica.
+		// If the import failed entirely (e.g. replica was still in Creating state),
+		// replicaHasRotationHistoryEntry returns false and we go straight to the
+		// PendingImport compensation path - saving 30 x poll-sleep of wasted time.
+		// When an entry exists (including PENDING_IMPORT), we still poll for Enabled
+		// normally so the compensation path can fire if needed.
 		var firstEnabledDiags diag.Diagnostics
-		firstEnabledResponse := waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &firstEnabledDiags)
+		var firstEnabledResponse string
+		replicaEntryPresent := replicaHasRotationHistoryEntry(ctx, id, client, replicaKeyID, sourceKeyID)
+		if replicaEntryPresent {
+			firstEnabledResponse = waitForReplicatedKeyIsEnabled(ctx, id, client, replicaKeyID, &firstEnabledDiags)
+		}
 
-		if gjson.Get(firstEnabledResponse, "aws_param.KeyState").String() != "Enabled" {
+		if !replicaEntryPresent || gjson.Get(firstEnabledResponse, "aws_param.KeyState").String() != "Enabled" {
 			// Replica is not yet Enabled. Re-fetch to check the current key state.
 			replicaKeyJSON, getErr := client.GetById(ctx, id, replicaKeyID, common.URL_AWS_KEY)
 			replicaKeyState := ""

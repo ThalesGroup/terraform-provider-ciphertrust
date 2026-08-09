@@ -1335,7 +1335,14 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		SourceKeyTier: sourceKeyTier,
 		KeyExpiration: validTo != "",
 		ValidTo:       validTo,
-		ImportType:    &importType,
+	}
+	// Only include import_type when a value is provided AND the CM version supports it.
+	// CM 2.23 rejects import_type for multi-region BYOK replica keys with HTTP 400
+	// ("import_type parameter is only supported for single region AES key.").
+	// CM 2.24+ supports it. CMVersion == 0 means unknown - include to avoid blocking
+	// on version-fetch failure.
+	if importType != "" && (client.CMVersion == 0 || client.CMVersion >= 224) {
+		payload.ImportType = &importType
 	}
 	if keyMaterialDescription != "" {
 		payload.KeyMaterialDescription = &keyMaterialDescription
