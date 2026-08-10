@@ -2215,3 +2215,90 @@ resource "ciphertrust_cm_key" "k" {
 		},
 	})
 }
+
+// Test_CM_AccCMKey_revocation verifies that setting revocation_reason/revocation_message
+// on Update actually revokes the key on CM via the dedicated /revoke endpoint, rather than
+// 400ing on the general key PATCH endpoint (which has never accepted these fields under any
+// name — see revokeKey in resource_cm_key.go).
+func Test_CM_AccCMKey_revocation(t *testing.T) {
+	RequireCM(t)
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("createCMClient failed")
+	}
+
+	suffix := uuid.New().String()[:8]
+	keyName := "tf-acc-key-revoke-" + suffix
+
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name      = %q
+  algorithm = "aes"
+  key_size  = 256
+}
+`, keyName),
+				Check: checkStep(t, "revocation: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_cm_key.k", "id"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_cm_key.k"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name               = %q
+  algorithm          = "aes"
+  key_size           = 256
+  revocation_reason  = "KeyCompromise"
+  revocation_message = "acceptance test revoke"
+}
+`, keyName),
+				Check: checkStep(t, "revocation: update must not 400 and must land in state",
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "revocation_reason", "KeyCompromise"),
+					resource.TestCheckResourceAttr("ciphertrust_cm_key.k", "revocation_message", "acceptance test revoke"),
+					func(s *terraform.State) error {
+						// Independent live check: confirm CM itself recorded the revocation,
+						// not just Terraform's own state bookkeeping.
+						response, err := client.GetById(context.Background(), uuid.NewString(), capturedID, common.URL_KEY_MANAGEMENT)
+						if err != nil {
+							return fmt.Errorf("failed to fetch key from CM: %w", err)
+						}
+						if state := gjson.Get(response, "state").String(); state != "Compromised" {
+							return fmt.Errorf("expected CM key state %q, got %q", "Compromised", state)
+						}
+						if reason := gjson.Get(response, "revocationReason").String(); reason != "KeyCompromise" {
+							return fmt.Errorf("expected CM revocationReason %q, got %q", "KeyCompromise", reason)
+						}
+						if message := gjson.Get(response, "revocationMessage").String(); message != "acceptance test revoke" {
+							return fmt.Errorf("expected CM revocationMessage %q, got %q", "acceptance test revoke", message)
+						}
+						return nil
+					},
+				),
+			},
+			{
+				// Idempotency: re-applying the same revocation must not re-issue the /revoke
+				// call (and therefore must not error or drift).
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "k" {
+  name               = %q
+  algorithm          = "aes"
+  key_size           = 256
+  revocation_reason  = "KeyCompromise"
+  revocation_message = "acceptance test revoke"
+}
+`, keyName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

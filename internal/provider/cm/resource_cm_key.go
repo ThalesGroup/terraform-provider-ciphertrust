@@ -859,6 +859,20 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	}
 }
 
+// revokeKey calls CM's dedicated key revoke endpoint. This is a separate operation from the
+// general key PATCH/POST endpoint, which does not accept revocation fields under any name.
+// Note the request body uses "reason"/"message", not the revocationReason/revocationMessage
+// names CM reports back on GET.
+func (r *resourceCMKey) revokeKey(ctx context.Context, id, reason, message string) error {
+	payload := CMKeyRevokeJSON{Reason: reason, Message: message}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT+"/"+id+"/revoke", payloadJSON)
+	return err
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -977,12 +991,6 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 	if plan.ProtectStopDate.ValueString() != "" {
 		payload.ProtectStopDate = plan.ProtectStopDate.ValueString()
-	}
-	if plan.RevocationMessage.ValueString() != "" {
-		payload.RevocationMessage = plan.RevocationMessage.ValueString()
-	}
-	if plan.RevocationReason.ValueString() != "" {
-		payload.RevocationReason = plan.RevocationReason.ValueString()
 	}
 	if plan.RotationFrequencyDays.ValueString() != "" {
 		payload.RotationFrequencyDays = plan.RotationFrequencyDays.ValueString()
@@ -1297,6 +1305,19 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
+
+	// Revocation is a dedicated CM operation, not a field on the general key payload
+	// (see revokeKey). Issue it only after the key itself exists.
+	if plan.RevocationReason.ValueString() != "" || plan.RevocationMessage.ValueString() != "" {
+		if err := r.revokeKey(ctx, plan.ID.ValueString(), plan.RevocationReason.ValueString(), plan.RevocationMessage.ValueString()); err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Create][" + id + "]")
+			resp.Diagnostics.AddError(
+				"Error revoking key on CipherTrust Manager: ",
+				"Key was created (id: "+plan.ID.ValueString()+") but could not be revoked, unexpected error: "+err.Error(),
+			)
+			return
+		}
+	}
 
 	// Hydrate boolean fields from POST response only when the server explicitly returns
 	// them. If a field is absent from the response (the API omits false-default values,
@@ -1923,12 +1944,6 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	if plan.ProtectStopDate.ValueString() != "" {
 		payload.ProtectStopDate = plan.ProtectStopDate.ValueString()
 	}
-	if plan.RevocationMessage.ValueString() != "" {
-		payload.RevocationMessage = plan.RevocationMessage.ValueString()
-	}
-	if plan.RevocationReason.ValueString() != "" {
-		payload.RevocationReason = plan.RevocationReason.ValueString()
-	}
 	if plan.RotationFrequencyDays.ValueString() != "" {
 		payload.RotationFrequencyDays = plan.RotationFrequencyDays.ValueString()
 	}
@@ -1976,6 +1991,22 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	plan.ID = types.StringValue(gjson.Get(responseBody, "id").String())
+
+	// Revocation is a dedicated CM operation, not a field on the general key payload
+	// (see revokeKey). Only call it when revocation actually changed, so an already-revoked
+	// key doesn't get re-revoked on every unrelated apply.
+	revocationChanged := plan.RevocationReason.ValueString() != state.RevocationReason.ValueString() ||
+		plan.RevocationMessage.ValueString() != state.RevocationMessage.ValueString()
+	if revocationChanged && (plan.RevocationReason.ValueString() != "" || plan.RevocationMessage.ValueString() != "") {
+		if err := r.revokeKey(ctx, plan.ID.ValueString(), plan.RevocationReason.ValueString(), plan.RevocationMessage.ValueString()); err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Update][" + plan.ID.ValueString() + "]")
+			resp.Diagnostics.AddError(
+				"Error revoking key on CipherTrust Manager: ",
+				"Could not revoke key, unexpected error: "+err.Error(),
+			)
+			return
+		}
+	}
 
 	// Resolve Optional bool fields that may remain unknown after PATCH if the user
 	// did not explicitly configure them (IsUnknown means plan modifier left them open).

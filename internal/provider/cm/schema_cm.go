@@ -328,8 +328,6 @@ type CMKeyJSON struct {
 	Password                 string                   `json:"password,omitempty"`
 	ProcessStartDate         string                   `json:"processStartDate,omitempty"`
 	ProtectStopDate          string                   `json:"protectStopDate,omitempty"`
-	RevocationReason         string                   `json:"revocationReason,omitempty"`
-	RevocationMessage        string                   `json:"revocationMessage,omitempty"`
 	RotationFrequencyDays    string                   `json:"rotationFrequencyDays,omitempty"`
 	SecretDataEncoding       string                   `json:"secretDataEncoding,omitempty"`
 	SecretDataLink           string                   `json:"secretDataLink,omitempty"`
@@ -356,6 +354,14 @@ type CMKeyJSON struct {
 	RSAAESWrap               *WrapRSAAESJSON          `json:"wrapRSAAES,omitempty"`
 	AllVersions              bool                     `json:"allVersions,omitempty"`
 	Labels                   map[string]interface{}   `json:"labels,omitempty"`
+}
+
+// CMKeyRevokeJSON is the request body for the dedicated key revoke endpoint
+// (POST /vault/keys2/{id}/revoke), which uses different field names than the
+// general key payload's revocationReason/revocationMessage.
+type CMKeyRevokeJSON struct {
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type CMRegTokensListTFSDK struct {
