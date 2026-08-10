@@ -1671,10 +1671,14 @@ func TestCckmAWSKeyMaterialMRAdoptPendingRotation(t *testing.T) {
 					//    enters PENDING_MULTI_REGION_IMPORT_AND_ROTATION.
 					cckm.ImportByokKeyMaterial(ctx, id, client,
 						capturedPrimaryKeyID, capturedCmKey2ID, "local", "", "", "NEW_KEY_MATERIAL", &diags)
-					// b. Import the same cm_aes_key2 bytes to replica_1 using EXISTING_KEY_MATERIAL.
-					//    replica_1 now has the bytes; replica_2 does not.
+					// b. Import the same cm_aes_key2 bytes to replica_1 using NEW_KEY_MATERIAL.
+					//    cm_aes_key2 has never been imported to replica_1 before, so NEW_KEY_MATERIAL
+					//    is required. EXISTING_KEY_MATERIAL would fail on CM 2.24 with
+					//    IncorrectKeyMaterialException because AWS expects the current material bytes,
+					//    not bytes for a new material identifier. replica_1 now has the bytes;
+					//    replica_2 does not.
 					cckm.ImportByokKeyMaterial(ctx, id, client,
-						capturedReplica1KeyID, capturedCmKey2ID, "local", "", "", "EXISTING_KEY_MATERIAL", &diags)
+						capturedReplica1KeyID, capturedCmKey2ID, "local", "", "", "NEW_KEY_MATERIAL", &diags)
 					if diags.HasError() {
 						fmt.Printf("import-material failed: %v\n", diags)
 						return
