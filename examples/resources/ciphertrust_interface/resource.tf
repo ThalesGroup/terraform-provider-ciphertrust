@@ -32,9 +32,7 @@ provider "ciphertrust" {
 resource "ciphertrust_interface" "certificate" {
   name = "web"
 
-  # The port the new interface will listen on. Mutable — CM applies port changes
-  # in place, but changing a default interface's port restarts CM services
-  # cluster-wide, so treat it as a planned change.
+  # (Immutable) The port the new interface will listen on.
   port = 9005
 
   certificate = {
