@@ -137,7 +137,7 @@ resource "ciphertrust_aws_byok_key" "byok_key_mr_replica" {
 - `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
 - `kms_id` (String) (Conditionally immutable) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.
-- `primary_region` (String) Updates the primary region of a multi-region key. Only valid during updates.
+- `primary_region` (String) Updates the primary region of a multi-region key. Only valid during updates. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
 - `replicate_key` (Attributes) Replicate a primary EXTERNAL multi-region key to a new region. Key material will be imported from the primary key. (see [below for nested schema](#nestedatt--replicate_key))
 - `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 - `source_key_identifier` (String) (Immutable) CipherTrust Manager key ID to upload to AWS as BYOK material. Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. Populated on read from the API once material has been imported.
@@ -241,7 +241,7 @@ Required:
 
 Optional:
 
-- `make_primary` (Boolean) Promote the replica to primary after replication. Only valid during replication creation.
+- `make_primary` (Boolean) Promote the replica to primary after replication. Only valid during replication creation. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
 
 
 <a id="nestedatt--multi_region_configuration"></a>

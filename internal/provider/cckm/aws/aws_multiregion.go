@@ -13,6 +13,17 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// mrKeyRefreshLimitationNote is appended to schema descriptions for attributes that trigger
+// update-primary-region. On CM < 2.22 individual key refresh (POST .../refresh) is not
+// available, so multi-region configuration in Terraform state may be stale after the
+// primary-region change until a KMS-wide synchronization is run.
+const mrKeyRefreshLimitationNote = " On CipherTrust Manager versions earlier than 2.22," +
+	" keys in the multi-region set may not reflect the correct multi-region configuration" +
+	" in Terraform state after this operation. Individual key refresh was not introduced" +
+	" until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a" +
+	" ciphertrust_scheduler resource with operation = \"cckm_synchronization\"," +
+	" then run terraform refresh."
+
 // replicateKeyCommon calls the replicate-key API, waits for the replica to leave Creating state,
 // waits for it to reach Enabled state, optionally promotes it to primary, and returns the final
 // key JSON from a fresh GET. origin should be "AWS_KMS" for native keys or "EXTERNAL" for BYOK keys.
@@ -845,6 +856,19 @@ func waitForPrimaryRegionUpdated(
 	// CCKM saves the refreshed key synchronously before returning, so the GET after
 	// each refresh call reflects current AWS state. Sleep between attempts gives AWS
 	// additional time if the primary-region transition is still in progress.
+	//
+	// Individual key refresh (POST .../refresh) is only supported on CM >= 2.22.
+	// On older CM and on CDSPaaS the endpoint returns 404, so skip the refresh
+	// loop entirely and accept whatever state the inner poll loop produced.
+	if client.CMVersion < 222 || client.IsCDSPaaS {
+		client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] individual key refresh not supported (CM < 2.22 or CDSPaaS), skipping refresh loop")
+		for i, keyID := range allKeyIDs {
+			if !confirmed[i] {
+				client.Log.Warn(fmt.Sprintf("[aws_multiregion.go -> waitForPrimaryRegionUpdated] key %s not confirmed after poll loop (refresh unavailable)", keyID))
+			}
+		}
+		return
+	}
 	client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] wait loop exhausted - refreshing unconfirmed keys")
 	const refreshAttemptsPrimary = 15
 	refreshSleepPrimary := 5

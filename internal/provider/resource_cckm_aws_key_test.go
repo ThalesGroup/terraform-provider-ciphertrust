@@ -905,6 +905,27 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 	replicaResource1 := "ciphertrust_aws_key.replica"
 	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias)
 	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias)
+	// On CM < 2.22 individual key refresh is not supported, so after update-primary-region
+	// the old primary key may still report MultiRegionKeyType == "PRIMARY" in state.
+	// Skip the key-type assertions for that step on older CM versions.
+	supportsKeyRefresh := getCipherTrustVersion() >= 222
+	// Build the step 5 check: on CM < 2.22 omit multi_region_key_type assertions since
+	// the old primary may not yet reflect the change without the /refresh endpoint.
+	step5Checks := []resource.TestCheckFunc{
+		resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
+		resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+		resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+		resource.TestCheckResourceAttr(replicaResource1, "aws_param.multi_region", "true"),
+		resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
+		resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.%", "1"),
+	}
+	if supportsKeyRefresh {
+		step5Checks = append([]resource.TestCheckFunc{
+			resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+			resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+			resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.replica_keys.#", "1"),
+		}, step5Checks...)
+	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -979,19 +1000,9 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 			{
 				// After update: multi_region_key (regions[0]) is now a REPLICA;
 				// replica (regions[1]) is now the PRIMARY with one replica key.
+				// On CM < 2.22 the key-type assertions are omitted (see step5Checks).
 				Config: updateResources,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.multi_region", "true"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
-
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
-					resource.TestCheckResourceAttr(replicaResource1, "multi_region_configuration.replica_keys.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "aws_param.multi_region", "true"),
-					resource.TestCheckResourceAttr(replicaResource1, "aws_param.alias.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource1, "aws_param.tags.%", "1"),
-				),
+				Check:  resource.ComposeTestCheckFunc(step5Checks...),
 			},
 		},
 	})
@@ -1120,6 +1131,26 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 	replica3Resource := "ciphertrust_aws_key.replica3"
 	createResources := awsConnectionResource + fmt.Sprintf(createConfig, aliasA, replicaAlias, replica2Alias, replica3Alias)
 	updateResources := awsConnectionResource + fmt.Sprintf(updateConfig, aliasA, aliasB, replicaAlias, replica2Alias, replica3Alias)
+	// On CM < 2.22 individual key refresh is not supported, so after update-primary-region
+	// the old primary key may still report MultiRegionKeyType == "PRIMARY" in state.
+	// Skip the key-type assertion for that step on older CM versions.
+	supportsKeyRefresh := getCipherTrustVersion() >= 222
+	// Build the step 7 check: on CM < 2.22 omit multi_region_key_type == "REPLICA" for
+	// the old primary since without /refresh it may not yet reflect the change.
+	step7Checks := []resource.TestCheckFunc{
+		resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
+		resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
+		resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
+		resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
+		resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
+		resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
+		resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
+	}
+	if supportsKeyRefresh {
+		step7Checks = append([]resource.TestCheckFunc{
+			resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+		}, step7Checks...)
+	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -1245,18 +1276,10 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 				// Step 7: promote replica (regions[1]) to primary via primary_region.
 				// The original primary becomes a REPLICA. A refresh is needed to observe
 				// the new primary's updated multi_region_key_type.
+				// On CM < 2.22 the key-type assertion is omitted (see step7Checks).
 				PreConfig: func() { logTestStep(t.Name(), "Step 7") },
 				Config:    updateResources,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.alias.#", "2"),
-					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.%", "2"),
-					resource.TestCheckResourceAttr(replicaResource, "aws_param.multi_region", "true"),
-					resource.TestCheckResourceAttr(replicaResource, "aws_param.alias.#", "1"),
-					resource.TestCheckResourceAttr(replicaResource, "aws_param.tags.%", "1"),
-					resource.TestCheckResourceAttr(replica2Resource, "aws_param.multi_region", "true"),
-					resource.TestCheckResourceAttr(replica3Resource, "aws_param.multi_region", "true"),
-				),
+				Check:     resource.ComposeTestCheckFunc(step7Checks...),
 			},
 			{
 				// Step 8: refresh state to confirm the promoted replica is now PRIMARY.

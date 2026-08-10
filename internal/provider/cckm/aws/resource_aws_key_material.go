@@ -218,9 +218,10 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 	// Version guard: on CM 2.23, only single-region is supported; MRK requires CM 2.24+.
 	// The < 2.23 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
 	// can inspect the actual key type from the CipherTrust Manager API response.
-	// CMVersion == 0 means version could not be determined at startup - skip version gates.
+	// On CDSPaaS the server confirms MR BYOK key material is supported, so only
+	// apply the version gate for on-prem CM < 2.24.
 	isMRKey := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
-	if r.client.CMVersion > 0 && r.client.CMVersion < 224 && isMRKey {
+	if isMRKey && !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
 		resp.Diagnostics.AddError(common.UnsupportedCMVersion("ciphertrust_aws_key_material for multi-region keys", r.client.CMFullVersion, "2.24"), "")
 		return
 	}
@@ -401,9 +402,8 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 	if req.State.Raw.IsNull() {
 		// CM version gate: ciphertrust_aws_key_material requires CM 2.23+.
 		// This check runs at plan time so the user gets a clear error before any
-		// API calls are made. CMVersion == 0 means version could not be determined
-		// at startup - skip the gate to avoid blocking on version-fetch failure.
-		if r.client != nil && r.client.CMVersion > 0 && r.client.CMVersion < 223 {
+		// API calls are made. On CDSPaaS ciphertrust_aws_key_material is supported.
+		if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
 			resp.Diagnostics.AddError(
 				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.23"),
 				"",
@@ -1336,12 +1336,11 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		KeyExpiration: validTo != "",
 		ValidTo:       validTo,
 	}
-	// Only include import_type when a value is provided AND the CM version supports it.
+	// Only include import_type when the CM version supports it.
 	// CM 2.23 rejects import_type for multi-region BYOK replica keys with HTTP 400
 	// ("import_type parameter is only supported for single region AES key.").
-	// CM 2.24+ supports it. CMVersion == 0 means unknown - include to avoid blocking
-	// on version-fetch failure.
-	if importType != "" && (client.CMVersion == 0 || client.CMVersion >= 224) {
+	// CM 2.24+ and CDSPaaS support it.
+	if client.IsCDSPaaS || client.CMVersion >= 224 {
 		payload.ImportType = &importType
 	}
 	if keyMaterialDescription != "" {
@@ -1408,9 +1407,9 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	// CM 2.23 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
 	// material as PENDING_ROTATION, then return false so the outer retry loop re-classifies
 	// and repairKeyMaterialRotations activates it via rotate-material with an empty body.
-	// CM < 224: rotate-material with source_key_identifier is not supported.
-	// CMVersion == 0 means unknown - fall through to the standard path.
-	if client.CMVersion > 0 && client.CMVersion < 224 {
+	// On-prem CM < 2.24 does not support rotate-material with source_key_identifier.
+	// CDSPaaS supports it.
+	if !client.IsCDSPaaS && client.CMVersion < 224 {
 		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CM %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
 		ImportByokKeyMaterial(ctx, id, client, cmKeyID, srcID, srcTier, validTo, keyMaterialDescription, "NEW_KEY_MATERIAL", diags)
 		if diags.HasError() {
