@@ -91,8 +91,8 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 		Description: "Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.\n\n" +
 			"This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.\n\n" +
 			"**CipherTrust Manager version requirements:**\n\n" +
-			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later.\n" +
-			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later.\n" +
+			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.\n" +
+			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.\n" +
 			"* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.\n\n" +
 			"Key features:\n\n" +
 			"* Import key material into AWS EXTERNAL symmetric keys.\n" +
@@ -1246,7 +1246,13 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		// No per-replica wait: if the import-material call returns no error, the command
 		// has been received by AWS and will be acted on asynchronously. We refresh the
 		// primary key after all replicas are processed to trigger CM to re-check AWS state.
+		//
+		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
 		importType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			importType = ""
+		}
 		var importDiags diag.Diagnostics
 		ImportByokKeyMaterial(ctx, id, r.client, replicaCMKeyID, sourceKeyID, sourceKeyTier, validTo, "", importType, &importDiags)
 		if importDiags.HasError() {
@@ -1309,8 +1315,12 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 			continue
 		}
 		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental: importing to region: %s replicaCMKeyID: %s sourceKeyID: %s", region, cmID, sourceKeyID))
+		suppImportType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			suppImportType = ""
+		}
 		var importDiags diag.Diagnostics
-		ImportByokKeyMaterial(ctx, id, r.client, cmID, sourceKeyID, sourceKeyTier, validTo, "", "EXISTING_KEY_MATERIAL", &importDiags)
+		ImportByokKeyMaterial(ctx, id, r.client, cmID, sourceKeyID, sourceKeyTier, validTo, "", suppImportType, &importDiags)
 		if importDiags.HasError() {
 			diags.Append(importDiags...)
 			return
@@ -1336,11 +1346,10 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		KeyExpiration: validTo != "",
 		ValidTo:       validTo,
 	}
-	// Only include import_type when the CM version supports it.
-	// CM 2.23 rejects import_type for multi-region BYOK replica keys with HTTP 400
-	// ("import_type parameter is only supported for single region AES key.").
-	// CM 2.24+ and CDSPaaS support it.
-	if client.IsCDSPaaS || client.CMVersion >= 224 {
+	// Only include import_type when a non-empty value is provided.
+	// Call sites that must suppress import_type (e.g. MR replica imports on CM 2.23)
+	// pass an empty string so the field is omitted from the request.
+	if importType != "" {
 		payload.ImportType = &importType
 	}
 	if keyMaterialDescription != "" {

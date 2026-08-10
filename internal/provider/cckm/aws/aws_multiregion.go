@@ -479,6 +479,13 @@ func importAllMaterialsToReplica(ctx context.Context, id string, client *common.
 
 		client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: importing srcID: %s srcTier: %s to replicaKeyID: %s", idx, srcID, srcTier, replicaKeyID))
 
+		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
+		importType := "EXISTING_KEY_MATERIAL"
+		if !client.IsCDSPaaS && client.CMVersion < 224 {
+			importType = ""
+		}
+
 		// Retry the import when AWS rejects with "is creating" (replica not yet fully provisioned).
 		imported := false
 		for attempt := 0; attempt < maxCreatingRetries; attempt++ {
@@ -487,7 +494,7 @@ func importAllMaterialsToReplica(ctx context.Context, id string, client *common.
 				time.Sleep(time.Duration(creatingRetryDelay) * time.Second)
 			}
 			var importDiags diag.Diagnostics
-			ImportByokKeyMaterial(ctx, id, client, replicaKeyID, srcID, srcTier, "", "", "EXISTING_KEY_MATERIAL", &importDiags)
+			ImportByokKeyMaterial(ctx, id, client, replicaKeyID, srcID, srcTier, "", "", importType, &importDiags)
 			if !importDiags.HasError() {
 				imported = true
 				break
