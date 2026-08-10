@@ -175,8 +175,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "elasticsearch"
-  elasticsearch_params {
-    indices {
+  elasticsearch_params = {
+    indices = {
       activity_kmip = "kmip-index"
     }
   }
@@ -189,7 +189,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "es-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "elasticsearch_params.0.indices.0.activity_kmip", "kmip-index"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "elasticsearch_params.indices.activity_kmip", "kmip-index"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -206,8 +206,8 @@ resource "ciphertrust_log_forwarder" "test" {
 					payload := []byte(`{"elasticsearch_params":{"indices":{"activity_kmip":"kmip-index-modified"}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -232,9 +232,9 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
-      activity_kmip = "kmip-label"
+  loki_params = {
+    labels = {
+      activity_kmip = "job=kmip-label"
     }
   }
 }
@@ -246,7 +246,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "loki-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "loki_params.0.labels.0.activity_kmip", "kmip-label"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "loki_params.labels.activity_kmip", "job=kmip-label"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -260,11 +260,11 @@ resource "ciphertrust_log_forwarder" "test" {
 					if !ok {
 						return
 					}
-					payload := []byte(`{"loki_params":{"labels":{"activity_kmip":"kmip-label-modified"}}}`)
+					payload := []byte(`{"loki_params":{"labels":{"activity_kmip":"job=kmip-label-modified"}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -289,8 +289,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -303,7 +303,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "syslog-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "updated_at"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -317,11 +317,11 @@ resource "ciphertrust_log_forwarder" "test" {
 					if !ok {
 						return
 					}
-					payload := []byte(`{"syslog_params":{"syslog_params":{"activity_kmip":false}}}`)
+					payload := []byte(`{"syslog_params":{"forward_logs":{"activity_kmip":false}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -563,8 +563,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
+  loki_params = {
+    labels = {
       activity_kmip = "job=kmip"
     }
   }
@@ -582,8 +582,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
+  loki_params = {
+    labels = {
       activity_kmip = "job=kmip-updated"
     }
   }
@@ -614,8 +614,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "elasticsearch"
-  elasticsearch_params {
-    indices {
+  elasticsearch_params = {
+    indices = {
       activity_kmip = "kmip-index"
     }
   }
@@ -647,8 +647,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -772,8 +772,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -790,8 +790,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip        = true
       server_audit_records = true
     }
@@ -823,8 +823,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -840,8 +840,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip        = true
       server_audit_records = true
     }
@@ -873,8 +873,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -890,8 +890,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -918,8 +918,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -961,8 +961,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip        = true
       activity_nae         = true
       client_audit_records = true
@@ -972,8 +972,8 @@ resource "ciphertrust_log_forwarder" "test" {
 }
 `, connID, rName),
 				Check: checkStep(t, "all four fields set",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.server_audit_records", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.server_audit_records", "true"),
 				),
 			},
 			{
@@ -982,8 +982,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
       activity_nae  = false
     }
@@ -991,10 +991,10 @@ resource "ciphertrust_log_forwarder" "test" {
 }
 `, connID, rName),
 				Check: checkStep(t, "partial update — omitted fields preserved in live state",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_nae", "false"),
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.client_audit_records", "true"),
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.server_audit_records", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_nae", "false"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.client_audit_records", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.server_audit_records", "true"),
 				),
 			},
 		},
