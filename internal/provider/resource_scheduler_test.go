@@ -11,7 +11,10 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
 
 func Test_CM_ResourceScheduler(t *testing.T) {
@@ -301,6 +304,114 @@ resource "ciphertrust_scheduler" "test" {
 }
 `, uniqueName),
 				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// Test_CM_Scheduler_ComputedFieldsStableAcrossUnrelatedChange is a regression test for
+// TFIN-582: uri, account, created_at, application, dev_account, description, run_on,
+// and disabled had no UseStateForUnknown(), so any unrelated field change (e.g. run_at)
+// caused all of them to show as "(known after apply)" even though none of them actually
+// changed. updated_at is deliberately not checked here: CM bumps it on every PATCH, so
+// it is expected to be unknown at plan time.
+func Test_CM_Scheduler_ComputedFieldsStableAcrossUnrelatedChange(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_Scheduler_ComputedFieldsStableAcrossUnrelatedChange: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "tfin582-sched-" + uuid.New().String()[:8]
+
+	config := func(runAt string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "database_backup"
+  run_at    = %q
+  database_backup_params = {
+    scope = "system"
+  }
+}
+`, uniqueName, runAt)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("0 0 * * *"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "id"),
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "uri"),
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "account"),
+				),
+			},
+			// Step 2: change only run_at (unrelated to every field being asserted below).
+			{
+				Config: config("0 1 * * *"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("uri"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("account"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("created_at"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("application"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("dev_account"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("description"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("run_on"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("disabled"), knownvalue.NotNull()),
+					},
+				},
+			},
+		},
+	})
+}
+
+// Test_CM_Scheduler_CCKMKeyRotationParamsStableAcrossUnrelatedChange is a regression test
+// for TFIN-582: the cckm_key_rotation_params sub-fields (aws_retain_alias, rotate_material,
+// expiration, expire_in, rotation_after) had no per-leaf UseStateForUnknown(), so leaving
+// them unset in config and changing an unrelated field (run_at) caused all of them to show
+// as "(known after apply)" — the parent object-level UseStateForUnknown() modifier does not
+// protect individual unset leaves when the block itself is configured.
+func Test_CM_Scheduler_CCKMKeyRotationParamsStableAcrossUnrelatedChange(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CIPHERTRUST_SCHEDULER_ENABLED") == "" {
+		t.Skip("skipping Test_CM_Scheduler_CCKMKeyRotationParamsStableAcrossUnrelatedChange: set CIPHERTRUST_SCHEDULER_ENABLED=1 to enable")
+	}
+	uniqueName := "tfin582-sched-rot-" + uuid.New().String()[:8]
+
+	config := func(runAt string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = %q
+  cckm_key_rotation_params = {
+    cloud_name = "aws"
+  }
+}
+`, uniqueName, runAt)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("0 0 * * *"),
+				Check:  resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "id"),
+			},
+			// Step 2: change only run_at; cckm_key_rotation_params's unset leaves must
+			// carry forward from state, not show as newly unknown.
+			{
+				Config: config("0 1 * * *"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("cckm_key_rotation_params").AtMapKey("aws_retain_alias"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("cckm_key_rotation_params").AtMapKey("rotate_material"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("cckm_key_rotation_params").AtMapKey("expiration"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("cckm_key_rotation_params").AtMapKey("expire_in"), knownvalue.NotNull()),
+						plancheck.ExpectKnownValue("ciphertrust_scheduler.test", tfjsonpath.New("cckm_key_rotation_params").AtMapKey("rotation_after"), knownvalue.NotNull()),
+					},
+				},
 			},
 		},
 	})

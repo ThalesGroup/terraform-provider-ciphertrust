@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
@@ -84,10 +85,18 @@ func (r *resourceScheduler) ValidateConfig(ctx context.Context, req resource.Val
 	}
 
 	var names []string
-	if config.DatabaseBackupParams != nil           { names = append(names, "database_backup_params") }
-	if config.CCKMKeyRotationParams != nil          { names = append(names, "cckm_key_rotation_params") }
-	if config.CCKMSynchronizationParams != nil      { names = append(names, "cckm_synchronization_params") }
-	if config.CCKMXksRotateCredentialsParams != nil { names = append(names, "cckm_xks_credential_rotation_params") }
+	if config.DatabaseBackupParams != nil {
+		names = append(names, "database_backup_params")
+	}
+	if config.CCKMKeyRotationParams != nil {
+		names = append(names, "cckm_key_rotation_params")
+	}
+	if config.CCKMSynchronizationParams != nil {
+		names = append(names, "cckm_synchronization_params")
+	}
+	if config.CCKMXksRotateCredentialsParams != nil {
+		names = append(names, "cckm_xks_credential_rotation_params")
+	}
 
 	if len(names) > 1 {
 		resp.Diagnostics.AddError(
@@ -138,16 +147,25 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Optional:    true,
 				Description: "Description for the job configuration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"run_on": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
 				Description: "Default is 'any'. For database_backup, the default will be the current node if in a cluster. This attribute is not supported in CDSPaaS.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"disabled": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Description: "By default, the job configuration starts in an active state. True disables the job configuration.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"start_date": schema.StringAttribute{
 				Computed:    true,
@@ -274,12 +292,45 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 					},
 				},
 			},
-			"uri":         schema.StringAttribute{Computed: true, Description: "A human readable unique identifier of the resource."},
-			"account":     schema.StringAttribute{Computed: true, Description: "The account which owns this resource."},
-			"created_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was created."},
-			"updated_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was last updated."},
-			"application": schema.StringAttribute{Computed: true, Description: "The application this resource belongs to."},
-			"dev_account": schema.StringAttribute{Computed: true, Description: "The developer account which owns this resource's application."},
+			"uri": schema.StringAttribute{
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"account": schema.StringAttribute{
+				Computed:    true,
+				Description: "The account which owns this resource.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the resource was created.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			// updated_at intentionally has no UseStateForUnknown(): CM sets a fresh
+			// timestamp on every successful update, so showing it as "known after
+			// apply" is accurate, not spurious drift.
+			"updated_at": schema.StringAttribute{Computed: true, Description: "Date/time the resource was last updated."},
+			"application": schema.StringAttribute{
+				Computed:    true,
+				Description: "The application this resource belongs to.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"dev_account": schema.StringAttribute{
+				Computed:    true,
+				Description: "The developer account which owns this resource's application.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"cckm_key_rotation_params": schema.SingleNestedAttribute{
 				Optional: true,
 				Computed: true,
@@ -293,6 +344,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Description: "Retain the alias and timestamp on the archived key after rotation. " +
 							"Applicable only to AWS key rotation.",
 						Computed: true,
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"rotate_material": schema.BoolAttribute{
 						Optional: true,
@@ -300,6 +354,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and  " +
 							"valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.",
 						Computed: true,
+						PlanModifiers: []planmodifier.Bool{
+							boolplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"cloud_name": schema.StringAttribute{
 						Required:    true,
@@ -318,6 +375,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
 							"To remove the setting, set to an empty string.",
 						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"expire_in": schema.StringAttribute{
 						Optional: true,
@@ -328,6 +388,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
 							"To remove the setting, set to an empty string.",
 						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"rotation_after": schema.StringAttribute{
 						Optional: true,
@@ -338,6 +401,9 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"Subsequently, the keys will be rotated after every six days. " +
 							"To remove the setting, set to an empty string.",
 						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 			},
