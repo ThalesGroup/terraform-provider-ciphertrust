@@ -192,6 +192,14 @@ func createCapture(t *testing.T, plan, config *CMKeyTFSDK, responseExtra string)
 	r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
 		b := make([]byte, req.ContentLength)
 		_, _ = req.Body.Read(b)
+		// A plan with revocation_reason/revocation_message set triggers a second,
+		// separate POST to the /revoke endpoint (see revokeKey) right after creation.
+		// Handle it distinctly so it doesn't clobber the create POST body below.
+		if strings.HasSuffix(req.URL.Path, "/revoke") {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{}`)
+			return
+		}
 		capturedBody = string(b)
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"id":"key-123"%s}`, responseExtra)
@@ -276,8 +284,6 @@ func Test_CMKeyCreate_RemainingScalarFieldsInPayload(t *testing.T) {
 		MacSignKeyIdentifier:     types.StringValue("mac-key-1"),
 		MacSignKeyIdentifierType: types.StringValue("name"),
 		Padded:                   types.BoolValue(true),
-		RevocationMessage:        types.StringValue("revoked for testing"),
-		RevocationReason:         types.StringValue("KeyCompromise"),
 		SecretDataEncoding:       types.StringValue("HEX"),
 		SecretDataLink:           types.StringValue("secret-1"),
 		SigningAlgo:              types.StringValue("RSA"),
@@ -309,8 +315,6 @@ func Test_CMKeyCreate_RemainingScalarFieldsInPayload(t *testing.T) {
 		{"mac_sign_key_identifier", `"macSignKeyIdentifier":"mac-key-1"`},
 		{"mac_sign_key_identifier_type", `"macSignKeyIdentifierType":"name"`},
 		{"padded", `"padded":true`},
-		{"revocation_message", `"revocationMessage":"revoked for testing"`},
-		{"revocation_reason", `"revocationReason":"KeyCompromise"`},
 		{"secret_data_encoding", `"secretDataEncoding":"HEX"`},
 		{"secret_data_link", `"secretDataLink":"secret-1"`},
 		{"signing_algo", `"signingAlgo":"RSA"`},
@@ -329,6 +333,46 @@ func Test_CMKeyCreate_RemainingScalarFieldsInPayload(t *testing.T) {
 				t.Errorf("expected POST body to contain %s, got: %s", tc.want, body)
 			}
 		})
+	}
+}
+
+func Test_CMKeyCreate_RevocationSentToRevokeEndpoint(t *testing.T) {
+	// Revocation is a dedicated CM operation (see revokeKey), not a field on the general
+	// key create payload — reason/message must never appear there. Confirm they instead
+	// reach CM via a distinct POST to .../<id>/revoke using CM's reason/message field names.
+	plan := &CMKeyTFSDK{
+		Name:              types.StringValue("tf-revoke"),
+		RevocationReason:  types.StringValue("KeyCompromise"),
+		RevocationMessage: types.StringValue("revoked for testing"),
+	}
+	var revokePath, revokeBody string
+	r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
+		b := make([]byte, req.ContentLength)
+		_, _ = req.Body.Read(b)
+		if strings.HasSuffix(req.URL.Path, "/revoke") {
+			revokePath = req.URL.Path
+			revokeBody = string(b)
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{}`)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id":"key-999"}`)
+	})
+	req := resource.CreateRequest{
+		Plan:   mustPlan(t, ctx, schemaResp, plan),
+		Config: mustConfig(t, ctx, schemaResp, plan),
+	}
+	resp := &resource.CreateResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+	r.Create(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics from Create(): %v", resp.Diagnostics)
+	}
+	if !strings.HasSuffix(revokePath, "/key-999/revoke") {
+		t.Fatalf("expected revoke call to hit .../key-999/revoke, got path: %q", revokePath)
+	}
+	if !strings.Contains(revokeBody, `"reason":"KeyCompromise"`) || !strings.Contains(revokeBody, `"message":"revoked for testing"`) {
+		t.Errorf(`expected revoke POST body to contain "reason":"KeyCompromise" and "message":"revoked for testing", got: %s`, revokeBody)
 	}
 }
 
@@ -1288,6 +1332,15 @@ func updateCapture(t *testing.T, plan, state *CMKeyTFSDK, responseBody string) (
 	r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
 		b := make([]byte, req.ContentLength)
 		_, _ = req.Body.Read(b)
+		// A plan/state pair with a changed revocation_reason/revocation_message
+		// triggers a second, separate POST to the /revoke endpoint (see revokeKey)
+		// right after the PATCH. Handle it distinctly so it doesn't clobber the
+		// PATCH body below.
+		if strings.HasSuffix(req.URL.Path, "/revoke") {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{}`)
+			return
+		}
 		capturedBody = string(b)
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, responseBody)
@@ -1454,8 +1507,6 @@ func Test_CMKeyUpdate_RemainingScalarFieldsInPayload(t *testing.T) {
 		MUID:                     types.StringValue("muid-1"),
 		ProcessStartDate:         types.StringValue("2024-01-01T00:00:00Z"),
 		ProtectStopDate:          types.StringValue("2030-01-01T00:00:00Z"),
-		RevocationMessage:        types.StringValue("revoked for testing"),
-		RevocationReason:         types.StringValue("KeyCompromise"),
 		RotationFrequencyDays:    types.StringValue("30"),
 		UnDeletable:              types.BoolValue(true),
 		UnExportable:             types.BoolValue(true),
@@ -1478,8 +1529,6 @@ func Test_CMKeyUpdate_RemainingScalarFieldsInPayload(t *testing.T) {
 		{"muid", `"muid":"muid-1"`},
 		{"process_start_date", `"processStartDate":"2024-01-01T00:00:00Z"`},
 		{"protect_stop_date", `"protectStopDate":"2030-01-01T00:00:00Z"`},
-		{"revocation_message", `"revocationMessage":"revoked for testing"`},
-		{"revocation_reason", `"revocationReason":"KeyCompromise"`},
 		{"rotation_frequency_days", `"rotationFrequencyDays":"30"`},
 		{"undeletable", `"undeletable":true`},
 		{"unexportable", `"unexportable":true`},
@@ -1490,6 +1539,64 @@ func Test_CMKeyUpdate_RemainingScalarFieldsInPayload(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if !strings.Contains(body, tc.want) {
 				t.Errorf("expected PATCH payload to contain %s, got: %s", tc.want, body)
+			}
+		})
+	}
+}
+
+func Test_CMKeyUpdate_RevocationSentToRevokeEndpointOnChange(t *testing.T) {
+	// Mirrors the revocationChanged gate in Update(): revocation is a dedicated CM
+	// operation (see revokeKey), resent only when reason/message actually changed —
+	// not on every apply — so an already-revoked key isn't re-revoked repeatedly.
+	for _, tc := range []struct {
+		name          string
+		state         *CMKeyTFSDK
+		plan          *CMKeyTFSDK
+		expectRevoked bool
+	}{
+		{
+			name:          "unchanged revocation is not resent",
+			state:         &CMKeyTFSDK{ID: types.StringValue("key-1"), RevocationReason: types.StringValue("KeyCompromise"), RevocationMessage: types.StringValue("revoked for testing")},
+			plan:          &CMKeyTFSDK{ID: types.StringValue("key-1"), RevocationReason: types.StringValue("KeyCompromise"), RevocationMessage: types.StringValue("revoked for testing")},
+			expectRevoked: false,
+		},
+		{
+			name:          "newly set revocation is sent",
+			state:         &CMKeyTFSDK{ID: types.StringValue("key-1")},
+			plan:          &CMKeyTFSDK{ID: types.StringValue("key-1"), RevocationReason: types.StringValue("KeyCompromise"), RevocationMessage: types.StringValue("revoked for testing")},
+			expectRevoked: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var revokeCalled bool
+			var revokeBody string
+			r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
+				b := make([]byte, req.ContentLength)
+				_, _ = req.Body.Read(b)
+				if strings.HasSuffix(req.URL.Path, "/revoke") {
+					revokeCalled = true
+					revokeBody = string(b)
+					w.WriteHeader(http.StatusOK)
+					fmt.Fprint(w, `{}`)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, `{"id":"key-1"}`)
+			})
+			req := resource.UpdateRequest{
+				Plan:  mustPlan(t, ctx, schemaResp, tc.plan),
+				State: mustState(t, ctx, schemaResp, tc.state),
+			}
+			resp := &resource.UpdateResponse{State: mustState(t, ctx, schemaResp, tc.state)}
+			r.Update(ctx, req, resp)
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+			}
+			if revokeCalled != tc.expectRevoked {
+				t.Fatalf("expected revokeCalled=%v, got %v", tc.expectRevoked, revokeCalled)
+			}
+			if tc.expectRevoked && (!strings.Contains(revokeBody, `"reason":"KeyCompromise"`) || !strings.Contains(revokeBody, `"message":"revoked for testing"`)) {
+				t.Errorf(`expected revoke body to contain "reason":"KeyCompromise" and "message":"revoked for testing", got: %s`, revokeBody)
 			}
 		})
 	}
