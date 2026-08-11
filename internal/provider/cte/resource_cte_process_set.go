@@ -177,6 +177,12 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 	}
 	payload.Processes = processes
 
+	labelsPayload := make(map[string]interface{})
+	for k, v := range plan.Labels.Elements() {
+		labelsPayload[k] = v.(types.String).ValueString()
+	}
+	payload.Labels = labelsPayload
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Create][" + id + "]")
@@ -311,6 +317,17 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	}
 	payload.Processes = processes
 
+	// Handle labels: send nil when empty to clear labels in CM (TFIN-598)
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Update][" + plan.ID.ValueString() + "]")
@@ -395,6 +412,24 @@ func setCTEProcessSetState(
 		state.Description = types.StringValue(apiResp.Description)
 	} else {
 		state.Description = types.StringNull()
+	}
+
+	// Labels (TFIN-598)
+	if apiResp.Labels != nil {
+		labelsMap := map[string]attr.Value{}
+		for k, v := range apiResp.Labels {
+			if strVal, ok := v.(string); ok {
+				labelsMap[k] = types.StringValue(strVal)
+			}
+		}
+		labelsValue, diags := types.MapValue(types.StringType, labelsMap)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsValue
+	} else {
+		state.Labels = types.MapNull(types.StringType)
 	}
 
 	var processes []CTEProcessTFSDK
