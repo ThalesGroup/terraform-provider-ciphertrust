@@ -1406,6 +1406,22 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 }
 
+// gjsonPermissionValues reads a meta.permissions field from a vault/keys2 response.
+// CM persists meta.permissions under whichever casing (PascalCase or snake_case) was
+// last PATCHed - including via non-Terraform clients - and echoes that casing back on
+// GET, so both forms must be checked.
+func gjsonPermissionValues(response, pascalKey, snakeKey string) []types.String {
+	r := gjson.Get(response, "meta.permissions."+pascalKey)
+	if !r.Exists() {
+		r = gjson.Get(response, "meta.permissions."+snakeKey)
+	}
+	var out []types.String
+	for _, item := range r.Array() {
+		out = append(out, types.StringValue(item.String()))
+	}
+	return out
+}
+
 // Read refreshes the Terraform state with the latest data.
 func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
@@ -1714,33 +1730,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		permsResult := gjson.Get(response, "meta.permissions")
 		if permsResult.Exists() && permsResult.Type != gjson.Null {
 			var perms KeyMetadataPermissionsTFSDK
-			for _, item := range gjson.Get(response, "meta.permissions.DecryptWithKey").Array() {
-				perms.DecryptWithKey = append(perms.DecryptWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.EncryptWithKey").Array() {
-				perms.EncryptWithKey = append(perms.EncryptWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.ExportKey").Array() {
-				perms.ExportKey = append(perms.ExportKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.MACVerifyWithKey").Array() {
-				perms.MACVerifyWithKey = append(perms.MACVerifyWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.MACWithKey").Array() {
-				perms.MACWithKey = append(perms.MACWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.ReadKey").Array() {
-				perms.ReadKey = append(perms.ReadKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.SignVerifyWithKey").Array() {
-				perms.SignVerifyWithKey = append(perms.SignVerifyWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.SignWithKey").Array() {
-				perms.SignWithKey = append(perms.SignWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.UseKey").Array() {
-				perms.UseKey = append(perms.UseKey, types.StringValue(item.String()))
-			}
+			perms.DecryptWithKey = gjsonPermissionValues(response, "DecryptWithKey", "decrypt_with_key")
+			perms.EncryptWithKey = gjsonPermissionValues(response, "EncryptWithKey", "encrypt_with_key")
+			perms.ExportKey = gjsonPermissionValues(response, "ExportKey", "export_key")
+			perms.MACVerifyWithKey = gjsonPermissionValues(response, "MACVerifyWithKey", "mac_verify_with_key")
+			perms.MACWithKey = gjsonPermissionValues(response, "MACWithKey", "mac_with_key")
+			perms.ReadKey = gjsonPermissionValues(response, "ReadKey", "read_key")
+			perms.SignVerifyWithKey = gjsonPermissionValues(response, "SignVerifyWithKey", "sign_verify_with_key")
+			perms.SignWithKey = gjsonPermissionValues(response, "SignWithKey", "sign_with_key")
+			perms.UseKey = gjsonPermissionValues(response, "UseKey", "use_key")
 			metaVal.Permissions = &perms
 		} else {
 			metaVal.Permissions = nil
