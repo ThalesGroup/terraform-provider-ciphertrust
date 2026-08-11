@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -895,8 +896,8 @@ resource "ciphertrust_interface" "test" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig:          func() { interfaceSweep(9878) },
-				Config:             cfg,
+				PreConfig: func() { interfaceSweep(9878) },
+				Config:    cfg,
 				Check: checkStep(t, "create without names",
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
 				),
@@ -1162,6 +1163,186 @@ resource "ciphertrust_interface" "test" {
 						return nil
 					},
 				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// interfaceCiphersFromCM returns the cipher suites CM currently reports for the named
+// interface, in CM's returned order. Used to build tls_ciphers configs dynamically:
+// CM rejects adding or removing members ("Adding or removing TLS cipher suites is not
+// allowed", HTTP 400), so a config must list exactly the suites the interface already has,
+// and hardcoding them would break whenever a CM release changes the set.
+func interfaceCiphersFromCM(ifaceName string) ([]struct {
+	Suite   string
+	Enabled bool
+}, bool) {
+	client, ok := createCMClient()
+	if !ok {
+		return nil, false
+	}
+	raw, err := client.ReadDataByParam(context.Background(), uuid.New().String(), ifaceName, common.URL_INTERFACE)
+	if err != nil {
+		return nil, false
+	}
+	var out []struct {
+		Suite   string
+		Enabled bool
+	}
+	gjson.Get(raw, "tls_ciphers").ForEach(func(_, c gjson.Result) bool {
+		out = append(out, struct {
+			Suite   string
+			Enabled bool
+		}{Suite: c.Get("cipher_suite").String(), Enabled: c.Get("enabled").Bool()})
+		return true
+	})
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+// Test_CM_Interface_TLSCiphersOrderInsensitiveConverges is the acceptance-level proof for the
+// tls_ciphers non-convergence fix. CM re-orders the cipher list unpredictably on every write
+// (live-confirmed: repeated GETs are stable, but after a PATCH the returned order matches
+// neither the previous order nor the order just submitted). While tls_ciphers was an
+// order-sensitive List, state came back in CM's post-write order, never equalled the config's
+// order, and every plan showed a positional "cipher_suite = A -> B" diff that re-applying
+// only re-shuffled — exactly the perpetual diff reported in the ticket.
+//
+// The config below deliberately submits the full member set in REVERSE of CM's order so an
+// order-sensitive implementation cannot pass by luck. Step 2 refreshes and requires an empty
+// plan; that is the assertion that the resource converges.
+func Test_CM_Interface_TLSCiphersOrderInsensitiveConverges(t *testing.T) {
+	RequireCM(t)
+
+	// Read the cipher set off the always-present default NAE interface so the generated
+	// config matches whatever this CM build ships.
+	ciphers, ok := interfaceCiphersFromCM("nae")
+	if !ok {
+		t.Skip("could not read tls_ciphers from CM's default nae interface — skipping")
+	}
+
+	// Reverse CM's order, and flip one enabled flag so the apply is a real change.
+	var b strings.Builder
+	for i := len(ciphers) - 1; i >= 0; i-- {
+		enabled := ciphers[i].Enabled
+		if i == len(ciphers)-1 {
+			enabled = !enabled
+		}
+		fmt.Fprintf(&b, "    { cipher_suite = %q, enabled = %t },\n", ciphers[i].Suite, enabled)
+	}
+
+	// tls_ciphers is added in a second step rather than at create time: Create() does not put
+	// tls_ciphers in its POST payload but *does* hydrate the field from the POST response, so
+	// a create-time tls_ciphers config fails with "Provider produced inconsistent result
+	// after apply" (CM's response carries all suites at their defaults, which cannot match a
+	// config that changes any enabled flag). That is a separate pre-existing gap, unrelated to
+	// element ordering; PATCH via Update() is the path that actually manages this attribute
+	// and the path the reported bug occurs on.
+	const bare = `
+resource "ciphertrust_interface" "test" {
+  port           = 9396
+  interface_type = "nae"
+}`
+	withCiphers := fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = 9396
+  interface_type = "nae"
+  tls_ciphers = [
+%s  ]
+}`, b.String())
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9396) },
+				Config:    providerConfig + bare,
+				Check:     checkStep(t, "tls_ciphers: create interface without ciphers"),
+			},
+			{
+				// PATCH the full member set in reverse of CM's order. CM re-shuffles on write,
+				// so the order it reports back will match neither this order nor its previous
+				// one — only membership is preserved.
+				Config: providerConfig + withCiphers,
+				Check: checkStep(t, "tls_ciphers: PATCH full set in reverse of CM's order",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "tls_ciphers.#",
+						fmt.Sprintf("%d", len(ciphers))),
+				),
+			},
+			{
+				// The regression assertion. Read() hydrates state from CM's re-shuffled order;
+				// as an order-sensitive List that produced a positional
+				// "cipher_suite = A -> B" diff on every refresh, forever. As a Set it must be
+				// clean.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Interface_AutoGenCAIdEmptyStringConverges is the acceptance-level proof for the
+// auto_gen_ca_id fix, following the ticket's repro steps: set a real Local CA, then set the
+// documented disable value "" and confirm it sticks. CM echoes the key back with an empty
+// value (live-confirmed: PATCH {"auto_gen_ca_id":""} returns 200 with "auto_gen_ca_id":"" and
+// the subsequent GET agrees), but the provider used to discard that via an
+// `r.Exists() && r.String() != ""` guard and rewrite state to null on every refresh — so an
+// explicit auto_gen_ca_id = "" re-planned forever.
+func Test_CM_Interface_AutoGenCAIdEmptyStringConverges(t *testing.T) {
+	RequireCM(t)
+
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("CM client unavailable — skipping")
+	}
+	raw, err := client.GetAll(context.Background(), uuid.New().String(), common.URL_LOCAL_CA)
+	if err != nil {
+		t.Skipf("could not list local CAs: %v", err)
+	}
+	caURI := gjson.Get(raw, "0.uri").String()
+	if caURI == "" {
+		t.Skip("no local CA available on CM — skipping")
+	}
+
+	withCA := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_interface" "test" {
+  port           = 9395
+  interface_type = "nae"
+  auto_gen_ca_id = %q
+}`, caURI)
+
+	withEmpty := providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9395
+  interface_type = "nae"
+  auto_gen_ca_id = ""
+}`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9395) },
+				Config:    withCA,
+				Check: checkStep(t, "auto_gen_ca_id: set to a real Local CA URI",
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_gen_ca_id", caURI),
+				),
+			},
+			{
+				// The documented way to disable auto-generation. State must hold "" — not
+				// null — or the next plan diffs forever.
+				Config: withEmpty,
+				Check: checkStep(t, `auto_gen_ca_id: set to "" (disable auto-generation)`,
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "auto_gen_ca_id", ""),
+				),
+			},
+			{
+				// This refresh is the regression assertion: pre-fix it produced a perpetual
+				// `+ auto_gen_ca_id = ""` plan.
+				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
 			},
 		},

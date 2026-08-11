@@ -316,9 +316,21 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
-			"tls_ciphers": schema.ListNestedAttribute{
+			// Set, not List: CM re-orders the cipher-suite entries unpredictably on every
+			// write. Live-confirmed: repeated GETs are stable, but after a PATCH the returned
+			// order matches neither the previously-returned order nor the order just
+			// submitted — only the membership is preserved. While this was an order-sensitive
+			// ListNestedAttribute, Read() hydrated state in CM's post-write order, which
+			// never equalled the config's order, so every plan showed a positional diff and
+			// re-applying just re-shuffled it — the resource never converged. A Set takes
+			// ordering out of both state and diffing.
+			//
+			// Note CM rejects adding or removing members ("Adding or removing TLS cipher
+			// suites is not allowed", HTTP 400): a config must list every cipher suite the
+			// interface has, and only the `enabled` flags are actually mutable.
+			"tls_ciphers": schema.SetNestedAttribute{
 				Optional:    true,
-				Description: "The list of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled.",
+				Description: "The set of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. Ordering is not significant. CipherTrust Manager does not permit adding or removing cipher suites, so this must list every suite the interface already has; only the enabled flags can be changed.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"cipher_suite": schema.StringAttribute{
@@ -548,8 +560,14 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 			plan.AllowUnregistered = types.BoolNull()
 		}
 	}
+	// "" is a meaningful value for auto_gen_ca_id, not a synonym for "unset": setting it to
+	// an empty string is the documented way to disable server-certificate auto-generation
+	// (see this attribute's Description). CM echoes the key back with an empty value rather
+	// than omitting it — live-confirmed: PATCH {"auto_gen_ca_id":""} returns 200 with
+	// "auto_gen_ca_id":"" and the subsequent GET agrees — so gate on r.Exists() alone.
+	// Collapsing "" to null here made an explicit auto_gen_ca_id = "" re-plan forever.
 	if !plan.AutogenCAId.IsNull() && !plan.AutogenCAId.IsUnknown() {
-		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() {
 			plan.AutogenCAId = types.StringValue(r.String())
 		} else {
 			plan.AutogenCAId = types.StringNull()
@@ -727,8 +745,11 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AllowUnregistered = types.BoolNull()
 		}
 	}
+	// Gate on r.Exists() alone — "" is a real value meaning "auto-generation disabled", not
+	// "unset". See the matching comment in Create(); this is the site that produced the
+	// perpetual "+ auto_gen_ca_id = \"\"" diff, since Read() runs on every refresh.
 	if !state.AutogenCAId.IsNull() {
-		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() {
 			state.AutogenCAId = types.StringValue(r.String())
 		} else {
 			state.AutogenCAId = types.StringNull()
