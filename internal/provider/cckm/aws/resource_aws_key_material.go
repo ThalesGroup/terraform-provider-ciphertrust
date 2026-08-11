@@ -90,8 +90,10 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		Description: "Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.\n\n" +
 			"This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.\n\n" +
-			"Multi-region key support requires CipherTrust Manager 2.23 or later. " +
-			"Single-region key support requires CipherTrust Manager 2.21 or later.\n\n" +
+			"**CipherTrust Manager version requirements:**\n\n" +
+			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.\n" +
+			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.\n" +
+			"* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.\n\n" +
 			"Key features:\n\n" +
 			"* Import key material into AWS EXTERNAL symmetric keys.\n" +
 			"* Rotate to new key material by adding additional `key_material` entries.\n" +
@@ -213,6 +215,17 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	// Version guard: on CM 2.23, only single-region is supported; MRK requires CM 2.24+.
+	// The < 2.23 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
+	// can inspect the actual key type from the CipherTrust Manager API response.
+	// On CDSPaaS the server confirms MR BYOK key material is supported, so only
+	// apply the version gate for on-prem CM < 2.24.
+	isMRKey := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
+	if isMRKey && !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+		resp.Diagnostics.AddError(common.UnsupportedCMVersion("ciphertrust_aws_key_material for multi-region keys", r.client.CMFullVersion, "2.24"), "")
+		return
+	}
+
 	// Validate that the target AWS key is an EXTERNAL (BYOK) key with SYMMETRIC_DEFAULT encryption.
 	// Only EXTERNAL origin keys support key material import, and only SYMMETRIC_DEFAULT
 	// keys are supported by this resource.
@@ -387,6 +400,17 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 	// Create path: state is null.
 	if req.State.Raw.IsNull() {
+		// CM version gate: ciphertrust_aws_key_material requires CM 2.23+.
+		// This check runs at plan time so the user gets a clear error before any
+		// API calls are made. On CDSPaaS ciphertrust_aws_key_material is supported.
+		if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
+			resp.Diagnostics.AddError(
+				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.23"),
+				"",
+			)
+			return
+		}
+
 		var createPlan AWSKeyMaterialTFSDK
 		resp.Diagnostics.Append(req.Plan.Get(ctx, &createPlan)...)
 		if resp.Diagnostics.HasError() {
@@ -1222,7 +1246,13 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		// No per-replica wait: if the import-material call returns no error, the command
 		// has been received by AWS and will be acted on asynchronously. We refresh the
 		// primary key after all replicas are processed to trigger CM to re-check AWS state.
+		//
+		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
 		importType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			importType = ""
+		}
 		var importDiags diag.Diagnostics
 		ImportByokKeyMaterial(ctx, id, r.client, replicaCMKeyID, sourceKeyID, sourceKeyTier, validTo, "", importType, &importDiags)
 		if importDiags.HasError() {
@@ -1285,8 +1315,12 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 			continue
 		}
 		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental: importing to region: %s replicaCMKeyID: %s sourceKeyID: %s", region, cmID, sourceKeyID))
+		suppImportType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			suppImportType = ""
+		}
 		var importDiags diag.Diagnostics
-		ImportByokKeyMaterial(ctx, id, r.client, cmID, sourceKeyID, sourceKeyTier, validTo, "", "EXISTING_KEY_MATERIAL", &importDiags)
+		ImportByokKeyMaterial(ctx, id, r.client, cmID, sourceKeyID, sourceKeyTier, validTo, "", suppImportType, &importDiags)
 		if importDiags.HasError() {
 			diags.Append(importDiags...)
 			return
@@ -1311,7 +1345,12 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		SourceKeyTier: sourceKeyTier,
 		KeyExpiration: validTo != "",
 		ValidTo:       validTo,
-		ImportType:    &importType,
+	}
+	// Only include import_type when a non-empty value is provided.
+	// Call sites that must suppress import_type (e.g. MR replica imports on CM 2.23)
+	// pass an empty string so the field is omitted from the request.
+	if importType != "" {
+		payload.ImportType = &importType
 	}
 	if keyMaterialDescription != "" {
 		payload.KeyMaterialDescription = &keyMaterialDescription
@@ -1372,6 +1411,24 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 
 	client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] primaryKeyID: %s sourceKeyID: %s", cmKeyID, srcID))
 
+	// CM < 224: rotate-material ignores source_key_identifier and calls RotateKeyOnDemand
+	// directly without first staging pending material - AWS rejects the call. Use the
+	// CM 2.23 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
+	// material as PENDING_ROTATION, then return false so the outer retry loop re-classifies
+	// and repairKeyMaterialRotations activates it via rotate-material with an empty body.
+	// On-prem CM < 2.24 does not support rotate-material with source_key_identifier.
+	// CDSPaaS supports it.
+	if !client.IsCDSPaaS && client.CMVersion < 224 {
+		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CM %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
+		ImportByokKeyMaterial(ctx, id, client, cmKeyID, srcID, srcTier, validTo, keyMaterialDescription, "NEW_KEY_MATERIAL", diags)
+		if diags.HasError() {
+			return false
+		}
+		waitForRotationHistoryRecord(ctx, id, client, cmKeyID, srcID, srcTier, diags)
+		// Return false (no error) - the outer loop re-classifies, sees PENDING_ROTATION,
+		// and calls repairKeyMaterialRotations to complete activation.
+		return false
+	}
 	rotPayload := RotateMaterialPayloadJSON{
 		SourceKeyID:            srcID,
 		SourceKeyTier:          srcTier,

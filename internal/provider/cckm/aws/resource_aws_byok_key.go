@@ -118,7 +118,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
-				Description: "Updates the primary region of a multi-region key. Only valid during updates.",
+				Description: "Updates the primary region of a multi-region key. Only valid during updates." + mrKeyRefreshLimitationNote,
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
@@ -146,7 +146,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					},
 					"make_primary": schema.BoolAttribute{
 						Optional:    true,
-						Description: "Promote the replica to primary after replication. Only valid during replication creation.",
+						Description: "Promote the replica to primary after replication. Only valid during replication creation." + mrKeyRefreshLimitationNote,
 					},
 				},
 			},

@@ -735,8 +735,8 @@ func TestCckmAWSKeyMaterialMROOBDeleteMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 224 {
+		t.Skip("Skipping on CipherTrust version < 224")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1149,11 +1149,12 @@ func TestCckmAWSKeyMaterialMROOBDeleteMaterial(t *testing.T) {
 //     Verify rotation_history.#=2 and all keys Enabled.
 //  6. RefreshState - confirm plan stable.
 func TestCckmAWSKeyMaterialMRRepairPendingImportAndRotation(t *testing.T) {
+
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 224 {
+		t.Skip("Skipping on CipherTrust version < 224")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1494,8 +1495,8 @@ func TestCckmAWSKeyMaterialMRAdoptPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 224 {
+		t.Skip("Skipping on CipherTrust version < 224")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1671,10 +1672,32 @@ func TestCckmAWSKeyMaterialMRAdoptPendingRotation(t *testing.T) {
 					//    enters PENDING_MULTI_REGION_IMPORT_AND_ROTATION.
 					cckm.ImportByokKeyMaterial(ctx, id, client,
 						capturedPrimaryKeyID, capturedCmKey2ID, "local", "", "", "NEW_KEY_MATERIAL", &diags)
-					// b. Import the same cm_aes_key2 bytes to replica_1 using EXISTING_KEY_MATERIAL.
-					//    replica_1 now has the bytes; replica_2 does not.
-					cckm.ImportByokKeyMaterial(ctx, id, client,
-						capturedReplica1KeyID, capturedCmKey2ID, "local", "", "", "EXISTING_KEY_MATERIAL", &diags)
+					// b. Import cm_aes_key2 to replica_1 using EXISTING_KEY_MATERIAL.
+					//    AWS propagates the PENDING_IMPORT slot to replicas asynchronously after
+					//    the primary import. On CM 2.24 the import_type is forwarded verbatim so
+					//    EXISTING_KEY_MATERIAL fails with IncorrectKeyMaterialException until the
+					//    slot exists. Retry with a short sleep between attempts. On CM 2.25 the
+					//    first attempt succeeds immediately.
+					//    NEW_KEY_MATERIAL cannot be used on replica MRK keys (AWS ValidationException).
+					const maxAttempts = 4
+					for attempt := 1; attempt <= maxAttempts; attempt++ {
+						fmt.Printf("importing cm_aes_key2 to replica_1 (attempt %d/%d)\n", attempt, maxAttempts)
+						var attemptDiags diag.Diagnostics
+						cckm.ImportByokKeyMaterial(ctx, id, client,
+							capturedReplica1KeyID, capturedCmKey2ID, "local", "", "", "EXISTING_KEY_MATERIAL", &attemptDiags)
+						if !attemptDiags.HasError() {
+							fmt.Printf("attempt %d/%d succeeded\n", attempt, maxAttempts)
+							break
+						}
+						errStr := fmt.Sprintf("%v", attemptDiags)
+						if !strings.Contains(errStr, "IncorrectKeyMaterialException") || attempt == maxAttempts {
+							fmt.Printf("attempt %d/%d failed (non-retryable or max attempts): %v\n", attempt, maxAttempts, attemptDiags)
+							t.Skipf("EXISTING_KEY_MATERIAL to replica_1 failed after %d attempts - skipping test", maxAttempts)
+							return
+						}
+						fmt.Printf("attempt %d/%d: slot not yet propagated, sleeping 15s\n", attempt, maxAttempts)
+						time.Sleep(15 * time.Second)
+					}
 					if diags.HasError() {
 						fmt.Printf("import-material failed: %v\n", diags)
 						return
@@ -1783,8 +1806,8 @@ func TestCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 224 {
+		t.Skip("Skipping on CipherTrust version < 224")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -2142,7 +2165,6 @@ func callByokImportMaterialOutOfBand(keyID, sourceKeyID, sourceKeyTier, importTy
 
 func refreshKeyAndWait(testName string, keyID string, sourceKeyIDs []string) {
 	logTestStep(testName, fmt.Sprintf("refreshKeyAndWait: keyID: %s", keyID))
-	fmt.Printf("refreshKeyAndWait: keyID: %s sourceKeyIDs: %v\n", keyID, sourceKeyIDs)
 	client, ok := createCMClient()
 	if !ok {
 		fmt.Println("refreshKeyAndWait: could not create CM client")

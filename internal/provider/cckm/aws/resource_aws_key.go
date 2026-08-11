@@ -117,7 +117,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
-				Description: "Updates the primary region of a multi-region key.",
+				Description: "Updates the primary region of a multi-region key." + mrKeyRefreshLimitationNote,
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
@@ -266,7 +266,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 					},
 					"make_primary": schema.BoolAttribute{
 						Optional:    true,
-						Description: "Update the primary key region to the replicated key's region following replication.",
+						Description: "Update the primary key region to the replicated key's region following replication." + mrKeyRefreshLimitationNote,
 					},
 				},
 			},

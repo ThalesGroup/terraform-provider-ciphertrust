@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,13 @@ type Client struct {
 	// IsClustered is true when the CipherTrust Manager instance has more than
 	// one node in the cluster. When false, waitForReplication is a no-op.
 	IsClustered bool
+	// CMVersion is the integer-encoded CipherTrust Manager version fetched at
+	// startup (e.g. "2.23.0+16764" -> 223). Zero means the version could not
+	// be determined; callers should treat 0 as "unknown" and skip version gates.
+	CMVersion int
+	// CMFullVersion is the full raw version string from /api/v1/system/info
+	// (e.g. "2.23.0+16764"). Empty when the version could not be determined.
+	CMFullVersion string
 	// Log is the provider-specific logger that writes to a dedicated log file,
 	// independent of Terraform's TF_LOG output.
 	Log hclog.Logger
@@ -251,9 +259,49 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 	c.Token = ar.Token
 	c.CMRefreshToken = ar.RefreshToken
 	c.IsClustered = c.checkIsClustered(ctx)
-
+	if !c.IsCDSPaaS {
+		if err = c.fetchCMVersion(ctx); err != nil {
+			return nil, err
+		}
+	}
 	tflog.Trace(ctx, MSG_METHOD_END+" [client.go -> NewClient]["+uuid+"]")
 	return &c, nil
+}
+
+// fetchCMVersion calls GET /api/v1/system/info and sets c.CMVersion and c.CMFullVersion.
+// Returns an error if the version cannot be fetched or parsed.
+// Sets CMVersion=9999 and CMFullVersion="Development" for Development builds.
+func (c *Client) fetchCMVersion(ctx context.Context) error {
+	response, err := c.ReadDataByParam(ctx, "version", "all", URL_SYSTEMINFO)
+	if err != nil {
+		tflog.Error(ctx, "fetchCMVersion -> failed to fetch CM system info: "+err.Error())
+		return fmt.Errorf("failed to fetch CM system info: %s", err.Error())
+	}
+	version := gjson.Get(response, "version").String()
+	if version == "" {
+		tflog.Error(ctx, "fetchCMVersion -> CM system info response missing version field")
+		return fmt.Errorf("CM system info response missing version field")
+	}
+	if version == "Development" {
+		c.Log.Info("CM version: Development (returning 9999)")
+		c.CMVersion = 9999
+		c.CMFullVersion = "Development"
+		tflog.Info(ctx, "fetchCMVersion -> Development")
+		return nil
+	}
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		tflog.Error(ctx, fmt.Sprintf("fetchCMVersion -> unexpected CM version format: %q", version))
+		return fmt.Errorf("unexpected CM version format: %q", version)
+	}
+	v, err := strconv.Atoi(parts[0] + parts[1])
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("fetchCMVersion -> failed to parse CM version %q: %s", version, err.Error()))
+		return fmt.Errorf("failed to parse CM version %q: %s", version, err.Error())
+	}
+	c.CMVersion = v
+	c.CMFullVersion = version
+	return nil
 }
 
 // checkIsClustered calls GET /api/v1/cluster and returns true only when the
