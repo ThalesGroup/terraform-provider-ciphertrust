@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -25,6 +26,7 @@ var (
 	_ resource.Resource                = &resourceCTEPolicySecurityRule{}
 	_ resource.ResourceWithConfigure   = &resourceCTEPolicySecurityRule{}
 	_ resource.ResourceWithImportState = &resourceCTEPolicySecurityRule{}
+	_ resource.ResourceWithModifyPlan  = &resourceCTEPolicySecurityRule{}
 )
 
 func NewResourceCTEPolicySecurityRule() resource.Resource {
@@ -63,6 +65,17 @@ func (r *resourceCTEPolicySecurityRule) Schema(_ context.Context, _ resource.Sch
 						Optional:    true,
 						Computed:    true,
 						Description: "Precedence order of the rule in the parent policy.",
+						// TFIN-610: adding ModifyPlan (below) to this resource
+						// causes the framework to mark computed-and-unset
+						// attributes lacking their own plan modifier as
+						// unknown ahead of ModifyPlan running, producing a
+						// perpetual "known after apply" diff for this field
+						// on every plan. UseStateForUnknown restores the
+						// original (pre-ModifyPlan) behavior of carrying the
+						// prior state value forward when unconfigured.
+						PlanModifiers: []planmodifier.Int64{
+							int64planmodifier.UseStateForUnknown(),
+						},
 					},
 					"action": schema.StringAttribute{
 						Optional:    true,
@@ -271,6 +284,40 @@ func (r *resourceCTEPolicySecurityRule) Read(ctx context.Context, req resource.R
 
 }
 
+// ModifyPlan normalizes rule.resource_set_id so state (always the CM-returned
+// name form, per Read() above) and config (which may supply either a UUID or
+// a name) can be compared consistently (TFIN-610). CM's GET for this
+// endpoint always returns the resource set's name, and Read() has always
+// unconditionally refreshed state from it, so config supplying a UUID showed
+// a permanent, non-converging diff (~ resource_set_id = "<name>" ->
+// "<UUID>") on every subsequent plan. If the planned value resolves to the
+// same resource set as the current state, the plan is pinned to the
+// existing state value (no diff); a genuine change is left untouched so it
+// surfaces normally.
+func (r *resourceCTEPolicySecurityRule) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan, state CTEPolicyAddSecurityRuleTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if resolved, ok := modifyPlanCTERuleResourceSetID(
+		ctx,
+		r.client,
+		plan.SecurityRule.ResourceSetID.ValueString(),
+		state.SecurityRule.ResourceSetID.ValueString(),
+		!plan.SecurityRule.ResourceSetID.IsUnknown(),
+	); ok {
+		plan.SecurityRule.ResourceSetID = types.StringValue(resolved)
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+	}
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCTEPolicySecurityRule) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state CTEPolicyAddSecurityRuleTFSDK
@@ -320,7 +367,18 @@ func (r *resourceCTEPolicySecurityRule) Update(ctx context.Context, req resource
 	if plan.SecurityRule.UserSetID.ValueString() != "" && plan.SecurityRule.UserSetID.ValueString() != types.StringNull().ValueString() {
 		payload.UserSetID = string(plan.SecurityRule.UserSetID.ValueString())
 	}
-	if !plan.SecurityRule.OrderNumber.IsNull() && !plan.SecurityRule.OrderNumber.IsUnknown() {
+	// TFIN-610: only send order_number when it is actually changing. order_number
+	// now carries UseStateForUnknown (added above to counteract ModifyPlan's side
+	// effect of marking unconfigured computed attributes unknown), so it is
+	// "known" on every Update() call even when unchanged -- previously it would
+	// often have been unknown/omitted here. Confirmed via live CM (on the
+	// sibling data_tx_rule/key_rule endpoints): including an unchanged
+	// order_number in the same PATCH as a resource_set_id clear
+	// ("resource_set_id":"") causes CM to silently ignore the clear (a CM-side
+	// quirk); omitting order_number when it isn't actually changing avoids
+	// triggering that.
+	if !plan.SecurityRule.OrderNumber.IsNull() && !plan.SecurityRule.OrderNumber.IsUnknown() &&
+		plan.SecurityRule.OrderNumber.ValueInt64() != state.SecurityRule.OrderNumber.ValueInt64() {
 		OrderNumber := plan.SecurityRule.OrderNumber.ValueInt64()
 		payload.OrderNumber = &OrderNumber
 	}

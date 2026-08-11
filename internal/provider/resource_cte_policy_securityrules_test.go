@@ -123,3 +123,69 @@ func TestCTEPolicySecurityRuleResource_drift(t *testing.T) {
 		},
 	})
 }
+
+// cteSecurityRuleResourceSetConfig renders a policy plus a security_rule whose
+// resource_set_id is set to the given resource set reference expression.
+func cteSecurityRuleResourceSetConfig(policyName, resourceSetIDExpr string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "rs" {
+  name = "tf-secrule-rs-%s"
+  resources = [{
+    directory          = "/opt/tfin610"
+    file               = "*"
+    include_subfolders = true
+    hdfs               = false
+  }]
+}
+
+resource "ciphertrust_cte_policy" "policy" {
+  name        = %q
+  policy_type = "Standard"
+  key_rules = [{
+    key_id   = "clear_key"
+    key_type = ""
+  }]
+}
+
+resource "ciphertrust_cte_policy_security_rule" "secrule" {
+  policy_id = ciphertrust_cte_policy.policy.id
+  rule = {
+    effect          = "permit"
+    action          = "all_ops"
+    resource_set_id = %s
+  }
+}
+`, policyName, policyName, resourceSetIDExpr)
+}
+
+// TestCTEPolicySecurityRuleResource_resourceSetIDStability covers TFIN-610's
+// milder, VISIBLE variant on ciphertrust_cte_policy_security_rule (not
+// covered by TFIN-470/471, which only fixed data_tx_rule/key_rule): CM's GET
+// always returns the resource set's name, and Read() has always
+// unconditionally refreshed state from it, so a config supplying a UUID
+// showed a permanent, non-converging diff on every subsequent plan. After
+// apply, a further plan must be empty.
+func TestCTEPolicySecurityRuleResource_resourceSetIDStability(t *testing.T) {
+	policyName := "tf-secrule-rsid-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy_security_rule.secrule"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteSecurityRuleResourceSetConfig(policyName, "ciphertrust_cte_resource_set.rs.id"),
+				Check: checkStep(t, "security_rule: create with resource_set_id (UUID)",
+					resource.TestCheckResourceAttrSet(rn, "rule.id"),
+					resource.TestCheckResourceAttrPair(rn, "rule.resource_set_id", "ciphertrust_cte_resource_set.rs", "id"),
+				),
+			},
+			// TFIN-610: plan must be empty; previously perpetually proposed
+			// resource_set_id name->UUID on every refresh.
+			{
+				Config:             cteSecurityRuleResourceSetConfig(policyName, "ciphertrust_cte_resource_set.rs.id"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
