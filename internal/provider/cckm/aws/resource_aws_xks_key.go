@@ -383,8 +383,9 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	if readKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "XKS key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -427,23 +428,8 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if gjson.Get(response, "linked_state").Bool() && updateKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "XKS key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			policyPlanUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			policyStateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, policyPlanUpdate, policyStateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-		}
-		r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
-		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 

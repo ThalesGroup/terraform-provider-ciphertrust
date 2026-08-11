@@ -58,8 +58,8 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 //     add/change/remove.
 //   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
 //     (schedule_for_deletion_days) retains with warning.
-//   - OOB key deletion: RefreshState retains key as SCHEDULING_DELETION (drift reported);
-//     Update triggers "Provider produced inconsistent result".
+//   - OOB key deletion: RefreshState errors because Read returns an error for SCHEDULING_DELETION;
+//     Update also errors because the pre-apply refresh triggers the same Read error.
 func TestCckmOCIByokKey(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
@@ -497,36 +497,22 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 13: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
-				// OCI auto-disables the key, causing drift on enable_key - ExpectNonEmptyPlan captures this.
-				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
+				// Read now returns an error for SCHEDULING_DELETION keys, so the refresh fails with
+				// the SCHEDULING_DELETION error rather than retaining the key in state.
 				PreConfig: func() {
 					logTestStep(t.Name(), "Step 13")
 					scheduleOciKeyDeletionOutOfBand(capturedByokKeyID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedByokKeyID {
-							return fmt.Errorf("expected key id %q, got %q", capturedByokKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 14: OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
-				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
-				// but the plan used the schema default (true). The Terraform framework raises
-				// "Provider produced inconsistent result".
+				// The pre-apply refresh triggers Read which errors because the key is in
+				// SCHEDULING_DELETION state.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 14") },
 				Config:      updateResourceStr2,
-				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
+				ExpectError: regexp.MustCompile(`SCHEDULING_DELETION state`),
 			},
 		},
 	})
