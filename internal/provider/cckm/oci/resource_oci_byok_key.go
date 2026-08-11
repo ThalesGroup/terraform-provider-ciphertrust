@@ -408,8 +408,8 @@ func (r *resourceCCKMOCIByokKey) Create(ctx context.Context, req resource.Create
 }
 
 // Read refreshes the resource state from the CipherTrust Manager API.
-// Returns an error if the vault or key is not found (HTTP 404).
-// Adds a warning if the key lifecycle state is SCHEDULING_DELETION but keeps the resource in state.
+// Returns an error if the vault or key is not found (HTTP 404) or if the key is in
+// SCHEDULING_DELETION or PENDING_DELETION state.
 func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key.go -> Read][" + id + "]")
@@ -431,8 +431,9 @@ func (r *resourceCCKMOCIByokKey) Read(ctx context.Context, req resource.ReadRequ
 	if readKeyState == keyStateScheduledForDeletion || readKeyState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key", readKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setByokKeyState(ctx, id, r.client, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -474,13 +475,8 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 	if preCheckKeyState == keyStateScheduledForDeletion || preCheckKeyState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key", preCheckKeyState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		setByokKeyState(ctx, id, r.client, preCheckResponse, &plan, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 

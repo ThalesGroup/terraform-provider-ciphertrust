@@ -3,12 +3,12 @@
 page_title: "ciphertrust_aws_byok_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is kept in state on refresh with a warning.
+  Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered.
 ---
 
 # ciphertrust_aws_byok_key (Resource)
 
-Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered. A key pending deletion is kept in state on refresh with a warning.
+Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. If the KMS is not found during refresh the key is kept in state until the KMS is recovered.
 
 ## Example Usage
 
