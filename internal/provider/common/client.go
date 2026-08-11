@@ -260,7 +260,7 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 	c.CMRefreshToken = ar.RefreshToken
 	c.IsClustered = c.checkIsClustered(ctx)
 	if !c.IsCDSPaaS {
-		if err = fetchCMVersion(ctx, &c); err != nil {
+		if err = c.fetchCMVersion(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -271,8 +271,8 @@ func NewClient(ctx context.Context, uuid string, address, auth_domain, domain, u
 // fetchCMVersion calls GET /api/v1/system/info and sets c.CMVersion and c.CMFullVersion.
 // Returns an error if the version cannot be fetched or parsed.
 // Sets CMVersion=9999 and CMFullVersion="Development" for Development builds.
-func fetchCMVersion(ctx context.Context, c *Client) error {
-	response, err := c.GetById(ctx, "", "", URL_SYSTEMINFO)
+func (c *Client) fetchCMVersion(ctx context.Context) error {
+	response, err := c.ReadDataByParam(ctx, "version", "all", URL_SYSTEMINFO)
 	if err != nil {
 		tflog.Error(ctx, "fetchCMVersion -> failed to fetch CM system info: "+err.Error())
 		return fmt.Errorf("failed to fetch CM system info: %s", err.Error())
@@ -286,7 +286,7 @@ func fetchCMVersion(ctx context.Context, c *Client) error {
 		c.Log.Info("CM version: Development (returning 9999)")
 		c.CMVersion = 9999
 		c.CMFullVersion = "Development"
-		tflog.Error(ctx, "fetchCMVersion -> Development")
+		tflog.Info(ctx, "fetchCMVersion -> Development")
 		return nil
 	}
 	parts := strings.Split(version, ".")
