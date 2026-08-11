@@ -1151,9 +1151,7 @@ func TestCckmAWSByokKeyMultiRegionReplication(t *testing.T) {
 
 // TestCckmAWSByokKeyPendingDeletionRefresh verifies that when an AWS BYOK (EXTERNAL) key is
 // scheduled for deletion out-of-band (without Terraform), a subsequent terraform refresh
-// retains the resource in state and issues a warning rather than removing it from state.
-// AWS automatically disables keys pending deletion, so Terraform will report drift on
-// enable_key - ExpectNonEmptyPlan: true captures this expected drift.
+// issues an error rather than silently retaining the resource in state with stale data.
 func TestCckmAWSByokKeyPendingDeletionRefresh(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1197,38 +1195,20 @@ func TestCckmAWSByokKeyPendingDeletionRefresh(t *testing.T) {
 			},
 			{
 				// Step 2: schedule the key for deletion out-of-band, then refresh state.
-				// Expected: provider issues a warning (not an error) and retains the resource
-				// in state with key_state = "PendingDeletion". Terraform reports drift on
-				// enable_key because AWS automatically disables keys pending deletion.
+				// Expected: provider issues an error because the key is in PendingDeletion state.
 				PreConfig: func() {
 					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-				Check: resource.ComposeTestCheckFunc(
-					// Use a closure so capturedKeyID is read at execution time (after Step 1
-					// has populated it), not at TestCase definition time when it is still "".
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found in state: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedKeyID {
-							return fmt.Errorf("expected id %q, got %q", capturedKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "PendingDeletion"),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`was found in PendingDeletion state`),
 			},
 		},
 	})
 }
 
 // TestCckmAWSByokKeyPendingDeletionUpdate verifies that when an AWS BYOK (EXTERNAL) key is
-// scheduled for deletion out-of-band, a subsequent terraform apply that includes a key_policy
-// update succeeds with a warning, retains the resource in state, and reflects the updated policy.
-// AWS permits key policy updates on keys in PendingDeletion state.
+// scheduled for deletion out-of-band, a subsequent terraform apply issues an error because
+// the key is in PendingDeletion state.
 func TestCckmAWSByokKeyPendingDeletionUpdate(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1306,31 +1286,12 @@ func TestCckmAWSByokKeyPendingDeletionUpdate(t *testing.T) {
 			},
 			{
 				// Step 2: schedule the key for deletion out-of-band, then apply a policy update.
-				// Expected: Update detects PendingDeletion state, issues a warning (not an error),
-				// applies the policy change (AWS permits policy updates on keys pending deletion),
-				// and retains the resource in state. The admins/users from the create policy
-				// should no longer appear in the updated policy.
+				// Expected: Update detects PendingDeletion state and issues an error.
 				PreConfig: func() {
 					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
 				},
-				Config: awsConnectionResource + cmAesKeyConfig + updateConfig,
-				Check: resource.ComposeTestCheckFunc(
-					// Use a closure so capturedKeyID is read at execution time (after Step 1
-					// has populated it), not at TestCase definition time when it is still "".
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found in state: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedKeyID {
-							return fmt.Errorf("expected id %q, got %q", capturedKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "aws_param.key_state", "PendingDeletion"),
-					resource.TestCheckResourceAttrSet(keyResource, "aws_param.policy"),
-					testCheckAttributeContains(keyResource, "aws_param.policy", append(awsKeyUsers, awsKeyRoles...), false),
-				),
+				Config:      awsConnectionResource + cmAesKeyConfig + updateConfig,
+				ExpectError: regexp.MustCompile(`was found in PendingDeletion state`),
 			},
 		},
 	})

@@ -114,7 +114,7 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"user_id": schema.StringAttribute{
 				Optional:      true,
-				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
+				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\". Specify either \"user_id\" or \"group\".",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"vault_id": schema.StringAttribute{
@@ -205,7 +205,7 @@ func (r *resourceCCKMOCIAcl) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "OCI vault ACL not found. If it no longer exists, remove it from your Terraform config."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI vault ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
@@ -241,7 +241,7 @@ func (r *resourceCCKMOCIAcl) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "OCI vault ACL was not found, cannot update."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "OCI vault ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"vault_id": vaultID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
