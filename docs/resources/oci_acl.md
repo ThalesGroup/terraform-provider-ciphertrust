@@ -70,7 +70,7 @@ To remove a user or group from the vault ACL entirely, delete the resource.
 ### Optional
 
 - `group` (String) (Immutable) The CipherTrust Manager group the ACL applies to. Specify either "user_id" or "group".
-- `user_id` (String) (Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: "user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9" .Specify either "user_id" or "group".
+- `user_id` (String) (Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: "local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9". Specify either "user_id" or "group".
 
 ### Read-Only
 
