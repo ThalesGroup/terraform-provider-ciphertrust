@@ -105,10 +105,10 @@ Optional:
 
 Optional:
 
-- `activity_kmip` (String) Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
-- `activity_nae` (String) Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
-- `client_audit_records` (String) Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters.
-- `server_audit_records` (String) Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.
+- `activity_kmip` (String) Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `activity_nae` (String) Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `client_audit_records` (String) Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `server_audit_records` (String) Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
 
 
 
@@ -124,10 +124,10 @@ Optional:
 
 Optional:
 
-- `activity_kmip` (String) Labels to be used for entries coming from the KMIP activity log, for example "jobs=activity_kmip". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
-- `activity_nae` (String) Labels to be used for entries coming from the NAE activity log, for example "jobs=activity_nae". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
-- `client_audit_records` (String) Labels to be used for entries coming from client audit records, for example "jobs=client_audit_records". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters.
-- `server_audit_records` (String) Labels to be used for entries coming from server audit records, for example "jobs=server_audit_records". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.
+- `activity_kmip` (String) Labels to be used for entries coming from the KMIP activity log, for example "jobs=activity_kmip". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `activity_nae` (String) Labels to be used for entries coming from the NAE activity log, for example "jobs=activity_nae". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `client_audit_records` (String) Labels to be used for entries coming from client audit records, for example "jobs=client_audit_records". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
+- `server_audit_records` (String) Labels to be used for entries coming from server audit records, for example "jobs=server_audit_records". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.
 
 
 
@@ -143,7 +143,7 @@ Optional:
 
 Optional:
 
-- `activity_kmip` (Boolean) When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them.
-- `activity_nae` (Boolean) When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them.
-- `client_audit_records` (Boolean) When true, Client Audit Records will be forwarded.
-- `server_audit_records` (Boolean) When true, Server Audit Records will be forwarded.
+- `activity_kmip` (Boolean) When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.
+- `activity_nae` (Boolean) When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.
+- `client_audit_records` (Boolean) When true, Client Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.
+- `server_audit_records` (Boolean) When true, Server Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.

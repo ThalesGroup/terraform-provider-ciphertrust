@@ -81,7 +81,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_kmip": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Description: "Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -89,7 +89,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_nae": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Description: "Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -97,7 +97,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"client_audit_records": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters.",
+								Description: "Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -105,7 +105,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"server_audit_records": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Description: "Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -125,7 +125,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_kmip": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Labels to be used for entries coming from the KMIP activity log, for example \"jobs=activity_kmip\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Description: "Labels to be used for entries coming from the KMIP activity log, for example \"jobs=activity_kmip\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -133,7 +133,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_nae": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Labels to be used for entries coming from the NAE activity log, for example \"jobs=activity_nae\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Description: "Labels to be used for entries coming from the NAE activity log, for example \"jobs=activity_nae\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -141,7 +141,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"client_audit_records": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Labels to be used for entries coming from client audit records, for example \"jobs=client_audit_records\". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters.",
+								Description: "Labels to be used for entries coming from client audit records, for example \"jobs=client_audit_records\". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -149,7 +149,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"server_audit_records": schema.StringAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "Labels to be used for entries coming from server audit records, for example \"jobs=server_audit_records\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Description: "Labels to be used for entries coming from server audit records, for example \"jobs=server_audit_records\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.String{
 									stringplanmodifier.UseStateForUnknown(),
 								},
@@ -169,7 +169,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_kmip": schema.BoolAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them.",
+								Description: "When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.Bool{
 									boolplanmodifier.UseStateForUnknown(),
 								},
@@ -177,7 +177,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"activity_nae": schema.BoolAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them.",
+								Description: "When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.Bool{
 									boolplanmodifier.UseStateForUnknown(),
 								},
@@ -185,7 +185,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"client_audit_records": schema.BoolAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "When true, Client Audit Records will be forwarded.",
+								Description: "When true, Client Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.Bool{
 									boolplanmodifier.UseStateForUnknown(),
 								},
@@ -193,7 +193,7 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 							"server_audit_records": schema.BoolAttribute{
 								Optional:    true,
 								Computed:    true,
-								Description: "When true, Server Audit Records will be forwarded.",
+								Description: "When true, Server Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
 								PlanModifiers: []planmodifier.Bool{
 									boolplanmodifier.UseStateForUnknown(),
 								},
