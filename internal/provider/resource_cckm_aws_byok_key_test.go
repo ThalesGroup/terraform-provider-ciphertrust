@@ -1196,9 +1196,8 @@ func TestCckmAWSByokKeyPendingDeletionUpdate(t *testing.T) {
 					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
 				},
 				Config:      awsConnectionResource + cmAesKeyConfig + updateConfig,
-				ExpectError: regexp.MustCompile(`is in PendingDeletion state`),
+				ExpectError: regexp.MustCompile(`was found in PendingDeletion state`),
 			},
 		},
 	})
 }
-

@@ -1318,7 +1318,7 @@ func TestCckmAWSKeyNativePendingDeletionUpdate(t *testing.T) {
 					scheduleAwsKeyDeletionOutOfBand(capturedKeyID)
 				},
 				Config:      awsConnectionResource + updateConfig,
-				ExpectError: regexp.MustCompile(`is in PendingDeletion state`),
+				ExpectError: regexp.MustCompile(`was found in PendingDeletion state`),
 			},
 		},
 	})
