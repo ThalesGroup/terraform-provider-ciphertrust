@@ -119,12 +119,12 @@ func (r *resourceCTESignatureSet) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = plan.Name.ValueString()
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = plan.Description.ValueString()
 	}
 	if plan.Type.ValueString() != "" && plan.Type.ValueString() != types.StringNull().ValueString() {
-		payload.Type = common.TrimString(plan.Type.String())
+		payload.Type = plan.Type.ValueString()
 	}
 	if plan.Sources != nil {
 		for _, source := range plan.Sources {
@@ -243,7 +243,7 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = plan.Description.ValueString()
 	}
 
 	stateSet := make(map[string]bool)
