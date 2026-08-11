@@ -57,7 +57,10 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
-				Description: "The interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use. Mutable for interface_type nae, kmip, and web — CM applies the change in place. Changing the port of a default interface (web, nae, kmip) restarts CM services cluster-wide, so treat it as a planned change.",
+				Description: "(Immutable) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.",
+				PlanModifiers: []planmodifier.Int64{
+					modifiers.ImmutableInt64(),
+				},
 			},
 			"allow_unregistered": schema.BoolAttribute{
 				Optional:    true,
@@ -1179,14 +1182,6 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		// CM does not support clearing mode by omitting the field — without an explicit value
 		// the prior setting persists silently. Send the CM-documented default to genuinely reset.
 		payload["mode"] = "unauth-tls-pw-req"
-	}
-
-	// port (Int64) - Required, so always known/non-null in plan, but CM returns
-	// 409 "conflict with the current state" if the (unchanged) port is resent on
-	// every update — it interprets the value as a request to bind to a port
-	// already in use by this same interface. Only send it when it actually changed.
-	if !plan.Port.Equal(state.Port) {
-		payload["port"] = plan.Port.ValueInt64()
 	}
 
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
