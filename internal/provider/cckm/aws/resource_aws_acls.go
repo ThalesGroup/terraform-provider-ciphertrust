@@ -143,7 +143,7 @@ func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"user_id": schema.StringAttribute{
 				Optional:      true,
-				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
+				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\". Specify either \"user_id\" or \"group\".",
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"kms_id": schema.StringAttribute{
@@ -231,7 +231,7 @@ func (r *resourceCCKMAWSAcl) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "AWS KMS ACL not found. If it no longer exists, remove it from your Terraform config."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
@@ -269,7 +269,7 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 	r.client.Log.Debug("[resource_aws_acls.go -> Update][get response:" + redactAWSResponse(response) + "]")
 
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "AWS KMS ACL was not found, cannot update."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
