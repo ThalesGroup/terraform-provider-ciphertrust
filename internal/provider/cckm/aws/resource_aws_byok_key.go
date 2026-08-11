@@ -64,8 +64,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		Description: "Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. " +
 			"Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. " +
-			"If the KMS is not found during refresh the key is kept in state until the KMS is recovered. " +
-			"A key pending deletion is kept in state on refresh with a warning.",
+			"If the KMS is not found during refresh the key is kept in state until the KMS is recovered.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -398,8 +397,9 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "BYOK key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -437,33 +437,8 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "BYOK key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		// Policy updates are permitted by AWS on keys pending deletion.
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-			// Re-fetch to reflect any policy change in state.
-			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
-				response = updated
-			}
-		}
-		// key_policy IS updated in this path - reflect the new config value in state.
-		state.KeyPolicy = plan.KeyPolicy
-		r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()

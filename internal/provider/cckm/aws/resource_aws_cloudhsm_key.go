@@ -345,8 +345,8 @@ func (r *resourceAWSCloudHSMKey) Create(ctx context.Context, req resource.Create
 }
 
 // Read refreshes Terraform state for an AWS CloudHSM key by reading its current data from CipherTrust Manager.
-// If the linked key is in PendingDeletion or PendingReplicaDeletion state, a warning is added.
-// Returns an error if the key or key store is not reachable.
+// Returns an error if the key or key store is not reachable or if the linked key is in
+// PendingDeletion or PendingReplicaDeletion state.
 func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_cloudhsm_key.go -> Read][" + id + "]")
@@ -365,8 +365,9 @@ func (r *resourceAWSCloudHSMKey) Read(ctx context.Context, req resource.ReadRequ
 		(readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion") {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "CloudHSM key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setCloudHSMKeyResourceState(ctx, r.client, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -413,33 +414,8 @@ func (r *resourceAWSCloudHSMKey) Update(ctx context.Context, req resource.Update
 		(updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion") {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "CloudHSM key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		// Policy updates are permitted by AWS on keys pending deletion.
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-			// Re-fetch to reflect any policy change in state.
-			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
-				response = updated
-			}
-		}
-		// key_policy IS updated in this path - reflect the new config value in state.
-		state.KeyPolicy = plan.KeyPolicy
-		setCloudHSMKeyResourceState(ctx, r.client, response, &state.AWSKeyStoreResourceCommonTFSDK, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	var planP *AWSCloudHSMKeyAwsParamTFSDK
