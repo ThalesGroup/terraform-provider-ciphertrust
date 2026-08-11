@@ -752,6 +752,45 @@ func restoreKeyFromBackup(ctx context.Context, id string, client *common.Client,
 		return
 	}
 	waitForOCIKeyVersions(ctx, id, client, keyID, versionsURL, preSnapshot)
+
+	// After the version-change wait, CM's background task may still be writing
+	// back to the key record. Poll GET /oci/keys/:id until it returns a clean
+	// 200 response before handing control back to the caller (which will call
+	// patchKey and then Read, both of which need the key to be queryable).
+	waitForOCIKeyReadable(ctx, id, client, keyID, diags)
+}
+
+// waitForOCIKeyReadable polls GET /oci/keys/:id until the request succeeds (200)
+// or the 60-second deadline is reached. It retries on any error (including HTTP
+// 500 returned by CM while the post-restore background task is still running).
+func waitForOCIKeyReadable(ctx context.Context, id string, client *common.Client, keyID string, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> waitForOCIKeyReadable][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> waitForOCIKeyReadable][" + id + "]")
+
+	const (
+		readableTimeout  = 60 * time.Second
+		readableInterval = 5 * time.Second
+	)
+	deadline := time.Now().Add(readableTimeout)
+	attempt := 0
+	for {
+		attempt++
+		_, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
+		if err == nil {
+			client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyReadable] key_id: %s readable after %d attempt(s)", keyID, attempt))
+			return
+		}
+		if time.Now().After(deadline) {
+			msg := "Timed out waiting for restored OCI key to become readable."
+			details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "error": err.Error()})
+			client.Log.Error(details)
+			diags.AddError(details, "")
+			return
+		}
+		client.Log.Debug(fmt.Sprintf("[oci_key_common.go -> waitForOCIKeyReadable] attempt %d key_id: %s not yet readable (%s), retrying in %s",
+			attempt, keyID, strings.Split(err.Error(), "\n")[0], readableInterval))
+		time.Sleep(readableInterval)
+	}
 }
 
 // waitForOCIKeyVersions polls the key versions list until every version whose ID appears
