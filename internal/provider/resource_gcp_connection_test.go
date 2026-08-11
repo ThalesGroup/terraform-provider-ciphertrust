@@ -150,3 +150,57 @@ resource "ciphertrust_gcp_connection" "test" {
 }
 
 // terraform destroy will perform automatically at the end of the test
+
+// Test_CM_AccGCPConnection_LabelsMetaKeyRemovalConverges verifies that removing
+// a key from labels or meta converges cleanly — the provider must send null for
+// the removed key so CM's merge-PATCH deletes it rather than preserving it (TFIN-602).
+// Confirmed live: on-prem and CDSPaaS both correctly honour null for labels/meta on GCP.
+func Test_CM_AccGCPConnection_LabelsMetaKeyRemovalConverges(t *testing.T) {
+	gcpKeyFile := os.Getenv("CCKM_GOOGLE_KEY_FILE")
+	if gcpKeyFile == "" {
+		t.Skip("CCKM_GOOGLE_KEY_FILE not set")
+	}
+	name := "tf-602-gcp-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with two labels and two meta keys.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "test" {
+  name     = %q
+  key_file = %q
+  labels   = { env = "test", team = "vaqa" }
+  meta     = { m1 = "v1", m2 = "v2" }
+}`, name, gcpKeyFile),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "labels.env", "test"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "labels.team", "vaqa"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "meta.m1", "v1"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "meta.m2", "v2"),
+				),
+			},
+			{
+				// Step 2: remove "team" from labels and "m2" from meta.
+				// Without the TFIN-602 fix, apply crashes with
+				// "Provider produced inconsistent result: new element 'team' has appeared."
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_gcp_connection" "test" {
+  name     = %q
+  key_file = %q
+  labels   = { env = "test" }
+  meta     = { m1 = "v1" }
+}`, name, gcpKeyFile),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "labels.env", "test"),
+					resource.TestCheckNoResourceAttr("ciphertrust_gcp_connection.test", "labels.team"),
+					resource.TestCheckResourceAttr("ciphertrust_gcp_connection.test", "meta.m1", "v1"),
+					resource.TestCheckNoResourceAttr("ciphertrust_gcp_connection.test", "meta.m2"),
+				),
+				// Second plan after apply must be empty — both keys fully converged.
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
