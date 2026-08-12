@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,6 +21,10 @@ func TestCckmAWSDataSourceAccountDetails(t *testing.T) {
 		data "ciphertrust_aws_account_details" "account_details" {
 		  connection_id = ciphertrust_aws_connection.aws_connection.id
 		}`
+	invalidConnectionConfig := `
+		data "ciphertrust_aws_account_details" "bad_connection" {
+			connection_id = "00000000-0000-0000-0000-000000000000"
+		}`
 	datasourceName := "data.ciphertrust_aws_account_details.account_details"
 
 	resource.Test(t, resource.TestCase{
@@ -32,6 +37,11 @@ func TestCckmAWSDataSourceAccountDetails(t *testing.T) {
 					resource.TestCheckResourceAttrSet(datasourceName, "account_id"),
 					resource.TestCheckResourceAttrSet(datasourceName, "regions.0"),
 				),
+			},
+			{
+				// An invalid connection ID must cause an error rather than returning empty results.
+				Config:      invalidConnectionConfig,
+				ExpectError: regexp.MustCompile("."),
 			},
 		},
 	})

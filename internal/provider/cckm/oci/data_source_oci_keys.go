@@ -49,9 +49,49 @@ const ociKeysFiltersTable = "\n\n> **Note:** Although some filters represent int
 	"| state                     | string  | Filter by key state. Valid values are `ACTIVE` and `DISABLED`. |"
 
 var (
-	_ datasource.DataSource              = &dataSourceOCIKeys{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIKeys{}
+	_ datasource.DataSource                     = &dataSourceOCIKeys{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIKeys{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIKeys{}
+
+	ociKeyValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "key_name": {},
+		"algorithm": {}, "length": {}, "key_id": {}, "vault_name": {},
+		"protection_mode": {}, "job_config_id": {}, "lifecycle_state": {},
+		"tenancy": {}, "compartment_name": {}, "vault_id": {}, "cckm_vault_id": {},
+		"curve_id": {}, "gone": {}, "region": {}, "local_hyok_key_id": {},
+		"local_hyok_key_version_id": {}, "local_key_store_id": {},
+		"linked_state": {}, "key_material_origin": {}, "blocked": {}, "state": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCIKeys) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociKeyFilterValidator{}}
+}
+
+type ociKeyFilterValidator struct{}
+
+func (v ociKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeysDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_key_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCIKeys() datasource.DataSource {
 	return &dataSourceOCIKeys{}
@@ -361,6 +401,7 @@ func (d *dataSourceOCIKeys) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
+	state.Keys = []models.DataSourceKeyTFSDK{}
 	for _, key := range keys.Resources {
 		keyTFSDK := models.DataSourceKeyTFSDK{
 			Account:           types.StringValue(key.Account),

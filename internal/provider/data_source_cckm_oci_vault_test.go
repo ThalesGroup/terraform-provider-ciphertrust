@@ -2,6 +2,8 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
+
 	"github.com/google/uuid"
 	"os"
 	"testing"
@@ -50,7 +52,7 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 		}
 		data "ciphertrust_oci_vault_list" "by_name" {
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}
 		data "ciphertrust_oci_vault_list" "no_filters" {
@@ -64,11 +66,39 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 	vaultsDataSource := "data.ciphertrust_get_oci_vaults.vaults"
 	compartmentsDataSource := "data.ciphertrust_get_oci_compartments.compartments"
 
+	invalidFilterConfig := `
+		data "ciphertrust_oci_vault_list" "bad_filter" {
+			filters = {
+				totally_bogus_filter = "x"
+			}
+		}`
+
+	zeroMatchConfig := `
+		data "ciphertrust_oci_vault_list" "zero_match" {
+			filters = {
+				display_name = "definitely-does-not-exist-xyz"
+			}
+		}`
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmOCIVaults() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				// Step 1: Unrecognized filter key must be rejected at plan time.
+				Config:      invalidFilterConfig,
+				ExpectError: regexp.MustCompile(`Unrecognized filter key`),
+			},
+			{
+				// Step 2: valid filter with no matching vault must return empty list, not null.
+				Config: zeroMatchConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_oci_vault_list.zero_match", "vaults.#", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_oci_vault_list.zero_match", "matched", "0"),
+				),
+			},
+			{
+				// Step 3: infrastructure + data source checks.
 				Config: connectionConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Vault resource

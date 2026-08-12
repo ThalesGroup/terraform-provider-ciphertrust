@@ -681,7 +681,7 @@ func RefreshKeyAndWait(ctx context.Context, id string, client *common.Client, ke
 			}
 			total := gjson.Get(listJSON, "total").Int()
 			if total == 0 {
-				msg := "RefreshKeyAndWait: replica key not found in CM - skipping from refresh tracking."
+				msg := "RefreshKeyAndWait: replica key not found in CipherTrust Manager - skipping from refresh tracking."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID, "region": replicaRegion})
 				client.Log.Warn(details)
 				diags.AddWarning(details, "")

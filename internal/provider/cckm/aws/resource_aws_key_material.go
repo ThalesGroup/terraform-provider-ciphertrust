@@ -1198,7 +1198,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		}
 		total := gjson.Get(listJSON, "total").Int()
 		if total == 0 {
-			msg := "Skipping replica repair: replica key not found in CipherTrust Manager. Import the replica key into CM first."
+			msg := "Skipping replica repair: replica key not found in CipherTrust Manager. Import the replica key into CipherTrust Manager first."
 			details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
 			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
@@ -1284,7 +1284,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 
 	supplementalListJSON, supplementalListErr := r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, url.Values{"keyid": []string{awsMrkKeyID}})
 	if supplementalListErr != nil {
-		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental CM search failed: %s", supplementalListErr.Error()))
+		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental CipherTrust Manager search failed: %s", supplementalListErr.Error()))
 		return
 	}
 	for _, res := range gjson.Get(supplementalListJSON, "resources").Array() {
@@ -1419,7 +1419,7 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	// On-prem CM < 2.24 does not support rotate-material with source_key_identifier.
 	// CDSPaaS supports it.
 	if !client.IsCDSPaaS && client.CMVersion < 224 {
-		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CM %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
+		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CipherTrust Manager %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
 		ImportByokKeyMaterial(ctx, id, client, cmKeyID, srcID, srcTier, validTo, keyMaterialDescription, "NEW_KEY_MATERIAL", diags)
 		if diags.HasError() {
 			return false

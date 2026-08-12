@@ -97,7 +97,7 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 
 	total := gjson.Get(listJSON, "total").Int()
 	if total == 0 {
-		msg := "AWS key not found in CipherTrust Manager. Ensure the key has been registered in CM before managing its key material."
+		msg := "AWS key not found in CipherTrust Manager. Ensure the key has been registered in CipherTrust Manager before managing its key material."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")

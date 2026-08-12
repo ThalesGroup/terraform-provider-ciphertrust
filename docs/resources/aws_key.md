@@ -149,7 +149,7 @@ resource "ciphertrust_aws_key" "replicated_key" {
 - `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
 - `kms_id` (String) (Conditionally immutable) ID of the KMS to use when creating the key. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.
-- `primary_region` (String) Updates the primary region of a multi-region key. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
+- `primary_region` (String) Updates the primary region of a multi-region key. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CipherTrust Manager 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
 - `replicate_key` (Attributes) Replicate key parameters. (see [below for nested schema](#nestedatt--replicate_key))
 - `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
@@ -250,7 +250,7 @@ Required:
 
 Optional:
 
-- `make_primary` (Boolean) Update the primary key region to the replicated key's region following replication. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
+- `make_primary` (Boolean) Update the primary key region to the replicated key's region following replication. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CipherTrust Manager 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.
 
 
 <a id="nestedatt--multi_region_configuration"></a>

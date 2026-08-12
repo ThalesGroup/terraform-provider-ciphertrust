@@ -33,9 +33,44 @@ const awsKmsFiltersTable = "\n\n> **Note:** Although some filters represent inte
 	"| status      | string  | Filter by KMS status. |"
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSKms{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKms{}
+	_ datasource.DataSource                     = &dataSourceAWSKms{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSKms{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSKms{}
+
+	awsKmsValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "name": {},
+		"account_id": {}, "cloud_name": {}, "status": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSKms) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsKmsFilterValidator{}}
+}
+
+type awsKmsFilterValidator struct{}
+
+func (v awsKmsFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsKmsFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsKmsFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSKmsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKmsValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_kms_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSKms() datasource.DataSource {
 	return &dataSourceAWSKms{}

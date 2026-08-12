@@ -700,37 +700,22 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 18: schedule the key itself for deletion OOB, then refresh state.
-				// OCI auto-disables keys when scheduling deletion, causing drift on enable_key
-				// (plan wants true from schema default, read-back is false).
-				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
+				// Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
 					logTestStep(t.Name(), "Step 18")
 					scheduleOciKeyDeletionOutOfBand(capturedKeyID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedKeyID {
-							return fmt.Errorf("expected key id %q, got %q", capturedKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`OCI key was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 19: apply a rename on the SCHEDULING_DELETION key.
-				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
-				// but the plan used the schema default (true). The Terraform framework raises
-				// "Provider produced inconsistent result".
+				// Step 19: attempt to apply a config change while the key is still in
+				// SCHEDULING_DELETION. Read errors before any apply logic runs.
+				// Expected: same SCHEDULING_DELETION error.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 19") },
 				Config:      oobKeyUpdateConfig,
-				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
+				ExpectError: regexp.MustCompile(`OCI key was found in SCHEDULING_DELETION state`),
 			},
 		},
 	})

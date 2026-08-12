@@ -29,9 +29,44 @@ const ociKeyVersionsFiltersTable = "\n\n> **Note:** Although some filters repres
 	"| is_primary | boolean | Filter by whether the key version belongs to a primary vault (`true` or `false`). |"
 
 var (
-	_ datasource.DataSource              = &dataSourceOCIVersions{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIVersions{}
+	_ datasource.DataSource                     = &dataSourceOCIVersions{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIVersions{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIVersions{}
+
+	ociKeyVersionValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "version_id": {}, "id": {},
+		"origin": {}, "is_primary": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCIVersions) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociKeyVersionFilterValidator{}}
+}
+
+type ociKeyVersionFilterValidator struct{}
+
+func (v ociKeyVersionFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociKeyVersionFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociKeyVersionFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeyVersionsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociKeyVersionValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_key_version_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCIVersions() datasource.DataSource {
 	return &dataSourceOCIVersions{}
@@ -258,6 +293,7 @@ func (d *dataSourceOCIVersions) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
+	state.KeyVersions = []models.DataSourceKeyVersionTFSDK{}
 	for _, version := range versions.Resources {
 
 		keyVersionTFSDK := models.DataSourceKeyVersionTFSDK{

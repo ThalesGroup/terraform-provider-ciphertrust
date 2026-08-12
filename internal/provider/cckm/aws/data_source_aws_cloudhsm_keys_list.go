@@ -16,9 +16,39 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSCloudHSMKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSource                     = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSCloudHSMKey{}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSCloudHSMKey) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsCloudHSMKeyFilterValidator{}}
+}
+
+type awsCloudHSMKeyFilterValidator struct{}
+
+func (v awsCloudHSMKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsCloudHSMKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsCloudHSMKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSCloudHSMKeyListDataSourceTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_cloudhsm_keys_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSCloudHSMKeys() datasource.DataSource {
 	return &dataSourceAWSCloudHSMKey{}

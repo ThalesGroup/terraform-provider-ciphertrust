@@ -155,6 +155,7 @@ func (d *dataSourceGetOCICompartments) Read(ctx context.Context, req datasource.
 		payload.NextPage = &np
 	}
 
+	state.Compartments = []models.GetOCICompartmentTFSDK{}
 	for _, compartment := range data {
 		compartmentTFSDK := models.GetOCICompartmentTFSDK{
 			ID:             types.StringValue(compartment.ID),

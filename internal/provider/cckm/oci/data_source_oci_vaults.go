@@ -26,11 +26,11 @@ const ociVaultsFiltersTable = "\n\n> **Note:** Although some filters represent i
 	"| sort                | string  | Fields to sort by. Valid sort fields are `display_name`, `vault_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
 	"| id                  | string  | Filter by CipherTrust Manager internal ID. |\n" +
 	"| display_name        | string  | Filter by vault display name. |\n" +
-	"| vault_name          | string  | Filter by vault name. |\n" +
+	"| vault_name          | string  | Filter by vault name. Valid for the `EXTERNAL` vault type only. |\n" +
 	"| linked_state        | boolean | Filter by whether the vault is in a linked state (`true` or `false`). |\n" +
 	"| issuer_id           | string  | Filter by issuer ID. |\n" +
 	"| state               | string  | Filter by state (for external vaults only). |\n" +
-	"| external_vault_type | string  | Filter by external vault type. |\n" +
+	"| external_vault_type | string  | Filter by `EXTERNAL` vault type. |\n" +
 	"| cloud_name          | string  | Filter by cloud name. |\n" +
 	"| vault_id            | string  | Filter by vault OCID. |\n" +
 	"| vault_type          | string  | Filter by vault type. Valid values are `DEFAULT`, `EXTERNAL`, and `VIRTUAL_PRIVATE`. |\n" +
@@ -42,9 +42,47 @@ const ociVaultsFiltersTable = "\n\n> **Note:** Although some filters represent i
 	"| blocked             | boolean | Filter by whether the vault is blocked (`true` or `false`). |"
 
 var (
-	_ datasource.DataSource              = &dataSourceOCIVault{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIVault{}
+	_ datasource.DataSource                     = &dataSourceOCIVault{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIVault{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIVault{}
+
+	ociVaultValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "display_name": {},
+		"vault_name": {}, "linked_state": {}, "issuer_id": {}, "state": {},
+		"external_vault_type": {}, "cloud_name": {}, "vault_id": {}, "vault_type": {},
+		"tenancy": {}, "compartment_name": {}, "lifecycle_state": {}, "region": {},
+		"source_key_tier": {}, "blocked": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCIVault) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociVaultFilterValidator{}}
+}
+
+type ociVaultFilterValidator struct{}
+
+func (v ociVaultFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociVaultFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociVaultFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config OCIVaultDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociVaultValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_vault_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCIVault() datasource.DataSource {
 	return &dataSourceOCIVault{}
@@ -290,6 +328,7 @@ func (d *dataSourceOCIVault) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
+	state.Vaults = []models.VaultTFSDK{}
 	for ndx, vault := range vaults.Resources {
 		vaultTFSDK := models.VaultTFSDK{
 			ConnectionID: types.StringValue(vault.Connection),

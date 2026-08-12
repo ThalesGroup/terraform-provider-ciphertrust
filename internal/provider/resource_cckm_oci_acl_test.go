@@ -204,7 +204,7 @@ func TestCckmOCIAclUsersAndGroups(t *testing.T) {
 		data "ciphertrust_oci_vault_list" "vault_ds" {
 			depends_on = [ciphertrust_oci_acl.user_acl, ciphertrust_oci_acl.group_acl]
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}`
 
@@ -230,7 +230,7 @@ func TestCckmOCIAclUsersAndGroups(t *testing.T) {
 		data "ciphertrust_oci_vault_list" "vault_ds" {
 			depends_on = [ciphertrust_oci_acl.user_acl, ciphertrust_oci_acl.group_acl]
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}`
 
@@ -251,7 +251,7 @@ func TestCckmOCIAclUsersAndGroups(t *testing.T) {
 		data "ciphertrust_oci_vault_list" "vault_ds" {
 			depends_on = [ciphertrust_oci_acl.user_acl]
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}`
 
@@ -290,7 +290,7 @@ func TestCckmOCIAclUsersAndGroups(t *testing.T) {
 	dataSourceConfig := `
 		data "ciphertrust_oci_vault_list" "vault_ds" {
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}`
 
@@ -549,7 +549,7 @@ func TestCckmOCIAclOOB(t *testing.T) {
 		data "ciphertrust_oci_vault_list" "vault_ds" {
 			depends_on = [ciphertrust_oci_acl.user_acl]
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}`
 
