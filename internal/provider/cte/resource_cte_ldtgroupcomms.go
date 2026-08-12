@@ -97,10 +97,10 @@ func (r *resourceLDTGroupCommSvc) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = plan.Name.ValueString()
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// var clients []string
@@ -251,7 +251,7 @@ func LdtGroupUpdate(r *resourceLDTGroupCommSvc, ctx context.Context, plan *LDTGr
 	var payload CTEClientGroupJSON
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = plan.Description.ValueString()
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -282,26 +282,26 @@ func LdtGroupAddRemoveClient(r *resourceLDTGroupCommSvc, ctx context.Context, pl
 
 	stateSet := make(map[string]bool)
 	for _, s := range state.ClientList {
-		stateSet[s.String()] = true
+		stateSet[s.ValueString()] = true
 	}
 
 	planSet := make(map[string]bool)
 	for _, s := range plan.ClientList {
-		planSet[s.String()] = true
+		planSet[s.ValueString()] = true
 	}
 
 	// Find added elements
 	addedList := []string{}
 	for k := range planSet {
 		if !stateSet[k] {
-			addedList = append(addedList, common.TrimString(k))
+			addedList = append(addedList, k)
 		}
 	}
 	// Find removed elements
 	removedList := []string{}
 	for k := range stateSet {
 		if !planSet[k] {
-			removedList = append(removedList, common.TrimString(k))
+			removedList = append(removedList, k)
 		}
 	}
 
