@@ -276,7 +276,8 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 
 // TestCckmAWSPolicyTemplateSetFieldLifecycle exercises the full lifecycle of the five set fields
 // (key_admins, key_users, key_admins_roles, key_users_roles, external_accounts): populate, clear
-// to explicit [] (regression test for TFIN-617 - must not crash), repopulate, then omit entirely.
+// to explicit [] (regression test for TFIN-617 - must not crash), repopulate,
+// then omit entirely.
 func TestCckmAWSPolicyTemplateSetFieldLifecycle(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
