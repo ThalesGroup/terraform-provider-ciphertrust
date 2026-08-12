@@ -29,9 +29,44 @@ const ociCompartmentsFiltersTable = "\n\n> **Note:** Although some filters repre
 	"| tenancy        | string  | Filter the results by OCI tenancy. |"
 
 var (
-	_ datasource.DataSource              = &dataSourceOCICompartmentsList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSource                     = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCICompartmentsList{}
+
+	ociCompartmentValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {},
+		"name": {}, "compartment_id": {}, "tenancy": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCICompartmentsList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociCompartmentFilterValidator{}}
+}
+
+type ociCompartmentFilterValidator struct{}
+
+func (v ociCompartmentFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociCompartmentFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociCompartmentFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config models.OCICompartmentListDataSourceModelTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociCompartmentValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_compartments_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCICompartmentsList() datasource.DataSource {
 	return &dataSourceOCICompartmentsList{}
@@ -196,6 +231,7 @@ func (d *dataSourceOCICompartmentsList) Read(ctx context.Context, req datasource
 		return
 	}
 
+	state.Compartments = []models.OCICompartmentTFSDK{}
 	for _, c := range list.Resources {
 		compartment := models.OCICompartmentTFSDK{
 			ID:                  types.StringValue(c.ID),

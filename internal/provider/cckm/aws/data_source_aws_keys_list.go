@@ -52,9 +52,50 @@ const awsKeyFiltersTable = "\n\n> **Note:** Although some filters represent inte
 	"| custom_key_store_name    | string  | Filter by custom key store name (AWS HYOK keys only). |"
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKey{}
+	_ datasource.DataSource                     = &dataSourceAWSKey{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSKey{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSKey{}
+
+	awsKeyValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "keyid": {}, "arn": {},
+		"alias": {}, "kms": {}, "kms_id": {}, "region": {}, "cloud_name": {},
+		"origin": {}, "job_config_id": {}, "cckm_policy_template_id": {},
+		"enabled": {}, "gone": {}, "tags": {}, "keystate": {}, "keyusage": {},
+		"keymanager": {}, "rotation_job_enabled": {}, "CustomerMasterKeySpec": {},
+		"key_material_origin": {}, "key_source": {}, "multi_region": {},
+		"multi_region_key_type": {}, "blocked": {}, "custom_key_store_id": {},
+		"custom_key_store_name": {}, "id": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSKey) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsKeyFilterValidator{}}
+}
+
+type awsKeyFilterValidator struct{}
+
+func (v awsKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSKeyListDataSourceTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_keys_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSKeys() datasource.DataSource {
 	return &dataSourceAWSKey{}

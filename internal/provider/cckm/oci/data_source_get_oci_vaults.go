@@ -161,6 +161,7 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 		payload.NextPage = &np
 	}
 
+	state.Vaults = []models.DataSourceGetOCIVaultTFSDK{}
 	for _, vault := range data {
 		ociVault := models.DataSourceGetOCIVaultTFSDK{
 			CompartmentID:      types.StringValue(vault.CompartmentID),

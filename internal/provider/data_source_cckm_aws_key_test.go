@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -46,6 +47,21 @@ func TestCckmAWSDataSourceKey(t *testing.T) {
 				"keyid"  = ciphertrust_aws_key.aws_key.aws_param.key_id
 				"region" = ciphertrust_aws_key.aws_key.region
 			}
+		}`
+
+	// badFilterConfig: data source with an unrecognized filter key.
+	// The provider rejects it at plan time.
+	badFilterConfig := awsConnectionResource + `
+		data "ciphertrust_aws_keys_list" "bad_filter" {
+			filters = { totally_bogus_filter = "x" }
+		}`
+
+	// zeroMatchConfig: data source with a valid filter key and a value that
+	// cannot match any key. Verifies that zero results are returned as an
+	// empty list (keys.# = 0) rather than null.
+	zeroMatchConfig := awsConnectionResource + `
+		data "ciphertrust_aws_keys_list" "zero_match" {
+			filters = { alias = "definitely-does-not-exist-xyz" }
 		}`
 
 	alias := awsKeyNamePrefix + uuid.New().String()[:8]
@@ -101,6 +117,21 @@ func TestCckmAWSDataSourceKey(t *testing.T) {
 					resource.TestCheckResourceAttrPair(keyResource, "id", dsByAwsKeyIDAndRegion, "keys.0.key_id"),
 					resource.TestCheckResourceAttr(dsByAwsKeyIDAndRegion, "keys.0.aws_param.customer_master_key_spec", "SYMMETRIC_DEFAULT"),
 					resource.TestCheckResourceAttr(dsByAwsKeyIDAndRegion, "keys.0.aws_param.key_state", "Enabled"),
+				),
+			},
+			{
+				// Step 3: bogus filter key - provider rejects it at plan time.
+				Config:      badFilterConfig,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("not a supported filter key"),
+			},
+			{
+				// Step 4: valid filter with a value that cannot match any key.
+				// Checks that zero results are returned as an empty list, not null.
+				Config: zeroMatchConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_keys_list.zero_match", "matched", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_keys_list.zero_match", "keys.#", "0"),
 				),
 			},
 		},

@@ -20,7 +20,7 @@ import (
 const mrKeyRefreshLimitationNote = " On CipherTrust Manager versions earlier than 2.22," +
 	" keys in the multi-region set may not reflect the correct multi-region configuration" +
 	" in Terraform state after this operation. Individual key refresh was not introduced" +
-	" until CM 2.22. To synchronize state, trigger a KMS-wide synchronization using a" +
+	" until CipherTrust Manager 2.22. To synchronize state, trigger a KMS-wide synchronization using a" +
 	" ciphertrust_scheduler resource with operation = \"cckm_synchronization\"," +
 	" then run terraform refresh."
 
@@ -868,7 +868,7 @@ func waitForPrimaryRegionUpdated(
 	// On older CM and on CDSPaaS the endpoint returns 404, so skip the refresh
 	// loop entirely and accept whatever state the inner poll loop produced.
 	if client.CMVersion < 222 || client.IsCDSPaaS {
-		client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] individual key refresh not supported (CM < 2.22 or CDSPaaS), skipping refresh loop")
+		client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] individual key refresh not supported (CipherTrust Manager < 2.22 or CDSPaaS), skipping refresh loop")
 		for i, keyID := range allKeyIDs {
 			if !confirmed[i] {
 				client.Log.Warn(fmt.Sprintf("[aws_multiregion.go -> waitForPrimaryRegionUpdated] key %s not confirmed after poll loop (refresh unavailable)", keyID))

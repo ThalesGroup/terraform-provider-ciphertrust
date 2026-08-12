@@ -80,7 +80,7 @@ const awsACLTable = `The following table lists the accepted values:
 |Create (HYOK Key)                |  hyokkeycreate                | Permission to create an AWS HYOK key. |
 |Block/Unblock (HYOK Key)         |  hyokkeyblockunblock          | Permission to block/unblock an AWS HYOK key. |
 |Delete (HYOK Key)                |  hyokkeydelete                | Permission to delete an AWS HYOK key (applicable only to unlinked key). |
-|Link (HYOK Key)                  |  hyokkeylink                  | Permission to link an HYOK key in CM to HYOK key in AWS. |
+|Link (HYOK Key)                  |  hyokkeylink                  | Permission to link an HYOK key in CipherTrust Manager to HYOK key in AWS. |
 |List (CloudHSM Key)              |  viewcloudhsmkey              | Permission to view AWS CloudHSM keys. |
 |Create (CloudHSM Key)            |  cloudhsmkeycreate            | Permission to create an AWS CloudHSM key. |
 |Delete (CloudHSM Key)            |  cloudhsmkeydelete            | Permission to delete an AWS CloudHSM key. |

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -78,6 +79,15 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 						ciphertrust_aws_acl.group1_acl, ciphertrust_aws_acl.group2_acl]
 		}`
 
+	badFilter := `
+		data "ciphertrust_aws_kms_list" "bad_filter" {
+			filters = { totally_bogus_filter = "x" }
+		}`
+	zeroMatch := `
+		data "ciphertrust_aws_kms_list" "zero_match" {
+			filters = { name = "definitely-does-not-exist-xyz" }
+		}`
+
 	dsAllKmsResources := "data.ciphertrust_aws_kms_list.all_kms"
 	dsByName := "data.ciphertrust_aws_kms_list.by_name"
 	dsByID := "data.ciphertrust_aws_kms_list.by_id"
@@ -118,6 +128,20 @@ func TestCckmAWSDataSourceKms(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.0.acls.#", "2"),
 					resource.TestCheckResourceAttr(dsAllKmsResources, "kms.1.acls.#", "2"),
+				),
+			},
+			{
+				// Bogus filter key - provider rejects it at plan time.
+				Config:      awsConnectionResource + kmsTwoConfigStr + badFilter,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("not a supported filter key"),
+			},
+			{
+				// Valid filter key with a value that cannot match any KMS record.
+				Config: awsConnectionResource + kmsTwoConfigStr + zeroMatch,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_kms_list.zero_match", "matched", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_kms_list.zero_match", "kms.#", "0"),
 				),
 			},
 		},

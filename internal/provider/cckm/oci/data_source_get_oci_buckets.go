@@ -144,6 +144,7 @@ func (d *dataSourceGetOCIBuckets) Read(ctx context.Context, req datasource.ReadR
 		payload.OciNextPage = &np
 	}
 
+	state.Buckets = []models.OCIBucketTFSDK{}
 	for _, b := range data {
 		bucket := models.OCIBucketTFSDK{
 			Namespace:     types.StringValue(b.Namespace),

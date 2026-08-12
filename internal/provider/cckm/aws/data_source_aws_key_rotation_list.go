@@ -33,9 +33,45 @@ const awsKeyRotationFiltersTable = "\n\n> **Note:** Although some filters repres
 	"| KeyMaterialId        | string  | Filter by key material ID. |"
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSKeyRotationList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSource                     = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSKeyRotationList{}
+
+	awsKeyRotationValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "key_source": {},
+		"key_material_origin": {}, "ImportState": {}, "KeyMaterialState": {},
+		"RotationType": {}, "last_import_status": {}, "KeyMaterialId": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSKeyRotationList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsKeyRotationFilterValidator{}}
+}
+
+type awsKeyRotationFilterValidator struct{}
+
+func (v awsKeyRotationFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsKeyRotationFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsKeyRotationFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeyRotationsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyRotationValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_key_rotation_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSKeyRotationList() datasource.DataSource {
 	return &dataSourceAWSKeyRotationList{}

@@ -39,9 +39,46 @@ const awsCustomKeyStoreFiltersTable = "\n\n> **Note:** Although some filters rep
 	"| custom_key_store_type   | string  | Filter by custom key store type (`EXTERNAL_KEY_STORE` or `AWS_CLOUDHSM`). |"
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSCustomKeyStoreList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSource                     = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSCustomKeyStoreList{}
+
+	awsCustomKeyStoreValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "name": {},
+		"kms": {}, "kms_id": {}, "region": {}, "cloud_name": {}, "type": {},
+		"blocked": {}, "linked_state": {}, "xks_proxy_connectivity": {},
+		"connection_state": {}, "source_key_tier": {}, "custom_key_store_type": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSCustomKeyStoreList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsCustomKeyStoreFilterValidator{}}
+}
+
+type awsCustomKeyStoreFilterValidator struct{}
+
+func (v awsCustomKeyStoreFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsCustomKeyStoreFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsCustomKeyStoreFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSCustomKeyStoreListDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsCustomKeyStoreValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_custom_keystore_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSCustomKeyStore() datasource.DataSource {
 	return &dataSourceAWSCustomKeyStoreList{}
