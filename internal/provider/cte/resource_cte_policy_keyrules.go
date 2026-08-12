@@ -181,8 +181,7 @@ func (r *resourceCTEPolicyKeyRule) Read(ctx context.Context, req resource.ReadRe
 		common.URL_CTE_POLICY+"/"+state.CTEClientPolicyID.ValueString()+"/keyrules",
 	)
 
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleRuleReadNotFound(ctx, err, response, "CTE Policy Key Rule ("+state.KeyRule.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 

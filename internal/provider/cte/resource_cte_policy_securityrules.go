@@ -248,8 +248,7 @@ func (r *resourceCTEPolicySecurityRule) Read(ctx context.Context, req resource.R
 		common.URL_CTE_POLICY+"/"+state.CTEClientPolicyID.ValueString()+"/securityrules",
 	)
 
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleRuleReadNotFound(ctx, err, response, "CTE Policy Security Rule ("+state.SecurityRule.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 

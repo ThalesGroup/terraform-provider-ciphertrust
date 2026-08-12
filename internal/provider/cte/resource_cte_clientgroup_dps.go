@@ -134,23 +134,18 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 
 	url := fmt.Sprintf("%s/%s/dps", common.URL_CTE_CLIENT_GROUP, state.ClientGroupID.ValueString())
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), url)
-	if err != nil {
-		if strings.Contains(err.Error(), "record not found") || strings.Contains(err.Error(), "status: 404") {
-			r.client.Log.Debug("[resource_cte_clientgroup_dps.go -> Read] DPS not found, removing from state: " + state.ID.ValueString())
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup_dps.go -> Read][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Error reading CTE Client Group Designated Primary Set on CipherTrust Manager: ",
-			"Could not read Designated Primary Set id: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
-		)
+	if handleReadNotFound(ctx, err, "CTE Client Group Designated Primary Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
-	// Resource was deleted outside Terraform — remove from state so it gets recreated
+	// Resource returned an empty response with no error -- treat the same as
+	// not-found: hard error, keep state (TFIN-623), rather than silently
+	// removing it from state as if it were confirmed deleted.
 	if response == "" {
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddError(
+			"CTE Client Group Designated Primary Set ("+state.ID.ValueString()+") not found",
+			"Designated Primary Set "+state.ID.ValueString()+" returned an empty response from CipherTrust Manager during refresh, indicating it may have been removed out-of-band. Keeping it in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
 		return
 	}
 

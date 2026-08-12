@@ -146,10 +146,16 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 		ruleIDStr := ruleID.(types.String).ValueString()
 		response, err := r.client.GetById(ctx, id, ruleIDStr,
 			common.URL_CTE_POLICY+"/"+state.CTEPolicyID.ValueString()+"/signaturerules")
-		if err != nil || response == "" {
-			// Rule deleted on CM — skip it
-			r.client.Log.Debug("Signature rule not found on CM, removing from state: " + ruleIDStr)
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Signature Rule ("+ruleIDStr+")", &resp.Diagnostics) {
+			// TFIN-623: previously this silently dropped the missing rule
+			// from the tracked list (`continue`, debug log only) instead of
+			// surfacing a diagnostic. Per this ticket's universal Read()
+			// policy, a missing/errored rule is now a hard error and the
+			// whole Read() aborts here -- since `state` has not yet been
+			// written back via resp.State.Set, returning immediately leaves
+			// the resource's prior state untouched (kept), rather than
+			// partially refreshing it with this rule silently missing.
+			return
 		}
 
 		var apiResp SignatureRuleJSON
@@ -179,14 +185,17 @@ func (r *resourceCTEPolicySignatureRule) Read(ctx context.Context, req resource.
 		refreshedIDs = append(refreshedIDs, types.StringValue(apiResp.ID))
 	}
 
-	// If this resource previously tracked at least one rule but CM now
-	// reports zero remaining (all deleted out-of-band), remove the
-	// resource from state entirely so the next plan proposes a fresh
-	// "+ create" instead of a "~ update" against a resource shell with
-	// empty attributes (TFIN-457).
+	// Defense in depth: every per-rule failure above now returns immediately
+	// (TFIN-623), so in practice this can no longer be reached with a
+	// non-empty original list and zero refreshed rules. Kept as a
+	// hard-error safety net rather than the previous silent RemoveResource
+	// (TFIN-457) in case a future code path reaches here without going
+	// through the per-rule check.
 	if len(state.SignatureRuleIDs.Elements()) > 0 && len(refreshedIDs) == 0 {
-		r.client.Log.Debug("[resource_cte_policy_signaturerules.go -> Read] no signature rules remain on CM for policy " + state.CTEPolicyID.ValueString() + " (removed out-of-band), removing resource from state")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddError(
+			"CTE Policy Signature Rules (policy "+state.CTEPolicyID.ValueString()+") not found",
+			"No signature rules remain on CipherTrust Manager for policy "+state.CTEPolicyID.ValueString()+", indicating they may have been removed out-of-band. Keeping this resource in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
 		return
 	}
 
