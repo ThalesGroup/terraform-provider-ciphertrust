@@ -177,8 +177,7 @@ func (r *resourceCTEPolicyDataTXRule) Read(ctx context.Context, req resource.Rea
 		common.URL_CTE_POLICY+"/"+state.CTEClientPolicyID.ValueString()+"/datatxrules",
 	)
 
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleRuleReadNotFound(ctx, err, response, "CTE Policy Data TX Rule ("+state.DataTXRule.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResp DataTxRuleJSON

@@ -764,10 +764,13 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 		ruleEndpoint := fmt.Sprintf("%s/%s/securityrules", common.URL_CTE_POLICY, state.ID.ValueString())
 
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			// Rule was deleted directly on CM — remove from state by skipping it
-			r.client.Log.Debug("Security rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Security Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			// TFIN-623: this previously silently dropped the missing nested
+			// rule (`continue`, debug log only). Aborting the whole Read()
+			// here instead -- state has not yet been persisted via
+			// resp.State.Set, so returning immediately leaves the resource's
+			// prior state untouched (kept) rather than partially refreshed.
+			return
 		}
 
 		var apiRule SecurityRuleJSON
@@ -798,9 +801,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.KeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/keyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			r.client.Log.Debug("Key rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule KeyRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -822,9 +824,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.DataTransformRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/datatxrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			r.client.Log.Debug("Data transform rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Data Transformation Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule DataTxRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -846,9 +847,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.IDTKeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/idtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			r.client.Log.Debug("IDT key rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy IDT Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule IDTRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -870,9 +870,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.LDTKeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/ldtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			r.client.Log.Debug("LDT key rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy LDT Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule LDTRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -917,9 +916,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.SignatureRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/signaturerules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			r.client.Log.Debug("Signature rule not found on CM, removing from state: " + rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Signature Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule SignatureRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {

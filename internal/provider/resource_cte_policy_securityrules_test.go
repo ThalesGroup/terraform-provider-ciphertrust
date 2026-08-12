@@ -124,6 +124,38 @@ func TestCTEPolicySecurityRuleResource_drift(t *testing.T) {
 	})
 }
 
+// TestCTEPolicySecurityRuleResource_readNotFoundErrors verifies TFIN-623:
+// deleting the security rule out-of-band and refreshing must now fail
+// loudly (hard error) instead of the previous silent `response == ""`
+// misdetection, which emitted zero diagnostic and wiped the rule from
+// state. The rule must remain in Terraform state after the failed refresh.
+func TestCTEPolicySecurityRuleResource_readNotFoundErrors(t *testing.T) {
+	policyName := "tf-secrule-404-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy_security_rule.secrule"
+	var policyID, ruleID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteSecurityRuleConfig(policyName, "read", "permit", false),
+				Check: checkStep(t, "security_rule 404: create",
+					cteCaptureAttr(rn, "policy_id", &policyID),
+					cteCaptureAttr(rn, "rule.id", &ruleID),
+				),
+			},
+			{
+				PreConfig: func() {
+					cteOutOfBandDelete(common.URL_CTE_POLICY+"/"+policyID+"/securityrules", ruleID)
+				},
+				Config:      cteSecurityRuleConfig(policyName, "read", "permit", false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)CTE Policy Security Rule .* not found`),
+			},
+		},
+	})
+}
+
 // cteSecurityRuleResourceSetConfig renders a policy plus a security_rule whose
 // resource_set_id is set to the given resource set reference expression.
 func cteSecurityRuleResourceSetConfig(policyName, resourceSetIDExpr string) string {

@@ -400,12 +400,22 @@ func (r *resourceLDTGroupCommSvc) Delete(ctx context.Context, req resource.Delet
 			payloadJSON,
 			"id")
 		if err != nil {
-			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_ldtgroupcomms.go -> Update][" + state.ID.ValueString() + "]")
-			diags.AddError(
-				"Error deleting clients list from the LDT Group Communication Service on CipherTrust Manager: ",
-				"Could not delete clients list before deleting LDT Group Communication Service, unexpected error: "+err.Error()+fmt.Sprintf("%s", removedList),
-			)
-			return
+			// TFIN-623: a 404 here (e.g. a client already detached
+			// out-of-band) previously hit the generic AddError below
+			// unconditionally, aborting the whole Delete() before the main
+			// group deletion a few lines down ever ran. Gate through
+			// handleDeleteNotFound so a 404 is tolerated as "already done"
+			// (warning only) and Delete() falls through to still delete the
+			// group itself, consistent with how the main resource delete
+			// below already treats its own 404.
+			if !handleDeleteNotFound(err, "LDT Group Communication Service "+state.ID.ValueString()+" client list", &resp.Diagnostics) {
+				r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_ldtgroupcomms.go -> Update][" + state.ID.ValueString() + "]")
+				resp.Diagnostics.AddError(
+					"Error deleting clients list from the LDT Group Communication Service on CipherTrust Manager: ",
+					"Could not delete clients list before deleting LDT Group Communication Service, unexpected error: "+err.Error()+fmt.Sprintf("%s", removedList),
+				)
+				return
+			}
 		}
 	}
 

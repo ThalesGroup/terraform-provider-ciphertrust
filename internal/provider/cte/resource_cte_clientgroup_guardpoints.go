@@ -308,21 +308,15 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 	clientGroupID := state.CTEClientGroupID.ValueString()
 
 	response, err := r.client.GetById(ctx, id, "", common.URL_CTE_CLIENT_GROUP+"/"+clientGroupID+"/guardpoints")
-	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
-			r.client.Log.Debug("[resource_cte_clientgroup_guardpoints.go -> Read] parent client group " + clientGroupID + " not found (404), removing from state")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		resp.Diagnostics.AddError(
-			"Error reading Guardpoints for ClientGroup id "+clientGroupID+" on CipherTrust Manager: ",
-			"Could not read CTE ClientGroup id: "+clientGroupID+", unexpected error: "+err.Error(),
-		)
+	if handleReadNotFound(ctx, err, "CTE ClientGroup Guardpoints (client group "+clientGroupID+")", &resp.Diagnostics) {
 		return
 	}
 
 	if response == "" {
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddError(
+			"CTE ClientGroup Guardpoints (client group "+clientGroupID+") not found",
+			"Guardpoints for CTE ClientGroup "+clientGroupID+" returned an empty response from CipherTrust Manager during refresh, indicating the parent client group or its guardpoints may have been removed out-of-band. Keeping this resource in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
 		return
 	}
 
@@ -387,8 +381,10 @@ func (r *resourceCTEClientGroupGP) Read(ctx context.Context, req resource.ReadRe
 			}
 		}
 		if !anyTrackedPathStillExists {
-			r.client.Log.Debug("[resource_cte_clientgroup_guardpoints.go -> Read] all guard_points for client group " + clientGroupID + " no longer exist on CipherTrust Manager (out-of-band deletion), removing from state")
-			resp.State.RemoveResource(ctx)
+			resp.Diagnostics.AddError(
+				"CTE ClientGroup Guardpoints (client group "+clientGroupID+") not found",
+				"All guard_points previously tracked for CTE ClientGroup "+clientGroupID+" no longer exist on CipherTrust Manager, indicating they were removed out-of-band (e.g. via the /unguard action). Keeping this resource in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+			)
 			return
 		}
 	}

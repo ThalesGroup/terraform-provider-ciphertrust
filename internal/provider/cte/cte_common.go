@@ -78,18 +78,23 @@ func handleDeleteNotFound(err error, resourceLabel string, diags *diag.Diagnosti
 
 // handleReadNotFound centralizes CTE resource Read() 404/error handling.
 // On err == nil it does nothing and returns false (caller proceeds normally).
-// On a genuine error it adds a diagnostic error. On a 404 specifically it
-// adds a warning and leaves state untouched (does NOT remove the resource),
-// per this project's conservative-on-404 convention (commit 43f3b14, TFIN-185).
+// On ANY error -- including a 404 -- it adds a hard diagnostic error and
+// leaves state untouched (does NOT remove the resource), per TFIN-623's
+// universal CTE Read()/Update() 404 policy: a 404 during refresh must fail
+// loudly rather than being silently tolerated, since the user has no other
+// signal that Terraform's view of the resource has diverged from reality.
+// (Previously a 404 here only added a warning -- commit 43f3b14/TFIN-185 --
+// which kept state correctly but under-reported the severity; TFIN-623
+// keeps the state-preserving behavior and raises the severity to AddError.)
 // Returns true if the caller should return immediately.
 func handleReadNotFound(ctx context.Context, err error, resourceLabel string, diags *diag.Diagnostics) bool {
 	if err == nil {
 		return false
 	}
 	if strings.Contains(err.Error(), "status: 404") {
-		diags.AddWarning(
+		diags.AddError(
 			fmt.Sprintf("%s not found", resourceLabel),
-			fmt.Sprintf("%s was not found on CipherTrust Manager during refresh. Keeping it in Terraform state rather than removing it, in case this is a transient issue.", resourceLabel),
+			fmt.Sprintf("%s was not found on CipherTrust Manager during refresh. Keeping it in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.", resourceLabel),
 		)
 		return true
 	}
@@ -98,6 +103,32 @@ func handleReadNotFound(ctx context.Context, err error, resourceLabel string, di
 		err.Error(),
 	)
 	return true
+}
+
+// handleRuleReadNotFound extends handleReadNotFound for CTE policy sub-rule
+// Read() implementations (datatxrules/keyrules/ldtkeyrules/securityrules),
+// which historically detected "not found" via `response == ""` alone. Since
+// Client.GetById/doRequest return ("", err) uniformly for EVERY non-2xx
+// status -- not just 404 -- checking response=="" without first checking
+// err misclassifies ANY failure (a transient 500, an expired-token 401, a
+// network error) as "rule deleted out-of-band" and silently wipes it from
+// state (TFIN-623). This defers to handleReadNotFound for the err-based
+// checks first (both a genuine 404 and any other error now AddError + keep
+// state), then applies the same AddError + keep-state treatment for the
+// residual response=="" case with err == nil. Returns true if the caller
+// should return immediately.
+func handleRuleReadNotFound(ctx context.Context, err error, response string, resourceLabel string, diags *diag.Diagnostics) bool {
+	if handleReadNotFound(ctx, err, resourceLabel, diags) {
+		return true
+	}
+	if response == "" {
+		diags.AddError(
+			fmt.Sprintf("%s not found", resourceLabel),
+			fmt.Sprintf("%s returned an empty response from CipherTrust Manager during refresh, indicating it may have been removed out-of-band. Keeping it in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.", resourceLabel),
+		)
+		return true
+	}
+	return false
 }
 
 // normalizeCTEResourceSetName resolves a CTE resource set reference (which a

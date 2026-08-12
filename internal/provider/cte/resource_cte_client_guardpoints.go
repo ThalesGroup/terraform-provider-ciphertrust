@@ -292,22 +292,15 @@ func (r *resourceCTEClientGP) Read(ctx context.Context, req resource.ReadRequest
 	clientID := state.CTEClientID.ValueString()
 
 	response, err := r.client.GetById(ctx, id, "", common.URL_CTE_CLIENT+"/"+clientID+"/guardpoints")
-	if err != nil {
-		if strings.Contains(err.Error(), "status: 404") {
-			r.client.Log.Debug("[resource_cte_client_guardpoints.go -> Read] parent client " + clientID + " not found (404), removing guardpoint resource from state")
-			resp.State.RemoveResource(ctx)
-			return
-		}
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client_guardpoints.go -> Read][" + clientID + "]")
-		resp.Diagnostics.AddError(
-			"Error reading Guardpoints for Client id "+clientID+" on CipherTrust Manager: ",
-			"Could not read CTE Client id: "+clientID+", unexpected error: "+err.Error(),
-		)
+	if handleReadNotFound(ctx, err, "CTE Client Guardpoints (client "+clientID+")", &resp.Diagnostics) {
 		return
 	}
 
 	if response == "" {
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddError(
+			"CTE Client Guardpoints (client "+clientID+") not found",
+			"Guardpoints for CTE Client "+clientID+" returned an empty response from CipherTrust Manager during refresh, indicating the parent client or its guardpoints may have been removed out-of-band. Keeping this resource in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
 		return
 	}
 
@@ -324,8 +317,10 @@ func (r *resourceCTEClientGP) Read(ctx context.Context, req resource.ReadRequest
 	}
 
 	if len(envelope.Resources) == 0 {
-		r.client.Log.Debug("[resource_cte_client_guardpoints.go -> Read] no guardpoints remain on CM for client " + clientID + " (removed out-of-band), removing resource from state")
-		resp.State.RemoveResource(ctx)
+		resp.Diagnostics.AddError(
+			"CTE Client Guardpoints (client "+clientID+") not found",
+			"No guardpoints remain on CipherTrust Manager for CTE Client "+clientID+", indicating they may have been removed out-of-band. Keeping this resource in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
 		return
 	}
 

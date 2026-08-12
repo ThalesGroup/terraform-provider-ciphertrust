@@ -211,8 +211,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req resource.Rea
 		common.URL_CTE_POLICY+"/"+state.CTEClientPolicyID.ValueString()+"/ldtkeyrules",
 	)
 
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleRuleReadNotFound(ctx, err, response, "CTE Policy LDT Key Rule ("+state.LDTKeyRule.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResponse LDTRuleJSON
