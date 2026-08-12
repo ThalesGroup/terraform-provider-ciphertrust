@@ -273,3 +273,91 @@ func TestCckmAWSPolicyTemplate(t *testing.T) {
 		},
 	})
 }
+
+// TestCckmAWSPolicyTemplateSetFieldLifecycle exercises the full lifecycle of the five set fields
+// (key_admins, key_users, key_admins_roles, key_users_roles, external_accounts): populate, clear
+// to explicit [] (regression test for TFIN-617 - must not crash), repopulate, then omit entirely.
+func TestCckmAWSPolicyTemplateSetFieldLifecycle(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	keyUsers := getAwsUsers()
+	if len(keyUsers) < 1 {
+		t.Skip("AWS_KEY_USERS is not exported or is empty")
+	}
+	keyRoles := getAwsRoles()
+	if len(keyRoles) < 1 {
+		t.Skip("AWS_KEY_ROLES is not exported or is empty")
+	}
+	user := fmt.Sprintf("%q", keyUsers[0])
+	role := fmt.Sprintf("%q", keyRoles[0])
+
+	templateName := "tf-template-empty-" + uuid.New().String()[:8]
+	kpResource := "ciphertrust_aws_policy_template.policy_template_empty_set"
+
+	createWithUsersConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_policy_template" "policy_template_empty_set" {
+			kms_id           = ciphertrust_aws_kms.kms.id
+			name             = %q
+			key_admins       = [%s]
+			key_users        = [%s]
+			key_admins_roles = [%s]
+			key_users_roles  = [%s]
+		}`, templateName, user, user, role, role)
+
+	// Explicitly set all four fields to [] - this is the scenario that triggered the crash.
+	updateToExplicitEmptyConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_policy_template" "policy_template_empty_set" {
+			kms_id           = ciphertrust_aws_kms.kms.id
+			name             = %q
+			key_admins       = []
+			key_users        = []
+			key_admins_roles = []
+			key_users_roles  = []
+		}`, templateName)
+
+	// Omit the set fields entirely - verifies null semantics still work after going through empty-set state.
+	omitSetFieldsConfig := fmt.Sprintf(`
+		resource "ciphertrust_aws_policy_template" "policy_template_empty_set" {
+			kms_id = ciphertrust_aws_kms.kms.id
+			name   = %q
+		}`, templateName)
+
+	checkCounts := func(count string) resource.TestCheckFunc {
+		return resource.ComposeTestCheckFunc(
+			resource.TestCheckResourceAttrSet(kpResource, "id"),
+			resource.TestCheckResourceAttr(kpResource, "key_admins.#", count),
+			resource.TestCheckResourceAttr(kpResource, "key_users.#", count),
+			resource.TestCheckResourceAttr(kpResource, "key_admins_roles.#", count),
+			resource.TestCheckResourceAttr(kpResource, "key_users_roles.#", count),
+		)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with non-empty sets.
+				Config: awsConnectionResource + createWithUsersConfig,
+				Check:  checkCounts("1"),
+			},
+			{
+				// Step 2: clear all set fields to explicit [] - must not crash (TFIN-617).
+				Config: awsConnectionResource + updateToExplicitEmptyConfig,
+				Check:  checkCounts("0"),
+			},
+			{
+				// Step 3: re-add users/roles.
+				Config: awsConnectionResource + createWithUsersConfig,
+				Check:  checkCounts("1"),
+			},
+			{
+				// Step 4: remove the fields from config entirely (omit, not []) - null semantics.
+				Config: awsConnectionResource + omitSetFieldsConfig,
+				Check:  checkCounts("0"),
+			},
+		},
+	})
+}
