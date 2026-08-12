@@ -349,3 +349,91 @@ func TestCTEPolicyResource_neverDenyApplykeyValidation(t *testing.T) {
 		},
 	})
 }
+
+// cteIDTPolicyConfig renders an IDT ciphertrust_cte_policy with a single
+// idt_key_rules entry (present or absent depending on withRule), backed by a
+// real XTS-mode transformation key. Used by the TFIN-603 removal-refusal test.
+func cteIDTPolicyConfig(name, keyName string, withRule bool) string {
+	idtBlock := "idt_key_rules = []\n"
+	if withRule {
+		idtBlock = `idt_key_rules = [{
+    current_key             = "clear_key"
+    current_key_type        = ""
+    transformation_key      = ciphertrust_cm_key.idt_xform.name
+    transformation_key_type = ""
+  }]
+`
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "idt_xform" {
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  xts                          = true
+  undeletable                  = false
+  remove_from_state_on_destroy = true
+
+  meta = {
+    permissions = {
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
+    }
+    cte = {
+      persistent_on_client = true
+      encryption_mode      = "XTS"
+      cte_versioned        = false
+    }
+  }
+}
+
+resource "ciphertrust_cte_policy" "cte_policy_idt" {
+  name        = %q
+  policy_type = "IDT"
+
+  %s
+  security_rules = [{
+    effect = "permit"
+    action = "all_ops"
+  }]
+}
+`, keyName, name, idtBlock)
+}
+
+// TestCTEPolicyResource_idtKeyRulesRemovalRefused verifies TFIN-603: since
+// CipherTrust Manager has no route to delete an individual IDT key rule
+// (DELETE .../idtkeyrules/{id} returns 405), removing idt_key_rules from
+// config must be refused at apply time with a clear diagnostic rather than
+// silently succeeding while state is wiped to [] and the CM-side rule is
+// orphaned. A subsequent apply of the original (unchanged) config must show
+// no drift, proving the failed removal attempt left state uncorrupted.
+func TestCTEPolicyResource_idtKeyRulesRemovalRefused(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	name := "tf-policy-idt-" + suffix
+	keyName := "tf-idt-xform-" + suffix
+	const rn = "ciphertrust_cte_policy.cte_policy_idt"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteIDTPolicyConfig(name, keyName, true),
+				Check: checkStep(t, "idt policy: create with idt_key_rules",
+					resource.TestCheckResourceAttrSet(rn, "idt_key_rules.0.id"),
+					resource.TestCheckResourceAttr(rn, "idt_key_rules.0.current_key", "clear_key"),
+				),
+			},
+			{
+				// Removing idt_key_rules must be refused, not silently applied.
+				Config:      cteIDTPolicyConfig(name, keyName, false),
+				ExpectError: regexp.MustCompile(`(?i)IDT Key Rule Removal Not Supported|IDT key rules cannot be removed`),
+			},
+			{
+				// State must be uncorrupted by the failed removal attempt: the
+				// original config re-applies with no drift.
+				Config:             cteIDTPolicyConfig(name, keyName, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

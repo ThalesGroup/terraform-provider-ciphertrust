@@ -1526,16 +1526,46 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 }
 
 func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFSDK, state CTEPolicyTFSDK, resp *resource.UpdateResponse) error {
-	// No IDT key rules in state — nothing to update
-	if len(state.IDTKeyRules) == 0 {
+	// TFIN-603: CipherTrust Manager has no route to delete an individual IDT
+	// key rule (DELETE .../idtkeyrules/{id} returns 405 Method Not Allowed).
+	// Previously this case only logged a warning and tried to restore
+	// plan.IDTKeyRules from state, but since plan is passed by value here
+	// that reassignment never propagated back to the caller's plan variable
+	// in Update() — the caller's resp.State.Set(ctx, plan) still wrote
+	// idt_key_rules = [], permanently orphaning the live CM rule with no
+	// Terraform-native way to reconcile it again. Refuse the apply instead
+	// so state can never reach that terminal condition.
+	if len(state.IDTKeyRules) > 0 && len(plan.IDTKeyRules) == 0 {
+		resp.Diagnostics.AddError(
+			"IDT Key Rule Removal Not Supported",
+			"IDT key rules cannot be removed once created; CipherTrust Manager has no API route to delete an "+
+				"individual IDT key rule. Restore the idt_key_rules block in your configuration to keep managing "+
+				"this policy, or destroy and recreate the entire policy if removal is truly required.",
+		)
+		return fmt.Errorf("IDT key rule removal is not supported by CipherTrust Manager")
+	}
+
+	// Nothing in state and nothing planned — nothing to do.
+	if len(state.IDTKeyRules) == 0 && len(plan.IDTKeyRules) == 0 {
 		return nil
 	}
 
-	// User removed IDT key rule block — warn and ignore since deletion not supported
-	if len(plan.IDTKeyRules) == 0 {
-		r.client.Log.Warn("IDT key rules cannot be deleted once created. Ignoring removal.")
-		plan.IDTKeyRules = state.IDTKeyRules
-		return nil
+	// TFIN-603: adding an idt_key_rules entry to a policy that currently has
+	// none in state is not handled through this path — CipherTrust Manager
+	// only accepts idt_key_rules embedded in the policy creation payload,
+	// and there is no confirmed API route to add one to an existing policy
+	// afterward (nor, as above, to remove one). Previously this silently
+	// no-op'd (returning nil without any API call) and let the plan's
+	// unvalidated values — including a fabricated id: null — get written
+	// straight to state. Fail clearly instead.
+	if len(state.IDTKeyRules) == 0 && len(plan.IDTKeyRules) > 0 {
+		resp.Diagnostics.AddError(
+			"IDT Key Rule Addition Not Supported",
+			"Adding idt_key_rules to a policy that does not already have one is not supported via update; "+
+				"CipherTrust Manager does not expose an API route to add an IDT key rule to an existing policy. "+
+				"Set idt_key_rules at policy creation time instead.",
+		)
+		return fmt.Errorf("adding an IDT key rule via update is not supported by CipherTrust Manager")
 	}
 
 	if len(plan.IDTKeyRules) > 1 {
@@ -1546,9 +1576,41 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 		return fmt.Errorf("only one IDT key rule is allowed per policy")
 	}
 
-	// State rule has no ID yet — nothing to update
+	// TFIN-603: state rule has no ID. In practice this only happens to state
+	// that was already corrupted by the bug above prior to this fix
+	// (removal silently emptied idt_key_rules while the rule stayed live on
+	// CM, then re-adding the block wrote id: null with no API call).
+	// Reconcile by listing the policy's IDT key rules directly from CM
+	// (GET .../idtkeyrules) so the real ID can be recovered without already
+	// knowing it, rather than silently continuing with an invalid ID.
 	if state.IDTKeyRules[0].ID.ValueString() == "" {
-		return nil
+		ruleEndpoint := fmt.Sprintf("%s/%s/idtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
+		jsonStr, _, err := r.client.GetAllPagedWithLimit(ctx, uuid.New().String(), ruleEndpoint, 0, 10)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"IDT Key Rule State Inconsistent",
+				"IDT key rule in state has no ID and the existing IDT key rules could not be listed from "+
+					"CipherTrust Manager to reconcile it: "+err.Error(),
+			)
+			return err
+		}
+		var existingRules []CTEPolicyIDTKeyRulesJSON
+		if err := json.Unmarshal([]byte(jsonStr), &existingRules); err != nil {
+			resp.Diagnostics.AddError("Error parsing IDT key rules list response while reconciling", err.Error())
+			return err
+		}
+		if len(existingRules) == 0 {
+			resp.Diagnostics.AddError(
+				"IDT Key Rule State Inconsistent",
+				"IDT key rule in state has no ID and CipherTrust Manager reports no IDT key rule exists for this "+
+					"policy. State cannot be automatically reconciled; correct idt_key_rules in state manually with "+
+					"the correct id from CipherTrust Manager before applying again.",
+			)
+			return fmt.Errorf("IDT key rule state is inconsistent: no ID in state and none found on CM")
+		}
+		state.IDTKeyRules[0].ID = types.StringValue(existingRules[0].ID)
+		plan.IDTKeyRules[0].ID = state.IDTKeyRules[0].ID
+		r.client.Log.Debug("Reconciled IDT key rule ID from CM: " + state.IDTKeyRules[0].ID.ValueString())
 	}
 
 	planRule := plan.IDTKeyRules[0]
