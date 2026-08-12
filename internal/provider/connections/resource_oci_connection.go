@@ -603,10 +603,15 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	// Connection identity fields returned by CM on every read.
 	data.Name = types.StringValue(gjson.Get(response, "name").String())
 	// description: hydrate unconditionally so drift is detected. Clear to null when absent
-	// or empty-string so stale state is not preserved after a CM-side removal.
+	// or empty-string so stale state is not preserved after a CM-side removal — UNLESS the
+	// value already on hand is itself a deliberately-empty string (e.g. description = "" from
+	// config on Create/Update). CM has no wire representation for "explicitly empty" versus
+	// "unset", so without this guard a plan of description = "" would be overwritten with null
+	// here and Terraform's post-apply consistency check would crash (.description: was
+	// cty.StringVal(""), but now null).
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
-	} else {
+	} else if data.Description.IsNull() || data.Description.ValueString() != "" {
 		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
@@ -614,9 +619,14 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.TenancyOcid = types.StringValue(gjson.Get(response, "tenancy_ocid").String())
 	data.UserOcid = types.StringValue(gjson.Get(response, "user_ocid").String())
 	// meta: always assign a typed value to avoid DynamicPseudoType zero-value conversion error.
+	// Same explicitly-empty-vs-unset reasoning as description above: a plan of meta = {} is a
+	// known, non-null empty map, and CM omits/nulls the field on the wire when it has nothing
+	// to return — collapsing that straight to null here would contradict the plan and crash
+	// Terraform's post-apply consistency check (.meta: was cty.MapValEmpty(cty.String), but now
+	// null). Preserve the value already on hand when it is itself a deliberately-empty map.
 	if len(gjson.Get(response, "meta").String()) > 0 {
 		data.Meta = common.ParseMap(response, diags, "meta")
-	} else {
+	} else if data.Meta.IsNull() || len(data.Meta.Elements()) != 0 {
 		data.Meta = types.MapNull(types.StringType)
 	}
 	if len(gjson.Get(response, "products").String()) > 0 {
