@@ -11,6 +11,7 @@ import (
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -21,6 +22,7 @@ var (
 	_ resource.Resource                = &resourceCTEPolicyKeyRule{}
 	_ resource.ResourceWithConfigure   = &resourceCTEPolicyKeyRule{}
 	_ resource.ResourceWithImportState = &resourceCTEPolicyKeyRule{}
+	_ resource.ResourceWithModifyPlan  = &resourceCTEPolicyKeyRule{}
 )
 
 func NewResourceCTEPolicyKeyRule() resource.Resource {
@@ -58,6 +60,17 @@ func (r *resourceCTEPolicyKeyRule) Schema(_ context.Context, _ resource.SchemaRe
 						Optional:    true,
 						Computed:    true,
 						Description: "Precedence order of the rule in the parent policy.",
+						// TFIN-610: adding ModifyPlan (below) to this resource
+						// causes the framework to mark computed-and-unset
+						// attributes lacking their own plan modifier as
+						// unknown ahead of ModifyPlan running, producing a
+						// perpetual "known after apply" diff for this field
+						// on every plan. UseStateForUnknown restores the
+						// original (pre-ModifyPlan) behavior of carrying the
+						// prior state value forward when unconfigured.
+						PlanModifiers: []planmodifier.Int64{
+							int64planmodifier.UseStateForUnknown(),
+						},
 					},
 					"key_id": schema.StringAttribute{
 						Optional:    true,
@@ -183,22 +196,65 @@ func (r *resourceCTEPolicyKeyRule) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
-	// TFIN-470: CM normalizes resource_set_id from the UUID the user configured
-	// to the resource set's name when storing the rule, so GET returns a
-	// different representation than the config. TFIN-472: CM's GET response
-	// for this endpoint never includes key_type at all (write-only at the API
-	// level), so it always unmarshals as "". Overwriting state from the API
-	// response for either field caused a perpetual plan diff against the
-	// user's configured value on every refresh. Preserve the existing
-	// (config-sourced) state values for key_type/resource_set_id instead of
-	// blindly overwriting them from the API response; still refresh the
-	// fields CM does return correctly.
+	// TFIN-472: CM's GET response for this endpoint never includes key_type at
+	// all (write-only at the API level), so it always unmarshals as "".
+	// Overwriting state from the API response would cause a perpetual plan
+	// diff against the user's configured value on every refresh. Preserve the
+	// existing (config-sourced) state value for key_type instead of blindly
+	// overwriting it from the API response; still refresh the fields CM does
+	// return correctly.
+	//
+	// TFIN-470/TFIN-610: resource_set_id is the opposite case -- CM DOES
+	// return it consistently (normalized to the resource set's name), so it
+	// must be refreshed from the API response like id/order_number/key_id
+	// below. TFIN-470's original fix instead preserved the existing state
+	// value here (mirroring the key_type workaround), which stopped the
+	// visible perpetual diff but as a side effect made Read() never detect a
+	// genuine out-of-band resource_set_id change at all -- a silent-drift
+	// regression (TFIN-610). Always refreshing it from apiResp fixes that;
+	// ModifyPlan below (TFIN-610) reconciles the resulting name-vs-UUID
+	// representation mismatch against config so this doesn't reintroduce the
+	// original visible perpetual diff.
 	state.KeyRule.ID = types.StringValue(apiResp.ID)
 	state.KeyRule.OrderNumber = types.Int64Value(*apiResp.OrderNumber)
 	state.KeyRule.KeyID = types.StringValue(apiResp.KeyID)
+	state.KeyRule.ResourceSetID = types.StringValue(apiResp.ResourceSetID)
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_keyrules.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
+}
+
+// ModifyPlan normalizes rule.resource_set_id so state (always the CM-returned
+// name form, per Read() above) and config (which may supply either a UUID or
+// a name) can be compared consistently (TFIN-610). Without this, refreshing
+// state.ResourceSetID from CM's response would show a perpetual diff for any
+// config that supplies a UUID -- the exact visible bug TFIN-470 originally
+// fixed by a different means. If the planned value resolves to the same
+// resource set as the current state, the plan is pinned to the existing
+// state value (no diff); a genuine change is left untouched so it surfaces
+// normally.
+func (r *resourceCTEPolicyKeyRule) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if r.client == nil || req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan, state CTEPolicyAddKeyRuleTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if resolved, ok := modifyPlanCTERuleResourceSetID(
+		ctx,
+		r.client,
+		plan.KeyRule.ResourceSetID.ValueString(),
+		state.KeyRule.ResourceSetID.ValueString(),
+		!plan.KeyRule.ResourceSetID.IsUnknown(),
+	); ok {
+		plan.KeyRule.ResourceSetID = types.StringValue(resolved)
+		resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -228,7 +284,17 @@ func (r *resourceCTEPolicyKeyRule) Update(ctx context.Context, req resource.Upda
 	if plan.KeyRule.KeyType.ValueString() != "" && plan.KeyRule.KeyType.ValueString() != types.StringNull().ValueString() {
 		payload.KeyType = string(plan.KeyRule.KeyType.ValueString())
 	}
-	if !plan.KeyRule.OrderNumber.IsNull() && !plan.KeyRule.OrderNumber.IsUnknown() {
+	// TFIN-610: only send order_number when it is actually changing. order_number
+	// now carries UseStateForUnknown (added above to counteract ModifyPlan's side
+	// effect of marking unconfigured computed attributes unknown), so it is
+	// "known" on every Update() call even when unchanged -- previously it would
+	// often have been unknown/omitted here. Confirmed via live CM: including an
+	// unchanged order_number in the same PATCH as a resource_set_id clear
+	// ("resource_set_id":"") causes CM to silently ignore the clear (a CM-side
+	// quirk); omitting order_number when it isn't actually changing avoids
+	// triggering that.
+	if !plan.KeyRule.OrderNumber.IsNull() && !plan.KeyRule.OrderNumber.IsUnknown() &&
+		plan.KeyRule.OrderNumber.ValueInt64() != state.KeyRule.OrderNumber.ValueInt64() {
 		OrderNumber := plan.KeyRule.OrderNumber.ValueInt64()
 		payload.OrderNumber = &OrderNumber
 	}

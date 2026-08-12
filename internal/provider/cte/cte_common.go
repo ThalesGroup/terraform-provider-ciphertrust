@@ -2,9 +2,12 @@ package cte
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -95,4 +98,62 @@ func handleReadNotFound(ctx context.Context, err error, resourceLabel string, di
 		err.Error(),
 	)
 	return true
+}
+
+// normalizeCTEResourceSetName resolves a CTE resource set reference (which a
+// user may supply as either the resource set's UUID or its name) to the
+// resource set's canonical name, the form CipherTrust Manager itself always
+// stores/echoes back on a policy rule's resource_set_id (confirmed via GET
+// on datatxrules/keyrules/securityrules). CM's GET
+// /transparent-encryption/resourcesets/{id} endpoint accepts either a UUID
+// or a name in the same path parameter, so a single lookup handles both
+// input forms.
+//
+// This exists to let ModifyPlan compare a rule's planned (config-sourced)
+// resource_set_id against its refreshed (CM-sourced, name-form) state value
+// in the same representation (TFIN-610): without it, a config supplying a
+// UUID would show a perpetual diff against the name Read() now always
+// refreshes state with -- the same visible bug TFIN-470 originally
+// described, reintroduced by fixing the silent-drift variant.
+//
+// If idOrName is empty, or the lookup fails for any reason (transient error,
+// or a value that is not a resolvable resource set at all), idOrName is
+// returned unchanged so callers fail closed to "no normalization" rather
+// than risking corrupting an otherwise-valid value.
+func normalizeCTEResourceSetName(ctx context.Context, client *common.Client, idOrName string) string {
+	if idOrName == "" {
+		return idOrName
+	}
+	response, err := client.GetById(ctx, uuid.New().String(), idOrName, common.URL_CTE_RESOURCE_SET)
+	if err != nil || response == "" {
+		return idOrName
+	}
+	var rs CTEResourceSetJSON
+	if err := json.Unmarshal([]byte(response), &rs); err != nil || rs.Name == "" {
+		return idOrName
+	}
+	return rs.Name
+}
+
+// modifyPlanCTERuleResourceSetID centralizes the ModifyPlan logic shared by
+// resource_cte_policy_datatxrules.go, resource_cte_policy_keyrules.go, and
+// resource_cte_policy_securityrules.go for normalizing rule.resource_set_id
+// (TFIN-610). planRSID is the resource_set_id value from the raw generated
+// plan (config-sourced, may be a UUID or a name); stateRSID is the
+// resource_set_id value from the refreshed prior state (always name-form,
+// per Read()). If they already match, or the plan value is unknown (create),
+// there is nothing to normalize. Otherwise, resolve planRSID to its
+// canonical name and compare against stateRSID: if they refer to the same
+// resource set, return (stateRSID, true) so the caller can pin the plan to
+// the existing state value and suppress a meaningless representation-only
+// diff; if they genuinely differ, return ("", false) and the caller leaves
+// the diff untouched so real drift/changes still surface normally.
+func modifyPlanCTERuleResourceSetID(ctx context.Context, client *common.Client, planRSID, stateRSID string, planKnown bool) (string, bool) {
+	if !planKnown || planRSID == stateRSID {
+		return "", false
+	}
+	if normalizeCTEResourceSetName(ctx, client, planRSID) == stateRSID {
+		return stateRSID, true
+	}
+	return "", false
 }

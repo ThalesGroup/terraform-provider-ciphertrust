@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -146,6 +147,90 @@ func TestCTEPolicyKeyRuleResource_resourceSetIDAndKeyTypeStability(t *testing.T)
 				Config:             cteKeyRuleResourceSetConfig(policyName, ""),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEPolicyKeyRuleResource_resourceSetIDDrift covers TFIN-610: an
+// out-of-band change to rule.resource_set_id (e.g. a direct CM API PATCH)
+// must be DETECTED on the next plan. TFIN-470's original fix made Read()
+// preserve the existing state value for resource_set_id unconditionally
+// (to stop a perpetual UUID<->name diff), which as a side effect meant
+// genuine out-of-band resource_set_id changes were never detected at all --
+// a silent-drift regression. Without TFIN-610's fix, the PlanOnly step below
+// would show an empty plan despite the confirmed live PATCH.
+func TestCTEPolicyKeyRuleResource_resourceSetIDDrift(t *testing.T) {
+	policyName := "tf-keyrule-rsid-drift-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy_key_rule.keyrule"
+	var policyID, ruleID, rs2ID string
+
+	config := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "rs" {
+  name = "tf-keyrule-rsid-drift-rs-%s"
+  resources = [{
+    directory          = "/opt/tfin610"
+    file               = "*"
+    include_subfolders = true
+    hdfs               = false
+  }]
+}
+
+resource "ciphertrust_cte_resource_set" "rs2" {
+  name = "tf-keyrule-rsid-drift-rs2-%s"
+  resources = [{
+    directory          = "/opt/tfin610-2"
+    file               = "*"
+    include_subfolders = true
+    hdfs               = false
+  }]
+}
+
+resource "ciphertrust_cte_policy" "policy" {
+  name        = %q
+  policy_type = "Standard"
+  security_rules = [{
+    effect = "permit,audit"
+    action = "all_ops"
+  }]
+}
+
+resource "ciphertrust_cte_policy_key_rule" "keyrule" {
+  policy_id = ciphertrust_cte_policy.policy.id
+  rule = {
+    key_id          = "clear_key"
+    key_type        = "name"
+    resource_set_id = ciphertrust_cte_resource_set.rs.id
+  }
+  # The out-of-band PATCH below rebinds this rule to rs2 without Terraform's
+  # knowledge, creating a real CM-side dependency the HCL graph doesn't
+  # express. Without this, destroy may attempt to delete rs2 before the rule
+  # that (out-of-band) now references it, which CM rejects as "in use".
+  depends_on = [ciphertrust_cte_resource_set.rs2]
+}
+`, policyName, policyName, policyName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: checkStep(t, "key_rule resource_set_id drift: create",
+					cteCaptureAttr(rn, "policy_id", &policyID),
+					cteCaptureAttr(rn, "rule.id", &ruleID),
+					cteCaptureAttr("ciphertrust_cte_resource_set.rs2", "id", &rs2ID),
+				),
+			},
+			{
+				PreConfig: func() {
+					// Directly PATCH resource_set_id on CM to a *different*
+					// resource set, bypassing Terraform entirely.
+					cteOutOfBandPatch(common.URL_CTE_POLICY+"/"+policyID+"/keyrules", ruleID,
+						fmt.Sprintf(`{"resource_set_id":%q}`, rs2ID))
+				},
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
