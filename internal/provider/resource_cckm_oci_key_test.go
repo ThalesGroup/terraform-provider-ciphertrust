@@ -666,11 +666,11 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 17: attempt to apply update with schedule_for_deletion_days = 7 on v1.
-				// v1 is already SCHEDULING_DELETION. Update must error by design.
-				// Expected: apply fails with the SCHEDULING_DELETION error.
+				// v1 is already SCHEDULING_DELETION. The pre-apply refresh triggers Read which
+				// errors before Update can run. Expected: apply fails with the SCHEDULING_DELETION error.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 17") },
 				Config:      twoVersionsUpdateV1Config,
-				ExpectError: regexp.MustCompile(`OCI key version is in SCHEDULING_DELETION state`),
+				ExpectError: regexp.MustCompile(`OCI key version was found in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 18: schedule the key itself for deletion OOB, then refresh state.

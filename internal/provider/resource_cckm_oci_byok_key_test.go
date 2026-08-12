@@ -465,11 +465,12 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 12: OOB version deletion - Update: attempt schedule_for_deletion_days = 10
-				// on byok_v1 which is already SCHEDULING_DELETION. Update must error by design.
+				// on byok_v1 which is already SCHEDULING_DELETION. The pre-apply refresh triggers
+				// Read which errors before Update can run.
 				// Expected: apply fails with the SCHEDULING_DELETION error.
 				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
 				Config:      updateResourceStr4,
-				ExpectError: regexp.MustCompile(`OCI BYOK key version is in SCHEDULING_DELETION state`),
+				ExpectError: regexp.MustCompile(`OCI BYOK key version was found in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 13: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
