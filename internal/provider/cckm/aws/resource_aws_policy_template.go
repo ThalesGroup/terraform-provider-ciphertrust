@@ -12,6 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -192,7 +193,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
 	var diags diag.Diagnostics
-	r.setPolicyTemplateState(response, &plan, &diags)
+	r.setPolicyTemplateState(response, &plan, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
@@ -216,7 +217,7 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.setPolicyTemplateState(response, &state, &resp.Diagnostics)
+	r.setPolicyTemplateState(response, &state, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -266,7 +267,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 			keyPolicyParams.KeyUsers == nil && keyPolicyParams.KeyUsersRoles == nil {
 			// terraform import can lead to this
 			r.client.Log.Debug("[resource_aws_policy_template.go -> Update][nothing to update]")
-			r.setPolicyTemplateState(response, &plan, &resp.Diagnostics)
+			r.setPolicyTemplateState(response, &plan, &plan, &resp.Diagnostics)
 			resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 			return
 		}
@@ -297,7 +298,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	}
 	r.client.Log.Debug("[resource_aws_policy_template.go -> Update][response:" + redactAWSResponse(response) + "]")
 
-	r.setPolicyTemplateState(response, &plan, &resp.Diagnostics)
+	r.setPolicyTemplateState(response, &plan, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -464,7 +465,10 @@ func (r *resourceAWSPolicyTemplate) getUpdatePolicyTemplateParams(ctx context.Co
 }
 
 // setPolicyTemplateState populates Terraform state for an AWS key policy template from an API response JSON string.
-func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, state *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
+// planned is the prior state or plan model used to preserve explicit empty-set values when the API returns no data for
+// a field. If planned has an explicit empty set (not null) for a field and the API returns empty, state is set to an
+// empty set rather than null, preventing "Provider produced inconsistent result after apply" errors.
+func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, state *AWSKeyPolicyTemplateTFSDK, planned *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	state.KmsID = types.StringValue(gjson.Get(response, "kms").String())
 	state.KmsName = types.StringValue(gjson.Get(response, "kms_name").String())
@@ -473,37 +477,46 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, stat
 	if len(externalAccounts) != 0 {
 		state.ExternalAccounts = utils.StringSliceJSONToSetValue(externalAccounts, diags)
 	} else {
-		state.ExternalAccounts = types.SetNull(types.StringType)
+		state.ExternalAccounts = emptyOrNullSet(planned.ExternalAccounts)
 	}
 	state.IsVerified = types.BoolValue(gjson.Get(response, "is_verified").Bool())
 	keyAdmins := gjson.Get(response, "key_admins").Array()
 	if len(keyAdmins) != 0 {
 		state.KeyAdmins = utils.StringSliceJSONToSetValue(keyAdmins, diags)
 	} else {
-		state.KeyAdmins = types.SetNull(types.StringType)
+		state.KeyAdmins = emptyOrNullSet(planned.KeyAdmins)
 	}
 	keyAdminsRoles := gjson.Get(response, "key_admins_roles").Array()
 	if len(keyAdminsRoles) != 0 {
 		state.KeyAdminsRoles = utils.StringSliceJSONToSetValue(keyAdminsRoles, diags)
 	} else {
-		state.KeyAdminsRoles = types.SetNull(types.StringType)
+		state.KeyAdminsRoles = emptyOrNullSet(planned.KeyAdminsRoles)
 	}
 	keyUsers := gjson.Get(response, "key_users").Array()
 	if len(keyUsers) != 0 {
 		state.KeyUsers = utils.StringSliceJSONToSetValue(keyUsers, diags)
 	} else {
-		state.KeyUsers = types.SetNull(types.StringType)
+		state.KeyUsers = emptyOrNullSet(planned.KeyUsers)
 	}
 	keyUsersRoles := gjson.Get(response, "key_users_roles").Array()
 	if len(keyUsersRoles) != 0 {
 		state.KeyUsersRoles = utils.StringSliceJSONToSetValue(keyUsersRoles, diags)
 	} else {
-		state.KeyUsersRoles = types.SetNull(types.StringType)
+		state.KeyUsersRoles = emptyOrNullSet(planned.KeyUsersRoles)
 	}
 	equivalent := getPoliciesAreEqual(r.client, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
 	if !equivalent {
 		state.Policy = types.StringValue(gjson.Get(response, "policy").String())
 	}
+}
+
+// emptyOrNullSet returns an empty Set of string if planned was an explicit empty set (not null), or SetNull otherwise.
+// This preserves the distinction between an omitted field (null) and an explicitly cleared field ([]).
+func emptyOrNullSet(planned types.Set) types.Set {
+	if !planned.IsNull() {
+		return types.SetValueMust(types.StringType, []attr.Value{})
+	}
+	return types.SetNull(types.StringType)
 }
 
 // getPoliciesAreEqual reports whether two AWS key policy JSON strings are semantically equal after normalisation.
