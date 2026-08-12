@@ -11,6 +11,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -74,10 +75,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"bypass_policy_lockout_safety_check": schema.BoolAttribute{
 				Optional:    true,
-				Description: "(Immutable) Whether to bypass the key policy lockout safety check.",
-				PlanModifiers: []planmodifier.Bool{
-					modifiers.ImmutableBool(),
-				},
+				Description: "(Immutable once set) Whether to bypass the key policy lockout safety check when linking an XKS key with AWS. Only valid when local_hosted_params.linked = true.",
 			},
 			"aws_param": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -87,7 +85,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional: true,
-				Description: "Enable or disable the key. Only applied when the key is in a linked state. " +
+				Description: "Enable or disable the key. Requires local_hosted_params.linked = true. " +
 					"Cannot be set to false at creation time; disable the key via update after it is created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
@@ -248,6 +246,9 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"source_key_tier": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.",
+						Validators: []validator.String{
+							stringvalidator.OneOf("local"),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},
@@ -676,55 +677,59 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 
 	// On create (no prior state), validate the configuration.
 	if req.State.Raw.IsNull() {
-		// These attributes require separate post-create API calls and cannot be applied at creation time.
-		// They must be set via update after the key is created.
-		var createInvalid []string
+		var invalid []string
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 			if xksP != nil {
 				if len(xksP.Alias.Elements()) > 1 {
-					createInvalid = append(createInvalid, "aws_param.alias (only one alias may be set at creation; add more via update)")
+					invalid = append(invalid, "aws_param.alias (only one alias may be set at creation; additional aliases require local_hosted_params.linked = true)")
 				}
 			}
 		}
 		if plan.EnableRotation != nil {
-			createInvalid = append(createInvalid, "enable_rotation (cannot be set at creation; configure via update)")
+			invalid = append(invalid, "enable_rotation (cannot be set at creation; configure via update after linking)")
 		}
 		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-			createInvalid = append(createInvalid, "enable_key = false (cannot be set at creation; disable via update)")
+			invalid = append(invalid, "enable_key = false (cannot be set at creation; disable via update after linking)")
 		}
-		if len(createInvalid) > 0 {
-			resp.Diagnostics.AddError(
-				"Invalid attribute at creation time",
-				"The following attributes cannot be set when creating an XKS key: "+
-					strings.Join(createInvalid, "; ")+".",
-			)
-		}
-
-		// aws_param.tags and key_policy are only valid when linked = true at creation time;
+		// The following attributes require local_hosted_params.linked = true;
 		// the API only applies them to the AWS-side key when the key is linked.
 		if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() {
-			var unlinkedInvalid []string
 			if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 				xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 				if xksP != nil {
-					if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
-						len(xksP.Tags.Elements()) > 0 {
-						unlinkedInvalid = append(unlinkedInvalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
+					if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() && len(xksP.Tags.Elements()) > 0 {
+						invalid = append(invalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
 					}
 				}
 			}
 			if plan.KeyPolicy != nil {
-				unlinkedInvalid = append(unlinkedInvalid, "key_policy (only valid when local_hosted_params.linked = true)")
+				invalid = append(invalid, "key_policy (only valid when local_hosted_params.linked = true)")
 			}
-			if len(unlinkedInvalid) > 0 {
-				resp.Diagnostics.AddError(
-					"Invalid configuration for an unlinked key",
-					"The following attributes cannot be set when local_hosted_params.linked = false: "+
-						strings.Join(unlinkedInvalid, "; ")+".",
-				)
+			if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() {
+				invalid = append(invalid, "bypass_policy_lockout_safety_check (only valid when local_hosted_params.linked = true)")
 			}
 		}
+		if len(invalid) > 0 {
+			resp.Diagnostics.AddError(
+				"Invalid configuration for a new XKS key",
+				"The following attributes cannot be set when creating an XKS key: "+
+					strings.Join(invalid, "; ")+".",
+			)
+		}
+		return
+	}
+
+	// If the attribute was previously set (state is non-null), block any change to it.
+	// bypass_policy_lockout_safety_check can only be set once - when first linking the key.
+	if !req.State.Raw.IsNull() &&
+		!state.BypassPolicyLockoutSafetyCheck.IsNull() &&
+		!plan.BypassPolicyLockoutSafetyCheck.Equal(state.BypassPolicyLockoutSafetyCheck) {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("bypass_policy_lockout_safety_check"),
+			"bypass_policy_lockout_safety_check is immutable",
+			"This attribute cannot be changed after it has been set. To change this value, destroy and recreate the resource.",
+		)
 		return
 	}
 
@@ -734,16 +739,33 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		!state.LocalHostParams.Linked.ValueBool() && !plan.LocalHostParams.Linked.ValueBool() {
 		var invalid []string
 
+		var planAwsParam, stateAwsParam *AWSXKSKeyAwsParamTFSDK
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-			if xksP != nil {
-				if len(xksP.Alias.Elements()) > 1 {
-					invalid = append(invalid, "aws_param.alias (more than one alias)")
-				}
-				if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
-					len(xksP.Tags.Elements()) > 0 {
-					invalid = append(invalid, "aws_param.tags")
-				}
+			planAwsParam = extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		if !state.AWSParam.IsNull() && !state.AWSParam.IsUnknown() {
+			stateAwsParam = extractXKSKeyAwsParam(ctx, state.AWSParam, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		if planAwsParam != nil {
+			xksP := planAwsParam
+			if len(xksP.Alias.Elements()) > 1 {
+				invalid = append(invalid, "aws_param.alias (more than one alias)")
+			}
+			if stateAwsParam != nil && !xksP.Alias.Equal(stateAwsParam.Alias) {
+				invalid = append(invalid, "aws_param.alias (value changed)")
+			}
+			if stateAwsParam != nil && !xksP.Description.Equal(stateAwsParam.Description) {
+				invalid = append(invalid, "aws_param.description")
+			}
+			if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
+				len(xksP.Tags.Elements()) > 0 {
+				invalid = append(invalid, "aws_param.tags")
 			}
 		}
 		if plan.KeyPolicy != nil {
@@ -754,6 +776,9 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
 			invalid = append(invalid, "enable_key = false")
+		}
+		if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() {
+			invalid = append(invalid, "bypass_policy_lockout_safety_check (only valid when local_hosted_params.linked = true)")
 		}
 
 		if len(invalid) > 0 {
