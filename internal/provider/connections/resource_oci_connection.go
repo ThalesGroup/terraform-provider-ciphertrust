@@ -611,7 +611,7 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	// cty.StringVal(""), but now null).
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
-	} else if data.Description.IsNull() || data.Description.ValueString() != "" {
+	} else if data.Description.IsNull() || data.Description.IsUnknown() || data.Description.ValueString() != "" {
 		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
@@ -626,7 +626,7 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	// null). Preserve the value already on hand when it is itself a deliberately-empty map.
 	if len(gjson.Get(response, "meta").String()) > 0 {
 		data.Meta = common.ParseMap(response, diags, "meta")
-	} else if data.Meta.IsNull() || len(data.Meta.Elements()) != 0 {
+	} else if data.Meta.IsNull() || data.Meta.IsUnknown() || len(data.Meta.Elements()) != 0 {
 		data.Meta = types.MapNull(types.StringType)
 	}
 	if len(gjson.Get(response, "products").String()) > 0 {
