@@ -924,6 +924,57 @@ func Test_CMKeyRead_FullHydration(t *testing.T) {
 	}
 }
 
+func Test_CMKeyRead_MetaPermissionsSnakeCaseCasing(t *testing.T) {
+	// CM persists meta.permissions under whichever casing was last PATCHed - including
+	// snake_case written by a non-Terraform client - and echoes that casing back on GET.
+	responseJSON := `{
+		"id": "key-1",
+		"name": "tf-key",
+		"meta": {
+			"permissions": {
+				"read_key": ["CTE Clients"],
+				"export_key": ["CTE Clients"]
+			}
+		}
+	}`
+	r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, responseJSON)
+	})
+
+	state := &CMKeyTFSDK{
+		ID:   types.StringValue("key-1"),
+		Name: types.StringValue("tf-key"),
+		Metadata: &KeyMetadataTFSDK{
+			Permissions: &KeyMetadataPermissionsTFSDK{
+				ReadKey:   []types.String{types.StringValue("CTE Clients")},
+				ExportKey: []types.String{types.StringValue("CTE Clients")},
+			},
+		},
+	}
+
+	req := resource.ReadRequest{State: mustState(t, ctx, schemaResp, state)}
+	resp := &resource.ReadResponse{State: mustState(t, ctx, schemaResp, state)}
+	r.Read(ctx, req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", resp.Diagnostics)
+	}
+
+	var final CMKeyTFSDK
+	resp.State.Get(ctx, &final)
+
+	if final.Metadata == nil || final.Metadata.Permissions == nil {
+		t.Fatalf("expected meta.permissions hydrated, got %+v", final.Metadata)
+	}
+	perms := final.Metadata.Permissions
+	if len(perms.ReadKey) != 1 || perms.ReadKey[0].ValueString() != "CTE Clients" {
+		t.Errorf("expected read_key hydrated from snake_case response, got %+v", perms.ReadKey)
+	}
+	if len(perms.ExportKey) != 1 || perms.ExportKey[0].ValueString() != "CTE Clients" {
+		t.Errorf("expected export_key hydrated from snake_case response, got %+v", perms.ExportKey)
+	}
+}
+
 func Test_CMKeyRead_AlgorithmDriftSurfaced(t *testing.T) {
 	r, ctx, schemaResp := newTestCMKeyResource(t, func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprint(w, `{"id":"key-1","algorithm":"rsa"}`)
