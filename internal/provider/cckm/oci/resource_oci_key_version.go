@@ -271,8 +271,9 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setCommonKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -282,8 +283,8 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 }
 
 // Update checks the OCI key version state in CipherTrust Manager via
-// getOciKeyVersion and removes the resource from state if the version is
-// scheduled for deletion. The only schema attribute that can differ between plan and
+// getOciKeyVersion and returns an error if the version is in SCHEDULING_DELETION
+// or PENDING_DELETION state. The only schema attribute that can differ between plan and
 // state is schedule_for_deletion_days, which is stored locally and applied at destroy
 // time only; its updated value is preserved in state after the check.
 func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -313,8 +314,9 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 
 	var plan models.KeyVersionTFSDK

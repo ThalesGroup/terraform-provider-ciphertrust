@@ -264,8 +264,8 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 }
 
 // Read refreshes the OCI BYOK key version state from CipherTrust Manager.
-// Returns a warning and removes the resource from state if the version is not found (404)
-// or if the version is scheduled for deletion.
+// Returns an error if the version is in SCHEDULING_DELETION or PENDING_DELETION state.
+// Removes the resource from state only if the version is not found (404).
 func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Read][" + id + "]")
@@ -287,8 +287,9 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setBYOOKKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -330,8 +331,9 @@ func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.Up
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 
 	var plan models.BYOKKeyVersionTFSDK

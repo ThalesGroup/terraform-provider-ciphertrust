@@ -56,8 +56,7 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 //   - Refresh and import (key and version).
 //   - Update lifecycle: disable/re-enable, freeform and defined tags, rename, scheduler
 //     add/change/remove.
-//   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
-//     (schedule_for_deletion_days) retains with warning.
+//   - OOB version deletion: RefreshState errors with SCHEDULING_DELETION; Update also errors.
 //   - OOB key deletion: RefreshState errors because Read returns an error for SCHEDULING_DELETION;
 //     Update also errors because the pre-apply refresh triggers the same Read error.
 func TestCckmOCIByokKey(t *testing.T) {
@@ -455,45 +454,22 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 11: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
-				// then refresh state. Expected: byok_v1 retained with SCHEDULING_DELETION.
+				// then refresh state. Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
 					logTestStep(t.Name(), "Step 11")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedByokKeyID, capturedByokV1ID)
 				},
 				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", versionResource)
-						}
-						if rs.Primary.ID != capturedByokV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedByokV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(versionResource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-					resource.TestCheckResourceAttr("ciphertrust_oci_byok_key_version.byok_v2", "oci_key_version_params.lifecycle_state", "ENABLED"),
-				),
+				ExpectError:  regexp.MustCompile(`OCI BYOK key version was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 12: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
-				// byok_v1 is already SCHEDULING_DELETION. Expected: warning issued, byok_v1 retained.
-				PreConfig: func() { logTestStep(t.Name(), "Step 12") },
-				Config:    updateResourceStr4,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", versionResource)
-						}
-						if rs.Primary.ID != capturedByokV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedByokV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(versionResource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				// Step 12: OOB version deletion - Update: attempt schedule_for_deletion_days = 10
+				// on byok_v1 which is already SCHEDULING_DELETION. Update must error by design.
+				// Expected: apply fails with the SCHEDULING_DELETION error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
+				Config:      updateResourceStr4,
+				ExpectError: regexp.MustCompile(`OCI BYOK key version is in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 13: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.

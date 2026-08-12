@@ -121,8 +121,7 @@ func scheduleOciKeyVersionDeletionOutOfBand(keyID, versionID string) {
 //   - Update lifecycle: disable/re-enable, freeform tags, rename, scheduler add/change/remove.
 //   - Post-update immutability checks: algorithm, length, and vault on the key; cckm_key_id
 //     on the version. All produce a plan-time error and leave resources untouched.
-//   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
-//     (schedule_for_deletion_days) retains with warning.
+//   - OOB version deletion: RefreshState errors with SCHEDULING_DELETION; Update also errors.
 //   - OOB key deletion: RefreshState retains key as SCHEDULING_DELETION (drift reported);
 //     Update triggers "Provider produced inconsistent result".
 func TestCckmOCIKeyNative(t *testing.T) {
@@ -656,47 +655,22 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 16: schedule v1 for deletion OOB, then refresh state.
-				// Expected: v1 retained with lifecycle_state = SCHEDULING_DELETION;
-				// v2 remains ENABLED.
+				// Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
 					logTestStep(t.Name(), "Step 16")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedKeyID, capturedV1ID)
 				},
 				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[v1Resource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", v1Resource)
-						}
-						if rs.Primary.ID != capturedV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-					resource.TestCheckResourceAttr(v2Resource, "oci_key_version_params.lifecycle_state", "ENABLED"),
-				),
+				ExpectError:  regexp.MustCompile(`OCI key version was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 17: apply update with schedule_for_deletion_days = 7 on v1.
-				// v1 is already SCHEDULING_DELETION. Expected: provider issues a warning
-				// (not an error) and retains v1 in state with SCHEDULING_DELETION.
-				PreConfig: func() { logTestStep(t.Name(), "Step 17") },
-				Config:    twoVersionsUpdateV1Config,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[v1Resource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", v1Resource)
-						}
-						if rs.Primary.ID != capturedV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				// Step 17: attempt to apply update with schedule_for_deletion_days = 7 on v1.
+				// v1 is already SCHEDULING_DELETION. Update must error by design.
+				// Expected: apply fails with the SCHEDULING_DELETION error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 17") },
+				Config:      twoVersionsUpdateV1Config,
+				ExpectError: regexp.MustCompile(`OCI key version is in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 18: schedule the key itself for deletion OOB, then refresh state.
