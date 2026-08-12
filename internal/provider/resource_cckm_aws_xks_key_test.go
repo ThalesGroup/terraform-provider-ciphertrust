@@ -10,6 +10,28 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
+// xksUnlinkedCreateInvalidRegexPre223 is the ExpectError regex for TestCckmAWSXksUnlinkedKeyCreateModifyPlan
+// when the connected CM is older than 2.23. The alias attribute is omitted from the config on pre-2.23
+// because a single alias on an unlinked key is accepted (there is no >1 alias error to trigger),
+// so aws_param.alias does not appear in the error listing.
+const xksUnlinkedCreateInvalidRegexPre223 = `(?s)Invalid configuration for a new XKS key` +
+	`.*enable_rotation` +
+	`.*enable_key` +
+	`.*aws_param\.tags` +
+	`.*key_policy` +
+	`.*bypass_policy_lockout_safety_check`
+
+// xksUnlinkedCreateInvalidRegex223Plus is the ExpectError regex for TestCckmAWSXksUnlinkedKeyCreateModifyPlan
+// when the connected CM is 2.23 or later. The config includes two aliases so the >1 alias check fires
+// and aws_param.alias appears first in the error listing.
+const xksUnlinkedCreateInvalidRegex223Plus = `(?s)Invalid configuration for a new XKS key` +
+	`.*aws_param\.alias` +
+	`.*enable_rotation` +
+	`.*enable_key` +
+	`.*aws_param\.tags` +
+	`.*key_policy` +
+	`.*bypass_policy_lockout_safety_check`
+
 // importStateVerifyIgnoreAwsXksKey lists the attributes that cannot round-trip through
 // terraform import for unlinked XKS keys. It is the superset of all four import steps
 // in TestCckmAWSXksSUnlinkedKey - extra entries are harmless when the attributes already match.
@@ -244,14 +266,24 @@ func TestCckmAWSXksUnlinkedKeyCreateModifyPlan(t *testing.T) {
 	enableRotationConfigStr := fmt.Sprintf(enableRotationConfig, enableRotationName)
 	enableRotationConfigStr = applyCDSPAAS(enableRotationConfigStr)
 
+	// On CM 2.23+: include two aliases so the >1 alias check fires and aws_param.alias appears in the
+	// error. On CM < 2.23: omit alias entirely - a single alias would fire the version gate instead,
+	// and two aliases would produce two separate alias errors rather than one clean listing.
+	aliasLine := `alias = [local.alias, "alias/testing123"]`
+	expectErrorRegex := xksUnlinkedCreateInvalidRegex223Plus
+	if getCipherTrustVersion() < 223 {
+		aliasLine = ""
+		expectErrorRegex = xksUnlinkedCreateInvalidRegexPre223
+	}
+
 	// This key config includes:
-	// - more than one alias, enable_rotation, enable_key=false (invalid at creation for any key)
+	// - more than one alias (CM 2.23+), enable_rotation, enable_key=false (invalid at creation for any key)
 	// - aws_param.tags, key_policy, bypass_policy_lockout_safety_check (invalid for unlinked keys;
 	//   rejected regardless of whether it is true or false)
 	createXksKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "unlinked_cm_source_invalid_params" {
 			aws_param = {
-				alias       = [local.alias, "testing123"]
+				%s
 				description = "create description"
 				tags = {
 					TagKey1 = "TagValue1"
@@ -277,7 +309,7 @@ func TestCckmAWSXksUnlinkedKeyCreateModifyPlan(t *testing.T) {
 			}
 		}`
 
-	createXksKeyConfigStr := fmt.Sprintf(createXksKeyConfig, awsKeyPolicy)
+	createXksKeyConfigStr := fmt.Sprintf(createXksKeyConfig, aliasLine, awsKeyPolicy)
 	createConfigStr := awsConnectionResource + createKeyStoreConfigStr +
 		enableRotationConfigStr + createXksKeyConfigStr
 
@@ -288,15 +320,75 @@ func TestCckmAWSXksUnlinkedKeyCreateModifyPlan(t *testing.T) {
 			{
 				Config: createConfigStr,
 				// A single error "Invalid configuration for a new XKS key" lists all
-				// invalid attributes.
+				// invalid attributes. The exact set depends on the CM version (see
+				// xksUnlinkedCreateInvalidRegex223Plus / xksUnlinkedCreateInvalidRegexPre223).
+				ExpectError: regexp.MustCompile(expectErrorRegex),
+			},
+		},
+	})
+}
+
+// TestCckmAWSXksUnlinkedKeyAliasVersionGate verifies that ModifyPlan rejects setting an alias on an
+// unlinked XKS key when the connected CipherTrust Manager is older than 2.23.
+// This test is skipped on CM 2.23+ and on CDSPaaS (where the feature is always supported).
+func TestCckmAWSXksUnlinkedKeyAliasVersionGate(t *testing.T) {
+	if getCipherTrustVersion() >= 223 || os.Getenv("CDSPAAS") == "true" {
+		t.Skip("TestCckmAWSXksUnlinkedKeyAliasVersionGate only applies to CM < 2.23")
+	}
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+	cmKeyName := "tf-cm-key-" + uuid.New().String()[:8]
+	keyStoreName := "tf-custom-key-store" + uuid.New().String()[:8]
+	proxyURIEndpoint := os.Getenv("CIPHERTRUST_ADDRESS")
+
+	createConfig := fmt.Sprintf(`
+		resource "ciphertrust_cm_key" "cm_aes_key" {
+			name         = %q
+			algorithm    = "AES"
+			usage_mask   = local.cm_key_usage_mask
+			unexportable = true
+			undeletable  = true
+			remove_from_state_on_destroy = true
+		}
+		resource "ciphertrust_aws_custom_keystore" "unlinked_xks_ks" {
+			name    = %q
+			region  = ciphertrust_aws_kms.kms.regions[0]
+			kms_id  = ciphertrust_aws_kms.kms.id
+			linked_state = false
+			local_hosted_params = {
+				health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
+				max_credentials = 8
+				source_key_tier = "local"
+			}
+			aws_param = {
+				xks_proxy_uri_endpoint = %q
+				xks_proxy_connectivity = "PUBLIC_ENDPOINT"
+				custom_key_store_type = "EXTERNAL_KEY_STORE"
+			}
+		}
+		resource "ciphertrust_aws_xks_key" "alias_version_gate" {
+			aws_param = {
+				alias = [local.alias]
+			}
+			local_hosted_params = {
+				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_ks.id
+				linked          = false
+				source_key_id   = ciphertrust_cm_key.cm_aes_key.id
+				source_key_tier = "local"
+			}
+		}`, cmKeyName, keyStoreName, proxyURIEndpoint)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: awsConnectionResource + createConfig,
 				ExpectError: regexp.MustCompile(
 					`(?s)Invalid configuration for a new XKS key` +
-						`.*aws_param\.alias` +
-						`.*enable_rotation` +
-						`.*enable_key` +
-						`.*aws_param\.tags` +
-						`.*key_policy` +
-						`.*bypass_policy_lockout_safety_check`,
+						`.*aws_param\.alias.*CipherTrust\s+Manager\s+2\.23`,
 				),
 			},
 		},
@@ -356,6 +448,7 @@ func TestCckmAWSXksUnlinkedKeyUpdateModifyPlan(t *testing.T) {
 	createXksKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "unlinked_update_invalid" {
 			aws_param = {
+				# Placeholder for alias < invalid for CM < 2.23
 				%s
 				description = "original description"
 			}
@@ -374,6 +467,7 @@ func TestCckmAWSXksUnlinkedKeyUpdateModifyPlan(t *testing.T) {
 	invalidUpdateXksKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "unlinked_update_invalid" {
 			aws_param = {
+				# Placeholder for alias < invalid for CM < 2.23
 				%s
 				description = "changed description"
 				tags = {

@@ -701,6 +701,11 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 					if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() && len(xksP.Tags.Elements()) > 0 {
 						invalid = append(invalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
 					}
+					if !xksP.Alias.IsNull() && !xksP.Alias.IsUnknown() && len(xksP.Alias.Elements()) > 0 {
+						if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
+							invalid = append(invalid, "aws_param.alias (setting alias on an unlinked key requires CipherTrust Manager 2.23 or later)")
+						}
+					}
 				}
 			}
 			if plan.KeyPolicy != nil {
@@ -757,7 +762,8 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 			if len(xksP.Alias.Elements()) > 1 {
 				invalid = append(invalid, "aws_param.alias (more than one alias)")
 			}
-			if stateAwsParam != nil && !xksP.Alias.Equal(stateAwsParam.Alias) {
+			if stateAwsParam != nil && !xksP.Alias.IsNull() && !xksP.Alias.IsUnknown() &&
+				len(xksP.Alias.Elements()) > 0 && !xksP.Alias.Equal(stateAwsParam.Alias) {
 				invalid = append(invalid, "aws_param.alias (value changed)")
 			}
 			if stateAwsParam != nil && !xksP.Description.Equal(stateAwsParam.Description) {
