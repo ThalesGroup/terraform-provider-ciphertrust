@@ -23,18 +23,18 @@ const NotFoundRetainedFmt = "%s was not found and has been retained in the Terra
 	"or run terraform state rm to remove it from the Terraform state. " +
 	"If the resource remains in your configuration, Terraform will propose recreating it on the next apply."
 
-// PendingDeletionReadFmt is the standard error message when a key is found in a
+// PendingDeletionReadFmt is the standard error message when a key or key version is found in a
 // pending-deletion state during a read/refresh operation. The resource is retained in state.
-// Key versions continue to use this as a warning. Placeholders: cloud name, resource type, state value, cloud name.
+// Placeholders: cloud name, resource type, state value, cloud name.
 const PendingDeletionReadFmt = "%s %s was found in %s state during refresh. " +
 	"The resource has been retained in Terraform state, but it cannot be managed " +
 	"while scheduled for deletion. Cancel the scheduled deletion in CipherTrust " +
 	"Manager or %s to resume management, or remove the resource from your Terraform " +
 	"configuration if deletion is intended."
 
-// PendingDeletionUpdateFmt is the standard error message when a key is found in a
+// PendingDeletionUpdateFmt is the standard error message when a key or key version is found in a
 // pending-deletion state during an update operation. The resource is retained in state.
-// Key versions continue to use this as a warning. Placeholders: cloud name, resource type, state value, cloud name.
+// Placeholders: cloud name, resource type, state value, cloud name.
 const PendingDeletionUpdateFmt = "%s %s is in %s state. The resource has been " +
 	"retained in Terraform state. Cancel the scheduled deletion in CipherTrust " +
 	"Manager or %s to resume management, or remove the resource from your Terraform " +
