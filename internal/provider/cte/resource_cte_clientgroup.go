@@ -224,7 +224,7 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = common.TrimString(plan.Description.String())
 	}
-	if plan.CommunicationEnabled.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.CommunicationEnabled.IsNull() {
 		payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 	}
 	if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
@@ -455,16 +455,16 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		}
 
 		//Now handle the mutable fields
-		if plan.ClientLocked.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.ClientLocked.IsNull() {
 			payload.ClientLocked = plan.ClientLocked.ValueBool()
 		}
-		if plan.CommunicationEnabled.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.CommunicationEnabled.IsNull() {
 			payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 		}
 		if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 			payload.Description = common.TrimString(plan.Description.String())
 		}
-		if plan.EnableDomainSharing.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.EnableDomainSharing.IsNull() {
 			payload.EnableDomainSharing = plan.EnableDomainSharing.ValueBool()
 		}
 		if plan.EnabledCapabilities.ValueString() != "" && plan.EnabledCapabilities.ValueString() != types.StringNull().ValueString() {
@@ -501,7 +501,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 				payload.SharedDomainList = append(payload.SharedDomainList, domain.ValueString())
 			}
 		}
-		if plan.SystemLocked.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.SystemLocked.IsNull() {
 			payload.SystemLocked = plan.SystemLocked.ValueBool()
 		}
 
@@ -589,7 +589,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		if plan.AuthBinaries.ValueString() != "" && plan.AuthBinaries.ValueString() != types.StringNull().ValueString() {
 			payload.AuthBinaries = strings.TrimSpace(plan.AuthBinaries.ValueString())
 		}
-		if plan.ReSign.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.ReSign.IsNull() {
 			payload.ReSign = plan.ReSign.ValueBool()
 		}
 
@@ -1070,7 +1070,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			return
 		}
 
-		if plan.Paused.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.Paused.IsNull() {
 			payload.Paused = plan.Paused.ValueBool()
 		}
 
