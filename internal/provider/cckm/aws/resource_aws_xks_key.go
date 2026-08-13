@@ -263,10 +263,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Required:    true,
 						Description: "(Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.",
 						Validators: []validator.String{
-							stringvalidator.RegexMatches(
-								regexp.MustCompile(`\S`),
-								"must contain at least one non-whitespace character",
-							),
+							stringvalidator.OneOf("local"),
 						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
