@@ -1424,3 +1424,63 @@ func TestCckmAWSByokKeyMultiRegionMultiReplica(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSByokKeyCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: region empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_byok_key" "test" {
+						region = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: region whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_byok_key" "test" {
+						region = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: replicate_key.key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_byok_key" "test" {
+						region = "us-east-1"
+						replicate_key = {
+							key_id = ""
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: replicate_key.key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_byok_key" "test" {
+						region = "us-east-1"
+						replicate_key = {
+							key_id = "   "
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: source_key_tier invalid value
+			{
+				Config: `
+					resource "ciphertrust_aws_byok_key" "test" {
+						region           = "us-east-1"
+						source_key_tier  = "INVALID"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}

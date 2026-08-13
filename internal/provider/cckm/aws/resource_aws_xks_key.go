@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -11,6 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -234,6 +236,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"custom_key_store_id": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) ID of the custom keystore where XKS key is to be created.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},
@@ -241,6 +249,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"source_key_id": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) ID of the source key for AWS XKS key.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},
@@ -248,6 +262,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"source_key_tier": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},

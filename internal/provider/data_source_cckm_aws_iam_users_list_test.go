@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -58,6 +59,32 @@ func TestCckmAWSDataSourceIAMUsersList(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsRandomPathName, "users.#", "0"),
 				),
+			},
+		},
+	})
+}
+
+func TestCckmAWSDataSourceIAMUsersListCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty kms_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_iam_users_list" "test" {
+						kms_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only kms_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_iam_users_list" "test" {
+						kms_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

@@ -741,3 +741,205 @@ func TestCckmOCIByokKeyInvalidCreateConfigs(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmOCIByokKeyCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: name empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = ""
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: name whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "   "
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: source_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = ""
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: source_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "   "
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: vault empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = ""
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 6: vault whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "   "
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 7: oci_key_params.compartment_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = ""
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 8: oci_key_params.compartment_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "   "
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 9: oci_key_params.protection_mode invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "INVALID"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}
+
+func TestCckmOCIByokKeyVersionCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: cckm_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = ""
+						source_key_id = "valid-source-key-id"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: cckm_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "   "
+						source_key_id = "valid-source-key-id"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: source_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "valid-key-id"
+						source_key_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: source_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "valid-key-id"
+						source_key_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: source_key_tier invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id     = "valid-key-id"
+						source_key_id   = "valid-source-key-id"
+						source_key_tier = "INVALID"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}

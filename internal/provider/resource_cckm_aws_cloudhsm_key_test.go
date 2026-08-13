@@ -291,3 +291,50 @@ func TestCckmAWSCloudHSMUnlinkedKey(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSCloudhsmKeyCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: enable_rotation.job_config_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_cloudhsm_key" "test" {
+						custom_key_store_id = "valid-keystore-id"
+						enable_rotation = {
+							job_config_id = ""
+							key_source    = "local"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: enable_rotation.job_config_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_cloudhsm_key" "test" {
+						custom_key_store_id = "valid-keystore-id"
+						enable_rotation = {
+							job_config_id = "   "
+							key_source    = "local"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: enable_rotation.key_source invalid value
+			{
+				Config: `
+					resource "ciphertrust_aws_cloudhsm_key" "test" {
+						custom_key_store_id = "valid-keystore-id"
+						enable_rotation = {
+							job_config_id = "valid-job-id"
+							key_source    = "INVALID"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}

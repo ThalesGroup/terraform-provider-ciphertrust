@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -114,6 +115,12 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource ID of a key rotation scheduler.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 					},
 					"key_source": schema.StringAttribute{
 						Required:    true,
@@ -139,6 +146,12 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "Name for the key.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"oci_key_params": schema.SingleNestedAttribute{
 				Required:    true,
@@ -151,6 +164,12 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"compartment_id": schema.StringAttribute{
 						Required:    true,
 						Description: "The compartment's OCID.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 					},
 					"current_key_version": schema.StringAttribute{
 						Computed:    true,
@@ -256,8 +275,14 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
-				Required:      true,
-				Description:   "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				Required:    true,
+				Description: "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"source_key_tier": schema.StringAttribute{
@@ -283,6 +308,12 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"vault": schema.StringAttribute{
 				Required:    true,
 				Description: "(Conditionally immutable) CipherTrust Manager OCI vault resource ID. This attribute can only be changed if the previously configured vault no longer exists in CipherTrust Manager.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"vault_id": schema.StringAttribute{
 				Computed:    true,

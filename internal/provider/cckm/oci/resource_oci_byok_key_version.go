@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -69,8 +70,14 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 				Description: "The account which owns this resource.",
 			},
 			"cckm_key_id": schema.StringAttribute{
-				Required:      true,
-				Description:   "(Immutable) CipherTrust Manager Key ID.",
+				Required:    true,
+				Description: "(Immutable) CipherTrust Manager Key ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
@@ -159,8 +166,14 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 				Validators:    []validator.Int64{int64validator.AtLeast(scheduleForDeletionDays), int64validator.AtMost(30)},
 			},
 			"source_key_id": schema.StringAttribute{
-				Required:      true,
-				Description:   "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				Required:    true,
+				Description: "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"source_key_name": schema.StringAttribute{

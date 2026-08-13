@@ -819,7 +819,12 @@ func commonAwsParamSchemaAttributes() map[string]schema.Attribute {
 			Optional:    true,
 			Computed:    true,
 			Description: "Description of the AWS key. Descriptions can be updated but not removed.",
-			Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+			Validators: []validator.String{
+				stringvalidator.RegexMatches(
+					regexp.MustCompile(`\S`),
+					"must contain at least one non-whitespace character",
+				),
+			},
 		},
 		"key_usage": schema.StringAttribute{
 			Optional:    true,

@@ -2306,3 +2306,85 @@ func logTestStep(testName, step string) {
 	}()
 	_, _ = fmt.Fprintf(f, "=========================== %s %s ===========================\n", testName, step)
 }
+
+func TestCckmAWSKeyMaterialCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: aws_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = ""
+						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "local" }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: aws_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = "   "
+						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "local" }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: key_material[0].source_key_identifier empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = "valid-key-id"
+						key_material = [{ source_key_identifier = "", source_key_tier = "local" }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: key_material[0].source_key_identifier whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = "valid-key-id"
+						key_material = [{ source_key_identifier = "   ", source_key_tier = "local" }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: key_material[0].source_key_tier empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = "valid-key-id"
+						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "" }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 6: key_material[0].source_key_tier whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id   = "valid-key-id"
+						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "   " }]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 7: key_material[0].valid_to invalid date format
+			{
+				Config: `
+					resource "ciphertrust_aws_key_material" "test" {
+						aws_key_id = "valid-key-id"
+						key_material = [{
+							source_key_identifier = "valid-id"
+							source_key_tier       = "local"
+							valid_to              = "not-a-date"
+						}]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("must conform to the following example"),
+			},
+		},
+	})
+}

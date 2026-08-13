@@ -261,3 +261,55 @@ func TestCckmOCIVault(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmOCIVaultCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// connection_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = ""
+						region        = "us-ashburn-1"
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// connection_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = "   "
+						region        = "us-ashburn-1"
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// region empty string
+			{
+				Config: `
+				resource "ciphertrust_oci_vault" "test" {
+					connection_id = "valid-connection-id"
+					region        = ""
+					vault_id      = "ocid1.vault.fake"
+				}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// region whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = "valid-connection-id"
+						region        = "   "
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}
