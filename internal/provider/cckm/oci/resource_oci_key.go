@@ -317,7 +317,7 @@ func (r *resourceCCKMOCIKey) Schema(_ context.Context, _ resource.SchemaRequest,
 						},
 						"version_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The key version's OCID",
+							Description: "The key version's OCID.",
 						},
 					},
 				},

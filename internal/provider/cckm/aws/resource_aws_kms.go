@@ -137,7 +137,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "True if the KMS was added by a scheduler.",
 			},
 			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 				Computed:    true,
 			},
 			"dev_account": schema.StringAttribute{
@@ -169,7 +169,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date and time the KMS was last updated",
+				Description: "Date and time the KMS was last updated.",
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,

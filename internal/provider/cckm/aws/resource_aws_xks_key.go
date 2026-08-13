@@ -179,11 +179,11 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"rotated_from": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.",
 			},
 			"rotated_to": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.",
 			},
 			"rotation_status": schema.StringAttribute{
 				Computed:    true,

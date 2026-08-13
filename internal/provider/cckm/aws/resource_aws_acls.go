@@ -149,7 +149,7 @@ func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"kms_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL",
+				Description: "(Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL.",
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(
 						regexp.MustCompile(`\S`),

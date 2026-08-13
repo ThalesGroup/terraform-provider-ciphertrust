@@ -149,11 +149,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"kms_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "Name or of the KMS.",
+				Description: "Name of the KMS.",
 			},
 			"kms_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "ID of the KMS",
+				Description: "ID of the KMS.",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -179,11 +179,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"rotated_from": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.",
 			},
 			"rotated_to": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.",
 			},
 			"rotation_status": schema.StringAttribute{
 				Computed:    true,

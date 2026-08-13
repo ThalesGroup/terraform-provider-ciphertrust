@@ -85,7 +85,7 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -146,7 +146,7 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"version_id": schema.StringAttribute{
 						Computed:    true,
-						Description: "OCI version ID",
+						Description: "OCI version ID.",
 					},
 				},
 			},

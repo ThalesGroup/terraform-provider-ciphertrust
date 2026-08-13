@@ -120,7 +120,7 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"vault_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL",
+				Description: "(Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL.",
 				Validators: []validator.String{
 					stringvalidator.RegexMatches(
 						regexp.MustCompile(`\S`),
