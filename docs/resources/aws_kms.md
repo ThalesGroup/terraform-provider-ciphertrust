@@ -70,11 +70,11 @@ resource "ciphertrust_aws_kms" "kms" {
 - `arn` (String) Amazon Resource Name.
 - `auto_added` (Boolean) True if the KMS was added by a scheduler.
 - `connection_name` (String) The connection name as returned by CipherTrust Manager. Always reflects the current server-side value; changes here indicate an out-of-band connection update.
-- `created_at` (String) Date/time the application was created
+- `created_at` (String) Date/time the application was created.
 - `dev_account` (String) The developer account which owns this resource's application.
 - `id` (String) The unique identifier of the resource.
 - `status` (String) The status of the KMS, archived or active.
-- `updated_at` (String) Date and time the KMS was last updated
+- `updated_at` (String) Date and time the KMS was last updated.
 - `uri` (String) A human-readable unique identifier of the resource.
 
 <a id="nestedatt--acls"></a>

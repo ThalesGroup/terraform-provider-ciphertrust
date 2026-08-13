@@ -3,12 +3,12 @@
 page_title: "ciphertrust_cm_keys_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Lists cryptographic keys from CipherTrust Manager's core vault key-management API (/v1/vault/keys2). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.
+  Lists cryptographic keys from CipherTrust Manager's core vault key-management API (/v1/vault/keys2). When neither "skip" nor "limit" is set, the data source paginates automatically (pages of 10) and returns every matching key. When either "skip" or "limit" is set, a single page is returned exactly as CM responds — useful for sampling or offset-based access.
 ---
 
 # ciphertrust_cm_keys_list (Data Source)
 
-Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.
+Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). When neither "skip" nor "limit" is set, the data source paginates automatically (pages of 10) and returns every matching key. When either "skip" or "limit" is set, a single page is returned exactly as CM responds — useful for sampling or offset-based access.
 
 
 
@@ -17,7 +17,7 @@ Lists cryptographic keys from CipherTrust Manager's core vault key-management AP
 
 ### Optional
 
-- `filters` (Map of String) Optional filters passed as query parameters to the CM keys list API, e.g. "name", "algorithm", "id", "uuid", "muid", "keyId", "size", "curveid", "version", or "state". The '?' and '*' wildcard characters may be used in "name". Note: "skip" and "limit" cannot be set here — the data source always paginates internally starting at skip=0 in pages of 10 to retrieve the full result set.
+- `filters` (Map of String) Optional filters passed as query parameters to the CM keys list API. Supported keys: "name" (supports '?' and '*' wildcards), "algorithm", "id", "uuid", "muid", "keyId", "size", "curveid", "parameterSet", "version", "uri", "state", "fields", "metaContains", "objectType", "skip", "limit". If "skip" or "limit" is set, only a single page is fetched as specified. Otherwise the data source paginates internally (skip=0, pages of 10) and returns the complete result set.
 
 ### Read-Only
 

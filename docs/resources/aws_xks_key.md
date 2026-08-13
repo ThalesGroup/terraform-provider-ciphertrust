@@ -133,8 +133,8 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `region` (String) AWS region in which the XKS key resides.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
-- `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
-- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
+- `rotated_from` (String) CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.
+- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
 - `rotation_status` (String) Rotation status of the key.
 - `synced_at` (String) Date the key was synchronized.
 - `updated_at` (String) Date the key was last updated.

@@ -89,7 +89,7 @@ It's not necessary to add any view permissions as they will be automatically add
 To remove a user or group from the KMS ACL entirely, delete the resource.
 
 For backwards compatibility the deprecated 'view' permission will be automatically converted to 'viewnative' and 'viewbyok' permissions.
-- `kms_id` (String) (Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL
+- `kms_id` (String) (Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL.
 
 ### Optional
 

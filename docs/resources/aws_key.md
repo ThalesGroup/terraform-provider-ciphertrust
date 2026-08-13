@@ -171,8 +171,8 @@ resource "ciphertrust_aws_key" "replicated_key" {
 - `multi_region_configuration` (Attributes) Multi-region configuration for the key. Set only when multi_region is true. (see [below for nested schema](#nestedatt--multi_region_configuration))
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
-- `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
-- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
+- `rotated_from` (String) CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.
+- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
 - `rotation_history` (Attributes List) Key material rotation history (up to 10 most recent entries, newest first). (see [below for nested schema](#nestedatt--rotation_history))
 - `rotation_status` (String) Rotation status of the key.
 - `synced_at` (String) Date the key was synchronized.

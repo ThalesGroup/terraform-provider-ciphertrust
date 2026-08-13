@@ -45,11 +45,11 @@ data "ciphertrust_oci_vault_list" "vpv_in_region" {
 | sort                | string  | Fields to sort by. Valid sort fields are `display_name`, `vault_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
 | id                  | string  | Filter by CipherTrust Manager internal ID. |
 | display_name        | string  | Filter by vault display name. |
-| vault_name          | string  | Filter by vault name. |
+| vault_name          | string  | Filter by vault name. Valid for the `EXTERNAL` vault type only. |
 | linked_state        | boolean | Filter by whether the vault is in a linked state (`true` or `false`). |
 | issuer_id           | string  | Filter by issuer ID. |
 | state               | string  | Filter by state (for external vaults only). |
-| external_vault_type | string  | Filter by external vault type. |
+| external_vault_type | string  | Filter by `EXTERNAL` vault type. |
 | cloud_name          | string  | Filter by cloud name. |
 | vault_id            | string  | Filter by vault OCID. |
 | vault_type          | string  | Filter by vault type. Valid values are `DEFAULT`, `EXTERNAL`, and `VIRTUAL_PRIVATE`. |
