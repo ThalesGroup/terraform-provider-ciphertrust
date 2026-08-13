@@ -133,7 +133,11 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 								},
 								"early_access": schema.BoolAttribute{
 									Optional:    true,
-									Description: "Whether secure start is turned on.",
+									Description: "Whether secure start is turned on. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.",
+									// CM has a dedicated early-access endpoint that supports both
+									// true->false and false->true in place for an existing
+									// GuardPoint, so no plan modifier is needed. Update() calls
+									// that dedicated endpoint directly on a genuine change.
 								},
 								"intelligent_protection": schema.BoolAttribute{
 									Optional:    true,
@@ -145,6 +149,8 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 								},
 								"mfa_enabled": schema.BoolAttribute{
 									Optional:    true,
+									Computed:    true,
+									Default:     booldefault.StaticBool(false),
 									Description: "Whether MFA is enabled.",
 								},
 								"network_share_credentials_id": schema.StringAttribute{
@@ -153,13 +159,30 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 								},
 								"preserve_sparse_regions": schema.BoolAttribute{
 									Optional:    true,
-									Description: "Whether to preserve sparse file regions.",
+									Description: "Whether to preserve sparse file regions. CM has a dedicated endpoint that turns this off in place for an EXISTING guard_path (true -> false does not force a replace), but once turned off it can never be turned back on for that same GuardPoint via any API call -- changing it from false to true for an EXISTING guard_path forces a whole-resource replace.",
+									PlanModifiers: []planmodifier.Bool{
+										// See resource_cte_clientgroup_guardpoints.go's
+										// preserve_sparse_regions for the full rationale -- same
+										// treatment applied here for consistency between the two
+										// resources.
+										modifiers.BoolRequiresReplaceOnFalseToTrueUnlessNewMapEntry(),
+									},
 								},
 								"guard_enabled": schema.BoolAttribute{
 									Optional:    true,
 									Computed:    true,
 									Default:     booldefault.StaticBool(true),
-									Description: "Whether the GuardPoint is enabled.",
+									Description: "Whether the GuardPoint is enabled. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.",
+									// PR review follow-up: guard_enabled is create-time-inert on CM (a
+									// GuardPoint created with guard_enabled = false still comes
+									// up enabled) and the generic PATCH .../guardpoints/{id}
+									// also silently no-ops it. Both Create() and Update() now
+									// call CM's dedicated .../guardpoints/enable endpoint
+									// instead, confirmed live to work in both directions
+									// (true->false and false->true) for an existing GuardPoint.
+									// Since Update() actually applies the change either way (same
+									// reasoning as early_access above), no plan modifier is
+									// needed here.
 								},
 							},
 						},
@@ -197,6 +220,16 @@ func (r *resourceCTEClientGP) Create(ctx context.Context, req resource.CreateReq
 		NWShareCredentialsID  string
 		DiskName              string
 		DiskgroupName         string
+		// TFIN-544: these 4 fields were missing from the comparison key. Two
+		// guard points differing ONLY in one of these fields used to hash to
+		// the same batchKey and collapse into a single batched POST
+		// /guardpoints call, so only one guard point's requested value for
+		// that field actually reached CM ("first writer wins"). Same root
+		// cause as TFIN-628 on the sibling resource_cte_clientgroup_guardpoints.go.
+		IsGuardEnabled                 bool
+		IsDataClassificationEnabled    bool
+		IsDataLineageEnabled           bool
+		IsIntelligentProtectionEnabled bool
 	}
 	type batchEntry struct {
 		params     CTEClientGuardPointParamsTFSDK
@@ -209,17 +242,21 @@ func (r *resourceCTEClientGP) Create(ctx context.Context, req resource.CreateReq
 	for guardPath, entry := range plan.GuardPoints {
 		p := entry.GuardPointParams
 		key := batchKey{
-			GPType:                p.GPType.ValueString(),
-			PolicyID:              p.PolicyID.ValueString(),
-			IsAutomountEnabled:    p.IsAutomountEnabled.ValueBool(),
-			IsCIFSEnabled:         p.IsCIFSEnabled.ValueBool(),
-			IsEarlyAccessEnabled:  p.IsEarlyAccessEnabled.ValueBool(),
-			IsDeviceIDTCapable:    p.IsDeviceIDTCapable.ValueBool(),
-			IsMFAEnabled:          p.IsMFAEnabled.ValueBool(),
-			PreserveSparseRegions: p.PreserveSparseRegions.ValueBool(),
-			NWShareCredentialsID:  p.NWShareCredentialsID.ValueString(),
-			DiskName:              p.DiskName.ValueString(),
-			DiskgroupName:         p.DiskgroupName.ValueString(),
+			GPType:                         p.GPType.ValueString(),
+			PolicyID:                       p.PolicyID.ValueString(),
+			IsAutomountEnabled:             p.IsAutomountEnabled.ValueBool(),
+			IsCIFSEnabled:                  p.IsCIFSEnabled.ValueBool(),
+			IsEarlyAccessEnabled:           p.IsEarlyAccessEnabled.ValueBool(),
+			IsDeviceIDTCapable:             p.IsDeviceIDTCapable.ValueBool(),
+			IsMFAEnabled:                   p.IsMFAEnabled.ValueBool(),
+			PreserveSparseRegions:          p.PreserveSparseRegions.ValueBool(),
+			NWShareCredentialsID:           p.NWShareCredentialsID.ValueString(),
+			DiskName:                       p.DiskName.ValueString(),
+			DiskgroupName:                  p.DiskgroupName.ValueString(),
+			IsGuardEnabled:                 p.IsGuardEnabled.ValueBool(),
+			IsDataClassificationEnabled:    p.IsDataClassificationEnabled.ValueBool(),
+			IsDataLineageEnabled:           p.IsDataLineageEnabled.ValueBool(),
+			IsIntelligentProtectionEnabled: p.IsIntelligentProtectionEnabled.ValueBool(),
 		}
 		if _, exists := batchMap[key]; !exists {
 			batchMap[key] = &batchEntry{params: p}
@@ -265,11 +302,29 @@ func (r *resourceCTEClientGP) Create(ctx context.Context, req resource.CreateReq
 
 		// Parse IDs from the API response JSON by matching guard_path, not position.
 		gpSize := int(gjson.Get(response, "guardpoints.#").Int())
+		var createdIDs []string
 		for i := 0; i < gpSize; i++ {
 			returnedPath := gjson.Get(response, fmt.Sprintf("guardpoints.%d.guardpoint.guard_path", i)).String()
 			returnedID := gjson.Get(response, fmt.Sprintf("guardpoints.%d.guardpoint.id", i)).String()
 			if returnedPath != "" && returnedID != "" {
 				pathToID[returnedPath] = returnedID
+				createdIDs = append(createdIDs, returnedID)
+			}
+		}
+
+		// PR review follow-up: guard_enabled is create-time-inert on CM -- confirmed
+		// live that a GuardPoint created with guard_enabled = false still
+		// comes back guard_enabled = true. Explicitly disable this batch's
+		// newly created GuardPoints via the dedicated endpoint whenever the
+		// plan requested guard_enabled = false.
+		if !p.IsGuardEnabled.ValueBool() {
+			if err := setGuardEnabled(ctx, r.client, common.URL_CTE_CLIENT+"/"+plan.CTEClientID.ValueString()+"/guardpoints/enable", createdIDs, false); err != nil {
+				r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client_guardpoints.go -> Create/GuardEnabled][" + id + "]")
+				resp.Diagnostics.AddError(
+					"Error disabling newly created Guardpoint(s) for client "+plan.CTEClientID.ValueString(),
+					err.Error(),
+				)
+				return
 			}
 		}
 	}
@@ -352,7 +407,13 @@ func (r *resourceCTEClientGP) Read(ctx context.Context, req resource.ReadRequest
 			GuardPointParams: CTEClientGuardPointParamsTFSDK{
 				GPType:         types.StringValue(gp.GuardPointType),
 				IsGuardEnabled: types.BoolValue(gp.GuardEnabled),
-				PolicyID:       types.StringValue(gp.PolicyID),
+				// mfa_enabled is now actually sent by Update() (see the dedicated
+				// payload fix above), so read it fresh from CM on every Read()
+				// instead of only ever carrying forward the prior state value --
+				// matching the sibling resource_cte_clientgroup_guardpoints.go's
+				// Read(), which already does this.
+				IsMFAEnabled: types.BoolValue(gp.MFAEnabled),
+				PolicyID:     types.StringValue(gp.PolicyID),
 			},
 		}
 
@@ -362,7 +423,6 @@ func (r *resourceCTEClientGP) Read(ctx context.Context, req resource.ReadRequest
 			entry.GuardPointParams.IsCIFSEnabled = p.IsCIFSEnabled
 			entry.GuardPointParams.IsEarlyAccessEnabled = p.IsEarlyAccessEnabled
 			entry.GuardPointParams.IsDeviceIDTCapable = p.IsDeviceIDTCapable
-			entry.GuardPointParams.IsMFAEnabled = p.IsMFAEnabled
 			entry.GuardPointParams.PreserveSparseRegions = p.PreserveSparseRegions
 			entry.GuardPointParams.IsDataClassificationEnabled = p.IsDataClassificationEnabled
 			entry.GuardPointParams.IsDataLineageEnabled = p.IsDataLineageEnabled
@@ -464,6 +524,16 @@ func (r *resourceCTEClientGP) Update(ctx context.Context, req resource.UpdateReq
 		NWShareCredentialsID  string
 		DiskName              string
 		DiskgroupName         string
+		// TFIN-544: these 4 fields were missing from the comparison key. Two
+		// guard points differing ONLY in one of these fields used to hash to
+		// the same batchKey and collapse into a single batched POST
+		// /guardpoints call, so only one guard point's requested value for
+		// that field actually reached CM ("first writer wins"). Same root
+		// cause as TFIN-628 on the sibling resource_cte_clientgroup_guardpoints.go.
+		IsGuardEnabled                 bool
+		IsDataClassificationEnabled    bool
+		IsDataLineageEnabled           bool
+		IsIntelligentProtectionEnabled bool
 	}
 	type batchEntry struct {
 		params     CTEClientGuardPointParamsTFSDK
@@ -481,17 +551,21 @@ func (r *resourceCTEClientGP) Update(ctx context.Context, req resource.UpdateReq
 
 		p := planEntry.GuardPointParams
 		key := batchKey{
-			GPType:                p.GPType.ValueString(),
-			PolicyID:              p.PolicyID.ValueString(),
-			IsAutomountEnabled:    p.IsAutomountEnabled.ValueBool(),
-			IsCIFSEnabled:         p.IsCIFSEnabled.ValueBool(),
-			IsEarlyAccessEnabled:  p.IsEarlyAccessEnabled.ValueBool(),
-			IsDeviceIDTCapable:    p.IsDeviceIDTCapable.ValueBool(),
-			IsMFAEnabled:          p.IsMFAEnabled.ValueBool(),
-			PreserveSparseRegions: p.PreserveSparseRegions.ValueBool(),
-			NWShareCredentialsID:  p.NWShareCredentialsID.ValueString(),
-			DiskName:              p.DiskName.ValueString(),
-			DiskgroupName:         p.DiskgroupName.ValueString(),
+			GPType:                         p.GPType.ValueString(),
+			PolicyID:                       p.PolicyID.ValueString(),
+			IsAutomountEnabled:             p.IsAutomountEnabled.ValueBool(),
+			IsCIFSEnabled:                  p.IsCIFSEnabled.ValueBool(),
+			IsEarlyAccessEnabled:           p.IsEarlyAccessEnabled.ValueBool(),
+			IsDeviceIDTCapable:             p.IsDeviceIDTCapable.ValueBool(),
+			IsMFAEnabled:                   p.IsMFAEnabled.ValueBool(),
+			PreserveSparseRegions:          p.PreserveSparseRegions.ValueBool(),
+			NWShareCredentialsID:           p.NWShareCredentialsID.ValueString(),
+			DiskName:                       p.DiskName.ValueString(),
+			DiskgroupName:                  p.DiskgroupName.ValueString(),
+			IsGuardEnabled:                 p.IsGuardEnabled.ValueBool(),
+			IsDataClassificationEnabled:    p.IsDataClassificationEnabled.ValueBool(),
+			IsDataLineageEnabled:           p.IsDataLineageEnabled.ValueBool(),
+			IsIntelligentProtectionEnabled: p.IsIntelligentProtectionEnabled.ValueBool(),
 		}
 		if _, exists := batchMap[key]; !exists {
 			batchMap[key] = &batchEntry{params: p}
@@ -535,11 +609,26 @@ func (r *resourceCTEClientGP) Update(ctx context.Context, req resource.UpdateReq
 
 		// Parse IDs from the API response JSON by matching guard_path, not position.
 		gpSize := int(gjson.Get(response, "guardpoints.#").Int())
+		var createdIDs []string
 		for i := 0; i < gpSize; i++ {
 			returnedPath := gjson.Get(response, fmt.Sprintf("guardpoints.%d.guardpoint.guard_path", i)).String()
 			returnedID := gjson.Get(response, fmt.Sprintf("guardpoints.%d.guardpoint.id", i)).String()
 			if returnedPath != "" && returnedID != "" {
 				pathToNewID[returnedPath] = returnedID
+				createdIDs = append(createdIDs, returnedID)
+			}
+		}
+
+		// PR review follow-up: same create-time-inert behavior as in Create() above --
+		// explicitly disable this batch's newly created GuardPoints via the
+		// dedicated endpoint whenever the plan requested guard_enabled = false.
+		if !p.IsGuardEnabled.ValueBool() {
+			if err := setGuardEnabled(ctx, r.client, common.URL_CTE_CLIENT+"/"+clientID+"/guardpoints/enable", createdIDs, false); err != nil {
+				resp.Diagnostics.AddError(
+					"Error disabling newly created Guardpoint(s) during Update for client "+clientID,
+					err.Error(),
+				)
+				return
 			}
 		}
 	}
@@ -594,11 +683,110 @@ func (r *resourceCTEClientGP) Update(ctx context.Context, req resource.UpdateReq
 				return
 			}
 
+			// ---------------------------------------------------------------
+			// DEDICATED-ENDPOINT FIELDS — early_access and preserve_sparse_regions
+			// (true->false only) silently no-op via the generic PATCH below, so
+			// send them through CM's dedicated sub-endpoints instead. Same
+			// treatment as resource_cte_clientgroup_guardpoints.go.
+			// ---------------------------------------------------------------
+			stateEarlyAccess := stateEntry.GuardPointParams.IsEarlyAccessEnabled.ValueBool()
+			planEarlyAccess := planEntry.GuardPointParams.IsEarlyAccessEnabled.ValueBool()
+			if stateEarlyAccess != planEarlyAccess {
+				earlyAccessPayloadJSON, err := json.Marshal(CTEGuardPointEarlyAccessJSON{EarlyAccess: planEarlyAccess})
+				if err != nil {
+					resp.Diagnostics.AddError("Invalid data input: CTE Client Guardpoint Early Access Update", err.Error())
+					return
+				}
+				_, err = r.client.UpdateData(
+					ctx,
+					"",
+					common.URL_CTE_CLIENT+"/"+clientID+"/guardpoints/"+gpID+"/early-access",
+					earlyAccessPayloadJSON,
+					"",
+				)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Error updating early_access for Guardpoint id "+gpID+" for client id "+clientID,
+						err.Error(),
+					)
+					return
+				}
+			}
+
+			// true->false is applied in place via the dedicated endpoint.
+			// false->true for an existing entry is blocked at plan time by
+			// BoolRequiresReplaceOnFalseToTrueUnlessNewMapEntry (CM can never
+			// re-enable preserve_sparse_regions on an existing GuardPoint), so
+			// this branch should only ever see a true->false transition.
+			statePreserveSparse := stateEntry.GuardPointParams.PreserveSparseRegions.ValueBool()
+			planPreserveSparse := planEntry.GuardPointParams.PreserveSparseRegions.ValueBool()
+			if statePreserveSparse && !planPreserveSparse {
+				preserveSparsePayloadJSON, err := json.Marshal(CTEGuardPointPreserveSparseRegionsOffJSON{PreserveSparseRegions: false})
+				if err != nil {
+					resp.Diagnostics.AddError("Invalid data input: CTE Client Guardpoint Preserve Sparse Regions Update", err.Error())
+					return
+				}
+				_, err = r.client.UpdateData(
+					ctx,
+					"",
+					common.URL_CTE_CLIENT+"/"+clientID+"/guardpoints/"+gpID+"/preserve-sparse-regions-off",
+					preserveSparsePayloadJSON,
+					"",
+				)
+				if err != nil {
+					resp.Diagnostics.AddError(
+						"Error updating preserve_sparse_regions for Guardpoint id "+gpID+" for client id "+clientID,
+						err.Error(),
+					)
+					return
+				}
+			}
+
+			// ---------------------------------------------------------------
+			// DEDICATED-ENDPOINT FIELD — guard_enabled (PR review follow-up). Like
+			// early_access/preserve_sparse_regions above, the generic PATCH
+			// below silently no-ops guard_enabled (confirmed live), so send a
+			// genuine change through the dedicated enable/disable endpoint
+			// instead, on both true->false and false->true transitions.
+			// ---------------------------------------------------------------
+			stateGuardEnabled := stateEntry.GuardPointParams.IsGuardEnabled.ValueBool()
+			planGuardEnabled := planEntry.GuardPointParams.IsGuardEnabled.ValueBool()
+			if stateGuardEnabled != planGuardEnabled {
+				if err := setGuardEnabled(ctx, r.client, common.URL_CTE_CLIENT+"/"+clientID+"/guardpoints/enable", []string{gpID}, planGuardEnabled); err != nil {
+					resp.Diagnostics.AddError(
+						"Error updating guard_enabled for Guardpoint id "+gpID+" for client id "+clientID,
+						err.Error(),
+					)
+					return
+				}
+			}
+
 			var payload UpdateCTEGuardPointJSON
 
-			if !planEntry.GuardPointParams.IsGuardEnabled.IsNull() {
-				v := planEntry.GuardPointParams.IsGuardEnabled.ValueBool()
-				payload.IsGuardEnabled = &v
+			// The generic PATCH payload never included mfa_enabled here, so a
+			// change to it silently never reached CM even though the field
+			// exists in the schema and IS sent by the sibling
+			// resource_cte_clientgroup_guardpoints.go's Update().
+			//
+			// Deliberately sent only when it actually changes (state vs plan),
+			// NOT whenever it is merely non-null like the sibling clientgroup
+			// file does: confirmed live that CM's /clients/ PATCH endpoint
+			// rejects the request outright if mfa_enabled is present at all
+			// on a CTE Client that lacks MFA capability ("mfa_enabled cannot
+			// passed in GuardPoint as it is not supported on CTE Client"),
+			// even when the value is unchanged (e.g. false -> false). Since
+			// mfa_enabled is Computed+Default now, the planned value is never
+			// null, so matching the clientgroup file's "if not null" pattern
+			// here would resend mfa_enabled on every Update() call for every
+			// existing entry -- breaking Update() entirely for any
+			// MFA-incapable client even when the actual config change is to
+			// an unrelated field. Only sending it on a genuine change avoids
+			// that regression while still fixing the original bug.
+			stateMFAEnabled := stateEntry.GuardPointParams.IsMFAEnabled.ValueBool()
+			planMFAEnabled := planEntry.GuardPointParams.IsMFAEnabled.ValueBool()
+			if stateMFAEnabled != planMFAEnabled {
+				v := planMFAEnabled
+				payload.IsMFAEnabled = &v
 			}
 			if planEntry.GuardPointParams.NWShareCredentialsID.ValueString() != "" {
 				payload.NWShareCredentialsID = planEntry.GuardPointParams.NWShareCredentialsID.ValueString()
