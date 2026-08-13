@@ -1008,6 +1008,68 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			return
 		}
 	} else if opType == "ldt-pause" {
+		// Add error checks for fields we cant change in op_type = ldt-pause
+		if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "client_list cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.InheritAttributes != state.InheritAttributes {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "inherit_attributes cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.AuthBinaries != state.AuthBinaries {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "auth_binaries cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ReSign != state.ReSign {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "re_sign cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "password cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "password_creation_method cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ClientLocked != state.ClientLocked {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "client_locked cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.CommunicationEnabled != state.CommunicationEnabled {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "communication_enabled cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.Description != state.Description {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "description cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.EnableDomainSharing != state.EnableDomainSharing {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "enable_domain_sharing cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.EnabledCapabilities != state.EnabledCapabilities {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "enabled_capabilities cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "ldt_designated_primary_set cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ProfileID != state.ProfileID {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "profile_id cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "shared_domain_list cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.SystemLocked != state.SystemLocked {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "system_locked cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+
 		if plan.Paused.ValueBool() != types.BoolNull().ValueBool() {
 			payload.Paused = plan.Paused.ValueBool()
 		}

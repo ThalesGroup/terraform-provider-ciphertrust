@@ -205,6 +205,79 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
+// TestCTEClientGroupResource_ldtPauseFieldGuard verifies op_type = "ldt-pause"
+// rejects a config that also changes an unrelated field in the same apply
+// (TFIN-625). Before the fix, the ldt-pause branch had no field-change
+// guard at all: the apply would succeed, only the paused flag would be sent
+// to CM, but the unrelated field's new value would still be recorded in
+// state -- a false value only caught on the next refresh. Also verifies
+// normal ldt-pause-only usage (toggling paused with no other field change)
+// still succeeds and produces no follow-up plan diff.
+func TestCTEClientGroupResource_ldtPauseFieldGuard(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-ldtpause-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+}
+`, cgName)
+
+	// op_type = ldt-pause with an unrelated field (description) also changed
+	// in the same apply -- must be rejected.
+	pauseWithSneakedFieldCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "sneaked-in-via-ldt-pause"
+  op_type      = "ldt-pause"
+  paused       = true
+}
+`, cgName)
+
+	// op_type = ldt-pause with only paused changed -- must succeed.
+	pauseOnlyCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+  op_type      = "ldt-pause"
+  paused       = true
+}
+`, cgName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group ldt-pause guard: create",
+					resource.TestCheckResourceAttr(rn, "description", "Initial create"),
+				),
+			},
+			{
+				Config:      pauseWithSneakedFieldCfg,
+				ExpectError: regexp.MustCompile(`description cannot be changed with op_type 'ldt-pause'`),
+			},
+			{
+				Config: pauseOnlyCfg,
+				Check: checkStep(t, "client_group ldt-pause guard: pause only",
+					resource.TestCheckResourceAttr(rn, "description", "Initial create"),
+					resource.TestCheckResourceAttr(rn, "paused", "true"),
+				),
+			},
+			{
+				Config:             pauseOnlyCfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEClientGroupResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
 func TestCTEClientGroupResource_drift(t *testing.T) {
