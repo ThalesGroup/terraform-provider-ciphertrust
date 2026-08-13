@@ -1782,6 +1782,47 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	resp.Diagnostics.Append(diags...)
 }
 
+// permissionsEqual compares two KeyMetadataPermissionsTFSDK by set membership per
+// action, not list order. CM's stored order isn't guaranteed to match the plan's
+// config order, so a plain reflect.DeepEqual on these slices can flag a false
+// positive change and trigger an unnecessary permissions PATCH on every apply.
+func permissionsEqual(a, b *KeyMetadataPermissionsTFSDK) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	sameSet := func(x, y []types.String) bool {
+		if len(x) != len(y) {
+			return false
+		}
+		toSet := func(s []types.String) map[string]int {
+			m := make(map[string]int, len(s))
+			for _, v := range s {
+				m[v.ValueString()]++
+			}
+			return m
+		}
+		xs, ys := toSet(x), toSet(y)
+		if len(xs) != len(ys) {
+			return false
+		}
+		for k, v := range xs {
+			if ys[k] != v {
+				return false
+			}
+		}
+		return true
+	}
+	return sameSet(a.DecryptWithKey, b.DecryptWithKey) &&
+		sameSet(a.EncryptWithKey, b.EncryptWithKey) &&
+		sameSet(a.ExportKey, b.ExportKey) &&
+		sameSet(a.MACVerifyWithKey, b.MACVerifyWithKey) &&
+		sameSet(a.MACWithKey, b.MACWithKey) &&
+		sameSet(a.ReadKey, b.ReadKey) &&
+		sameSet(a.SignVerifyWithKey, b.SignVerifyWithKey) &&
+		sameSet(a.SignWithKey, b.SignWithKey) &&
+		sameSet(a.UseKey, b.UseKey)
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMKeyTFSDK
@@ -1887,7 +1928,7 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 			metadata.OwnerId = v
 			hasMetadataChange = true
 		}
-		if plan.Metadata.Permissions != nil && !reflect.DeepEqual(plan.Metadata.Permissions, statePermissions) {
+		if plan.Metadata.Permissions != nil && !permissionsEqual(plan.Metadata.Permissions, statePermissions) {
 			var permission KeyMetadataPermissionsJSON
 			var decryptWithKey []string
 			var encryptWithKey []string

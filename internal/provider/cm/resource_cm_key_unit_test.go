@@ -1576,6 +1576,34 @@ func Test_CMKeyUpdate_MetadataPermissionsInPayload(t *testing.T) {
 	}
 }
 
+func Test_CMKeyUpdate_UnchangedMetaPermissionsNotResentWhenOrderDiffers(t *testing.T) {
+	// CM isn't guaranteed to return permission lists in the same order they were
+	// configured in, so comparing plan vs. state must be order-insensitive — otherwise
+	// an unrelated field change would spuriously resend an unchanged permissions block.
+	statePerms := &KeyMetadataPermissionsTFSDK{
+		DecryptWithKey: strList("user1", "user2"),
+		ReadKey:        strList("user1"),
+	}
+	planPerms := &KeyMetadataPermissionsTFSDK{
+		DecryptWithKey: strList("user2", "user1"), // same set, different order
+		ReadKey:        strList("user1"),
+	}
+	state := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(false),
+		Metadata:    &KeyMetadataTFSDK{Permissions: statePerms},
+	}
+	plan := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(true), // only this changed
+		Metadata:    &KeyMetadataTFSDK{Permissions: planPerms},
+	}
+	payload, _ := updateCapture(t, plan, state, `{"id":"key-1","undeletable":true}`)
+	if payload.Metadata != nil {
+		t.Errorf("expected meta to be entirely omitted from PATCH payload when permissions only differ by order, got %+v", payload.Metadata)
+	}
+}
+
 func Test_CMKeyUpdate_RemainingScalarFieldsInPayload(t *testing.T) {
 	state := &CMKeyTFSDK{ID: types.StringValue("key-1")}
 	plan := &CMKeyTFSDK{
