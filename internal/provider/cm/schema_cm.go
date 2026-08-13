@@ -337,7 +337,7 @@ type CMKeyJSON struct {
 	UnDeletable              *bool                    `json:"undeletable,omitempty"`
 	State                    string                   `json:"state,omitempty"`
 	TemplateID               string                   `json:"templateId,omitempty"`
-	UsageMask                int64                    `json:"usageMask,omitempty"`
+	UsageMask                *int64                   `json:"usageMask,omitempty"`
 	UUID                     string                   `json:"uuid,omitempty"`
 	WrapKeyIDType            string                   `json:"wrapKeyIDType,omitempty"`
 	WrapKeyName              string                   `json:"wrapKeyName,omitempty"`
