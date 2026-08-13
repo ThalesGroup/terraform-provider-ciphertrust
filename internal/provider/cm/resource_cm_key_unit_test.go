@@ -262,6 +262,19 @@ func Test_CMKeyCreate_SimpleScalarFieldsInPayload(t *testing.T) {
 	}
 }
 
+func Test_CMKeyCreate_UsageMaskZeroReachesPayload(t *testing.T) {
+	// UsageMask is *int64 specifically so an explicit 0 still serializes — a plain
+	// int64 with omitempty would drop it, silently no-op'ing the user's config.
+	plan := &CMKeyTFSDK{
+		Name:      types.StringValue("tf-usagemask-zero"),
+		UsageMask: types.Int64Value(0),
+	}
+	body, _ := createCapture(t, plan, nil, "")
+	if !strings.Contains(body, `"usageMask":0`) {
+		t.Errorf("expected POST body to contain \"usageMask\":0, got: %s", body)
+	}
+}
+
 func Test_CMKeyCreate_RemainingScalarFieldsInPayload(t *testing.T) {
 	// Every plan.<Field>.ValueString() != "" pass-through branch in Create() that isn't
 	// exercised by Test_CMKeyCreate_SimpleScalarFieldsInPayload. Table-driven with one
@@ -1124,10 +1137,12 @@ func Test_CMKeyRead_ConfiguredFieldsAbsentFromResponseBecomeNull(t *testing.T) {
 	// The inverse of Test_CMKeyRead_NeverConfiguredFieldsStayUntouched: when the user DID
 	// configure these fields (state non-null) but the response omits them, each guarded
 	// Optional+Computed field must reset to null, not silently keep the stale state value.
+	// usage_mask is deliberately excluded here — CM omits "usageMask" from the response
+	// specifically when its value is 0, so absence means 0, not null. See
+	// Test_CMKeyRead_UsageMaskAbsentFromResponseBecomesZero.
 	state := &CMKeyTFSDK{
 		ID:          types.StringValue("key-1"),
 		Algorithm:   types.StringValue("aes"),
-		UsageMask:   types.Int64Value(12),
 		Size:        types.Int64Value(256),
 		Description: types.StringValue("stale description"),
 		State:       types.StringValue("Pre-Active"),
@@ -1145,7 +1160,6 @@ func Test_CMKeyRead_ConfiguredFieldsAbsentFromResponseBecomeNull(t *testing.T) {
 		value interface{ IsNull() bool }
 	}{
 		{"algorithm", final.Algorithm},
-		{"usage_mask", final.UsageMask},
 		{"key_size", final.Size},
 		{"description", final.Description},
 		{"state", final.State},
@@ -1162,6 +1176,21 @@ func Test_CMKeyRead_ConfiguredFieldsAbsentFromResponseBecomeNull(t *testing.T) {
 				t.Errorf("expected %s to become null when absent from response, got %+v", tc.name, tc.value)
 			}
 		})
+	}
+}
+
+func Test_CMKeyRead_UsageMaskAbsentFromResponseBecomesZero(t *testing.T) {
+	// CM omits "usageMask" from the response specifically when its value is 0 (confirmed
+	// live) — indistinguishable on the wire from "field never set". Since this only
+	// matters when the field was already configured, absence must resolve to 0, not null,
+	// or a config of usage_mask = 0 would never converge.
+	state := &CMKeyTFSDK{
+		ID:        types.StringValue("key-1"),
+		UsageMask: types.Int64Value(12),
+	}
+	final := readCapture(t, state, `{"id":"key-1"}`) // usageMask omitted
+	if final.UsageMask.IsNull() || final.UsageMask.ValueInt64() != 0 {
+		t.Errorf("expected usage_mask to resolve to 0 when absent from response, got %+v", final.UsageMask)
 	}
 }
 

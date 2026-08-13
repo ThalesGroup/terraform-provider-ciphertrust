@@ -1022,7 +1022,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		payload.UnExportable = &v
 	}
 	if !plan.UsageMask.IsNull() && !plan.UsageMask.IsUnknown() {
-		payload.UsageMask = plan.UsageMask.ValueInt64()
+		v := plan.UsageMask.ValueInt64()
+		payload.UsageMask = &v
 	}
 	if plan.UUID.ValueString() != "" {
 		payload.UUID = plan.UUID.ValueString()
@@ -1487,11 +1488,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 	// usage_mask is Optional only — hydrate only when the user configured it (state
 	// non-null) to avoid perpetual drift for keys created without a usage_mask.
+	// CM omits the "usageMask" key from the response entirely when its value is 0
+	// (confirmed live) — indistinguishable on the wire from "field never set". Since
+	// this block only runs when the field was already configured, absence here means
+	// the value is 0, not that it should go back to null.
 	if !state.UsageMask.IsNull() {
 		if r := gjson.Get(response, "usageMask"); r.Exists() {
 			plan.UsageMask = types.Int64Value(r.Int())
 		} else {
-			plan.UsageMask = types.Int64Null()
+			plan.UsageMask = types.Int64Value(0)
 		}
 	}
 	// key_size: Optional field; hydrate only when the user configured it (state non-null)
@@ -1954,7 +1959,8 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		payload.UnExportable = &v
 	}
 	if !plan.UsageMask.IsNull() && !plan.UsageMask.IsUnknown() {
-		payload.UsageMask = plan.UsageMask.ValueInt64()
+		v := plan.UsageMask.ValueInt64()
+		payload.UsageMask = &v
 	}
 	if !plan.AllVersions.IsNull() && !plan.AllVersions.IsUnknown() {
 		payload.AllVersions = plan.AllVersions.ValueBool()
