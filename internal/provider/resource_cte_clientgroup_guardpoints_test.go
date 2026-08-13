@@ -192,3 +192,152 @@ func TestCTEClientGroupGuardPointResource_guardPointTypeRequiresReplace(t *testi
 		},
 	})
 }
+
+// TestCTEClientGroupGuardPointResource_policyIDRequiresReplace is the
+// regression test for TFIN-632: policy_id was Required with no
+// PlanModifiers at all, so changing it on an EXISTING guard_path was
+// planned as a plain in-place update and only rejected at apply time by
+// Update()'s manual AddError check ("Cannot change policy_id for an
+// existing GuardPoint"). policy_id now carries
+// modifiers.RequiresReplaceUnlessNewMapEntry(), so a genuine change to an
+// existing entry's policy_id must be planned as a destroy+create replace
+// (visible to the operator at plan time, not just a runtime apply
+// failure), and the apply must then succeed cleanly.
+func TestCTEClientGroupGuardPointResource_policyIDRequiresReplace(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "TF_CTE_ClientGroup_PolicyID-" + suffix
+
+	config := func(policyResource string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "policy_a" {
+  name        = "TF_CTE_Policy_CGPolicyIDA-%s"
+  policy_type = "Standard"
+  description = "Created via TF test"
+  never_deny  = true
+  security_rules = [{
+    effect = "permit,audit"
+    action = "all_ops"
+  }]
+}
+
+resource "ciphertrust_cte_policy" "policy_b" {
+  name        = "TF_CTE_Policy_CGPolicyIDB-%s"
+  policy_type = "Standard"
+  description = "Created via TF test"
+  never_deny  = true
+  security_rules = [{
+    effect = "permit,audit"
+    action = "all_ops"
+  }]
+}
+
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Created via TF test"
+}
+
+resource "ciphertrust_cte_clientgroup_guardpoint" "gp" {
+  client_group_id = ciphertrust_cte_client_group.cg.id
+  guard_points = {
+    "/tmp/testpathcgpolicyid1" = {
+      guard_point_params = {
+        guard_point_type = "directory_auto"
+        policy_id        = %s
+      }
+    }
+  }
+}
+`, suffix, suffix, cgName, policyResource)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with policy_a.
+			{
+				Config: config("ciphertrust_cte_policy.policy_a.id"),
+				Check: checkStep(t, "clientgroup_guardpoint policy_id requires replace: create",
+					resource.TestCheckResourceAttrPair(cteClientGroupGPName, "guard_points./tmp/testpathcgpolicyid1.guard_point_params.policy_id", "ciphertrust_cte_policy.policy_a", "id"),
+				),
+			},
+			// Step 2: change policy_id to policy_b on the SAME (existing)
+			// guard_path. Must plan as destroy+create, not a plain update,
+			// and the apply must succeed (no more runtime AddError).
+			{
+				Config: config("ciphertrust_cte_policy.policy_b.id"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(cteClientGroupGPName, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "clientgroup_guardpoint policy_id requires replace: change policy_id",
+					resource.TestCheckResourceAttrPair(cteClientGroupGPName, "guard_points./tmp/testpathcgpolicyid1.guard_point_params.policy_id", "ciphertrust_cte_policy.policy_b", "id"),
+				),
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupGuardPointResource_noOpFieldsRequireReplace is the
+// regression test for TFIN-633: automount_enabled, intelligent_protection,
+// and disk_name (representative of the 10 affected fields -- both Bool and
+// String -- see resource_cte_clientgroup_guardpoints.go's schema) had NO
+// PlanModifiers and NO runtime check at all. CM silently no-ops an update
+// to these fields via PATCH, so apply used to report success while state
+// permanently diverged from CM with no way to self-correct (confirmed live
+// against CM: the PATCH payload sent by UpdateCTEGuardPointJSON never
+// included these fields at all). They now carry
+// modifiers.BoolRequiresReplaceUnlessNewMapEntry() /
+// modifiers.RequiresReplaceUnlessNewMapEntry(), so a genuine change to an
+// EXISTING entry's value is planned as a destroy+create replace (which
+// actually applies the new value, since Create() sends the full field set)
+// instead of a silently no-op'd in-place update.
+func TestCTEClientGroupGuardPointResource_noOpFieldsRequireReplace(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	policyName := "TF_CTE_Policy_CGNoOp-" + suffix
+	cgName := "TF_CTE_ClientGroup_NoOp-" + suffix
+
+	gpBlock := func(automount, intelligentProtection, diskName string) string {
+		return fmt.Sprintf(`"/tmp/testpathcgnoop1" = {
+      guard_point_params = {
+        guard_point_type       = "directory_auto"
+        policy_id              = ciphertrust_cte_policy.policy.id
+        automount_enabled      = %s
+        intelligent_protection = %s
+        disk_name              = %q
+      }
+    }`, automount, intelligentProtection, diskName)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: create with all 3 representative fields false/empty.
+			{
+				Config: cteClientGroupGPConfig(policyName, cgName, gpBlock("false", "false", "diskA")),
+				Check: checkStep(t, "clientgroup_guardpoint no-op fields require replace: create",
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.automount_enabled", "false"),
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.intelligent_protection", "false"),
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.disk_name", "diskA"),
+				),
+			},
+			// Step 2: flip all 3 on the SAME (existing) guard_path. Must
+			// plan as destroy+create, not a plain in-place update that CM
+			// would silently no-op.
+			{
+				Config: cteClientGroupGPConfig(policyName, cgName, gpBlock("true", "true", "diskB")),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(cteClientGroupGPName, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "clientgroup_guardpoint no-op fields require replace: change fields",
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.automount_enabled", "true"),
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.intelligent_protection", "true"),
+					resource.TestCheckResourceAttr(cteClientGroupGPName, "guard_points./tmp/testpathcgnoop1.guard_point_params.disk_name", "diskB"),
+				),
+			},
+		},
+	})
+}
