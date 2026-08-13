@@ -67,7 +67,43 @@ var (
 	// below). Vars (not consts) so tests can shorten createClientRetryInterval.
 	createClientMaxRetries    = 180 // up to 30 minutes at 10s intervals, matching Read()
 	createClientRetryInterval = 10 * time.Second
+
+	// deleteClientMaxRetries/deleteClientRetryInterval bound Delete()'s attempts to reach
+	// the node being removed. Short, because failing to reach it does not stop Delete.
+	deleteClientMaxRetries    = 12 // 2 minutes
+	deleteClientRetryInterval = 10 * time.Second
+
+	// publicAddressRetries/publicAddressInterval bound the wait for the member to publish
+	// a node's publicAddress (see memberPublicAddress). Vars so tests can shorten them.
+	publicAddressRetries  = 24 // 2 minutes
+	publicAddressInterval = 5 * time.Second
 )
+
+// memberPublicAddress returns the publicAddress the cluster member reports for nodeID,
+// retrying while it reports none: CM publishes it only after the join completes, so the
+// member reports the node as status="r" with the new nodeCount while its node record
+// still omits the field (it is `omitempty`, so gjson yields ""). Measured on CM 2.21.3:
+// 9s for a 1→2 join, up to 93s for 2→3. 2.26 publishes it up front.
+//
+// Returns ("", nil) if it never appears within the budget — callers decide whether an
+// empty value is drift. A non-nil error means the lookup itself kept failing.
+func memberPublicAddress(ctx context.Context, c *common.Client, id, nodeID string) (string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= publicAddressRetries; attempt++ {
+		nodeInfo, err := c.GetById(ctx, id, nodeID, common.URL_NODES)
+		lastErr = err
+		if err == nil {
+			if publicAddress := gjson.Get(nodeInfo, "publicAddress").String(); publicAddress != "" {
+				return publicAddress, nil
+			}
+		}
+		tflog.Debug(ctx, fmt.Sprintf("[memberPublicAddress] member reports no publicAddress for node %s yet (attempt %d/%d)", nodeID, attempt, publicAddressRetries))
+		if attempt < publicAddressRetries {
+			time.Sleep(publicAddressInterval)
+		}
+	}
+	return "", lastErr
+}
 
 func NewResourceCMClusterNode() resource.Resource {
 	return &resourceCMClusterNode{}
@@ -510,6 +546,26 @@ func (r *resourceCMClusterNode) Create(ctx context.Context, req resource.CreateR
 		}
 	}
 
+	// Terraform refreshes as soon as Create returns, so wait for the member to publish
+	// publicAddress first: a refresh landing before that reads "" and reports a spurious
+	// public_address change on a node that just applied cleanly. Non-fatal — the node is
+	// already a member and Read tolerates an unpublished value — so a timeout only warns.
+	joinedNodeID := gjson.Get(finalStatusResponse, "nodeID").String()
+	if joinedNodeID == "" {
+		// GetById with an empty id hits the list endpoint, which never carries the field.
+		tflog.Info(ctx, "[resource_cm_cluster_node.go -> Create] joined node reported no nodeID; skipping public address publication check")
+	} else if publicAddress, paErr := memberPublicAddress(ctx, r.client, id, joinedNodeID); publicAddress == "" {
+		detail := fmt.Sprintf("Node %s joined the cluster, but the cluster member has not published its public address yet.", joinedNodeID)
+		if paErr != nil {
+			detail += " Last error: " + paErr.Error()
+		}
+		tflog.Info(ctx, "[resource_cm_cluster_node.go -> Create] "+detail)
+		resp.Diagnostics.AddWarning("Public address not published yet", detail+
+			" The node is in the cluster and Terraform state records the configured public_address; the next refresh will reconcile it.")
+	} else {
+		tflog.Info(ctx, fmt.Sprintf("[resource_cm_cluster_node.go -> Create] Member published publicAddress %q for node %s", publicAddress, joinedNodeID))
+	}
+
 	// Set plan values from final status
 	plan.ID = types.StringValue(gjson.Get(finalStatusResponse, "nodeID").String())
 	plan.NodeId = types.StringValue(gjson.Get(finalStatusResponse, "nodeID").String())
@@ -656,7 +712,23 @@ func (r *resourceCMClusterNode) Read(ctx context.Context, req resource.ReadReque
 	state.NodeCount = types.Int64Value(gjson.Get(response, "nodeCount").Int())
 	state.StatusCode = types.StringValue(statusCode)
 	state.StatusDescription = types.StringValue(gjson.Get(response, "status.description").String())
-	state.PublicAddress = types.StringValue(gjson.Get(nodeInfo, "publicAddress").String())
+
+	// An empty publicAddress is ambiguous: not published yet (normal after a join, see
+	// memberPublicAddress) or genuinely cleared out-of-band. Re-check, and record an empty
+	// value only once it outlasts the budget, so a publication lag is not reported as
+	// drift. Costs nothing when the member-check response above already carries it.
+	publicAddress := gjson.Get(nodeInfo, "publicAddress").String()
+	if publicAddress == "" {
+		waited, waitErr := memberPublicAddress(ctx, r.client, id, nodeID)
+		if waitErr != nil {
+			// Answering a moment ago but failing now: keep the prior value rather than
+			// reporting drift we could not observe.
+			tflog.Debug(ctx, fmt.Sprintf("[resource_cm_cluster_node.go -> Read][%s] could not re-check publicAddress for node %s, keeping prior state value: %s", id, nodeID, waitErr.Error()))
+			waited = state.PublicAddress.ValueString()
+		}
+		publicAddress = waited
+	}
+	state.PublicAddress = types.StringValue(publicAddress)
 
 	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Read]["+id+"]")
 	diags = resp.State.Set(ctx, &state)
@@ -770,11 +842,30 @@ func (r *resourceCMClusterNode) Delete(ctx context.Context, req resource.DeleteR
 	if !strings.Contains(nodeURL, "://") {
 		nodeURL = "https://" + nodeURL
 	}
-	nodeClient, err := common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, common.TLSOptions{InsecureSkipVerify: true}, 180)
+	// Retry briefly, then carry on without it: a node catching up after a cluster change
+	// answers auth with HTTP 500 and one already powered off never answers, but neither
+	// may abort the destroy. Removing the node from the cluster (step 1) runs on the
+	// member's client; erroring here left the node in state AND in the cluster, after
+	// which it refused to join anything else ("Cluster already exists").
+	var nodeClient *common.Client
+	for attempt := 1; attempt <= deleteClientMaxRetries; attempt++ {
+		nodeClient, err = common.NewClient(ctx, id, &nodeURL, &nodeAuthDomain, &nodeDomain, &nodeUsername, &nodePassword, nil, common.TLSOptions{InsecureSkipVerify: true}, 180)
+		if err == nil {
+			break
+		}
+		tflog.Info(ctx, fmt.Sprintf("[resource_cm_cluster_node.go -> Delete] attempt %d/%d: NewClient failed: %s", attempt, deleteClientMaxRetries, err))
+		if attempt < deleteClientMaxRetries {
+			time.Sleep(deleteClientRetryInterval)
+		}
+	}
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Delete]["+id+"]")
-		resp.Diagnostics.AddError("Unable to create HTTPS client for the removed node", err.Error())
-		return
+		resp.Diagnostics.AddWarning(
+			"Could not reach the node being removed",
+			"Node "+nodeHost+" could not be contacted ("+err.Error()+"). It will still be removed from the cluster, "+
+				"but its own local cluster configuration cannot be cleared from here.",
+		)
+		nodeClient = nil
 	}
 
 	// Snapshot member's current node count before removal so we can verify it decrements.
@@ -788,7 +879,7 @@ func (r *resourceCMClusterNode) Delete(ctx context.Context, req resource.DeleteR
 
 	// Recover node ID from the joining node if missing from state (e.g. after a failed apply).
 	nodeID := state.NodeId.ValueString()
-	if nodeID == "" {
+	if nodeID == "" && nodeClient != nil {
 		response, err := nodeClient.ReadDataByParam(ctx, id, "all", common.URL_CLUSTER_INFO)
 		if err == nil {
 			nodeID = gjson.Get(response, "nodeID").String()
@@ -817,17 +908,20 @@ func (r *resourceCMClusterNode) Delete(ctx context.Context, req resource.DeleteR
 	// out of the cluster as of step 1, which is the change that actually matters to the
 	// remaining cluster members. The node can legitimately be unreachable here (already
 	// powered off, network partitioned, or removed out-of-band ahead of this Delete), so
-	// a failure/timeout on this call must not abort the rest of destroy.
-	output, err := nodeClient.DeleteByURL(ctx, id, common.URL_CLUSTER_INFO)
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Delete]["+id+"]")
-		resp.Diagnostics.AddWarning(
-			"Could not clear cluster config on removed node",
-			"Node "+nodeHost+" was removed from the cluster but its own local cluster config could not be cleared "+
-				"(it may already be unreachable): "+err.Error(),
-		)
-	} else {
-		tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Delete]["+id+"]["+output+"]")
+	// a failure/timeout on this call must not abort the rest of destroy. Skipped
+	// entirely when the node could not be contacted above (already warned about).
+	if nodeClient != nil {
+		output, err := nodeClient.DeleteByURL(ctx, id, common.URL_CLUSTER_INFO)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_cluster_node.go -> Delete]["+id+"]")
+			resp.Diagnostics.AddWarning(
+				"Could not clear cluster config on removed node",
+				"Node "+nodeHost+" was removed from the cluster but its own local cluster config could not be cleared "+
+					"(it may already be unreachable): "+err.Error(),
+			)
+		} else {
+			tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_cluster_node.go -> Delete]["+id+"]["+output+"]")
+		}
 	}
 
 	// Step 3: Poll the cluster member until it reflects the removal (nodeCount decremented, status=r).
