@@ -28,11 +28,17 @@ var (
 	_ resource.ResourceWithConfigure      = &resourceCMCluster{}
 	_ resource.ResourceWithValidateConfig = &resourceCMCluster{}
 
-	// deleteVerifyRetries/deleteVerifyInterval bound how many times Delete() re-checks
-	// actual cluster status after a DELETE /cluster error before giving up (see Delete
-	// below). Vars (not consts) so tests can shorten deleteVerifyInterval.
-	deleteVerifyRetries  = 3
-	deleteVerifyInterval = 5 * time.Second
+	// deleteVerifyRetries/deleteVerifyInterval bound Delete()'s post-teardown polling.
+	// The budget has to outlast a CM service restart, not just the DELETE call: on 2.21.3
+	// the DELETE never returned and logins were still failing 20s later, so the previous
+	// 3 × 5s expired mid-restart and failed a destroy that had succeeded. Vars so tests
+	// can shorten them.
+	deleteVerifyRetries  = 90 // 15 minutes
+	deleteVerifyInterval = 10 * time.Second
+
+	// deleteVerifiedHealthRetries is the shorter budget for when the DELETE succeeded: CM
+	// already confirmed the deletion, so this only waits for the node to serve again.
+	deleteVerifiedHealthRetries = 30 // 5 minutes
 )
 
 func NewResourceCMCluster() resource.Resource {
@@ -240,11 +246,22 @@ func (r *resourceCMCluster) Read(ctx context.Context, req resource.ReadRequest, 
 	// A transient fetch failure here shouldn't fail the whole Read, so leave the prior
 	// state value in place rather than erroring.
 	if nodeInfo, nerr := r.client.GetById(ctx, id, nodeID, common.URL_NODES); nerr == nil {
-		// CM returns "" (not an omitted field) when no public_address was ever
-		// configured. public_address is Optional (not Computed), so an unconfigured
-		// attribute plans as null, not "" — mapping "" to StringValue("") here would
-		// permanently disagree with that null and show a spurious diff on every plan.
-		if publicAddress := gjson.Get(nodeInfo, "publicAddress").String(); publicAddress != "" {
+		// CM reports no publicAddress when none was ever configured. public_address is
+		// Optional (not Computed), so an unconfigured attribute plans as null, not "" —
+		// mapping that to StringValue("") here would permanently disagree with the null
+		// and show a spurious diff on every plan.
+		publicAddress := gjson.Get(nodeInfo, "publicAddress").String()
+		// But when state holds an address, an empty reply is ambiguous — CM also omits the
+		// field for a while after a create/join (see memberPublicAddress) — so re-check.
+		if publicAddress == "" && !state.PublicAddress.IsNull() {
+			if waited, waitErr := memberPublicAddress(ctx, r.client, id, nodeID); waitErr != nil {
+				r.client.Log.Debug("[resource_cm_cluster.go -> Read][" + id + "] could not re-check publicAddress, keeping prior state value: " + waitErr.Error())
+				publicAddress = state.PublicAddress.ValueString()
+			} else {
+				publicAddress = waited
+			}
+		}
+		if publicAddress != "" {
 			state.PublicAddress = types.StringValue(publicAddress)
 		} else {
 			state.PublicAddress = types.StringNull()
@@ -321,34 +338,76 @@ func (r *resourceCMCluster) Delete(ctx context.Context, req resource.DeleteReque
 	// Note: This only works if this is the last/only node in the cluster
 	output, err := r.client.DeleteByURL(ctx, state.NodeId.ValueString(), common.URL_CLUSTER_INFO)
 	if err != nil {
-		// Deleting a node's own cluster config can make its management service briefly
-		// unresponsive while it tears down its local raft/postgres processes, so this
-		// call can time out client-side even though the server-side change already went
-		// through (confirmed live: DELETE /cluster timed out after ~170s, but a GET
-		// /cluster immediately after showed status.code="none" — already deleted).
-		// Verify the actual state before treating this as a real failure.
-		for attempt := 1; attempt <= deleteVerifyRetries; attempt++ {
-			verifyResponse, verifyErr := r.client.ReadDataByParam(ctx, state.ID.ValueString(), "", common.URL_CLUSTER_INFO)
-			if verifyErr == nil {
-				nodeID := gjson.Get(verifyResponse, "nodeID").String()
-				statusCode := gjson.Get(verifyResponse, "status.code").String()
-				if nodeID == "" || statusCode == "" || statusCode == "none" {
-					r.client.Log.Debug("[resource_cm_cluster.go -> Delete] DELETE /cluster errored (" + err.Error() + ") but node is confirmed not clustered; treating as deleted")
-					return
+		// This restarts the node's services, so it routinely errors client-side even when
+		// the teardown went through (~170s timeout live, and on 2.21.3 no response at all).
+		r.client.Log.Debug("[resource_cm_cluster.go -> Delete] DELETE /cluster errored (" + err.Error() + "); verifying actual cluster state")
+	} else {
+		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
+	}
+
+	// The teardown restarts CM whether or not the DELETE returned, so wait for the node to
+	// answer before returning — otherwise the next plan fails building its API client
+	// (HTTP 500 from auth). After an error the node must also report itself unclustered,
+	// the only evidence the teardown happened; after a 200 any answer will do, since
+	// requiring "unclustered" would stall the full budget when a 200 leaves a cluster
+	// behind (the endpoint only removes the last node).
+	budget := deleteVerifyRetries
+	if err == nil {
+		budget = deleteVerifiedHealthRetries
+	}
+	for attempt := 1; attempt <= budget; attempt++ {
+		verifyResponse, verifyErr := r.client.ReadDataByParam(ctx, state.ID.ValueString(), "", common.URL_CLUSTER_INFO)
+		if verifyErr == nil {
+			nodeID := gjson.Get(verifyResponse, "nodeID").String()
+			statusCode := gjson.Get(verifyResponse, "status.code").String()
+			if nodeID == "" || statusCode == "" || statusCode == "none" {
+				r.client.Log.Debug("[resource_cm_cluster.go -> Delete] node is confirmed not clustered and serving requests again; treating as deleted")
+				return
+			}
+			if err == nil {
+				// Serving again but still clustered after an accepted DELETE: surface it
+				// rather than waiting for a state that may never come.
+				r.client.Log.Debug(fmt.Sprintf("[resource_cm_cluster.go -> Delete] DELETE succeeded but node still reports cluster status %q", statusCode))
+				resp.Diagnostics.AddWarning(
+					"Cluster deletion accepted but node still reports a cluster",
+					"CipherTrust Manager accepted the deletion, but node "+state.LocalNodeHost.ValueString()+
+						" still reports cluster status \""+statusCode+"\". DELETE /cluster only removes the last node of a "+
+						"cluster; check the node's cluster status before creating a new cluster on it.",
+				)
+				return
+			}
+			// Teardown may still be in flight; a mid-teardown status is not evidence that
+			// the delete failed, so keep waiting.
+			r.client.Log.Debug(fmt.Sprintf("[resource_cm_cluster.go -> Delete] node still reports cluster status %q (attempt %d/%d)", statusCode, attempt, budget))
+		} else {
+			if strings.Contains(verifyErr.Error(), "status: 401") {
+				// Token expired while the node was restarting.
+				if refreshErr := r.client.RefreshToken(ctx, state.ID.ValueString()); refreshErr != nil {
+					r.client.Log.Debug("[resource_cm_cluster.go -> Delete] token refresh failed: " + refreshErr.Error())
 				}
-				break
 			}
-			if attempt < deleteVerifyRetries {
-				time.Sleep(deleteVerifyInterval)
-			}
+			r.client.Log.Debug(fmt.Sprintf("[resource_cm_cluster.go -> Delete] node not answering yet (attempt %d/%d): %s", attempt, budget, verifyErr.Error()))
 		}
+		if attempt < budget {
+			time.Sleep(deleteVerifyInterval)
+		}
+	}
+
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error deleting cluster",
 			err.Error(),
 		)
 		return
 	}
-	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_cluster.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
+	// The DELETE was accepted, so the cluster is gone as far as CM is concerned; only the
+	// post-teardown health check timed out. Warn rather than failing a destroy over it.
+	resp.Diagnostics.AddWarning(
+		"Cluster deleted but node did not report back",
+		"CipherTrust Manager accepted the cluster deletion, but node "+state.LocalNodeHost.ValueString()+
+			" did not answer within the verification window. It may still be restarting; "+
+			"check its cluster status before creating a new cluster on it.",
+	)
 }
 
 func (d *resourceCMCluster) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

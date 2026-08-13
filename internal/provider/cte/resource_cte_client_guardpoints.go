@@ -18,6 +18,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 )
 
 var (
@@ -80,10 +81,26 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 							Description: "Parameters for this GuardPoint.",
 							Attributes: map[string]schema.Attribute{
 								"guard_point_type": schema.StringAttribute{
-									Required:    true,
-									Description: "Type of the GuardPoint. Changing this value forces the guard path to be destroyed and recreated, since guard_point_type is immutable once a GuardPoint is created.",
+									Required: true,
+									Description: "Type of the GuardPoint. guard_point_type is immutable once a GuardPoint is created: " +
+										"changing it for an EXISTING guard_path is rejected with a plan-time error by Update() " +
+										"(see \"Cannot change guard_point_type for an existing GuardPoint\"), since CM does not " +
+										"support changing it via PATCH. Adding a brand-new guard_path with any guard_point_type " +
+										"does not force a replace -- it is created in place by Update().",
 									PlanModifiers: []planmodifier.String{
-										stringplanmodifier.RequiresReplace(),
+										// TFIN-634: plain stringplanmodifier.RequiresReplace() cannot tell "a brand-new
+										// guard_path (map key) was added" apart from "an existing guard_path's type
+										// actually changed" -- both look like PlanValue != StateValue, since StateValue
+										// is null for a map key that never existed in prior state. That made adding
+										// ANY new guard point force a whole-resource -/+ replace, destroying every
+										// existing (unrelated, untouched) guard point too. If Create() then failed for
+										// any reason, Terraform's destroy-before-create ordering meant the destroy had
+										// already completed with no rollback, permanently losing all guard points.
+										// RequiresReplaceUnlessNewMapEntry only requires replace when the guard_path
+										// key already existed in prior state (a genuine type change on an existing,
+										// converged entry); a brand-new guard_path is instead created in place by
+										// Update()'s existing "create new paths" logic, never triggering a replace.
+										modifiers.RequiresReplaceUnlessNewMapEntry(),
 									},
 								},
 								"policy_id": schema.StringAttribute{
