@@ -886,15 +886,12 @@ func TestCckmAWSKeyMaterialMROOBDeleteMaterial(t *testing.T) {
 			},
 			{
 				// Step 2.  Add material2. Primary rotates to material2; replicas sync.
+				// Note: the BYOK key resources are not modified in this step so Terraform
+				// uses the plan-read state for them (which may reflect a transient CCKM
+				// cache). Key state checks for the replicas are in Step 3 (RefreshState).
 				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
 				Config:    addNewMaterial2Config,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica1Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica2Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica3Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica4Resource, "aws_param.key_state", "Enabled"),
-
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.#", "2"),
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.0.aws_params.key_material_state", "CURRENT"),
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.0.aws_params.import_state", "IMPORTED"),
@@ -951,16 +948,13 @@ func TestCckmAWSKeyMaterialMROOBDeleteMaterial(t *testing.T) {
 				),
 			},
 			{
-				// Step 4. Add material3. Primary rotates to material2; replicas sync.
+				// Step 4. Add material3. Primary rotates to material3; replicas sync.
+				// Note: the BYOK key resources are not modified in this step so Terraform
+				// uses the plan-read state for them (which may reflect a transient CCKM
+				// cache). Key state checks for the replicas are in Step 5 (RefreshState).
 				PreConfig: func() { logTestStep(t.Name(), "Step 4") },
 				Config:    addNewMaterial3Config,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(primaryResource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica1Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica2Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica3Resource, "aws_param.key_state", "Enabled"),
-					resource.TestCheckResourceAttr(replica4Resource, "aws_param.key_state", "Enabled"),
-
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.#", "3"),
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.0.aws_params.key_material_state", "CURRENT"),
 					resource.TestCheckResourceAttr(kmResource, "rotation_history.0.aws_params.import_state", "IMPORTED"),

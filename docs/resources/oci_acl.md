@@ -60,7 +60,7 @@ resource "ciphertrust_oci_acl" "group_acl" {
 | Block                           |  hyokkeyblockunblock   | Permission to block all the proxy operations on the OCI HYOK key. |
 | Unblock                         |  hyokkeyblockunblock   | Permission to unblock all the proxy operations on the OCI HYOK key. |
 | Delete  (HYOK Key)              |  hyokkeydelete         | Permission to delete an OCI HYOK key (applicable only to unlinked key). |
-| Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CM. |
+| Rotate  (HYOK Key)              |  hyokkeyrotate         | Permission to rotate a HYOK key in CipherTrust Manager. |
 
 The 'view' or 'viewhyokkey' permissions must be included with 'key' or 'hyok key' actions respectively.
 

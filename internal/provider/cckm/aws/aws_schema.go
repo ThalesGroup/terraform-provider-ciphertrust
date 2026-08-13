@@ -1001,7 +1001,7 @@ func keyPolicySchemaAttribute() schema.Attribute {
 func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "Key policy parameters. Only applicable to keys in a linked state.",
+		Description: "Key policy parameters. Only applicable to keys in a linked state. XKS keys require local_hosted_params.linked = true.",
 		Attributes:  keyPolicyAttributeMap,
 	}
 }
@@ -1011,7 +1011,7 @@ func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 func enableRotationSchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
 		Optional:    true,
-		Description: "Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created.",
+		Description: "Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. XKS keys require local_hosted_params.linked = true.",
 		Attributes: map[string]schema.Attribute{
 			"job_config_id": schema.StringAttribute{
 				Required:    true,
@@ -1251,7 +1251,7 @@ func keyStoreResourceCommonAwsParamSchemaAttributes() map[string]schema.Attribut
 		"description": schema.StringAttribute{
 			Optional:    true,
 			Computed:    true,
-			Description: "Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.",
+			Description: "Description of the AWS key. Both linked and unlinked keys can be created with a description. Updating the description requires local_hosted_params.linked = true.",
 		},
 		"tags": schema.MapAttribute{
 			Optional:    true,
@@ -1339,7 +1339,7 @@ func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 		Optional:    true,
 		Computed:    true,
 		ElementType: types.StringType,
-		Description: "Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = []. Setting alias on an unlinked key requires CipherTrust Manager 2.23 or later.",
+		Description: "Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = []. Setting alias on an unlinked key requires CipherTrust Manager 2.23 or later. Changing the alias requires local_hosted_params.linked = true.",
 		Validators: []validator.Set{
 			setvalidator.ValueStringsAre(
 				stringvalidator.RegexMatches(
@@ -1353,7 +1353,7 @@ func xksKeyAwsParamSchemaAttributes() map[string]schema.Attribute {
 		Optional:    true,
 		Computed:    true,
 		ElementType: types.StringType,
-		Description: "Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.",
+		Description: "Tags assigned to the key. Requires local_hosted_params.linked = true. To remove all tags set tags = {}.",
 	}
 	attrs["xks_key_configuration"] = schema.SingleNestedAttribute{
 		Computed:    true,
