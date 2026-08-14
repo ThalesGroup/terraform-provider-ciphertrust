@@ -47,7 +47,9 @@ provider "ciphertrust" {
 resource "ciphertrust_interface" "certificate" {
   name = "web"
 
-  # (Immutable) The port the new interface will listen on.
+  # The port the new interface will listen on. Mutable — CM applies port changes
+  # in place, but changing a default interface's port restarts CM services
+  # cluster-wide, so treat it as a planned change.
   port = 9005
 
   certificate = {
@@ -69,7 +71,7 @@ output "interface_id" {
 
 ### Required
 
-- `port` (Number) (Immutable) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.
+- `port` (Number) The interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use. Mutable for interface_type nae, kmip, and web — CM applies the change in place. Changing the port of a default interface (web, nae, kmip) restarts CM services cluster-wide, so treat it as a planned change.
 
 ### Optional
 
@@ -93,7 +95,7 @@ output "interface_id" {
 - `network_interface` (String) Defines what ethernet adapter the interface should listen to, use "all" for all. Defaults to all if not specified.
 - `registration_token` (String, Sensitive) Registration token in case auto registration is true. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated token, change `registration_token` and bump `registration_token_version` in the same apply.
 - `registration_token_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `registration_token` to CipherTrust Manager. Since `registration_token` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `registration_token` value re-sent.
-- `tls_ciphers` (Attributes Set) The set of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. Ordering is not significant. CipherTrust Manager does not permit adding or removing cipher suites, so this must list every suite the interface already has; only the enabled flags can be changed. (see [below for nested schema](#nestedatt--tls_ciphers))
+- `tls_ciphers` (Attributes List) The list of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. (see [below for nested schema](#nestedatt--tls_ciphers))
 - `trusted_cas` (Attributes) Collection of local and external CA IDs to trust for client authentication on this interface. (see [below for nested schema](#nestedatt--trusted_cas))
 
 ### Read-Only
