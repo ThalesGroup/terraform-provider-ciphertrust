@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 )
 
 var (
@@ -50,11 +51,17 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context, _
 			},
 			"client_group_id": schema.StringAttribute{
 				Required:    true,
-				Description: "The ID of the CTE Client Group to which this Designated Primary Set belongs.",
+				Description: "(Immutable) The ID of the CTE Client Group to which this Designated Primary Set belongs.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name to uniquely identify the Designated Primary Set within the client group.",
+				Description: "(Immutable) Name to uniquely identify the Designated Primary Set within the client group.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"client_list": schema.StringAttribute{
 				Required:    true,
@@ -62,7 +69,10 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context, _
 			},
 			"ldt_comm_group_service_id": schema.StringAttribute{
 				Required:    true,
-				Description: "Identifier of the LDT communication group service to be associated with this Designated Primary Set.",
+				Description: "(Immutable) Identifier of the LDT communication group service to be associated with this Designated Primary Set.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 		},
 	}
