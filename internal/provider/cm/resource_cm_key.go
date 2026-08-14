@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -1786,6 +1787,47 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	resp.Diagnostics.Append(diags...)
 }
 
+// permissionsEqual compares two KeyMetadataPermissionsTFSDK by set membership per
+// action, not list order. CM's stored order isn't guaranteed to match the plan's
+// config order, so a plain reflect.DeepEqual on these slices can flag a false
+// positive change and trigger an unnecessary permissions PATCH on every apply.
+func permissionsEqual(a, b *KeyMetadataPermissionsTFSDK) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	sameSet := func(x, y []types.String) bool {
+		if len(x) != len(y) {
+			return false
+		}
+		toSet := func(s []types.String) map[string]int {
+			m := make(map[string]int, len(s))
+			for _, v := range s {
+				m[v.ValueString()]++
+			}
+			return m
+		}
+		xs, ys := toSet(x), toSet(y)
+		if len(xs) != len(ys) {
+			return false
+		}
+		for k, v := range xs {
+			if ys[k] != v {
+				return false
+			}
+		}
+		return true
+	}
+	return sameSet(a.DecryptWithKey, b.DecryptWithKey) &&
+		sameSet(a.EncryptWithKey, b.EncryptWithKey) &&
+		sameSet(a.ExportKey, b.ExportKey) &&
+		sameSet(a.MACVerifyWithKey, b.MACVerifyWithKey) &&
+		sameSet(a.MACWithKey, b.MACWithKey) &&
+		sameSet(a.ReadKey, b.ReadKey) &&
+		sameSet(a.SignVerifyWithKey, b.SignVerifyWithKey) &&
+		sameSet(a.SignWithKey, b.SignWithKey) &&
+		sameSet(a.UseKey, b.UseKey)
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan CMKeyTFSDK
@@ -1866,13 +1908,32 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	if plan.KeyId.ValueString() != "" {
 		payload.KeyId = plan.KeyId.ValueString()
 	}
-	// Add meta to payload if set
+	// Add meta to payload only for the sub-fields (owner_id/permissions/cte) that actually
+	// changed from state. CM's ABAC policies (e.g. "CTE Section Key Meta update by CTE Admin")
+	// deny the *entire* UpdateKey call whenever meta.cte is present in the PATCH and differs
+	// from what's stored server-side — even for a superuser, and even when the field the user
+	// actually intends to change (e.g. undeletable) has nothing to do with meta. meta.cte drifts
+	// from Terraform's view the moment a real CTE client uses the key (CM stamps is_used=true,
+	// a field this schema doesn't model), so unconditionally resending it broke Update() for any
+	// key with a configured cte block once it entered real CTE use. Gating each sub-field
+	// independently lets an unrelated attribute change go out with no "meta" key at all.
 	var metadata KeyMetadataJSON
+	var hasMetadataChange bool
 	if plan.Metadata != nil {
-		if plan.Metadata.OwnerId.ValueString() != "" {
-			metadata.OwnerId = plan.Metadata.OwnerId.ValueString()
+		var statePermissions *KeyMetadataPermissionsTFSDK
+		var stateCTE *KeyMetadataCTETFSDK
+		var stateOwnerId string
+		if state.Metadata != nil {
+			statePermissions = state.Metadata.Permissions
+			stateCTE = state.Metadata.CTE
+			stateOwnerId = state.Metadata.OwnerId.ValueString()
 		}
-		if plan.Metadata.Permissions != nil {
+
+		if v := plan.Metadata.OwnerId.ValueString(); v != "" && v != stateOwnerId {
+			metadata.OwnerId = v
+			hasMetadataChange = true
+		}
+		if plan.Metadata.Permissions != nil && !permissionsEqual(plan.Metadata.Permissions, statePermissions) {
 			var permission KeyMetadataPermissionsJSON
 			var decryptWithKey []string
 			var encryptWithKey []string
@@ -1921,8 +1982,9 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 			permission.SignWithKey = signWithKey
 			permission.UseKey = useKey
 			metadata.Permissions = &permission
+			hasMetadataChange = true
 		}
-		if plan.Metadata.CTE != nil {
+		if plan.Metadata.CTE != nil && !reflect.DeepEqual(plan.Metadata.CTE, stateCTE) {
 			var cteParams KeyMetadataCTEJSON
 			if !plan.Metadata.CTE.PersistentOnClient.IsNull() && !plan.Metadata.CTE.PersistentOnClient.IsUnknown() {
 				cteParams.PersistentOnClient = plan.Metadata.CTE.PersistentOnClient.ValueBool()
@@ -1934,7 +1996,10 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 				cteParams.CTEVersioned = plan.Metadata.CTE.CTEVersioned.ValueBool()
 			}
 			metadata.CTE = &cteParams
+			hasMetadataChange = true
 		}
+	}
+	if hasMetadataChange {
 		payload.Metadata = &metadata
 	}
 

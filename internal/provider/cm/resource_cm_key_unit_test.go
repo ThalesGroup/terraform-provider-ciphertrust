@@ -1530,6 +1530,36 @@ func Test_CMKeyUpdate_MetadataCTEInPayload(t *testing.T) {
 	}
 }
 
+func Test_CMKeyUpdate_UnchangedMetaCTENotResentOnUnrelatedFieldChange(t *testing.T) {
+	// CM denies the entire UpdateKey call when meta.cte is present in the PATCH and
+	// differs from the server's stored value (e.g. once a CTE client sets is_used=true,
+	// a field this schema doesn't model) — even for a superuser, and even when the field
+	// actually being changed (undeletable here) has nothing to do with meta. meta must
+	// therefore be omitted entirely from the PATCH when it hasn't changed.
+	cte := &KeyMetadataCTETFSDK{
+		PersistentOnClient: types.BoolValue(true),
+		EncryptionMode:     types.StringValue("XTS"),
+		CTEVersioned:       types.BoolValue(false),
+	}
+	state := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(false),
+		Metadata:    &KeyMetadataTFSDK{CTE: cte},
+	}
+	plan := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(true), // only this changed
+		Metadata:    &KeyMetadataTFSDK{CTE: cte},
+	}
+	payload, _ := updateCapture(t, plan, state, `{"id":"key-1","undeletable":true}`)
+	if payload.Metadata != nil {
+		t.Errorf("expected meta to be entirely omitted from PATCH payload when unchanged, got %+v", payload.Metadata)
+	}
+	if payload.UnDeletable == nil || !*payload.UnDeletable {
+		t.Errorf("expected undeletable=true in PATCH payload, got %+v", payload.UnDeletable)
+	}
+}
+
 func Test_CMKeyUpdate_MetadataPermissionsInPayload(t *testing.T) {
 	state := &CMKeyTFSDK{ID: types.StringValue("key-1")}
 	plan := &CMKeyTFSDK{
@@ -1572,6 +1602,34 @@ func Test_CMKeyUpdate_MetadataPermissionsInPayload(t *testing.T) {
 				t.Errorf("expected [\"user1\"], got %+v", tc.got)
 			}
 		})
+	}
+}
+
+func Test_CMKeyUpdate_UnchangedMetaPermissionsNotResentWhenOrderDiffers(t *testing.T) {
+	// CM isn't guaranteed to return permission lists in the same order they were
+	// configured in, so comparing plan vs. state must be order-insensitive — otherwise
+	// an unrelated field change would spuriously resend an unchanged permissions block.
+	statePerms := &KeyMetadataPermissionsTFSDK{
+		DecryptWithKey: strList("user1", "user2"),
+		ReadKey:        strList("user1"),
+	}
+	planPerms := &KeyMetadataPermissionsTFSDK{
+		DecryptWithKey: strList("user2", "user1"), // same set, different order
+		ReadKey:        strList("user1"),
+	}
+	state := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(false),
+		Metadata:    &KeyMetadataTFSDK{Permissions: statePerms},
+	}
+	plan := &CMKeyTFSDK{
+		ID:          types.StringValue("key-1"),
+		UnDeletable: types.BoolValue(true), // only this changed
+		Metadata:    &KeyMetadataTFSDK{Permissions: planPerms},
+	}
+	payload, _ := updateCapture(t, plan, state, `{"id":"key-1","undeletable":true}`)
+	if payload.Metadata != nil {
+		t.Errorf("expected meta to be entirely omitted from PATCH payload when permissions only differ by order, got %+v", payload.Metadata)
 	}
 }
 
