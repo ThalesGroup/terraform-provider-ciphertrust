@@ -152,12 +152,12 @@ func (r *resourceCTEResourceSet) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 	if !plan.Description.IsNull() && plan.Description.ValueString() != "" {
 		payload.Description = plan.Description.ValueString()
 	}
 	if plan.Type.ValueString() != "" && plan.Type.ValueString() != types.StringNull().ValueString() {
-		payload.Type = common.TrimString(plan.Type.String())
+		payload.Type = common.TrimString(plan.Type.ValueString())
 	} else {
 		payload.Type = "Directory"
 	}
