@@ -57,10 +57,7 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
-				Description: "(Immutable) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.",
-				PlanModifiers: []planmodifier.Int64{
-					modifiers.ImmutableInt64(),
-				},
+				Description: "The interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use. Mutable for interface_type nae, kmip, and web — CM applies the change in place. Changing the port of a default interface (web, nae, kmip) restarts CM services cluster-wide, so treat it as a planned change.",
 			},
 			"allow_unregistered": schema.BoolAttribute{
 				Optional:    true,
@@ -1211,6 +1208,14 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		// CM does not support clearing network_interface by omitting the field — without an
 		// explicit value the prior setting persists silently. Send the CM-documented default.
 		payload["network_interface"] = "all"
+	}
+
+	// port — mutable for nae/kmip/web interfaces (CM PATCH /v1/configs/interfaces/{id}
+	// applies the change in place). Send only when it actually changed: resending the
+	// unchanged port causes CM to return 409 "conflict with the current state" because it
+	// interprets the value as a request to bind to a port already in use by this interface.
+	if !plan.Port.Equal(state.Port) {
+		payload["port"] = plan.Port.ValueInt64()
 	}
 
 	// registration_token is write-only (never stored in state), so its own value can never
