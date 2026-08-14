@@ -390,8 +390,8 @@ func (r *resourceAWSCustomKeyStore) Create(ctx context.Context, req resource.Cre
 	}
 	payload := AWSCustomKeyStoreJSON{
 		KMS:    kmsID,
-		Name:   common.TrimString(plan.Name.String()),
-		Region: common.TrimString(plan.Region.String()),
+		Name:   common.TrimString(plan.Name.ValueString()),
+		Region: common.TrimString(plan.Region.ValueString()),
 	}
 	if plan.EnableSuccessAuditEvent.ValueBool() != types.BoolNull().ValueBool() {
 		payload.EnableSuccessAuditEvent = plan.EnableSuccessAuditEvent.ValueBool()
@@ -634,8 +634,8 @@ func (r *resourceAWSCustomKeyStore) Update(ctx context.Context, req resource.Upd
 	actualName := gjson.Get(response, "name").String()
 	if plan.Name.ValueString() != "" &&
 		plan.Name.ValueString() != types.StringNull().ValueString() &&
-		common.TrimString(plan.Name.String()) != actualName {
-		payload.Name = common.TrimString(plan.Name.String())
+		common.TrimString(plan.Name.ValueString()) != actualName {
+		payload.Name = common.TrimString(plan.Name.ValueString())
 		toBeUpdated = true
 	}
 

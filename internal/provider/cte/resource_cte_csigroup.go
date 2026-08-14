@@ -111,7 +111,21 @@ func (r *resourceCTECSIGroup) Schema(_ context.Context, _ resource.SchemaRequest
 							Computed:    true,
 							Description: "Guardpoint ID returned by the API after the policy is added.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// UseStateForUnknown() unconditionally copies the prior
+								// state value once triggered. For a guard_policies map
+								// key that does not exist yet in prior state (e.g. a
+								// newly added guard policy), that state value is null
+								// (not absent), which forces this attribute's planned
+								// value to a concrete null instead of leaving it
+								// unknown. Terraform then rejects the apply once
+								// Update() resolves it to a real UUID ("provider
+								// produced inconsistent result after apply").
+								// UseNonNullStateForUnknown() only copies the prior
+								// value when it is non-null, so brand-new map entries
+								// correctly stay "(known after apply)" (same fix
+								// applied to the sibling guard_points[*].id attribute
+								// in TFIN-544).
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 					},
@@ -136,15 +150,15 @@ func (r *resourceCTECSIGroup) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	payload.Namespace = common.TrimString(plan.Namespace.String())
-	payload.StorageClass = common.TrimString(plan.StorageClass.String())
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Namespace = common.TrimString(plan.Namespace.ValueString())
+	payload.StorageClass = common.TrimString(plan.StorageClass.ValueString())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	if plan.ClientProfile.ValueString() != "" && plan.ClientProfile.ValueString() != types.StringNull().ValueString() {
-		payload.ClientProfile = common.TrimString(plan.ClientProfile.String())
+		payload.ClientProfile = common.TrimString(plan.ClientProfile.ValueString())
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -356,10 +370,10 @@ func (r *resourceCTECSIGroup) Update(ctx context.Context, req resource.UpdateReq
 				return
 			}
 			if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-				payload.Description = common.TrimString(plan.Description.String())
+				payload.Description = common.TrimString(plan.Description.ValueString())
 			}
 			if plan.ClientProfile.ValueString() != "" && plan.ClientProfile.ValueString() != types.StringNull().ValueString() {
-				payload.ClientProfile = common.TrimString(plan.ClientProfile.String())
+				payload.ClientProfile = common.TrimString(plan.ClientProfile.ValueString())
 			}
 
 			payloadJSON, err := json.Marshal(payload)

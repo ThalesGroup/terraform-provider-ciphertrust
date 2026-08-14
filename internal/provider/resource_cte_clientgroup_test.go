@@ -125,6 +125,67 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
+// TestCTEClientGroupResource_descriptionQuoteNotCorrupted is a regression
+// test for TFIN-624: Create()/Update() built the outgoing payload with
+// common.TrimString(plan.Description.String()) instead of
+// plan.Description.ValueString(). types.String.String() returns a Go
+// %q-quoted debug representation (adds outer quotes, escapes internal " as
+// \"), and TrimString only strips the outer quote pair, leaving the escaped
+// backslash in the value sent to CM -- permanently corrupting any
+// description containing a literal " character. If the value were corrupted
+// on the way to CM, Read would keep reporting a different (mangled) value
+// than the configured one, so the follow-up PlanOnly step would show a
+// perpetual diff instead of "No changes".
+func TestCTEClientGroupResource_descriptionQuoteNotCorrupted(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-quote-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+	const wantCreateDescription = `He said "hello" to me`
+	const wantUpdateDescription = `Updated: she said "goodbye" now`
+
+	cfg := func(description string, update bool) string {
+		op := ""
+		if update {
+			op = "  op_type      = \"update\"\n"
+		}
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = %q
+%s}
+`, cgName, description, op)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg(wantCreateDescription, false),
+				Check: checkStep(t, "client_group quote: create",
+					resource.TestCheckResourceAttr(rn, "description", wantCreateDescription),
+				),
+			},
+			{
+				Config:             cfg(wantCreateDescription, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: cfg(wantUpdateDescription, true),
+				Check: checkStep(t, "client_group quote: update",
+					resource.TestCheckResourceAttr(rn, "description", wantUpdateDescription),
+				),
+			},
+			{
+				Config:             cfg(wantUpdateDescription, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEClientGroupResource_nameRequiresReplace verifies a name change is
 // planned as a destroy+create rather than an in-place update (TFIN-489).
 func TestCTEClientGroupResource_nameRequiresReplace(t *testing.T) {

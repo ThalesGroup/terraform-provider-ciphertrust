@@ -155,9 +155,9 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	payload["name"] = common.TrimString(plan.Name.String())
+	payload["name"] = common.TrimString(plan.Name.ValueString())
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload["description"] = common.TrimString(plan.Description.String())
+		payload["description"] = common.TrimString(plan.Description.ValueString())
 	}
 	usersJSONArr := []CTEUserJSON{}
 	for _, user := range plan.Users {
@@ -291,7 +291,7 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload["description"] = common.TrimString(plan.Description.String())
+		payload["description"] = common.TrimString(plan.Description.ValueString())
 	} else {
 		payload["description"] = ""
 	}

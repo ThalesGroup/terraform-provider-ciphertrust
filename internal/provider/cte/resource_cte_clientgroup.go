@@ -222,19 +222,19 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	payload.ClusterType = common.TrimString(plan.ClusterType.ValueString())
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	if !plan.CommunicationEnabled.IsNull() {
 		payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 	}
 	if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
-		payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.String())
+		payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.ValueString())
 	}
 	if v := config.Password.ValueString(); v != "" {
 		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 		if plan.PasswordCreationMethod.ValueString() == "MANUAL" && (config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString()) {
 			resp.Diagnostics.AddError(
 				"Error creating CTE Client Group on CipherTrust Manager: ",
@@ -244,7 +244,7 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 		}
 	}
 	if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
-		payload.ProfileID = common.TrimString(plan.ProfileID.String())
+		payload.ProfileID = common.TrimString(plan.ProfileID.ValueString())
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -462,16 +462,16 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 		}
 		if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-			payload.Description = common.TrimString(plan.Description.String())
+			payload.Description = common.TrimString(plan.Description.ValueString())
 		}
 		if !plan.EnableDomainSharing.IsNull() {
 			payload.EnableDomainSharing = plan.EnableDomainSharing.ValueBool()
 		}
 		if plan.EnabledCapabilities.ValueString() != "" && plan.EnabledCapabilities.ValueString() != types.StringNull().ValueString() {
-			payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.String())
+			payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.ValueString())
 		}
 		if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
-			payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.String())
+			payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.ValueString())
 		}
 		// password is write-only (never stored in state), so its own value can never
 		// be diffed against a prior value — password_version is the explicit,
@@ -481,7 +481,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			payload.Password = config.Password.ValueString()
 		}
 		if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 			if plan.PasswordCreationMethod.ValueString() == "MANUAL" {
 				if config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString() {
 					resp.Diagnostics.AddError(
@@ -494,7 +494,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 		}
 		if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
-			payload.ProfileID = common.TrimString(plan.ProfileID.String())
+			payload.ProfileID = common.TrimString(plan.ProfileID.ValueString())
 		}
 		if plan.SharedDomainList != nil {
 			for _, domain := range plan.SharedDomainList {
@@ -687,7 +687,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			payload.Password = config.Password.ValueString()
 		}
 		if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 		}
 		if plan.PasswordCreationMethod.ValueString() == "MANUAL" && (config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString()) {
 			resp.Diagnostics.AddError(

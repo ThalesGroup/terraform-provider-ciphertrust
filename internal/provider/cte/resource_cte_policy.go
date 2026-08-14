@@ -453,14 +453,14 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	// Add Name to the payload
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	// Add Policy Type to the payload
-	payload.PolicyType = common.TrimString(plan.PolicyType.String())
+	payload.PolicyType = common.TrimString(plan.PolicyType.ValueString())
 
 	// Add Description to the payload if set
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 
 	// Add never_deny to the payload if set
@@ -964,7 +964,7 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	// Add Description to the payload if set
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 
 	// Add never_deny to the payload if set
