@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
@@ -83,6 +86,12 @@ func (d *dataSourceAWSIAMUsersList) Schema(_ context.Context, _ datasource.Schem
 			"kms_id": schema.StringAttribute{
 				Required:    true,
 				Description: "ID of the CipherTrust Manager AWS KMS whose IAM users are to be listed.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"marker": schema.StringAttribute{
 				Optional:    true,

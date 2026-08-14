@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -18,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
@@ -103,6 +106,12 @@ func (r *resourceAWSKeyRotation) Schema(_ context.Context, _ resource.SchemaRequ
 			"key_id": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) CipherTrust Manager UUID of the AWS native symmetric key to rotate.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -111,6 +120,12 @@ func (r *resourceAWSKeyRotation) Schema(_ context.Context, _ resource.SchemaRequ
 				Required: true,
 				Description: "Arbitrary user-supplied value that controls when a rotation is requested. " +
 					"Changing this value causes resource replacement, which requests exactly one additional on-demand rotation.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},

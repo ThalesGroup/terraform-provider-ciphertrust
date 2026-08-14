@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
@@ -118,9 +119,14 @@ func (r *resourceCCKMOCIAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"vault_id": schema.StringAttribute{
-				Required:      true,
-				Description:   "(Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL",
-				Validators:    []validator.String{stringvalidator.LengthAtLeast(1)},
+				Required:    true,
+				Description: "(Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 		},

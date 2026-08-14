@@ -183,7 +183,7 @@ func (d *dataSourceAWSKms) Schema(_ context.Context, _ datasource.SchemaRequest,
 							Description: "The connection name as returned by CipherTrust Manager.",
 						},
 						"created_at": schema.StringAttribute{
-							Description: "Date/time the application was created",
+							Description: "Date/time the application was created.",
 							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
@@ -208,7 +208,7 @@ func (d *dataSourceAWSKms) Schema(_ context.Context, _ datasource.SchemaRequest,
 							Description: "The status of the KMS, archived or active.",
 						},
 						"updated_at": schema.StringAttribute{
-							Description: "Date and time the KMS was last updated",
+							Description: "Date and time the KMS was last updated.",
 							Computed:    true,
 						},
 						"uri": schema.StringAttribute{

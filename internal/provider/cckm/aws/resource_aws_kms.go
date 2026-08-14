@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
@@ -120,7 +121,12 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager AWS connection ID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"connection_name": schema.StringAttribute{
 				Computed:    true,
@@ -131,7 +137,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "True if the KMS was added by a scheduler.",
 			},
 			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 				Computed:    true,
 			},
 			"dev_account": schema.StringAttribute{
@@ -163,7 +169,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date and time the KMS was last updated",
+				Description: "Date and time the KMS was last updated.",
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,

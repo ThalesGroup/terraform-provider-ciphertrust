@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
@@ -76,6 +77,12 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			"region": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) AWS region in which to create the key.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -143,6 +150,12 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					"key_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource of the primary key to replicate.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 					},
 					"make_primary": schema.BoolAttribute{
 						Optional:    true,

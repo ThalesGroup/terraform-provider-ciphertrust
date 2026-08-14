@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -126,6 +127,12 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			"name": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) Name for the policy template.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},

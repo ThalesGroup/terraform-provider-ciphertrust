@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -148,11 +149,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"kms_name": schema.StringAttribute{
 				Computed:    true,
-				Description: "Name or of the KMS.",
+				Description: "Name of the KMS.",
 			},
 			"kms_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "ID of the KMS",
+				Description: "ID of the KMS.",
 			},
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -178,11 +179,11 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"rotated_from": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.",
 			},
 			"rotated_to": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.",
 			},
 			"rotation_status": schema.StringAttribute{
 				Computed:    true,
@@ -211,6 +212,12 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 			"custom_key_store_id": schema.StringAttribute{
 				Required:    true,
 				Description: "(Immutable) CipherTrust Manager ID of the CloudHSM keystore where key is to be created.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -229,6 +236,12 @@ func (r *resourceAWSCloudHSMKey) Schema(_ context.Context, _ resource.SchemaRequ
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
 						Description: "ID of the scheduler configuration job.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 					},
 					"key_source": schema.StringAttribute{
 						Required:    true,

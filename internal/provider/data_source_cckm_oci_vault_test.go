@@ -115,3 +115,77 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmOCIDataSourceGetVaultsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = ""
+						compartment_id = "ocid1.compartment.fake"
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "   "
+						compartment_id = "ocid1.compartment.fake"
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// empty compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = ""
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "   "
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// empty region must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "ocid1.compartment.fake"
+						region         = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only region must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "ocid1.compartment.fake"
+						region         = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}

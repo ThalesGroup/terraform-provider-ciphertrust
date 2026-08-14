@@ -3,13 +3,14 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
-func Test_CM_CckmOCIDataSourceConnection(t *testing.T) {
+func TestCckmOCIDataSourceConnection(t *testing.T) {
 	ociKeyFile := os.Getenv("CCKM_OCI_KEY_FILE")
 	ociPubKeyFP := os.Getenv("CCKM_OCI_FINGERPRINT")
 	ociRegion := os.Getenv("CCKM_OCI_REGION")
@@ -68,6 +69,84 @@ func Test_CM_CckmOCIDataSourceConnection(t *testing.T) {
 					testCheckAttributeContains(vaults, "vaults.#", []string{"0"}, false),
 					resource.TestCheckResourceAttrSet(vaults, "vaults.0.vault_id"),
 				),
+			},
+		},
+	})
+}
+
+func TestCckmOCIDataSourceGetRegionsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_regions" "test" {
+						connection_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_regions" "test" {
+						connection_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}
+
+func TestCckmOCIDataSourceGetCompartmentsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_compartments" "test" {
+						connection_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_compartments" "test" {
+						connection_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}
+
+func TestCckmOCIDataSourceKeyVersionListCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty key_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_oci_key_version_list" "test" {
+						key_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only key_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_oci_key_version_list" "test" {
+						key_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

@@ -184,4 +184,4 @@ Read-Only:
 - `source_key_id` (String) CipherTrust Manager key ID used to create the version.
 - `source_key_name` (String) Name of the key used to create the version.
 - `source_key_tier` (String) Source of the key used to create the version.
-- `version_id` (String) The key version's OCID
+- `version_id` (String) The key version's OCID.

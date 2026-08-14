@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -175,11 +176,11 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"rotated_from": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.",
 			},
 			"rotated_to": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.",
 			},
 			"rotation_status": schema.StringAttribute{
 				Computed:    true,
@@ -232,6 +233,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"custom_key_store_id": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) ID of the custom keystore where XKS key is to be created.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},
@@ -239,6 +246,12 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 					"source_key_id": schema.StringAttribute{
 						Required:    true,
 						Description: "(Immutable) ID of the source key for AWS XKS key.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableString(),
 						},

@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -54,10 +57,22 @@ func (d *dataSourceGetOCIBuckets) Schema(_ context.Context, _ datasource.SchemaR
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager OCI connection name or ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"compartment_id": schema.StringAttribute{
 				Required:    true,
 				Description: "Compartment OCID whose buckets are to be listed.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"buckets": schema.ListNestedAttribute{
 				Computed:    true,
