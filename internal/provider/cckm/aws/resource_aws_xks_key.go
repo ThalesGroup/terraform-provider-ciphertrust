@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -73,7 +76,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"bypass_policy_lockout_safety_check": schema.BoolAttribute{
 				Optional:    true,
-				Description: "Whether to bypass the key policy lockout safety check.",
+				Description: "(Immutable once set) Whether to bypass the key policy lockout safety check when linking an XKS key with AWS. Only valid when local_hosted_params.linked = true.",
 			},
 			"aws_param": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -83,13 +86,13 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional: true,
-				Description: "(Updatable) Enable or disable the key. Only applied when the key is in a linked state. " +
+				Description: "Enable or disable the key. Requires local_hosted_params.linked = true. " +
 					"Cannot be set to false at creation time; disable the key via update after it is created.",
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -152,7 +155,7 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Computed:    true,
-				Description: "A list of key:value pairs associated with the key.",
+				Description: "A map of key/value pairs associated with the key.",
 			},
 			"local_key_id": schema.StringAttribute{
 				Computed:    true,
@@ -173,11 +176,11 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"rotated_from": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.",
 			},
 			"rotated_to": schema.StringAttribute{
 				Computed:    true,
-				Description: "CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.",
+				Description: "CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.",
 			},
 			"rotation_status": schema.StringAttribute{
 				Computed:    true,
@@ -225,25 +228,49 @@ func (r *resourceAWSXKSKey) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
-						Description: "(Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
+						Description: "Parameter to indicate if AWS XKS key is blocked for any data plane operation.",
 					},
 					"custom_key_store_id": schema.StringAttribute{
 						Required:    true,
-						Description: "ID of the custom keystore where XKS key is to be created.",
+						Description: "(Immutable) ID of the custom keystore where XKS key is to be created.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"source_key_id": schema.StringAttribute{
 						Required:    true,
-						Description: "ID of the source key for AWS XKS key.",
+						Description: "(Immutable) ID of the source key for AWS XKS key.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"source_key_tier": schema.StringAttribute{
 						Required:    true,
-						Description: "Source key tier for AWS XKS key. Current option is local. Default is local.",
+						Description: "(Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.",
+						Validators: []validator.String{
+							stringvalidator.OneOf("local"),
+						},
+						PlanModifiers: []planmodifier.String{
+							modifiers.ImmutableString(),
+						},
 					},
 					"linked": schema.BoolAttribute{
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
-						Description: "(Updatable) Parameter to indicate if AWS XKS key is linked with AWS.",
+						Description: "Parameter to indicate if AWS XKS key is linked with AWS.",
 					},
 				},
 			},
@@ -370,8 +397,9 @@ func (r *resourceAWSXKSKey) Read(ctx context.Context, req resource.ReadRequest, 
 	if readKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "XKS key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	r.setXKSKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -414,23 +442,8 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if gjson.Get(response, "linked_state").Bool() && updateKeyState == "PendingDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "XKS key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			policyPlanUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			policyStateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, policyPlanUpdate, policyStateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-		}
-		r.setXKSKeyState(ctx, response, &plan, &resp.Diagnostics)
-		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 
@@ -509,8 +522,8 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	if plan.KeyPolicy != nil {
 		planUpdate.KeyPolicy = plan.KeyPolicy
 	}
-	if planAwsParam != nil && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description.IsUnknown() {
-		planUpdate.Description = planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Description
+	if planAwsParam != nil && !planAwsParam.Description.IsNull() && !planAwsParam.Description.IsUnknown() {
+		planUpdate.Description = planAwsParam.Description
 	}
 	updateAwsKeyCommon(ctx, id, r.client, planUpdate, stateUpdate, response, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -518,16 +531,16 @@ func (r *resourceAWSXKSKey) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	if planAwsParam != nil {
-		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias.IsUnknown() {
-			updateAliases(ctx, id, r.client, keyID, planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Alias, response, &resp.Diagnostics)
+		if !planAwsParam.Alias.IsNull() && !planAwsParam.Alias.IsUnknown() {
+			updateAliases(ctx, id, r.client, keyID, planAwsParam.Alias, response, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
 		}
-		if !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() {
-			planTagsMap := make(map[string]string, len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()))
-			if len(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) != 0 {
-				resp.Diagnostics.Append(planAwsParam.AWSKeyStoreCommonAwsParamTFSDK.Tags.ElementsAs(ctx, &planTagsMap, false)...)
+		if !planAwsParam.Tags.IsNull() && !planAwsParam.Tags.IsUnknown() {
+			planTagsMap := make(map[string]string, len(planAwsParam.Tags.Elements()))
+			if len(planAwsParam.Tags.Elements()) != 0 {
+				resp.Diagnostics.Append(planAwsParam.Tags.ElementsAs(ctx, &planTagsMap, false)...)
 				if resp.Diagnostics.HasError() {
 					return
 				}
@@ -677,55 +690,64 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 
 	// On create (no prior state), validate the configuration.
 	if req.State.Raw.IsNull() {
-		// These attributes require separate post-create API calls and cannot be applied at creation time.
-		// They must be set via update after the key is created.
-		var createInvalid []string
+		var invalid []string
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 			if xksP != nil {
-				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-					createInvalid = append(createInvalid, "aws_param.alias (only one alias may be set at creation; add more via update)")
+				if len(xksP.Alias.Elements()) > 1 {
+					invalid = append(invalid, "aws_param.alias (only one alias may be set at creation; additional aliases require local_hosted_params.linked = true)")
 				}
 			}
 		}
 		if plan.EnableRotation != nil {
-			createInvalid = append(createInvalid, "enable_rotation (cannot be set at creation; configure via update)")
+			invalid = append(invalid, "enable_rotation (cannot be set at creation; configure via update after linking)")
 		}
 		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
-			createInvalid = append(createInvalid, "enable_key = false (cannot be set at creation; disable via update)")
+			invalid = append(invalid, "enable_key = false (cannot be set at creation; disable via update after linking)")
 		}
-		if len(createInvalid) > 0 {
-			resp.Diagnostics.AddError(
-				"Invalid attribute at creation time",
-				"The following attributes cannot be set when creating an XKS key: "+
-					strings.Join(createInvalid, "; ")+".",
-			)
-		}
-
-		// aws_param.tags and key_policy are only valid when linked = true at creation time;
+		// The following attributes require local_hosted_params.linked = true;
 		// the API only applies them to the AWS-side key when the key is linked.
 		if plan.LocalHostParams != nil && !plan.LocalHostParams.Linked.ValueBool() {
-			var unlinkedInvalid []string
 			if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
 				xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
 				if xksP != nil {
-					if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
-						len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
-						unlinkedInvalid = append(unlinkedInvalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
+					if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() && len(xksP.Tags.Elements()) > 0 {
+						invalid = append(invalid, "aws_param.tags (only valid when local_hosted_params.linked = true)")
+					}
+					if !xksP.Alias.IsNull() && !xksP.Alias.IsUnknown() && len(xksP.Alias.Elements()) > 0 {
+						if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
+							invalid = append(invalid, "aws_param.alias (setting alias on an unlinked key requires CipherTrust Manager 2.23 or later)")
+						}
 					}
 				}
 			}
 			if plan.KeyPolicy != nil {
-				unlinkedInvalid = append(unlinkedInvalid, "key_policy (only valid when local_hosted_params.linked = true)")
+				invalid = append(invalid, "key_policy (only valid when local_hosted_params.linked = true)")
 			}
-			if len(unlinkedInvalid) > 0 {
-				resp.Diagnostics.AddError(
-					"Invalid configuration for an unlinked key",
-					"The following attributes cannot be set when local_hosted_params.linked = false: "+
-						strings.Join(unlinkedInvalid, "; ")+".",
-				)
+			if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() {
+				invalid = append(invalid, "bypass_policy_lockout_safety_check (only valid when local_hosted_params.linked = true)")
 			}
 		}
+		if len(invalid) > 0 {
+			resp.Diagnostics.AddError(
+				"Invalid configuration for a new XKS key",
+				"The following attributes cannot be set when creating an XKS key: "+
+					strings.Join(invalid, "; ")+".",
+			)
+		}
+		return
+	}
+
+	// If the attribute was previously set (state is non-null), block any change to it.
+	// bypass_policy_lockout_safety_check can only be set once - when first linking the key.
+	if !req.State.Raw.IsNull() &&
+		!state.BypassPolicyLockoutSafetyCheck.IsNull() &&
+		!plan.BypassPolicyLockoutSafetyCheck.Equal(state.BypassPolicyLockoutSafetyCheck) {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("bypass_policy_lockout_safety_check"),
+			"bypass_policy_lockout_safety_check is immutable",
+			"This attribute cannot be changed after it has been set. To change this value, destroy and recreate the resource.",
+		)
 		return
 	}
 
@@ -735,16 +757,34 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		!state.LocalHostParams.Linked.ValueBool() && !plan.LocalHostParams.Linked.ValueBool() {
 		var invalid []string
 
+		var planAwsParam, stateAwsParam *AWSXKSKeyAwsParamTFSDK
 		if !plan.AWSParam.IsNull() && !plan.AWSParam.IsUnknown() {
-			xksP := extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
-			if xksP != nil {
-				if len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Alias.Elements()) > 1 {
-					invalid = append(invalid, "aws_param.alias (more than one alias)")
-				}
-				if !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsNull() && !xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.IsUnknown() &&
-					len(xksP.AWSKeyStoreCommonAwsParamTFSDK.Tags.Elements()) > 0 {
-					invalid = append(invalid, "aws_param.tags")
-				}
+			planAwsParam = extractXKSKeyAwsParam(ctx, plan.AWSParam, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		if !state.AWSParam.IsNull() && !state.AWSParam.IsUnknown() {
+			stateAwsParam = extractXKSKeyAwsParam(ctx, state.AWSParam, &resp.Diagnostics)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+		if planAwsParam != nil {
+			xksP := planAwsParam
+			if len(xksP.Alias.Elements()) > 1 {
+				invalid = append(invalid, "aws_param.alias (more than one alias)")
+			}
+			if stateAwsParam != nil && !xksP.Alias.IsNull() && !xksP.Alias.IsUnknown() &&
+				len(xksP.Alias.Elements()) > 0 && !xksP.Alias.Equal(stateAwsParam.Alias) {
+				invalid = append(invalid, "aws_param.alias (value changed)")
+			}
+			if stateAwsParam != nil && !xksP.Description.Equal(stateAwsParam.Description) {
+				invalid = append(invalid, "aws_param.description")
+			}
+			if !xksP.Tags.IsNull() && !xksP.Tags.IsUnknown() &&
+				len(xksP.Tags.Elements()) > 0 {
+				invalid = append(invalid, "aws_param.tags")
 			}
 		}
 		if plan.KeyPolicy != nil {
@@ -755,6 +795,9 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 		if !plan.EnableKey.IsNull() && !plan.EnableKey.IsUnknown() && !plan.EnableKey.ValueBool() {
 			invalid = append(invalid, "enable_key = false")
+		}
+		if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() {
+			invalid = append(invalid, "bypass_policy_lockout_safety_check (only valid when local_hosted_params.linked = true)")
 		}
 
 		if len(invalid) > 0 {
@@ -768,36 +811,6 @@ func (r *resourceAWSXKSKey) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 	}
 
-	var changed []string
-
-	if !plan.BypassPolicyLockoutSafetyCheck.IsNull() && !plan.BypassPolicyLockoutSafetyCheck.IsUnknown() &&
-		plan.BypassPolicyLockoutSafetyCheck != state.BypassPolicyLockoutSafetyCheck {
-		changed = append(changed, "bypass_policy_lockout_safety_check")
-	}
-
-	// Check immutable fields inside the local_hosted_params block.
-	if plan.LocalHostParams != nil && state.LocalHostParams != nil {
-		if plan.LocalHostParams.CustomKeyStoreID != state.LocalHostParams.CustomKeyStoreID {
-			changed = append(changed, "local_hosted_params.custom_key_store_id")
-		}
-		if plan.LocalHostParams.SourceKeyID != state.LocalHostParams.SourceKeyID {
-			changed = append(changed, "local_hosted_params.source_key_id")
-		}
-		if plan.LocalHostParams.SourceKeyTier != state.LocalHostParams.SourceKeyTier {
-			changed = append(changed, "local_hosted_params.source_key_tier")
-		}
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an existing AWS XKS key into Terraform state using its resource ID.
@@ -822,30 +835,30 @@ func (r *resourceAWSXKSKey) setXKSKeyState(ctx context.Context, response string,
 	if p == nil {
 		p = &AWSXKSKeyAwsParamTFSDK{}
 	}
-	setAliases(response, &p.AWSKeyStoreCommonAwsParamTFSDK.Alias, diags)
-	setKeyTags(ctx, response, &p.AWSKeyStoreCommonAwsParamTFSDK.Tags, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
+	setAliases(response, &p.Alias, diags)
+	setKeyTags(ctx, response, &p.Tags, diags)
+	p.Description = types.StringValue(gjson.Get(response, "aws_param.Description").String())
 	setPolicyTemplateTag(ctx, response, &state.PolicyTemplateTag, diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
-	p.AWSKeyStoreCommonAwsParamTFSDK.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
-	p.AWSKeyStoreCommonAwsParamTFSDK.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
-	p.AWSKeyStoreCommonAwsParamTFSDK.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
+	p.Arn = types.StringValue(gjson.Get(response, "aws_param.Arn").String())
+	p.AWSAccountID = types.StringValue(gjson.Get(response, "aws_param.AWSAccountId").String())
+	p.AWSCustomKeyStoreID = types.StringValue(gjson.Get(response, "aws_param.CustomKeyStoreId").String())
+	p.CustomerMasterKeySpec = types.StringValue(gjson.Get(response, "aws_param.CustomerMasterKeySpec").String())
+	p.CreationDate = types.StringValue(gjson.Get(response, "aws_param.CreationDate").String())
+	p.DeletionDate = types.StringValue(gjson.Get(response, "deletion_date").String())
+	p.Enabled = types.BoolValue(gjson.Get(response, "aws_param.Enabled").Bool())
+	p.EncryptionAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.EncryptionAlgorithms").Array(), diags)
+	p.ExpirationModel = types.StringValue(gjson.Get(response, "aws_param.ExpirationModel").String())
+	p.KeyID = types.StringValue(gjson.Get(response, "aws_param.KeyID").String())
+	p.KeyManager = types.StringValue(gjson.Get(response, "aws_param.KeyManager").String())
+	p.KeyState = types.StringValue(gjson.Get(response, "aws_param.KeyState").String())
+	p.KeyUsage = types.StringValue(gjson.Get(response, "aws_param.KeyUsage").String())
+	p.MacAlgorithms = utils.StringSliceJSONToListValue(gjson.Get(response, "aws_param.MacAlgorithmSpec").Array(), diags)
+	p.Origin = types.StringValue(gjson.Get(response, "aws_param.Origin").String())
 	policy := gjson.Get(response, "aws_param.Policy").String()
 	if state.AWSParam.IsNull() || state.AWSParam.IsUnknown() ||
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsNull() || p.AWSKeyStoreCommonAwsParamTFSDK.Policy.IsUnknown() ||
-		!getPoliciesAreEqual(r.client, policy, p.AWSKeyStoreCommonAwsParamTFSDK.Policy.ValueString(), diags) {
-		p.AWSKeyStoreCommonAwsParamTFSDK.Policy = types.StringValue(policy)
+		p.Policy.IsNull() || p.Policy.IsUnknown() ||
+		!getPoliciesAreEqual(r.client, policy, p.Policy.ValueString(), diags) {
+		p.Policy = types.StringValue(policy)
 	}
 	// XKS-specific computed field: populate the nested xks_key_configuration object.
 	// Set to nil (null object) when the key is unlinked or the ID is not yet populated.

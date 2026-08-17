@@ -14,7 +14,7 @@ import (
 // unchanged. Checking only this string (and not the HTTP status code) makes the predicate
 // robust against any future CCKM formatting changes to how the status code is reported.
 // ociVaultStateConflictError can occur after an operation like restoring a key from backup
-// The vault state is in a state of "restoring" for a short period and some operations can fail as a result
+// The vault state is in a state of "restoring" for a short period and some operations can fail as a result.
 const (
 	ociErrThrottled            = "TooManyRequests"
 	ociVaultStateConflictError = "Vault must be in one of the following states"

@@ -17,22 +17,22 @@ description: |-
 
 ### Required
 
-- `policy` (String)
+- `policy` (String) ID of the parent CTE Client Policy whose signature rules are to be listed.
 
 ### Read-Only
 
-- `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+- `rules` (Attributes List) List of signature rules configured on the policy. (see [below for nested schema](#nestedatt--rules))
 
 <a id="nestedatt--rules"></a>
 ### Nested Schema for `rules`
 
 Read-Only:
 
-- `account` (String)
-- `created_at` (String)
+- `account` (String) Account of the signature rule.
+- `created_at` (String) Date and time the signature rule was created.
 - `id` (String) ID of the Signature Rule within the parent CTE Client Policy
-- `policy_id` (String)
-- `signature_set_id` (String)
-- `signature_set_name` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `policy_id` (String) ID of the parent CTE Client Policy.
+- `signature_set_id` (String) ID of the signature set linked to the rule.
+- `signature_set_name` (String) Name of the signature set linked to the rule.
+- `updated_at` (String) Date and time the signature rule was last updated.
+- `uri` (String) URI of the signature rule.

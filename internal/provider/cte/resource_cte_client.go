@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -127,6 +126,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"profile_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the Client Profile to be associated with the client. If not provided, the default profile will be linked.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"registration_allowed": schema.BoolAttribute{
 				Optional:    true,
@@ -197,6 +199,9 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				Computed:    true,
 				Description: "ID of the profile that contains logger, logging, and QOS configuration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"protection_mode": schema.StringAttribute{
 				Optional:    true,
@@ -214,7 +219,7 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_client.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEClientTFSDK
@@ -257,13 +262,13 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 		payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 	}
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	if v := config.Password.ValueString(); v != "" {
 		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 	}
 	if plan.ProfileIdentifier.ValueString() != "" && plan.ProfileIdentifier.ValueString() != types.StringNull().ValueString() {
 		payload.ProfileIdentifier = common.TrimString(plan.ProfileIdentifier.ValueString())
@@ -274,7 +279,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Creation",
 			err.Error(),
@@ -284,7 +289,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_CLIENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Client on CipherTrust Manager: ",
 			"Could not create CTE Client, unexpected error: "+err.Error(),
@@ -306,7 +311,7 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.Password = types.StringNull()
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_client.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -320,11 +325,8 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_client.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_client.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -338,8 +340,7 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 		state.ID.ValueString(),
 		common.URL_CTE_CLIENT,
 	)
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Client ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -364,11 +365,8 @@ func (r *resourceCTEClient) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_client.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_client.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -420,7 +418,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 	}
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	// password is write-only (never stored in state), so its own value can never be
 	// diffed against a prior value — password_version is the explicit, state-tracked
@@ -429,7 +427,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		payload.Password = config.Password.ValueString()
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 	}
 	if plan.RegistrationAllowed.ValueBool() != types.BoolNull().ValueBool() {
 		payload.RegistrationAllowed = plan.RegistrationAllowed.ValueBool()
@@ -462,26 +460,32 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 		payload.MaxSpaceCacheLog = plan.MaxSpaceCacheLog.ValueInt64()
 	}
 	if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
-		payload.ProfileID = common.TrimString(plan.ProfileID.String())
+		payload.ProfileID = common.TrimString(plan.ProfileID.ValueString())
 	}
 	if plan.ProtectionMode.ValueString() != "" && plan.ProtectionMode.ValueString() != types.StringNull().ValueString() {
-		payload.ProtectionMode = common.TrimString(plan.ProtectionMode.String())
+		payload.ProtectionMode = common.TrimString(plan.ProtectionMode.ValueString())
 	}
 	if plan.SharedDomainList != nil {
 		for _, domain := range plan.SharedDomainList {
 			payload.SharedDomainList = append(payload.SharedDomainList, domain.ValueString())
 		}
 	}
-	// Add labels to payload
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Add labels to payload; send nil (JSON null) rather than an empty map
+	// when labels is empty/removed, so CM actually clears them instead of
+	// silently no-op'ing on {} (TFIN-463).
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Update",
 			err.Error(),
@@ -491,7 +495,7 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_CLIENT, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Client on CipherTrust Manager: ",
 			"Could not update CTE Client, unexpected error: "+err.Error(),
@@ -535,7 +539,7 @@ func (r *resourceCTEClient) Delete(ctx context.Context, req resource.DeleteReque
 	}
 	PayloadJSON, err := json.Marshal(DelClient)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_client.go -> Update][]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Client Update %s "+state.ID.ValueString(),
 			err.Error(),
@@ -545,8 +549,11 @@ func (r *resourceCTEClient) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete existing order using custom url
 	url := fmt.Sprintf("%s/%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_CLIENT, state.ID.ValueString(), "delete")
 	output, err := r.client.DeleteByID(ctx, "PATCH", state.ID.ValueString(), url, PayloadJSON)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_client.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Client "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust CTE Client",
 			"Could not delete CTE Client, unexpected error: "+err.Error(),
@@ -604,8 +611,48 @@ func validateCTEUClientConfig(ctx context.Context, req resource.ValidateConfigRe
 	}
 }
 
+// validateNonFunctionalCacheLogFields rejects max_num_cache_log/max_space_cache_log
+// when explicitly configured. TFIN-467: CipherTrust Manager silently ignores
+// writes to these two fields at the client level (confirmed via direct REST
+// PATCH cross-check, including values that respect the linked profile's
+// documented minimums) — every apply reports success but the value never
+// persists, producing a perpetual, unresolvable plan diff. The equivalent
+// setting is only functional on the linked ciphertrust_cte_profile resource's
+// cache_settings.max_files/max_space. Erroring here up front, rather than
+// sending a PATCH CM will 200-OK and silently no-op, matches the existing
+// in-file precedent (see validateCTEUClientConfig above) of surfacing
+// unsupported field combinations as an explicit attribute error instead of
+// letting them fail silently against CM.
+func validateNonFunctionalCacheLogFields(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var maxNumCacheLog types.Int64
+	var maxSpaceCacheLog types.Int64
+
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_num_cache_log"), &maxNumCacheLog)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_space_cache_log"), &maxSpaceCacheLog)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !maxNumCacheLog.IsNull() && !maxNumCacheLog.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_num_cache_log"),
+			"Non-Functional Field for CTE Client",
+			"max_num_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead.",
+		)
+	}
+	if !maxSpaceCacheLog.IsNull() && !maxSpaceCacheLog.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_space_cache_log"),
+			"Non-Functional Field for CTE Client",
+			"max_space_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead.",
+		)
+	}
+}
+
 func (r *resourceCTEClient) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	validateCTEUClientConfig(ctx, req, resp)
+	validateNonFunctionalCacheLogFields(ctx, req, resp)
 }
 
 func setCTEClientState(
@@ -620,9 +667,14 @@ func setCTEClientState(
 	} else {
 		state.Description = types.StringNull()
 	}
-	if state.Name.IsNull() || state.Name.ValueString() == "" {
-		state.Name = types.StringValue(apiResp.Name)
-	}
+	// TFIN-465: name must be refreshed from the live API response on every
+	// Read() (including `terraform apply -refresh-only`), not just the very
+	// first read when state happens to be null/empty. name now carries
+	// modifiers.ImmutableString() on its schema attribute (TFIN-461), so a
+	// refreshed value that no longer matches config surfaces as an explicit
+	// "Attribute is immutable" error at plan time instead of a silent,
+	// unresolvable diff.
+	state.Name = types.StringValue(apiResp.Name)
 	state.ClientLocked = types.BoolValue(apiResp.ClientLocked)
 	state.ClientType = types.StringValue(apiResp.ClientType)
 	state.CommunicationEnabled = types.BoolValue(apiResp.CommunicationEnabled)
@@ -635,12 +687,26 @@ func setCTEClientState(
 	state.EnabledCapabilities = types.StringValue(apiResp.EnabledCapabilities)
 	state.ProfileID = types.StringValue(apiResp.ProfileID)
 	state.ProfileName = types.StringValue(apiResp.ProfileName)
-	//state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
+
+	// protection_mode is refreshed from the live response only when state already
+	// holds a value, i.e. the configuration actually asked for a protection mode.
+	// CipherTrust Manager reports protection_mode = "CTE" for every client that has
+	// never had its protection mode changed, so populating it unconditionally would
+	// put a value in state for configurations that never set this Optional (not
+	// Computed) attribute and produce a plan diff that can never be resolved. The
+	// non-empty check on the response guards against a client whose payload omits
+	// the field, which would otherwise blank out a configured value.
+	if !state.ProtectionMode.IsNull() && state.ProtectionMode.ValueString() != "" &&
+		apiResp.ProtectionMode != "" {
+		state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
+	}
 
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
-	if apiResp.Labels != nil {
+	// Normalize an absent/nil or empty {} labels response to null so the
+	// resource can converge once labels have ever been set (TFIN-463).
+	if len(apiResp.Labels) > 0 {
 		labelsMap := map[string]attr.Value{}
 		for k, v := range apiResp.Labels {
 			if strVal, ok := v.(string); ok {
@@ -653,13 +719,15 @@ func setCTEClientState(
 			return
 		}
 		state.Labels = labels
+	} else {
+		state.Labels = types.MapNull(types.StringType)
 	}
 
 }
 
 func (r *resourceCTEClient) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_client.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_client.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

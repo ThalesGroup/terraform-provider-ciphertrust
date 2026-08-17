@@ -253,6 +253,8 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
+	// Initialize to a non-nil empty slice so zero-match filters return [] not null (TFIN-556).
+	state.Scheduler = []JobConfigParamsTFSDK{}
 	for _, jobs := range schedulerJobConfigs {
 		schedulerJobs := JobConfigParamsTFSDK{
 			CreateJobConfigParamsTFSDKCommon: CreateJobConfigParamsTFSDKCommon{

@@ -15,10 +15,87 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// awsKeyFiltersTable documents the supported query parameters for the filters map.
+// All values are supplied as strings in the Terraform filters map regardless of the
+// underlying API type shown below.
+const awsKeyFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter                   | type    | description |\n" +
+	"|--------------------------|---------|-------------|\n" +
+	"| skip                     | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit                    | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort                     | string  | Fields to sort by. Valid sort fields are `connection`, `cloud_name`, `origin`, `enabled`, `region`, `key_id`, `alias`, `updatedAt`, `createdAt`, `CreationDate`, `multi_region_key_type`, `blocked`, `CustomKeyStoreID`, and `ValidTo`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| keyid                    | string  | Filter by AWS key ID. |\n" +
+	"| arn                      | string  | Filter by AWS key ARN. |\n" +
+	"| alias                    | string  | Filter by AWS key alias. |\n" +
+	"| kms                      | string  | Filter by KMS name. |\n" +
+	"| kms_id                   | string  | Filter by KMS ID. |\n" +
+	"| region                   | string  | Filter by AWS region. |\n" +
+	"| cloud_name               | string  | Filter by cloud name. |\n" +
+	"| origin                   | string  | Filter by AWS key origin. |\n" +
+	"| job_config_id            | string  | Filter by scheduler job configuration ID. |\n" +
+	"| cckm_policy_template_id  | string  | Filter by CCKM policy template ID. |\n" +
+	"| enabled                  | boolean | Filter by whether the key is enabled (`true` or `false`). |\n" +
+	"| gone                     | boolean | Filter by whether the key is marked as gone (`true` or `false`). |\n" +
+	"| tags                     | string  | JSON value. Filters keys whose `tags` attribute contains the specified value. |\n" +
+	"| keystate                 | string  | Filter by AWS key state. |\n" +
+	"| keyusage                 | string  | Filter by AWS key usage. |\n" +
+	"| keymanager               | string  | Filter by AWS key manager. |\n" +
+	"| rotation_job_enabled     | boolean | Filter by whether the rotation job is enabled (`true` or `false`). |\n" +
+	"| CustomerMasterKeySpec    | string  | Filter by AWS KMS CustomerMasterKeySpec. |\n" +
+	"| key_material_origin      | string  | Filter by key material origin. |\n" +
+	"| key_source               | string  | Filter by key source. |\n" +
+	"| multi_region             | boolean | Filter by whether the key is multi-region (`true` or `false`). |\n" +
+	"| multi_region_key_type    | string  | Filter by multi-region key type. |\n" +
+	"| blocked                  | boolean | Filter by whether the key is blocked (`true` or `false`) (AWS HYOK keys only). |\n" +
+	"| custom_key_store_id      | string  | Filter by custom key store ID (AWS HYOK keys only). |\n" +
+	"| custom_key_store_name    | string  | Filter by custom key store name (AWS HYOK keys only). |"
+
 var (
-	_ datasource.DataSource              = &dataSourceAWSKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKey{}
+	_ datasource.DataSource                     = &dataSourceAWSKey{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSKey{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSKey{}
+
+	awsKeyValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "keyid": {}, "arn": {},
+		"alias": {}, "kms": {}, "kms_id": {}, "region": {}, "cloud_name": {},
+		"origin": {}, "job_config_id": {}, "cckm_policy_template_id": {},
+		"enabled": {}, "gone": {}, "tags": {}, "keystate": {}, "keyusage": {},
+		"keymanager": {}, "rotation_job_enabled": {}, "CustomerMasterKeySpec": {},
+		"key_material_origin": {}, "key_source": {}, "multi_region": {},
+		"multi_region_key_type": {}, "blocked": {}, "custom_key_store_id": {},
+		"custom_key_store_name": {}, "id": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSKey) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsKeyFilterValidator{}}
+}
+
+type awsKeyFilterValidator struct{}
+
+func (v awsKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSKeyListDataSourceTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_keys_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSKeys() datasource.DataSource {
 	return &dataSourceAWSKey{}
@@ -50,14 +127,14 @@ func (d *dataSourceAWSKey) Metadata(_ context.Context, req datasource.MetadataRe
 func (d *dataSourceAWSKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of AWS keys. " +
-			"Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters " +
-			"for listing AWS keys (e.g. region, alias, keyid). " +
-			"Use 'limit=-1' to return more than 10 matches.",
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS keys (such as `region`, `alias`, or `keyid`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A map of key:value pairs matching CipherTrust Manager API query parameters for listing AWS keys.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS keys." + awsKeyFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
@@ -182,6 +259,7 @@ func setCommonKeyDataSourceState(ctx context.Context, client *common.Client, res
 	state.KeyID = types.StringValue(gjson.Get(response, "id").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
+	state.Gone = types.BoolValue(gjson.Get(response, "gone").Bool())
 	state.ExternalAccounts = utils.StringSliceJSONToSetValue(gjson.Get(response, "external_accounts").Array(), diags)
 	state.KeyAdmins = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_admins").Array(), diags)
 	state.KeyAdminsRoles = utils.StringSliceJSONToSetValue(gjson.Get(response, "key_admins_roles").Array(), diags)

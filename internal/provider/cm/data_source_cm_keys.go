@@ -10,8 +10,11 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
@@ -27,7 +30,7 @@ const keysListPageSize = 10
 // key across all pages. userFilters are merged with the pagination params on
 // every request so caller-supplied filters (e.g. name=foo) are preserved.
 func fetchAllKeys(ctx context.Context, client *common.Client, uuid string, userFilters url.Values) ([]map[string]any, error) {
-	var allKeys []map[string]any
+	allKeys := []map[string]any{} // non-nil so zero-match returns [] not null
 	skip := 0
 	for {
 		filters := url.Values{}
@@ -86,12 +89,31 @@ func (d *dataSourceKeys) Metadata(_ context.Context, req datasource.MetadataRequ
 
 func (d *dataSourceKeys) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). Retrieves every key matching the given filters, paginating internally in pages of 10 (CM's default page size) until a short page is returned, so all matching keys are returned regardless of count.",
+		Description: "Lists cryptographic keys from CipherTrust Manager's core vault key-management API (`/v1/vault/keys2`). " +
+			"When neither \"skip\" nor \"limit\" is set, the data source paginates automatically (pages of 10) and returns every matching key. " +
+			"When either \"skip\" or \"limit\" is set, a single page is returned exactly as CM responds — useful for sampling or offset-based access.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "Optional filters passed as query parameters to the CM keys list API, e.g. \"name\", \"algorithm\", \"id\", \"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"version\", or \"state\". The '?' and '*' wildcard characters may be used in \"name\". Note: \"skip\" and \"limit\" cannot be set here — the data source always paginates internally starting at skip=0 in pages of 10 to retrieve the full result set.",
+				Description: "Optional filters passed as query parameters to the CM keys list API. " +
+					"Supported keys: \"name\" (supports '?' and '*' wildcards), \"algorithm\", \"id\", " +
+					"\"uuid\", \"muid\", \"keyId\", \"size\", \"curveid\", \"parameterSet\", \"version\", " +
+					"\"uri\", \"state\", \"fields\", \"metaContains\", \"objectType\", \"skip\", \"limit\". " +
+					"If \"skip\" or \"limit\" is set, only a single page is fetched as specified. " +
+					"Otherwise the data source paginates internally (skip=0, pages of 10) and returns the complete result set.",
+				Validators: []validator.Map{
+					mapvalidator.KeysAre(stringvalidator.OneOf(
+						"name", "algorithm", "id", "uuid", "muid", "keyId",
+						"size", "curveid", "parameterSet", "version",
+						"uri", "state", "fields", "metaContains", "objectType",
+						"compareIDWithUUID", "sha1Fingerprint", "sha256Fingerprint",
+						"sha384Fingerprint", "createdBefore", "createdAfter",
+						"alias", "linkType", "usageMask", "labels",
+						"keyCheckValue", "cteKeyHash",
+						"skip", "limit",
+					)),
+				},
 			},
 			"keys": schema.ListNestedAttribute{
 				Computed:    true,
@@ -213,16 +235,39 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		userFilters.Set(k, v.(types.String).ValueString())
 	}
 
-	data, err := fetchAllKeys(ctx, d.client, id, userFilters)
-	if err != nil {
-		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Unable to read keys from CM",
-			err.Error(),
-		)
-		return
+	// Branch on skip/limit: single-page when the caller controls pagination,
+	// auto-paginate when they don't (mirrors cm_groups_list behaviour).
+	var data []map[string]any
+	if userFilters.Get("skip") != "" || userFilters.Get("limit") != "" {
+		body, err := d.client.ListWithFilters(ctx, id, common.URL_KEY_MANAGEMENT, userFilters)
+		if err != nil {
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read single-page][" + id + "]")
+			resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+			return
+		}
+		raw := gjson.Get(body, "resources").Raw
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+				return
+			}
+		}
+		if data == nil {
+			data = []map[string]any{}
+		}
+	} else {
+		var err error
+		data, err = fetchAllKeys(ctx, d.client, id, userFilters)
+		if err != nil {
+			d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cm_keys.go -> Read][" + id + "]")
+			resp.Diagnostics.AddError("Unable to read keys from CM", err.Error())
+			return
+		}
 	}
 
+	// Initialize to a non-nil empty slice so a zero-match result serializes as []
+	// rather than null, keeping length() and for_each usable on the output.
+	state.Keys = []CMKeysListTFSDK{}
 	for _, key := range data {
 		keyState := CMKeysListTFSDK{}
 		if key["id"] != nil {

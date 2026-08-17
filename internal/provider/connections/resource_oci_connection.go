@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -70,9 +71,17 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				Computed:    true,
 				Description: "Date and time the connection was created.",
 			},
+			// description: Optional+Computed with UseStateWhenClearingString so that removing
+			// the attribute from config preserves the prior value in state (TFIN-569). CM does not
+			// support clearing description via PATCH, so the plan modifier correctly prevents the
+			// plan=null / state="old text" mismatch that would crash the post-apply consistency check.
 			"description": schema.StringAttribute{
-				Optional:    true,
-				Description: "Description about the connection. Once set, 'description' can be changed but not removed.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
+				Description: "Description about the connection. Once set, this field cannot be cleared back to empty — CM does not support clearing it via PATCH. Removing this attribute from config preserves the existing value.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -98,9 +107,18 @@ func (r *resourceCCKMOCIConnection) Schema(_ context.Context, _ resource.SchemaR
 				WriteOnly:   true,
 				Description: "Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.",
 			},
+			// meta: Optional+Computed with UseStateWhenClearingMap so that removing the attribute
+			// from config preserves the prior value in state (TFIN-569). CM's merge-PATCH semantics
+			// mean omitting the field leaves it unchanged; the modifier prevents the plan=null /
+			// state={...} mismatch that would crash the post-apply consistency check.
 			"meta": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.Map{
+					mapplanmodifier.UseStateForUnknown(),
+					modifiers.UseStateWhenClearingMap(),
+				},
 				Description: "Optional end-user or service data stored with the connection.",
 			},
 			"name": schema.StringAttribute{
@@ -312,13 +330,9 @@ func (r *resourceCCKMOCIConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_OCI_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"OCI Connection Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed OCI connection %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "OCI Connection"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "OCI Connection", state.ID.ValueString()),
 			)
 			return
 		}
@@ -532,6 +546,13 @@ func (r *resourceCCKMOCIConnection) Delete(ctx context.Context, req resource.Del
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_OCI_CONNECTION, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "status: 404") {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "OCI Connection", state.ID.ValueString()),
+			)
+			return
+		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Delete][" + id + "][" + output + "]")
 		resp.Diagnostics.AddError(
 			"Error Deleting CipherTrust OCI Connection",
@@ -582,10 +603,15 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	// Connection identity fields returned by CM on every read.
 	data.Name = types.StringValue(gjson.Get(response, "name").String())
 	// description: hydrate unconditionally so drift is detected. Clear to null when absent
-	// or empty-string so stale state is not preserved after a CM-side removal.
+	// or empty-string so stale state is not preserved after a CM-side removal — UNLESS the
+	// value already on hand is itself a deliberately-empty string (e.g. description = "" from
+	// config on Create/Update). CM has no wire representation for "explicitly empty" versus
+	// "unset", so without this guard a plan of description = "" would be overwritten with null
+	// here and Terraform's post-apply consistency check would crash (.description: was
+	// cty.StringVal(""), but now null).
 	if desc := gjson.Get(response, "description"); desc.Exists() && desc.String() != "" {
 		data.Description = types.StringValue(desc.String())
-	} else {
+	} else if data.Description.IsNull() || data.Description.IsUnknown() || data.Description.ValueString() != "" {
 		data.Description = types.StringNull()
 	}
 	data.Fingerprint = types.StringValue(gjson.Get(response, "fingerprint").String())
@@ -593,9 +619,14 @@ func (r *resourceCCKMOCIConnection) getOciParamsFromResponse(ctx context.Context
 	data.TenancyOcid = types.StringValue(gjson.Get(response, "tenancy_ocid").String())
 	data.UserOcid = types.StringValue(gjson.Get(response, "user_ocid").String())
 	// meta: always assign a typed value to avoid DynamicPseudoType zero-value conversion error.
+	// Same explicitly-empty-vs-unset reasoning as description above: a plan of meta = {} is a
+	// known, non-null empty map, and CM omits/nulls the field on the wire when it has nothing
+	// to return — collapsing that straight to null here would contradict the plan and crash
+	// Terraform's post-apply consistency check (.meta: was cty.MapValEmpty(cty.String), but now
+	// null). Preserve the value already on hand when it is itself a deliberately-empty map.
 	if len(gjson.Get(response, "meta").String()) > 0 {
 		data.Meta = common.ParseMap(response, diags, "meta")
-	} else {
+	} else if data.Meta.IsNull() || data.Meta.IsUnknown() || len(data.Meta.Elements()) != 0 {
 		data.Meta = types.MapNull(types.StringType)
 	}
 	if len(gjson.Get(response, "products").String()) > 0 {

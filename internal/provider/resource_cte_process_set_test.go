@@ -112,6 +112,111 @@ func TestCTEProcessSetResource_nameRequiresReplace(t *testing.T) {
 	})
 }
 
+// TestCTEProcessSetResource_processesClearing verifies that removing processes
+// from config actually clears them in CM and does not create a permanent plan
+// loop (TFIN-498).
+func TestCTEProcessSetResource_processesClearing(t *testing.T) {
+	name := "tf-procset-clear-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with a process entry
+			{
+				Config: cteProcessSetConfig(name, "Created via TF", false),
+				Check: checkStep(t, "process_set processes: create with processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "1"),
+				),
+			},
+			// Remove processes from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				Check: checkStep(t, "process_set processes: remove processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "0"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-498)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEProcessSetResource_labels verifies that the top-level labels
+// attribute actually reaches CM: setting it, changing it, and clearing it
+// each produce the expected state and no permanent plan loop (TFIN-598).
+func TestCTEProcessSetResource_labels(t *testing.T) {
+	name := "tf-procset-labels-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
+
+	withLabel := func(name, value string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+  labels = {
+    env = %q
+  }
+}
+`, name, value)
+	}
+	withoutLabels := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with labels set
+			{
+				Config: withLabel(name, "test"),
+				Check: checkStep(t, "process_set labels: create",
+					resource.TestCheckResourceAttr(rn, "labels.env", "test"),
+				),
+			},
+			// Plan again should show no changes
+			{
+				Config:             withLabel(name, "test"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Change labels value
+			{
+				Config: withLabel(name, "changed"),
+				Check: checkStep(t, "process_set labels: update",
+					resource.TestCheckResourceAttr(rn, "labels.env", "changed"),
+				),
+			},
+			// Remove labels from config entirely
+			{
+				Config: withoutLabels,
+				Check: checkStep(t, "process_set labels: clear",
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
+				),
+			},
+			// Plan again should show no changes (no clear-loop)
+			{
+				Config:             withoutLabels,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEProcessSetResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
 func TestCTEProcessSetResource_drift(t *testing.T) {

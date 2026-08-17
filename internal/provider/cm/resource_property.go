@@ -184,9 +184,9 @@ func (r *resourceCMProperty) Read(ctx context.Context, req resource.ReadRequest,
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			r.client.Log.Debug(common.ERR_METHOD_END + "property not found (404) [resource_property.go -> Read][" + id + "]")
-			resp.Diagnostics.AddWarning(
-				"Property Not Found — State Preserved",
-				"The Property resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Property"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Property", state.Name.ValueString()),
 			)
 			return
 		}
@@ -323,8 +323,10 @@ func (r *resourceCMProperty) Delete(ctx context.Context, req resource.DeleteRequ
 	r.client.Log.Debug("[resource_property.go -> Delete -> Response][" + response + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Property was already reset or does not exist as a customisable
-			// property on this CM version — treat as success.
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Property", state.Name.ValueString()),
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_property.go -> Delete][" + state.Name.ValueString() + "]")

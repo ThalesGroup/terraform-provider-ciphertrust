@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -30,7 +32,6 @@ var (
 	_ resource.Resource                = &resourceCCKMOCIByokVersion{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMOCIByokVersion{}
 	_ resource.ResourceWithImportState = &resourceCCKMOCIByokVersion{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMOCIByokVersion{}
 )
 
 func NewResourceCCKMOCIByokVersion() resource.Resource {
@@ -70,7 +71,14 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 			},
 			"cckm_key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager Key ID.",
+				Description: "(Immutable) CipherTrust Manager Key ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -78,7 +86,7 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -139,7 +147,7 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 					},
 					"version_id": schema.StringAttribute{
 						Computed:    true,
-						Description: "OCI version ID",
+						Description: "OCI version ID.",
 					},
 				},
 			},
@@ -150,7 +158,7 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the OCI BYOK key version " +
+				Description: "Number of days to wait before permanently deleting the OCI BYOK key version " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -159,18 +167,26 @@ func (r *resourceCCKMOCIByokVersion) Schema(_ context.Context, _ resource.Schema
 			},
 			"source_key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "ID of the key that will be uploaded from a key source to OCI.",
+				Description: "(Immutable) ID of the key that will be uploaded from a key source to OCI.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"source_key_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the key that will be uploaded from the key source to OCI.",
 			},
 			"source_key_tier": schema.StringAttribute{
-				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString("local"),
-				Description: "Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
-				Validators:  []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				Optional:      true,
+				Computed:      true,
+				Default:       stringdefault.StaticString("local"),
+				Description:   "(Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.",
+				Validators:    []validator.String{stringvalidator.OneOf([]string{"local"}...)},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
@@ -261,8 +277,8 @@ func (r *resourceCCKMOCIByokVersion) Create(ctx context.Context, req resource.Cr
 }
 
 // Read refreshes the OCI BYOK key version state from CipherTrust Manager.
-// Returns a warning and removes the resource from state if the version is not found (404)
-// or if the version is scheduled for deletion.
+// Returns an error if the version is in SCHEDULING_DELETION or PENDING_DELETION state.
+// Removes the resource from state only if the version is not found (404).
 func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_oci_byok_key_version.go -> Read][" + id + "]")
@@ -284,8 +300,9 @@ func (r *resourceCCKMOCIByokVersion) Read(ctx context.Context, req resource.Read
 	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "BYOK key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setBYOOKKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -327,8 +344,9 @@ func (r *resourceCCKMOCIByokVersion) Update(ctx context.Context, req resource.Up
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "BYOK key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 
 	var plan models.BYOKKeyVersionTFSDK
@@ -362,50 +380,6 @@ func (r *resourceCCKMOCIByokVersion) Delete(ctx context.Context, req resource.De
 	versionID := state.ID.ValueString()
 	days := state.ScheduleForDeletionDays.ValueInt64()
 	deleteKeyVersion(ctx, id, r.client, keyID, versionID, days, &resp.Diagnostics)
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceCCKMOCIByokVersion) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state models.BYOKKeyVersionTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.CCKMKeyID != state.CCKMKeyID {
-		changed = append(changed, "cckm_key_id")
-	}
-
-	if plan.SourceKeyID != state.SourceKeyID {
-		changed = append(changed, "source_key_id")
-	}
-
-	// source_key_tier is Optional+Computed; skip when the plan value is not yet known.
-	if !plan.SourceKeyTier.IsUnknown() && plan.SourceKeyTier != state.SourceKeyTier {
-		changed = append(changed, "source_key_tier")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports an OCI BYOK key version using the composite ID format: cckm_key_id.version_id.

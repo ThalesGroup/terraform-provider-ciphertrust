@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -561,7 +560,7 @@ func (r *resourceCTEProfile) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_profile.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_profile.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEProfileTFSDK
@@ -574,12 +573,12 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	// Add Name to the payload
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	// Set cache_settings in the request
 	var cacheSettings CTEProfileCacheSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileCacheSettingsTFSDK)(nil), plan.CacheSettings) {
-		tflog.Debug(ctx, "Cache should not be empty at this point")
+		r.client.Log.Debug("Cache should not be empty at this point")
 		if plan.CacheSettings.MaxFiles.ValueInt64() != types.Int64Null().ValueInt64() {
 			cacheSettings.MaxFiles = plan.CacheSettings.MaxFiles.ValueInt64()
 		}
@@ -595,14 +594,14 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	if !plan.Description.IsNull() {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
 	var duplicateSettings CTEProfileDuplicateSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileDuplicateSettingsTFSDK)(nil), plan.DuplicateSettings) {
-		tflog.Debug(ctx, "Duplicate settings should not be empty at this point")
+		r.client.Log.Debug("Duplicate settings should not be empty at this point")
 		if plan.DuplicateSettings.SuppressInterval.ValueInt64() != types.Int64Null().ValueInt64() {
 			duplicateSettings.SuppressInterval = plan.DuplicateSettings.SuppressInterval.ValueInt64()
 		}
@@ -615,12 +614,12 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	// Set file_settings in the request
 	var fileSettings CTEProfileFileSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileFileSettingsTFSDK)(nil), plan.FileSettings) {
-		tflog.Debug(ctx, "File settings should not be empty at this point")
+		r.client.Log.Debug("File settings should not be empty at this point")
 		if plan.FileSettings.AllowPurge.ValueBool() != types.BoolNull().ValueBool() {
 			fileSettings.AllowPurge = plan.FileSettings.AllowPurge.ValueBool()
 		}
 		if plan.FileSettings.FileThreshold.ValueString() != "" && plan.FileSettings.FileThreshold.ValueString() != types.StringNull().ValueString() {
-			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.String())
+			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.ValueString())
 		}
 		if plan.FileSettings.MaxFileSize.ValueInt64() != types.Int64Null().ValueInt64() {
 			fileSettings.MaxFileSize = plan.FileSettings.MaxFileSize.ValueInt64()
@@ -659,12 +658,12 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	// Set client_logger_configs in the request
 	var managementServiceLogger, policyEvaluationLogger, securityAdminLogger, systemAdminLogger CTEProfileManagementServiceLoggerJSON
 	if !reflect.DeepEqual((*CTEProfileManagementServiceLoggerTFSDK)(nil), plan.Client_Logging_Config) {
-		tflog.Debug(ctx, "Loggers should not be empty at this point")
+		r.client.Log.Debug("Loggers should not be empty at this point")
 		if plan.Client_Logging_Config.Duplicates.ValueString() != "" && plan.Client_Logging_Config.Duplicates.ValueString() != types.StringNull().ValueString() {
-			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
+			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
 		}
 		if plan.Client_Logging_Config.FileEnabled.ValueBool() != types.BoolNull().ValueBool() {
 			managementServiceLogger.FileEnabled = plan.Client_Logging_Config.FileEnabled.ValueBool()
@@ -681,9 +680,9 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 		}
 		if plan.Client_Logging_Config.Threshold.ValueString() != "" && plan.Client_Logging_Config.Threshold.ValueString() != types.StringNull().ValueString() {
 			managementServiceLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 			securityAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 
 		}
 		if plan.Client_Logging_Config.UploadEnabled.ValueBool() != types.BoolNull().ValueBool() {
@@ -764,12 +763,12 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	// Set syslog_settings in the request
 	var syslogSettings CTEProfileSyslogSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileSyslogSettingsTFSDK)(nil), plan.SyslogSettings) {
-		tflog.Debug(ctx, "Syslog settings should not be empty at this point")
+		r.client.Log.Debug("Syslog settings should not be empty at this point")
 		if plan.SyslogSettings.Local.ValueBool() != types.BoolNull().ValueBool() {
 			syslogSettings.Local = plan.SyslogSettings.Local.ValueBool()
 		}
 		if plan.SyslogSettings.Threshold.ValueString() != "" && plan.SyslogSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.String())
+			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.ValueString())
 		}
 		var servers []CTEProfileSyslogSettingServerJSON
 		for _, item := range plan.SyslogSettings.Servers {
@@ -804,7 +803,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	// Set upload_settings in the request
 	var uploadSettings CTEProfileUploadSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileUploadSettingsTFSDK)(nil), plan.UploadSettings) {
-		tflog.Debug(ctx, "Upload settings should not be empty at this point")
+		r.client.Log.Debug("Upload settings should not be empty at this point")
 		if plan.UploadSettings.ConnectionTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 			uploadSettings.ConnectionTimeout = plan.UploadSettings.ConnectionTimeout.ValueInt64()
 		}
@@ -824,14 +823,14 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			uploadSettings.MinInterval = plan.UploadSettings.MinInterval.ValueInt64()
 		}
 		if plan.UploadSettings.Threshold.ValueString() != "" && plan.UploadSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.String())
+			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.ValueString())
 		}
 		payload.UploadSettings = &uploadSettings
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_profile.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_profile.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Profile Creation",
 			err.Error(),
@@ -841,7 +840,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 
 	response, err := r.client.PostData(ctx, id, common.URL_CTE_PROFILE, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_profile.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_profile.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Profile on CipherTrust Manager: ",
 			"Could not create CTE Profile, unexpected error: "+err.Error(),
@@ -851,7 +850,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 
 	plan.ID = types.StringValue(response)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_profile.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -872,9 +871,7 @@ func (r *resourceCTEProfile) Read(ctx context.Context, req resource.ReadRequest,
 	}
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_PROFILE)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Profile ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -899,7 +896,7 @@ func (r *resourceCTEProfile) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_profile.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -926,7 +923,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 
 	var cacheSettings CTEProfileCacheSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileCacheSettingsTFSDK)(nil), plan.CacheSettings) {
-		tflog.Debug(ctx, "Cache should not be empty at this point")
+		r.client.Log.Debug("Cache should not be empty at this point")
 		if plan.CacheSettings.MaxFiles.ValueInt64() != types.Int64Null().ValueInt64() {
 			cacheSettings.MaxFiles = plan.CacheSettings.MaxFiles.ValueInt64()
 		}
@@ -942,14 +939,17 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	if plan.ConnectTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.ConnectTimeout = plan.ConnectTimeout.ValueInt64()
 	}
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.ValueString())
+	// Always include description in PATCH body to support clearing it (TFIN-500)
+	if plan.Description.IsNull() {
+		payload.Description = ""
+	} else {
+		payload.Description = plan.Description.ValueString()
 	}
 
 	// Set duplicate_settings in the request
 	var duplicateSettings CTEProfileDuplicateSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileDuplicateSettingsTFSDK)(nil), plan.DuplicateSettings) {
-		tflog.Debug(ctx, "Duplicate settings should not be empty at this point")
+		r.client.Log.Debug("Duplicate settings should not be empty at this point")
 		if plan.DuplicateSettings.SuppressInterval.ValueInt64() != types.Int64Null().ValueInt64() {
 			duplicateSettings.SuppressInterval = plan.DuplicateSettings.SuppressInterval.ValueInt64()
 		}
@@ -962,12 +962,12 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	// Set file_settings in the request
 	var fileSettings CTEProfileFileSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileFileSettingsTFSDK)(nil), plan.FileSettings) {
-		tflog.Debug(ctx, "Profile settings should not be empty at this point")
+		r.client.Log.Debug("Profile settings should not be empty at this point")
 		if plan.FileSettings.AllowPurge.ValueBool() != types.BoolNull().ValueBool() {
 			fileSettings.AllowPurge = plan.FileSettings.AllowPurge.ValueBool()
 		}
 		if plan.FileSettings.FileThreshold.ValueString() != "" && plan.FileSettings.FileThreshold.ValueString() != types.StringNull().ValueString() {
-			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.String())
+			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.ValueString())
 		}
 		if plan.FileSettings.MaxFileSize.ValueInt64() != types.Int64Null().ValueInt64() {
 			fileSettings.MaxFileSize = plan.FileSettings.MaxFileSize.ValueInt64()
@@ -999,12 +999,12 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	// Set client_logger_configs in the request
 	var managementServiceLogger, policyEvaluationLogger, securityAdminLogger, systemAdminLogger CTEProfileManagementServiceLoggerJSON
 	if !reflect.DeepEqual((*CTEProfileManagementServiceLoggerTFSDK)(nil), plan.Client_Logging_Config) {
-		tflog.Debug(ctx, "Loggers should not be empty at this point")
+		r.client.Log.Debug("Loggers should not be empty at this point")
 		if plan.Client_Logging_Config.Duplicates.ValueString() != "" && plan.Client_Logging_Config.Duplicates.ValueString() != types.StringNull().ValueString() {
-			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
+			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
 		}
 		if plan.Client_Logging_Config.FileEnabled.ValueBool() != types.BoolNull().ValueBool() {
 			managementServiceLogger.FileEnabled = plan.Client_Logging_Config.FileEnabled.ValueBool()
@@ -1021,9 +1021,9 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 		}
 		if plan.Client_Logging_Config.Threshold.ValueString() != "" && plan.Client_Logging_Config.Threshold.ValueString() != types.StringNull().ValueString() {
 			managementServiceLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 			securityAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 
 		}
 		if plan.Client_Logging_Config.UploadEnabled.ValueBool() != types.BoolNull().ValueBool() {
@@ -1104,12 +1104,12 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	// Set syslog_settings in the request
 	var syslogSettings CTEProfileSyslogSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileSyslogSettingsTFSDK)(nil), plan.SyslogSettings) {
-		tflog.Debug(ctx, "Syslog settings should not be empty at this point")
+		r.client.Log.Debug("Syslog settings should not be empty at this point")
 		if plan.SyslogSettings.Local.ValueBool() != types.BoolNull().ValueBool() {
 			syslogSettings.Local = plan.SyslogSettings.Local.ValueBool()
 		}
 		if plan.SyslogSettings.Threshold.ValueString() != "" && plan.SyslogSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.String())
+			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.ValueString())
 		}
 		var servers []CTEProfileSyslogSettingServerJSON
 		for _, item := range plan.SyslogSettings.Servers {
@@ -1144,7 +1144,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	// Set upload_settings in the request
 	var uploadSettings CTEProfileUploadSettingsJSON
 	if !reflect.DeepEqual((*CTEProfileUploadSettingsTFSDK)(nil), plan.UploadSettings) {
-		tflog.Debug(ctx, "upload settings should not be empty at this point")
+		r.client.Log.Debug("upload settings should not be empty at this point")
 		if plan.UploadSettings.ConnectionTimeout.ValueInt64() != types.Int64Null().ValueInt64() {
 			uploadSettings.ConnectionTimeout = plan.UploadSettings.ConnectionTimeout.ValueInt64()
 		}
@@ -1164,14 +1164,14 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			uploadSettings.MinInterval = plan.UploadSettings.MinInterval.ValueInt64()
 		}
 		if plan.UploadSettings.Threshold.ValueString() != "" && plan.UploadSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.String())
+			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.ValueString())
 		}
 		payload.UploadSettings = &uploadSettings
 	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_profile.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_profile.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Profile Update",
 			err.Error(),
@@ -1181,7 +1181,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 
 	response, err := r.client.UpdateData(ctx, plan.ID.ValueString(), common.URL_CTE_PROFILE, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_profile.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_profile.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Profile on CipherTrust Manager: ",
 			"Could not update CTE Profile, unexpected error: "+err.Error(),
@@ -1209,8 +1209,11 @@ func (r *resourceCTEProfile) Delete(ctx context.Context, req resource.DeleteRequ
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_PROFILE, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_profile.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Profile "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Profile",
 			"Could not delete CTE Profile, unexpected error: "+err.Error(),
@@ -1242,6 +1245,7 @@ func setProfileState(
 	apiResp *CTEProfilesListJSON,
 ) {
 	// Simple scalar fields
+	// Normalize empty description to null to prevent plan loops (TFIN-500, TFIN-501)
 	if apiResp.Description != "" {
 		state.Description = types.StringValue(apiResp.Description)
 	} else {
@@ -1442,7 +1446,7 @@ func setProfileState(
 
 func (r *resourceCTEProfile) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_profile.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_profile.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_profile.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_profile.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

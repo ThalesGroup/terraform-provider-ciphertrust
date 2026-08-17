@@ -1,6 +1,4 @@
-data "ciphertrust_get_oci_compartments" "connection_compartments" {
-  # Required parameters
-  connection_id = "oci-connection-id-or-name"
-  # Optional parameters
-  limit = 5
+# Retrieve OCI compartments available to a connection.
+data "ciphertrust_get_oci_compartments" "compartments" {
+  connection_id = "oci-prod-connection"
 }

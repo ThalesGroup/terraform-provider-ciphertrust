@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -63,11 +64,21 @@ func (r *resourceCMNTP) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"key": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Symmetric key value to be used for authenticated NTP servers. Changing or removing this value forces replacement of the NTP resource.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "Symmetric key value to be used for authenticated NTP servers. Write-only: never " +
+					"stored in Terraform state or plan artifacts (requires Terraform 1.11+). Since Terraform " +
+					"cannot detect a change in a write-only value on its own, bump `key_version` in the same " +
+					"apply to force replacement of the NTP resource with the new key.",
+			},
+			"key_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Arbitrary version number used to trigger replacement of the NTP resource with the " +
+					"current `key` value. Since `key` is write-only, Terraform cannot detect a change in its " +
+					"value on its own; increment this on every apply where you want the current `key` value sent.",
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.RequiresReplace(),
 				},
 			},
 			"key_type": schema.StringAttribute{
@@ -115,9 +126,20 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	// key is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.Key is always null here.
+	// req.Config is populated fresh from the HCL configuration on every RPC (not derived
+	// from the nullified plan), so it reliably carries the actual value.
+	var config CMNTPTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payload.Host = plan.Host.ValueString()
-	if plan.Key.ValueString() != "" && plan.Key.ValueString() != types.StringNull().ValueString() {
-		payload.Key = plan.Key.ValueString()
+	if config.Key.ValueString() != "" {
+		payload.Key = config.Key.ValueString()
 	}
 	if plan.KeyType.ValueString() != "" && plan.KeyType.ValueString() != types.StringNull().ValueString() {
 		payload.KeyType = plan.KeyType.ValueString()
@@ -155,16 +177,13 @@ func (r *resourceCMNTP) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.Host = types.StringValue(gjson.Get(response, "host").String())
 	// API does not return id, use host as the identifier
 	plan.ID = types.StringValue(plan.Host.ValueString())
-	// key and key_type are only returned by API if user provided them.
-	// If the user's plan had them as null, do NOT set them in state, to prevent inconsistent plan errors.
-	if !plan.Key.IsNull() && !plan.Key.IsUnknown() {
-		if keyVal := gjson.Get(response, "key"); keyVal.Exists() && keyVal.String() != "" {
-			plan.Key = types.StringValue(keyVal.String())
-		}
-	} else {
-		plan.Key = types.StringNull()
-	}
 
+	// key is write-only — the framework nulls it from outgoing state/plan artifacts
+	// automatically, but null it explicitly too for clarity.
+	plan.Key = types.StringNull()
+
+	// key_type is only returned by API if the user provided it.
+	// If the user's plan had it as null, do NOT set it in state, to prevent inconsistent plan errors.
 	if !plan.KeyType.IsNull() && !plan.KeyType.IsUnknown() {
 		if keyTypeVal := gjson.Get(response, "key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 			plan.KeyType = types.StringValue(keyTypeVal.String())
@@ -230,9 +249,9 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	})
 
 	if !entry.Exists() {
-		resp.Diagnostics.AddWarning(
-			"NTP Server Not Found — State Preserved",
-			"The NTP server '"+targetHost+"' was not found in the CipherTrust Manager NTP server list. To prevent accidental data loss, this resource has been kept in state.",
+		resp.Diagnostics.AddError(
+			fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "NTP Server"),
+			fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "NTP Server", targetHost),
 		)
 		return
 	}
@@ -241,17 +260,11 @@ func (r *resourceCMNTP) Read(ctx context.Context, req resource.ReadRequest, resp
 	// API does not return id, use host as the identifier
 	state.ID = types.StringValue(state.Host.ValueString())
 
-	// key and key_type are only returned by API if user provided them.
-	// If the user did not configure them (null/unknown), keep them as null.
-	// If they are configured, and API returns empty (write-only), preserve the prior state value.
-	if !state.Key.IsNull() && !state.Key.IsUnknown() {
-		if keyVal := entry.Get("key"); keyVal.Exists() && keyVal.String() != "" {
-			state.Key = types.StringValue(keyVal.String())
-		}
-	} else {
-		state.Key = types.StringNull()
-	}
+	// key is write-only — never stored in state, so there is nothing to hydrate or
+	// preserve here. state.Key is always null.
 
+	// key_type is only returned by API if the user provided it.
+	// If the user did not configure it (null/unknown), keep it as null.
 	if !state.KeyType.IsNull() && !state.KeyType.IsUnknown() {
 		if keyTypeVal := entry.Get("key_type"); keyTypeVal.Exists() && keyTypeVal.String() != "" {
 			state.KeyType = types.StringValue(keyTypeVal.String())
@@ -305,6 +318,10 @@ func (r *resourceCMNTP) Delete(ctx context.Context, req resource.DeleteRequest, 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_ntp.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "NTP Server", state.Host.ValueString()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

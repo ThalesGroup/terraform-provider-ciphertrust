@@ -109,10 +109,8 @@ func TestCckmOCIVault(t *testing.T) {
 		}
 		data "ciphertrust_get_oci_compartments" "compartments" {
 			connection_id = ciphertrust_oci_connection.connection.id
-			limit = 1
 		}
 		data "ciphertrust_get_oci_vaults" "vaults" {
-			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
 			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
@@ -139,10 +137,8 @@ func TestCckmOCIVault(t *testing.T) {
 		}
 		data "ciphertrust_get_oci_compartments" "compartments" {
 			connection_id = ciphertrust_oci_connection.connection.id
-			limit = 1
 		}
 		data "ciphertrust_get_oci_vaults" "vaults" {
-			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.name
 			compartment_id = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
 			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
@@ -255,12 +251,64 @@ func TestCckmOCIVault(t *testing.T) {
 			{
 				Config:      modifyVaultConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				ResourceName:      vaultResource,
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestCckmOCIVaultCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// connection_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = ""
+						region        = "us-ashburn-1"
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// connection_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = "   "
+						region        = "us-ashburn-1"
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// region empty string
+			{
+				Config: `
+				resource "ciphertrust_oci_vault" "test" {
+					connection_id = "valid-connection-id"
+					region        = ""
+					vault_id      = "ocid1.vault.fake"
+				}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// region whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_vault" "test" {
+						connection_id = "valid-connection-id"
+						region        = "   "
+						vault_id      = "ocid1.vault.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

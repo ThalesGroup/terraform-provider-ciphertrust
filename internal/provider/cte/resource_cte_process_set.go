@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -136,7 +135,7 @@ func (r *resourceCTEProcessSet) Schema(_ context.Context, _ resource.SchemaReque
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_process_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_process_set.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEProcessSetTFSDK
@@ -148,9 +147,9 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	var processes []CTEProcessJSON
 	for _, process := range plan.Processes {
@@ -178,9 +177,15 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 	}
 	payload.Processes = processes
 
+	labelsPayload := make(map[string]interface{})
+	for k, v := range plan.Labels.Elements() {
+		labelsPayload[k] = v.(types.String).ValueString()
+	}
+	payload.Labels = labelsPayload
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Process Set Creation",
 			err.Error(),
@@ -190,7 +195,7 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_PROCESS_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Process Set on CipherTrust Manager: ",
 			"Could not create CTE Process Set, unexpected error: "+err.Error(),
@@ -204,7 +209,7 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	plan.Application = types.StringValue(gjson.Get(response, "application").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_process_set.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -217,11 +222,8 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 	var state CTEProcessSetTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_process_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_process_set.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -229,9 +231,7 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_PROCESS_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Process Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResp CTEProcessSetJSON
@@ -264,11 +264,8 @@ func (r *resourceCTEProcessSet) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_process_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_process_set.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -294,9 +291,14 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
-	var processes []CTEProcessJSON
+	// Initialize as an empty (non-nil) slice so that when plan.Processes is
+	// empty, the PATCH body explicitly sends "processes": [] rather than
+	// omitting/nulling the field. CM's PATCH semantics leave a field
+	// unchanged when it is absent or null, so an explicit empty array is
+	// required to actually clear previously-set processes (TFIN-498).
+	processes := []CTEProcessJSON{}
 	for _, process := range plan.Processes {
 		var processJSON CTEProcessJSON
 		if process.Directory.ValueString() != "" && process.Directory.ValueString() != types.StringNull().ValueString() {
@@ -315,9 +317,20 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	}
 	payload.Processes = processes
 
+	// Handle labels: send nil when empty to clear labels in CM (TFIN-598)
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Process Set Update",
 			err.Error(),
@@ -327,7 +340,7 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_PROCESS_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_process_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_process_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Process Set on CipherTrust Manager: ",
 			"Could not create CTE Process Set, unexpected error: "+err.Error(),
@@ -358,8 +371,11 @@ func (r *resourceCTEProcessSet) Delete(ctx context.Context, req resource.DeleteR
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_PROCESS_SET, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_process_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_process_set.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Process Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Process Set",
 			"Could not delete CTE Process Set, unexpected error: "+err.Error(),
@@ -396,6 +412,24 @@ func setCTEProcessSetState(
 		state.Description = types.StringValue(apiResp.Description)
 	} else {
 		state.Description = types.StringNull()
+	}
+
+	// Labels (TFIN-598)
+	if apiResp.Labels != nil {
+		labelsMap := map[string]attr.Value{}
+		for k, v := range apiResp.Labels {
+			if strVal, ok := v.(string); ok {
+				labelsMap[k] = types.StringValue(strVal)
+			}
+		}
+		labelsValue, diags := types.MapValue(types.StringType, labelsMap)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Labels = labelsValue
+	} else {
+		state.Labels = types.MapNull(types.StringType)
 	}
 
 	var processes []CTEProcessTFSDK
@@ -443,7 +477,7 @@ func setCTEProcessSetState(
 
 func (r *resourceCTEProcessSet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_process_set.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_process_set.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_process_set.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_process_set.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

@@ -352,8 +352,7 @@ resource "ciphertrust_password_policy" "drift" {
 	})
 }
 
-// Test_CM_AccCMPasswordPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource
-// on 404 and plans recreation after OOB deletion.
+// Test_CM_AccCMPasswordPolicy_OutOfBandDeletion verifies that Read() returns AddError + preserves state on 404 (PR #476 behavior).
 func Test_CM_AccCMPasswordPolicy_OutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	var capturedName string
@@ -392,8 +391,8 @@ resource "ciphertrust_password_policy" "oob" {
   policy_name = "tf-test-pwpolicy-oob"
 }
 `,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -428,9 +427,8 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
 				),
 			},
 			{
-				// Delete the policy out-of-band; Read() should 404-guard and remove from state.
-				// PlanOnly: true confirms the plan shows a diff (resource needs recreation)
-				// without error, validating the 404 path in Read() is clean.
+				// Delete the policy out-of-band; Read() gets 404 → AddError + state preserved (PR #476).
+				// PlanOnly: true confirms the 404 error is raised, validating the Read() 404 path.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -444,8 +442,8 @@ resource "ciphertrust_password_policy" "oob_delete_test" {
     policy_name = %q
 }
 `, policyName),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -610,9 +608,9 @@ resource "ciphertrust_password_policy" "test" {
 }
 
 // Test_CM_PasswordPolicy_ZeroMinLengthNoRegression verifies that setting
-// inclusive_min_total_length = 0 does NOT produce a perpetual plan diff.
-// The UseStateWhenZeroInt64 plan modifier intercepts 0, substitutes the prior
-// state value (10), and the effective plan equals state — no diff.
+// inclusive_min_total_length = 0 on an existing resource is rejected at plan time
+// (TFIN-553: int64validator.AtLeast(1) added). Before the fix, UseStateWhenZeroInt64
+// would intercept 0 and produce an empty plan; now 0 is rejected outright.
 func Test_CM_PasswordPolicy_ZeroMinLengthNoRegression(t *testing.T) {
 	RequireCM(t)
 	policyName := "tf-test-pp-zmr-" + uuid.New().String()[:8]
@@ -641,27 +639,28 @@ resource "ciphertrust_password_policy" "test" {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: establish baseline with inclusive_min_total_length = 10.
 			{
+				// Step 1 (PlanOnly): verify 0 is rejected at plan time, even on a fresh resource.
+				// No resource is created — the plan fails before applying.
+				Config:      baseConfig(0),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+			{
+				// Step 2: create with a valid value. Post-test destroy uses the final step's
+				// config — must not contain 0 or the AtLeast(1) validator blocks destroy too.
 				Config: baseConfig(10),
-				Check: checkStep(t, "baseline min_length=10",
+				Check: checkStep(t, "create with valid min_length=10",
 					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_total_length", "10"),
 				),
-			},
-			// Step 2: plan-only with inclusive_min_total_length = 0.
-			// The UseStateWhenZeroInt64 modifier substitutes 0 with the prior state value (10),
-			// so the effective plan equals state and the plan must be empty.
-			{
-				Config:             baseConfig(0),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
 }
 
-// Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that planning inclusive_min_total_length = 0
-// triggers the custom plan modifier, preserving state value to prevent perpetual plan drift.
+// Test_CM_AccCMPasswordPolicy_ZeroSentinel verifies that inclusive_min_total_length = 0
+// is rejected at plan time by AtLeast(1) validator (TFIN-553). Previously UseStateWhenZeroInt64
+// silently intercepted 0; now 0 is rejected outright before any plan diff is produced.
 func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
 	RequireCM(t)
 	policyName := "TFTestPwdZero-" + uuid.New().String()[:8]
@@ -670,37 +669,20 @@ func Test_CM_AccCMPasswordPolicy_ZeroSentinel(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_password_policy" "zero_test" {
-  policy_name                = %q
-  inclusive_min_total_length = 10
-}
-`, policyName),
-				Check: checkStep(t, "zero-test: initial create",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
-				),
-			},
-			{
-				// Plan with inclusive_min_total_length = 0. The UseStateWhenZeroInt64 modifier
-				// substitutes 0 with the prior state value (10) so that field causes no diff.
-				// However Read() unconditionally hydrates Optional+Computed Int64 fields (e.g.
-				// inclusive_max_total_length) from the CM response even when prior state was null,
-				// producing a perpetual (known after apply) diff. ExpectNonEmptyPlan: true
-				// documents this known pre-existing behaviour for unset Optional Int64 fields.
+				// AtLeast(1) validator rejects 0 at plan time — no modifier intercept needed.
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_password_policy" "zero_test" {
   policy_name                = %q
   inclusive_min_total_length = 0
 }
 `, policyName),
-				ExpectNonEmptyPlan: true,
-				Check: checkStep(t, "zero-test: update to 0",
-					resource.TestCheckResourceAttr("ciphertrust_password_policy.zero_test", "inclusive_min_total_length", "10"),
-				),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
 			},
 		},
 	})
 }
+
 
 // Test_CM_PasswordPolicy_LockoutThresholdsLifecycle verifies the lifecycle of failed_logins_lockout_thresholds
 // across omitted, configured, and transitioned configurations as a Computed field.
@@ -754,4 +736,115 @@ resource "ciphertrust_password_policy" "lifecycle_test" {
 			},
 		},
 	})
+}
+
+// Test_CM_PasswordPolicy_ZeroMinTotalLengthRejectedAtPlan verifies that
+// inclusive_min_total_length = 0 is rejected at plan time (TFIN-553).
+// Before the fix, 0 would pass planning, CM would assign its default (8), and
+// Terraform would crash with "Provider produced inconsistent result after apply".
+func Test_CM_PasswordPolicy_ZeroMinTotalLengthRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+	name := "tf-ppol-zero-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_total_length = 0
+}`, name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_UseStateForUnknownOnUpdate verifies that unchanged
+// Optional+Computed fields do not show "(known after apply)" when an unrelated
+// field has a genuine pending change (TFIN-555 regression test).
+func Test_CM_PasswordPolicy_UseStateForUnknownOnUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tf-ppol-usfu-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create with two fields set.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_digits       = 1
+  inclusive_min_upper_case   = 1
+}`, name),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "1"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+				),
+			},
+			{
+				// Step 2: change one field; the other must NOT become "(known after apply)".
+				// With UseStateForUnknown(), stable fields keep their current state value.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  policy_name                = %q
+  inclusive_min_digits       = 2
+  inclusive_min_upper_case   = 1
+}`, name),
+				Check: checkStep(t, "update one field — sibling stays stable",
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_digits", "2"),
+					resource.TestCheckResourceAttr("ciphertrust_password_policy.test", "inclusive_min_upper_case", "1"),
+				),
+				// A clean subsequent plan confirms no drift from the UseStateForUnknown() modifiers.
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_PasswordPolicy_NegativeValueRejectedAtPlan verifies that every Int64
+// field that lacks a floor validator (TFIN-578) rejects negative values at plan
+// time with a clear "at least 0" diagnostic, preventing the "provider produced
+// inconsistent result after apply" crash that occurs when CM silently coerces
+// negative values to the prior server value.
+//
+// These are schema-validator tests: PlanOnly=true, no live CM call needed.
+func Test_CM_PasswordPolicy_NegativeValueRejectedAtPlan(t *testing.T) {
+	tests := []struct {
+		field string
+		hcl   string
+	}{
+		{"inclusive_min_digits", "inclusive_min_digits = -1"},
+		{"inclusive_min_lower_case", "inclusive_min_lower_case = -1"},
+		{"inclusive_min_upper_case", "inclusive_min_upper_case = -1"},
+		{"inclusive_min_other", "inclusive_min_other = -1"},
+		{"inclusive_max_total_length", "inclusive_max_total_length = -1"},
+		{"password_change_min_days", "password_change_min_days = -1"},
+		{"password_history_threshold", "password_history_threshold = -1"},
+		{"password_lifetime", "password_lifetime = -1"},
+		{"password_expiry_notification_days", "password_expiry_notification_days = -1"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.field, func(t *testing.T) {
+			resource.UnitTest(t, resource.TestCase{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Steps: []resource.TestStep{
+					{
+						Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_password_policy" "test" {
+  %s
+}
+`, tc.hcl),
+						PlanOnly:    true,
+						ExpectError: regexp.MustCompile(`(?i)at least 0`),
+					},
+				},
+			})
+		})
+	}
 }

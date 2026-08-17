@@ -791,9 +791,22 @@ type CTEClientGuardPointParamsJSON struct {
 	IsEarlyAccessEnabled           bool   `json:"early_access,omitempty"`
 	IsIntelligentProtectionEnabled bool   `json:"intelligent_protection,omitempty"`
 	IsDeviceIDTCapable             bool   `json:"is_idt_capable_device,omitempty"`
-	IsMFAEnabled                   bool   `json:"mfa_enabled,omitempty"`
-	NWShareCredentialsID           string `json:"network_share_credentials_id,omitempty"`
-	PreserveSparseRegions          bool   `json:"preserve_sparse_regions,omitempty"`
+	// PR review follow-up: buildParamsPayload() never copied guard_enabled into this
+	// struct at all, so a plan requesting guard_enabled = false was silently
+	// dropped before the request ever left the provider. Confirmed live
+	// against CM that even once this field IS sent on Create, CM ignores it
+	// at creation time and always comes up guard_enabled = true regardless
+	// (same create-time-inert behavior as mfa_enabled/early_access) -- so
+	// this field is populated here for correctness/completeness, but the
+	// actual fix requires a follow-up call to the dedicated
+	// .../guardpoints/enable(/) endpoint right after creation whenever the
+	// plan wants guard_enabled = false (see Create() and Update()'s Phase 1
+	// in both resource_cte_client_guardpoints.go and
+	// resource_cte_clientgroup_guardpoints.go).
+	IsGuardEnabled        bool   `json:"guard_enabled,omitempty"`
+	IsMFAEnabled          bool   `json:"mfa_enabled,omitempty"`
+	NWShareCredentialsID  string `json:"network_share_credentials_id,omitempty"`
+	PreserveSparseRegions bool   `json:"preserve_sparse_regions,omitempty"`
 }
 
 type CTEClientGuardPointJSON struct {
@@ -812,13 +825,52 @@ type UpdateCTEGuardPointTFSDK struct {
 }
 
 type UpdateCTEGuardPointJSON struct {
-	IsGuardEnabled       *bool  `json:"guard_enabled"`
+	// PR review follow-up: guard_enabled used to be sent here via the generic PATCH,
+	// but that silently no-ops on CM (confirmed live) -- Update() now sends
+	// a genuine guard_enabled change through the dedicated
+	// .../guardpoints/enable(/) endpoint instead (see CTEGuardPointEnableJSON).
 	IsMFAEnabled         *bool  `json:"mfa_enabled,omitempty"`
 	NWShareCredentialsID string `json:"network_share_credentials_id,omitempty"`
 }
 
 type CTEClientGuardPointUnguardJSON struct {
 	GuardPointIdList []string `json:"guard_point_id_list" validate:"required"`
+}
+
+// CTEGuardPointEnableJSON is the request body for the dedicated batch
+// PATCH .../guardpoints/enable(/) endpoint (both the /clients/ and
+// /clientgroups/ variants) that actually enables/disables a GuardPoint's
+// guard_enabled state. Confirmed live against CM (PR review follow-up): a GuardPoint
+// created with guard_enabled = false in the create payload still comes back
+// guard_enabled = true (create-time is inert for this field, same as
+// mfa_enabled/early_access), and the sibling generic PATCH
+// .../guardpoints/{id} also silently no-ops it. This dedicated endpoint,
+// given the same guard_point_id_list shape as CTEClientGuardPointUnguardJSON
+// plus a guard_enabled flag, is the only way that reliably takes effect --
+// verified in both directions (true->false and false->true) via a follow-up
+// GET on the GuardPoint.
+type CTEGuardPointEnableJSON struct {
+	GuardPointIdList []string `json:"guard_point_id_list" validate:"required"`
+	IsGuardEnabled   bool     `json:"guard_enabled"`
+}
+
+// CTEGuardPointEarlyAccessJSON is the request body for the dedicated
+// PATCH .../guardpoints/{guardpointId}/early-access endpoint (both the
+// /clients/ and /clientgroups/ variants). Confirmed live against CM: the
+// endpoint parses and acts on this field name (a request with this field
+// fails with a GuardPoint-eligibility error identifying "early_access" by
+// name, not an unrecognized-field error).
+type CTEGuardPointEarlyAccessJSON struct {
+	EarlyAccess bool `json:"early_access"`
+}
+
+// CTEGuardPointPreserveSparseRegionsOffJSON is the request body for the
+// dedicated PATCH .../guardpoints/{guardpointId}/preserve-sparse-regions-off
+// endpoint (both the /clients/ and /clientgroups/ variants). Confirmed live
+// against CM on an LDT-policy GuardPoint: PATCHing this body flips
+// preserve_sparse_regions from true to false, verified via a follow-up GET.
+type CTEGuardPointPreserveSparseRegionsOffJSON struct {
+	PreserveSparseRegions bool `json:"preserve_sparse_regions"`
 }
 
 type CTEClientGuardPointListTFSDK struct {
@@ -974,7 +1026,7 @@ type CTEClientGroupJSON struct {
 	SharedDomainList        []string `json:"shared_domain_list"`
 	SystemLocked            bool     `json:"system_locked"`
 	AuthBinaries            string   `json:"auth_binaries,omitempty"`
-	ReSign                  bool     `json:"re_sign,omitempty"`
+	ReSign                  bool     `json:"re_sign"`
 	ClientList              []string `json:"client_list"`
 	InheritAttributes       bool     `json:"inherit_attributes"`
 	ClientID                string   `json:"client_id"`
@@ -1386,7 +1438,7 @@ type CTEProfileJSON struct {
 	CacheSettings           *CTEProfileCacheSettingsJSON           `json:"cache_settings,omitempty"`
 	ConciseLogging          bool                                   `json:"concise_logging"`
 	ConnectTimeout          int64                                  `json:"connect_timeout,omitempty"`
-	Description             string                                 `json:"description,omitempty"`
+	Description             string                                 `json:"description"`
 	DuplicateSettings       *CTEProfileDuplicateSettingsJSON       `json:"duplicate_settings,omitempty"`
 	FileSettings            *CTEProfileFileSettingsJSON            `json:"file_settings,omitempty"`
 	Labels                  map[string]interface{}                 `json:"labels,omitempty"`

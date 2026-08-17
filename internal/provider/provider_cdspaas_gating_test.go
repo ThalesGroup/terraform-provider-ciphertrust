@@ -56,6 +56,14 @@ func fakeCDSPaaSAuthServer(t *testing.T) *httptest.Server {
 		// literal in this source file.
 		fmt.Fprintf(w, `{%q:%q}`, "jwt", testPlaceholder())
 	})
+	// NewClient's CM-mode (non-CDSPaaS) path calls fetchCMVersion, which GETs
+	// this and treats a failure as fatal to Configure. CDSPaaS-mode tests
+	// never reach it (fetchCMVersion is skipped when IsCDSPaaS), so mocking
+	// it here only affects the CM-mode gating test.
+	mux.HandleFunc("/api/v1/system/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"version":"9.9.9"}`)
+	})
 	return httptest.NewServer(mux)
 }
 

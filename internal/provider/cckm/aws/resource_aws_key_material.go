@@ -90,8 +90,10 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		Description: "Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.\n\n" +
 			"This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.\n\n" +
-			"Multi-region key support requires CipherTrust Manager 2.23 or later. " +
-			"Single-region key support requires CipherTrust Manager 2.21 or later.\n\n" +
+			"**CipherTrust Manager version requirements:**\n\n" +
+			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.\n" +
+			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.\n" +
+			"* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.\n\n" +
 			"Key features:\n\n" +
 			"* Import key material into AWS EXTERNAL symmetric keys.\n" +
 			"* Rotate to new key material by adding additional `key_material` entries.\n" +
@@ -114,6 +116,12 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 			"aws_key_id": schema.StringAttribute{
 				Required:    true,
 				Description: "The AWS key ID of the target EXTERNAL symmetric key.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"key_material": schema.SetNestedAttribute{
 				Optional: true,
@@ -129,15 +137,27 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 						"source_key_identifier": schema.StringAttribute{
 							Required:    true,
 							Description: "CipherTrust Manager ID of the source key.",
+							Validators: []validator.String{
+								stringvalidator.RegexMatches(
+									regexp.MustCompile(`\S`),
+									"must contain at least one non-whitespace character",
+								),
+							},
 						},
 						"source_key_tier": schema.StringAttribute{
 							Required:    true,
 							Description: "Source of the key material. Current option is 'local' implying a CipherTrust Manager key.",
+							Validators: []validator.String{
+								stringvalidator.RegexMatches(
+									regexp.MustCompile(`\S`),
+									"must contain at least one non-whitespace character",
+								),
+							},
 						},
 						// Optional attributes
 						"valid_to": schema.StringAttribute{
 							Optional: true,
-							Description: "(Updatable) Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. " +
+							Description: "Date of key material expiry in UTC time in RFC3339 format. For example, 2027-07-03T14:24:00Z. " +
 								"Removing this field from the plan will clear the expiry date and set the expiration model to KEY_MATERIAL_DOES_NOT_EXPIRE. " +
 								"If key material expires and enters PendingImport state, all future key-material operations (rotation, new imports) " +
 								"are blocked until the entry is either removed from the set or valid_to is updated to a future date and re-applied.",
@@ -149,7 +169,7 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 						},
 						"key_material_description": schema.StringAttribute{
 							Optional:    true,
-							Description: "(Updatable) Description for the key material. Removing this field from the plan will clear the description from the material.",
+							Description: "Description for the key material. Removing this field from the plan will clear the description from the material.",
 						},
 					},
 				},
@@ -213,6 +233,17 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	// Version guard: on CM 2.23, only single-region is supported; MRK requires CM 2.24+.
+	// The < 2.23 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
+	// can inspect the actual key type from the CipherTrust Manager API response.
+	// On CDSPaaS the server confirms MR BYOK key material is supported, so only
+	// apply the version gate for on-prem CM < 2.24.
+	isMRKey := gjson.Get(keyJSON, "aws_param.MultiRegion").Bool()
+	if isMRKey && !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+		resp.Diagnostics.AddError(common.UnsupportedCMVersion("ciphertrust_aws_key_material for multi-region keys", r.client.CMFullVersion, "2.24"), "")
+		return
+	}
+
 	// Validate that the target AWS key is an EXTERNAL (BYOK) key with SYMMETRIC_DEFAULT encryption.
 	// Only EXTERNAL origin keys support key material import, and only SYMMETRIC_DEFAULT
 	// keys are supported by this resource.
@@ -276,12 +307,8 @@ func (r *resourceAWSKeyMaterial) Read(ctx context.Context, req resource.ReadRequ
 	}
 
 	// Fetch the key record to verify it still exists, with proper 404 handling.
-	// If the KMS is gone, preserveState is true we keep the existing state unchanged.
-	_, preserveState := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "reading", &resp.Diagnostics)
-	if preserveState {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
+	// A 404 adds a hard error so state is preserved; non-404 errors also add a hard error.
+	getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -298,11 +325,10 @@ func (r *resourceAWSKeyMaterial) Read(ctx context.Context, req resource.ReadRequ
 // The update sequence is:
 //  1. Resolve the CM key UUID from the plan's aws_key_id.
 //  2. Verify the key exists in CM.
-//  3. Guard: no more than one new key_material entry may be added per apply.
-//  4. Refresh the key from AWS and wait for rotation history to reflect the refresh,
+//  3. Refresh the key from AWS and wait for rotation history to reflect the refresh,
 //     so that all subsequent material operations work from AWS-current state.
-//  5. Apply material operations (phases 0-2 of updateKeyMaterial).
-//  6. Read final state back from CM.
+//  4. Apply material operations via updateKeyMaterial.
+//  5. Read final state back from CM.
 func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> Update][" + id + "]")
@@ -328,12 +354,8 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 	}
 
 	// Step 2: verify the key still exists in CM and obtain its current JSON.
-	// preserveState is true when the KMS is gone - we should keep existing state.
-	keyJSON, preserveState := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "updating", &resp.Diagnostics)
-	if preserveState {
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
-		return
-	}
+	// A 404 adds a hard error so state is preserved; non-404 errors also add a hard error.
+	keyJSON := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), cmKeyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -360,13 +382,20 @@ func (r *resourceAWSKeyMaterial) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// Step 5: apply key material operations
+	// Re-fetch keyJSON so that updateKeyMaterial sees the AWS-current key state
+	// (KeyState, CurrentKeyMaterialId, etc.) after the refresh sync
+	refreshedKeyJSON, err := r.client.GetById(ctx, id, cmKeyID, common.URL_AWS_KEY)
+	if err == nil {
+		keyJSON = refreshedKeyJSON
+	}
+
+	// Step 4: apply key material operations.
 	r.updateKeyMaterial(ctx, id, cmKeyID, &plan, state.KeyMaterial, keyJSON, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Step 6: read final state from a fresh CM API fetch.
+	// Step 5: read final state from a fresh CM API fetch.
 	r.setAwsKeyMaterialState(ctx, cmKeyID, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
@@ -380,8 +409,8 @@ func (r *resourceAWSKeyMaterial) Delete(_ context.Context, _ resource.DeleteRequ
 }
 
 // ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource.
-// On create (no prior state), it also errors if more than one import_material entry is provided,
-// because only the first entry is used by the upload-key API call.
+// On create (no prior state), it also errors if zero key_material entries are provided,
+// because at least one entry is required to perform the initial import.
 func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		// Destroy - nothing to validate.
@@ -389,6 +418,17 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 	// Create path: state is null.
 	if req.State.Raw.IsNull() {
+		// CM version gate: ciphertrust_aws_key_material requires CM 2.23+.
+		// This check runs at plan time so the user gets a clear error before any
+		// API calls are made. On CDSPaaS ciphertrust_aws_key_material is supported.
+		if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
+			resp.Diagnostics.AddError(
+				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.23"),
+				"",
+			)
+			return
+		}
+
 		var createPlan AWSKeyMaterialTFSDK
 		resp.Diagnostics.Append(req.Plan.Get(ctx, &createPlan)...)
 		if resp.Diagnostics.HasError() {
@@ -562,10 +602,24 @@ func (r *resourceAWSKeyMaterial) setAwsKeyMaterialState(ctx context.Context, cmK
 }
 
 // updateKeyMaterial is the orchestrator for key material operations during both Create and Update.
-// It classifies plan entries against live rotation history, then runs each repair
-// and import phase in order. After each phase, history is re-fetched and all
-// classification slices are rebuilt from the fresh data so that subsequent phases
-// always operate on current AWS state.
+//
+// AWS key material operations are asynchronous and some workflows require
+// multiple AWS operations to complete in sequence. CCKM submits the initial
+// request and monitors AWS progress in the background, but only waits for a
+// bounded period before returning.
+//
+// As a result, this function may observe intermediate states where a previous
+// operation has been accepted but not yet fully completed (for example,
+// PENDING_IMPORT or PENDING_ROTATION). These are expected transient states,
+// not necessarily failures.
+//
+// updateKeyMaterial therefore operates as a state machine. Each iteration
+// re-fetches the live rotation history, reclassifies every key material entry,
+// and performs whatever repair or continuation step is currently required.
+// If asynchronous AWS processing has not yet completed by the end of an apply,
+// a subsequent apply will detect the current state and continue the workflow
+// until no further work remains.
+//
 // On Create, stateKeyMaterial is passed as types.Set{} (null), so stateMats is empty:
 // no removedMats and no metadataUpdates are produced.
 func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id string, keyID string, plan *AWSKeyMaterialTFSDK, stateKeyMaterial types.Set, keyJSON string, diags *diag.Diagnostics) {
@@ -632,6 +686,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		metadataUpdates        []AWSByokImportMaterialTFSDK // in history, not pending, valid_to or desc changed
 		newCandidates          []AWSByokImportMaterialTFSDK // not in history at all
 		removed                []AWSByokImportMaterialTFSDK // in state but not in plan
+		keyPendingImport       bool                         // AWS key state is PendingImport but rotation history is non-empty
 	)
 
 	// fetchHistoryAndClassify re-fetches rotation history, rebuilds historyBySourceKey,
@@ -650,6 +705,17 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		}
 		if diags.HasError() {
 			return
+		}
+
+		// Check the AWS key state directly. If the key reports PendingImport at the
+		// AWS level but rotation history is non-empty, CCKM's optimistic cache is ahead
+		// of AWS. Record this so the outer loop keeps iterating and the
+		// end-of-iteration RefreshKeyAndWait forces CCKM to re-sync with AWS.
+		keyPendingImport = false
+		if liveKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); getErr == nil {
+			keyJSON = liveKeyJSON
+			awsKeyState := gjson.Get(liveKeyJSON, "aws_param.KeyState").String()
+			keyPendingImport = awsKeyState == "PendingImport" && len(historyEntries) > 0
 		}
 
 		pendingMRRepairs = pendingMRRepairs[:0]
@@ -693,9 +759,9 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 				}
 			}
 		}
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d keyID: %s",
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> fetchHistoryAndClassify] pendingMR: %d pendingImport: %d pendingRotation: %d new: %d removed: %d metadataUpdates: %d keyPendingImport: %v keyID: %s",
 			len(pendingMRRepairs), len(pendingImportRepairs), len(pendingRotationRepairs),
-			len(newCandidates), len(removed), keyID))
+			len(newCandidates), len(removed), len(metadataUpdates), keyPendingImport, keyID))
 	}
 
 	// Initial history fetch and classification.
@@ -731,12 +797,12 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 
 		numOperations := len(pendingMRRepairs) + len(pendingImportRepairs) + len(pendingRotationRepairs) +
 			len(newCandidates) + len(removed) + len(metadataUpdates)
+		if keyPendingImport {
+			numOperations++
+		}
 		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] retry: %d num operations: %d", retry, numOperations))
 		if numOperations == 0 {
-			// The prior end-of-loop RefreshKeyAndWait already confirmed CM has fresh AWS
-			// data. Re-classifying on that fresh data shows nothing to do, so we are done.
-			// Calling RefreshKeyAndWait again immediately would time out (150s) because CM
-			// cannot advance the rotation-history updatedAt twice in rapid succession.
+			r.client.Log.Debug("[resource_aws_key_material.go -> updateKeyMaterial] 0 operations to process.")
 			break
 		}
 
@@ -776,7 +842,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		// with an empty body to activate the pending material. The material moves to either
 		// CURRENT or NON-CURRENT. History is re-fetched and re-classified after all resumes.
 		if len(pendingRotationRepairs) > 0 {
-			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, keyJSON, diags)
+			r.repairKeyMaterialRotations(ctx, id, keyID, pendingRotationRepairs, diags)
 			if diags.HasError() {
 				return
 			}
@@ -817,6 +883,7 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		if len(newCandidates) > 0 {
 			mat := newCandidates[0]
 			srcID := mat.SourceKeyID.ValueString()
+			rotationConfirmed := false
 			if len(historyBySourceKey) == 0 {
 				// No rotation history at all - key is back in PendingImport state.
 				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey is empty, using import-material (NEW_KEY_MATERIAL). srcID: %s keyID: %s", srcID, keyID))
@@ -829,13 +896,12 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 					return
 				}
 				waitForRotationHistoryRecord(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(), diags)
-				waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "import_state", "PENDING_IMPORT", "", diags)
 				if gjson.Get(keyJSON, "aws_param.MultiRegion").Bool() {
 					waitForReplicasMaterialCurrent(ctx, id, r.client, keyID, srcID, keyJSON, diags)
 				}
 			} else {
 				r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] historyBySourceKey has %d entries, rotate to new material.", len(historyBySourceKey)))
-				rotateToNewMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
+				rotationConfirmed = rotateToNewMaterial(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(),
 					mat.ValidTo.ValueString(), mat.KeyMaterialDescription.ValueString(), keyJSON, diags)
 			}
 			if diags.HasError() {
@@ -844,6 +910,35 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 			fetchHistoryAndClassify()
 			if diags.HasError() {
 				return
+			}
+			// If rotation was confirmed done but source_key_identifier is still missing from
+			// CCKM's rotation history (race condition where syncKeyRotations deleted the
+			// record before AWS returned the material in its list), re-import as
+			// EXISTING_KEY_MATERIAL to restore source_key_identifier, then wait for it to
+			// appear in history before re-classifying.
+			if rotationConfirmed {
+				stillNew := false
+				for _, c := range newCandidates {
+					if c.SourceKeyID.ValueString() == srcID {
+						stillNew = true
+						break
+					}
+				}
+				if stillNew {
+					r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> updateKeyMaterial] rotation confirmed but source_key_identifier for %s not in history; re-importing as EXISTING_KEY_MATERIAL to restore it", srcID))
+					r.updateExistingKeyMaterialMetadata(ctx, id, keyID, mat, diags)
+					if diags.HasError() {
+						return
+					}
+					waitForRotationHistoryRecord(ctx, id, r.client, keyID, srcID, mat.SourceKeyTier.ValueString(), diags)
+					if diags.HasError() {
+						return
+					}
+					fetchHistoryAndClassify()
+					if diags.HasError() {
+						return
+					}
+				}
 			}
 		}
 
@@ -854,25 +949,10 @@ func (r *resourceAWSKeyMaterial) updateKeyMaterial(ctx context.Context, id strin
 		}
 
 		// Refresh the primary key so CM re-checks AWS.
-		filters := url.Values{
-			"skip":  []string{"0"},
-			"limit": []string{"-1"},
-			"sort":  []string{"-RotationDate"},
-		}
-		endpoint := "api/v1/cckm/aws/keys/" + keyID + "/rotations"
-		rotationsJSON, err := r.client.ListWithFilters(ctx, id, endpoint, filters)
-		if err == nil {
-			resources := gjson.Get(rotationsJSON, "resources").Array()
-			var sourceKeyIDs []string
-			for _, item := range resources {
-				if item.Get("source_key_identifier").String() != "" {
-					sourceKeyIDs = append(sourceKeyIDs, item.Get("source_key_identifier").String())
-				}
-			}
-			primaryKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
-			if getErr == nil {
-				RefreshKeyAndWait(ctx, id, r.client, keyID, primaryKeyJSON, sourceKeyIDs, diags)
-			}
+		sourceKeyIDs := listKeyMaterialSourceKeyIDs(ctx, id, r.client, keyID)
+		primaryKeyJSON, getErr := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
+		if getErr == nil {
+			RefreshKeyAndWait(ctx, id, r.client, keyID, primaryKeyJSON, sourceKeyIDs, diags)
 		}
 	}
 }
@@ -903,9 +983,10 @@ func (r *resourceAWSKeyMaterial) updateExistingKeyMaterialMetadata(ctx context.C
 //  1. Resolves the source key ID and tier from historyBySourceKey.
 //  2. Calls repairMultiRegionReplicas to import the existing key material to every replica
 //     key that is still missing it (or is in PENDING_IMPORT state).
-//  3. Waits for the primary key's key_material_state to reach PENDING_ROTATION. AWS
-//     transitions the primary to PENDING_ROTATION automatically once all replicas have
-//     confirmed receipt of the material.
+//
+// No wait or refresh is performed after the replica imports. AWS transitions the primary
+// to PENDING_ROTATION asynchronously once all replicas confirm receipt. The outer retry loop
+// re-classifies on the next iteration and continues until the primary reaches PENDING_ROTATION.
 //
 // primaryKeyJSON is the full CM key record for keyID, already fetched by the caller.
 // pendingMRRepairs contains only entries whose key_material_state is
@@ -953,8 +1034,8 @@ func (r *resourceAWSKeyMaterial) repairPendingMultiRegionImportAndRotation(ctx c
 //  2. Calls ImportByokKeyMaterial with EXISTING_KEY_MATERIAL to re-upload the key material.
 //     An import failure is a hard error for that entry; the loop continues to attempt remaining
 //     entries, and the caller checks diags.HasError() after the call returns.
-//  3. Waits for import_state to leave PENDING_IMPORT (i.e. arrive at Imported). A poll
-//     timeout is a warning only because the import call itself succeeded.
+//     History is re-fetched and re-classified by the caller (fetchHistoryAndClassify) after
+//     this function returns so that subsequent phases see the updated state.
 func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id string, keyID string, pendingImportRepairs []AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairPendingImport][" + id + "]")
 	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairPendingImport][" + id + "]")
@@ -990,10 +1071,6 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 			continue
 		}
 
-		// Step 3: wait for import_state to leave PENDING_IMPORT (move to Imported).
-		// key_material_state is not changed by a re-import - it stays CURRENT or NON-CURRENT.
-		// A timeout is a warning only - the import call already completed successfully.
-		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "import_state", "PENDING_IMPORT", "", diags)
 	}
 }
 
@@ -1006,15 +1083,13 @@ func (r *resourceAWSKeyMaterial) repairPendingImport(ctx context.Context, id str
 //  1. Calls POST rotate-material with an empty body to activate the pending material.
 //     This is a hard error that stops the loop immediately on failure - a rotate-material
 //     failure leaves the key in the same PENDING_ROTATION state it started in.
-//  2. Waits 25 seconds for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background
-//     task to complete. The empty-body rotate-material path calls AWS RotateKeyOnDemand
-//     directly and forks syncKeyRotations - no status record is created, so polling
-//     /rotate-material/status returns 404. A short fixed sleep is sufficient because
-//     CCKM's syncKeyRotations task (with addDelay=true) completes within ~20-25s. The
-//     outer loop's end-of-iteration RefreshKeyAndWait then confirms the final state.
-//
-// keyJSON is the full CM key record for keyID, used to detect the multi-region case.
-func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, keyJSON string, diags *diag.Diagnostics) {
+//  2. Polls CCKM rotation history until the entry's key_material_state is no longer
+//     PENDING_ROTATION. Polling is required because the CCKM server forks syncKeyRotations
+//     and returns HTTP 200 before the rotation history cache is updated. Without polling,
+//     the outer retry loop may re-fetch history, still see PENDING_ROTATION (stale cache),
+//     and call rotate-material a second time - which AWS rejects with
+//     "No available key material pending rotation".
+func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context, id string, keyID string, pendingRotationRepairs []AWSByokImportMaterialTFSDK, diags *diag.Diagnostics) {
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
 	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> repairKeyMaterialRotations][" + id + "]")
 
@@ -1033,7 +1108,7 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 				// Key is still in pending import state on AWS, or replicas have not yet received
 				// the material. CM classified the primary as PENDING_ROTATION too early. Return
 				// without error so the outer loop can refresh and re-classify.
-				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Will refresh and re-classify. error: %s", errStr)
+				msg := fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] rotate-material rejected (pending import or replicas not ready). Refreshing key and retrying.. error: %s", errStr)
 				r.client.Log.Warn(msg)
 				return
 			}
@@ -1045,19 +1120,20 @@ func (r *resourceAWSKeyMaterial) repairKeyMaterialRotations(ctx context.Context,
 		}
 		r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] SUCCESS keyID: %s sourceKeyID: %s", keyID, srcID))
 
-		// Step 2: wait for AWS RotateKeyOnDemand and CCKM's syncKeyRotations background task
-		// to complete before returning. We do NOT call waitForMaterialRotation here because
-		// that endpoint (/rotate-material/status) only exists when rotate-material is called
-		// WITH source key params (which creates a RotateMaterialStatus record). The empty-body
-		// rotate-material path (used for repair) calls AWS RotateKeyOnDemand directly and forks
-		// syncKeyRotations - no status record is created, so /rotate-material/status returns 404.
-		// Previously this used waitForMaterialStateResolved + waitForReplicasMaterialCurrent
-		// which polled CCKM's stale rotation history cache for up to 10 minutes. A short fixed
-		// sleep is sufficient: CCKM's syncKeyRotations background task (with addDelay=true) runs
-		// within ~20-25s. The outer loop's end-of-iteration RefreshKeyAndWait then confirms the
-		// final state.
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] waiting 25s for AWS RotateKeyOnDemand and CCKM syncKeyRotations to complete keyID: %s sourceKeyID: %s", keyID, srcID))
-		time.Sleep(25 * time.Second)
+		// Step 2: poll CCKM rotation history until the entry's key_material_state is no longer
+		// PENDING_ROTATION. We do NOT call waitForMaterialRotation here because that endpoint
+		// (/rotate-material/status) only exists when rotate-material is called WITH source key
+		// params (which creates a RotateMaterialStatus record). The empty-body rotate-material
+		// path (used for repair) calls AWS RotateKeyOnDemand directly and forks syncKeyRotations
+		// - no status record is created, so /rotate-material/status returns 404.
+		//
+		// Polling is necessary because CCKM's server forks syncKeyRotations and returns HTTP 200
+		// before the rotation history cache is updated. A fixed sleep is unreliable on a loaded
+		// runner: if the forked task has not completed when the sleep ends, the outer retry loop
+		// re-fetches history, still sees PENDING_ROTATION, and calls rotate-material a second
+		// time - which AWS rejects with "No available key material pending rotation".
+		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairKeyMaterialRotations] polling until PENDING_ROTATION resolves in CCKM rotation history keyID: %s sourceKeyID: %s", keyID, srcID))
+		waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID, "key_material_state", "PENDING_ROTATION", "", diags)
 	}
 }
 
@@ -1140,7 +1216,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		}
 		total := gjson.Get(listJSON, "total").Int()
 		if total == 0 {
-			msg := "Skipping replica repair: replica key not found in CipherTrust Manager. Import the replica key into CM first."
+			msg := "Skipping replica repair: replica key not found in CipherTrust Manager. Import the replica key into CipherTrust Manager first."
 			details := utils.ApiError(msg, map[string]interface{}{"aws_key_id": awsKeyID, "region": replicaRegion})
 			r.client.Log.Warn(details)
 			diags.AddWarning(details, "")
@@ -1188,7 +1264,13 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		// No per-replica wait: if the import-material call returns no error, the command
 		// has been received by AWS and will be acted on asynchronously. We refresh the
 		// primary key after all replicas are processed to trigger CM to re-check AWS state.
+		//
+		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
 		importType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			importType = ""
+		}
 		var importDiags diag.Diagnostics
 		ImportByokKeyMaterial(ctx, id, r.client, replicaCMKeyID, sourceKeyID, sourceKeyTier, validTo, "", importType, &importDiags)
 		if importDiags.HasError() {
@@ -1197,6 +1279,71 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		}
 	}
 	time.Sleep(time.Duration(10*len(replicaKeysResult.Array())) * time.Second)
+
+	// Supplement: find any replicas not reflected in the primary's cached ReplicaKeys.
+	// CCKM updates MultiRegionConfiguration.ReplicaKeys asynchronously. If a recently-created
+	// replica is missing from that list, the loop above will not process it. Search CM directly
+	// by MRK key ID (no region filter) to catch any replicas that were omitted.
+	awsMrkKeyID := gjson.Get(primaryKeyJSON, "aws_param.KeyId").String()
+	primaryRegion := gjson.Get(primaryKeyJSON, "aws_param.Region").String()
+	if awsMrkKeyID == "" {
+		r.client.Log.Debug("[resource_aws_key_material.go -> repairMultiRegionReplicas] no MRK key ID found in primary key JSON, skipping supplemental search")
+		return
+	}
+
+	// Build set of regions already handled in the ReplicaKeys loop above.
+	alreadyHandledRegions := make(map[string]struct{})
+	for _, rk := range replicaKeysResult.Array() {
+		if reg := rk.Get("Region").String(); reg != "" {
+			alreadyHandledRegions[reg] = struct{}{}
+		}
+	}
+	alreadyHandledRegions[primaryRegion] = struct{}{} // exclude the primary itself
+
+	supplementalListJSON, supplementalListErr := r.client.ListWithFilters(ctx, id, common.URL_AWS_KEY, url.Values{"keyid": []string{awsMrkKeyID}})
+	if supplementalListErr != nil {
+		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental CipherTrust Manager search failed: %s", supplementalListErr.Error()))
+		return
+	}
+	for _, res := range gjson.Get(supplementalListJSON, "resources").Array() {
+		cmID := res.Get("id").String()
+		region := res.Get("region").String()
+		if cmID == "" || cmID == primaryKeyID {
+			continue
+		}
+		if _, handled := alreadyHandledRegions[region]; handled {
+			continue
+		}
+		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental: found replica not in primary's ReplicaKeys region: %s replicaCMKeyID: %s", region, cmID))
+
+		// Check the replica's rotation history for the source key.
+		suppHistory, _ := fetchRotationHistoryByokFull(ctx, id, r.client, cmID)
+		var suppEntries []RotationHistoryEntryFullTFSDK
+		alreadyImported := false
+		if hd := suppHistory.ElementsAs(ctx, &suppEntries, false); !hd.HasError() {
+			for _, entry := range suppEntries {
+				if entry.SourceKeyIdentifier.ValueString() == sourceKeyID && entry.AWSParams.ImportState.ValueString() != "PENDING_IMPORT" {
+					alreadyImported = true
+					break
+				}
+			}
+		}
+		if alreadyImported {
+			r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental: %s already has material for sourceKeyID: %s (not PENDING_IMPORT), skipping", cmID, sourceKeyID))
+			continue
+		}
+		r.client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> repairMultiRegionReplicas] supplemental: importing to region: %s replicaCMKeyID: %s sourceKeyID: %s", region, cmID, sourceKeyID))
+		suppImportType := "EXISTING_KEY_MATERIAL"
+		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
+			suppImportType = ""
+		}
+		var importDiags diag.Diagnostics
+		ImportByokKeyMaterial(ctx, id, r.client, cmID, sourceKeyID, sourceKeyTier, validTo, "", suppImportType, &importDiags)
+		if importDiags.HasError() {
+			diags.Append(importDiags...)
+			return
+		}
+	}
 }
 
 // ImportByokKeyMaterial calls the import-material API to load key material into an EXTERNAL AWS key.
@@ -1216,7 +1363,12 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		SourceKeyTier: sourceKeyTier,
 		KeyExpiration: validTo != "",
 		ValidTo:       validTo,
-		ImportType:    &importType,
+	}
+	// Only include import_type when a non-empty value is provided.
+	// Call sites that must suppress import_type (e.g. MR replica imports on CM 2.23)
+	// pass an empty string so the field is omitted from the request.
+	if importType != "" {
+		payload.ImportType = &importType
 	}
 	if keyMaterialDescription != "" {
 		payload.KeyMaterialDescription = &keyMaterialDescription
@@ -1240,7 +1392,7 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 			strings.Contains(errStr, materialHasNotBeenImportedError) {
 			// Key is in a pending state (PENDING_ROTATION or PENDING_MULTI_REGION_IMPORT_AND_ROTATION).
 			// Warn and return so the outer retry loop can repair the pending state first.
-			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] import-material rejected due to pending state - will re-classify. keyID: %s sourceKeyID: %s error: %s", keyID, sourceKeyID, errStr))
+			client.Log.Warn(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] import-material rejected due to pending state. Refreshing key and retrying.. keyID: %s sourceKeyID: %s error: %s", keyID, sourceKeyID, errStr))
 			return
 		}
 		client.Log.Error(fmt.Sprintf("[resource_aws_key_material.go -> ImportByokKeyMaterial] FAILED keyID: %s error: %s", keyID, errStr))
@@ -1270,13 +1422,31 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 // from the wait functions are added as warnings only - rotate-material was already called
 // and work is in progress asynchronously.
 // If rotate-material fails with replica pending import cannot rotate error we need to attempt to fix up
-// Return true to re-calculate material states and try again
-func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) {
+// Return true to re-calculate material states and try again.
+func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, cmKeyID string, srcID string, srcTier string, validTo string, keyMaterialDescription string, keyJSON string, diags *diag.Diagnostics) bool {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_material.go -> rotateToNewMaterial][" + id + "]")
 
 	client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] primaryKeyID: %s sourceKeyID: %s", cmKeyID, srcID))
 
+	// CM < 224: rotate-material ignores source_key_identifier and calls RotateKeyOnDemand
+	// directly without first staging pending material - AWS rejects the call. Use the
+	// CM 2.23 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
+	// material as PENDING_ROTATION, then return false so the outer retry loop re-classifies
+	// and repairKeyMaterialRotations activates it via rotate-material with an empty body.
+	// On-prem CM < 2.24 does not support rotate-material with source_key_identifier.
+	// CDSPaaS supports it.
+	if !client.IsCDSPaaS && client.CMVersion < 224 {
+		client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] CipherTrust Manager %d < 224, using import-material + PENDING_ROTATION repair path. keyID: %s sourceKeyID: %s", client.CMVersion, cmKeyID, srcID))
+		ImportByokKeyMaterial(ctx, id, client, cmKeyID, srcID, srcTier, validTo, keyMaterialDescription, "NEW_KEY_MATERIAL", diags)
+		if diags.HasError() {
+			return false
+		}
+		waitForRotationHistoryRecord(ctx, id, client, cmKeyID, srcID, srcTier, diags)
+		// Return false (no error) - the outer loop re-classifies, sees PENDING_ROTATION,
+		// and calls repairKeyMaterialRotations to complete activation.
+		return false
+	}
 	rotPayload := RotateMaterialPayloadJSON{
 		SourceKeyID:            srcID,
 		SourceKeyTier:          srcTier,
@@ -1290,23 +1460,23 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 		details := utils.ApiError(msg, map[string]interface{}{"error": marshalErr.Error(), "key_id": cmKeyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return
+		return false
 	}
 	_, rotErr := client.PostDataV2(ctx, id, common.URL_AWS_KEY+"/"+cmKeyID+"/rotate-material", payloadBytes)
 	if rotErr != nil {
 		errStr := rotErr.Error()
 		if strings.Contains(errStr, materialAlreadyExistsError) {
 			// The key material is already associated with this KMS key.
-			// Treat as a no-op and let the outer loop refresh state and re-classify.
+			// Treat as a no-op and report rotation confirmed (the material IS there).
 			msg := fmt.Sprintf("AWS key material rotate-material: material (source_key_id: %s) is already associated with this KMS key. Treating as no-op and refreshing state.", srcID)
 			client.Log.Warn(msg)
-			return
+			return true
 		}
 		msg := "Error calling rotate-material on AWS BYOK key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": rotErr.Error(), "key_id": cmKeyID, "source_key_id": srcID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return
+		return false
 	}
 
 	client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> rotateToNewMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmKeyID, srcID))
@@ -1320,10 +1490,10 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 	if retryOperation {
 		client.Log.Debug("[resource_aws_key_material.go -> rotateToNewMaterial] waiting for material rotation failed with soft error, continuing.")
 		// Known errors - re-calculate material states and try again - probably should refresh here.
-		return
+		return false
 	}
 	if diags.HasError() {
-		return
+		return false
 	}
 
 	// Wait for the (primary) key material to reach CURRENT state.
@@ -1334,28 +1504,28 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 		waitForReplicasMaterialCurrent(ctx, id, client, cmKeyID, srcID, keyJSON, diags)
 	}
 
-	return
+	return true
 }
 
 // deleteRemovedKeyMaterial calls delete-material on the primary key and, for multi-region
 // PRIMARY keys, on every registered replica key for each entry in removedMats.
 //
-// Only entries whose key_material_state is "CURRENT" are deleted; non-CURRENT entries
-// (NON-CURRENT, PENDING_IMPORT, etc.) are skipped because AWS only allows deleting the
-// currently active material and will reject the call otherwise.
+// delete-material is called regardless of key_material_state. All states are actioned:
+//   - CURRENT / NON-CURRENT: material exists and is deleted.
+//   - PENDING_IMPORT: material bytes are already gone; the API treats this as a no-op.
+//   - PENDING_ROTATION / PENDING_MULTI_REGION_IMPORT_AND_ROTATION: material exists and is deleted.
 //
 // For each removed entry:
 //  1. Look up the history entry by source key ID. If not found, the material was never
-//     imported (or history has already been cleared) - log info and skip.
-//  2. Check key_material_state. If not "CURRENT", log info and skip (no-op).
-//  3. Build the list of CM key IDs to call delete-material on:
+//     imported (or history has already been cleared) - log debug and skip.
+//  2. Build the list of CM key IDs to call delete-material on:
 //     - Always the primary keyID.
 //     - If the key is a multi-region PRIMARY (aws_param.MultiRegion == true and
 //     MultiRegionConfiguration.MultiRegionKeyType == "PRIMARY"), walk the ReplicaKeys
 //     array, extract the AWS key ID from each replica ARN, look up the CM UUID via
 //     ListWithFilters, and add it to the list. Replica lookup failures are warnings
 //     only - the delete still proceeds on the other keys.
-//  4. POST /v1/cckm/aws/keys/{cmID}/delete-material with an empty body for each CM key.
+//  3. POST /v1/cckm/aws/keys/{cmID}/delete-material for each CM key.
 //     Failure on any individual key is a hard error added to diags; the loop continues
 //     so the user sees all failures at once.
 //
@@ -1386,19 +1556,11 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 			continue
 		}
 
-		// Step 2: build the list of CM key IDs to delete from.
-		// delete-material is called regardless of key_material_state:
-		//   - CURRENT / NON-CURRENT: material exists and is deleted.
-		//   - PENDING_IMPORT: material bytes are already gone; the API treats this as a no-op.
-		//   - PENDING_ROTATION / PENDING_MULTI_REGION_IMPORT_AND_ROTATION: material exists and is deleted.
-		// The only skip is when the entry is not in rotation history at all (handled above).
-		matState := entry.AWSParams.KeyMaterialState.ValueString()
-		r.client.Log.Debug(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] sourceKeyID: %s key_material_state: %s", srcID, matState))
-
-		// Step 3: build the list of CM key IDs to delete from, together with the
-		// key_material_id to use for each key. Passing the key_material_id ensures
-		// we delete exactly the specific material entry we intend to remove, rather
-		// than the default behaviour of deleting the CURRENT (latest) material.
+		// Step 2: build the list of CM key IDs to delete from, together with the
+		// key_material_id to use for each key. delete-material is called regardless
+		// of key_material_state - all states are actioned (see doc comment above).
+		// Passing the key_material_id ensures we delete exactly the specific material
+		// entry we intend to remove, rather than defaulting to the CURRENT (latest) material.
 		cmKeyIDs := []string{keyID}
 		// cmIDToKeyMatID maps each CM key ID to the key_material_id to include in
 		// the delete-material request body. An empty string means fall back to {}.
@@ -1481,7 +1643,7 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 			}
 		}
 
-		// Step 4: call delete-material on each CM key ID, passing the specific
+		// Step 3: call delete-material on each CM key ID, passing the specific
 		// key_material_id so that the API deletes exactly the intended material entry
 		// rather than defaulting to the CURRENT (latest) material.
 		for _, cmID := range cmKeyIDs {
@@ -1506,6 +1668,15 @@ func (r *resourceAWSKeyMaterial) deleteRemovedKeyMaterial(
 				// Continue to attempt remaining keys - caller sees all failures.
 			} else {
 				r.client.Log.Info(fmt.Sprintf("[resource_aws_key_material.go -> deleteRemovedKeyMaterial] SUCCESS keyID: %s sourceKeyID: %s", cmID, srcID))
+				// Wait for the rotation history entry to leave IMPORTED state before the
+				// outer loop fires RefreshKeyAndWait. Without this gate, RefreshKeyAndWait
+				// can trigger a CCKM re-sync from AWS before AWS has processed the deletion,
+				// causing CCKM to overwrite import_state back to IMPORTED.
+				// Only poll the primary key - replicas are managed by AWS automatically.
+				if cmID == keyID {
+					waitForMaterialStateResolved(ctx, id, r.client, keyID, srcID,
+						"import_state", "IMPORTED", "", diags)
+				}
 			}
 		}
 	}

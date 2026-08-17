@@ -64,8 +64,9 @@ output "ntp_server_host" {
 
 ### Optional
 
-- `key` (String, Sensitive) Symmetric key value to be used for authenticated NTP servers. Changing or removing this value forces replacement of the NTP resource.
+- `key` (String, Sensitive) Symmetric key value to be used for authenticated NTP servers. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Since Terraform cannot detect a change in a write-only value on its own, bump `key_version` in the same apply to force replacement of the NTP resource with the new key.
 - `key_type` (String) Digest algorithm to be used for authenticated NTP servers; MD5, SHA-1, SHA-256, SHA-384 or SHA-512 (defaults to SHA-256). Changing or removing this value forces replacement of the NTP resource.
+- `key_version` (Number) Arbitrary version number used to trigger replacement of the NTP resource with the current `key` value. Since `key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `key` value sent.
 
 ### Read-Only
 

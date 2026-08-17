@@ -2,13 +2,14 @@ package provider
 
 import (
 	"fmt"
-	"regexp"
-	"testing"
-
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+	"regexp"
+	"testing"
 )
 
 // cteStandardPolicyConfig renders a Standard ciphertrust_cte_policy with a single
@@ -161,9 +162,11 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 }
 
 // TestCTEPolicyResource_typeImmutable verifies a change to the (immutable)
-// policy_type is rejected.
+// policy_type is planned as a destroy+create replacement rather than a
+// misleading in-place update that then fails at apply (TFIN-546).
 func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 	name := "tf-policy-typeimm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -171,12 +174,265 @@ func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 			{
 				Config: ctePolicyTypedConfig(name, "Standard"),
 				Check: checkStep(t, "policy type immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy", "policy_type", "Standard"),
+					resource.TestCheckResourceAttr(rn, "policy_type", "Standard"),
 				),
 			},
 			{
-				Config:      ctePolicyTypedConfig(name, "LDT"),
-				ExpectError: regexp.MustCompile(`(?i)cannot change type of the policy|immutable`),
+				// CSI, like Standard, only requires security_rules; other
+				// non-Standard types (e.g. LDT) require additional
+				// mandatory nested rule blocks tied to real key material.
+				Config: ctePolicyTypedConfig(name, "CSI"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "policy type immutable: replace",
+					resource.TestCheckResourceAttr(rn, "policy_type", "CSI"),
+				),
+			},
+		},
+	})
+}
+
+// cteApplykeyPolicyConfig renders a Standard ciphertrust_cte_policy whose
+// single security rule's effect and never_deny are both parameterized, used
+// to exercise the TFIN-496 never_deny/applykey cross-field validation.
+func cteApplykeyPolicyConfig(name string, neverDeny bool, effect string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "cte_policy_applykey" {
+  name        = %q
+  policy_type = "Standard"
+  never_deny  = %t
+
+  key_rules = [{
+    key_id = "clear_key"
+  }]
+
+  security_rules = [
+    {
+      effect        = %q
+      action        = "all_ops"
+      partial_match = false
+    }
+  ]
+}
+`, name, neverDeny, effect)
+}
+
+// cteDataTxRuleNestedPolicyConfig renders a Standard ciphertrust_cte_policy
+// whose own data_transform_rules nested attribute omits order_number and
+// key_type (letting CM compute them), and description is likewise omitted.
+// partialMatch is varied on the (required) security_rules block so the
+// update step produces a real, unrelated change.
+func cteDataTxRuleNestedPolicyConfig(name string, partialMatch bool) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "cte_policy_datatx" {
+  name        = %q
+  policy_type = "Standard"
+  never_deny  = false
+
+  key_rules = [{
+    key_id = "clear_key"
+  }]
+
+  data_transform_rules = [{
+    key_id = "clear_key"
+  }]
+
+  security_rules = [
+    {
+      effect        = "permit"
+      action        = "key_op"
+      partial_match = %t
+    }
+  ]
+}
+`, name, partialMatch)
+}
+
+// TestCTEPolicyResource_dataTransformRulesFieldsStability covers TFIN-583:
+// description (top-level) and data_transform_rules.order_number/key_type are
+// Optional+Computed. Without a UseStateForUnknown() plan modifier, any
+// unrelated change to the resource (here, security_rules.partial_match)
+// causes these fields to spuriously flip to "(known after apply)" -- or, for
+// description/key_type specifically, silently reset to their schema Default
+// ("") instead of keeping the real value, since the framework never marks a
+// Default-bearing attribute unknown in the first place. The PreApply plan
+// checks assert all three stay known, stable values across the unrelated
+// update.
+func TestCTEPolicyResource_dataTransformRulesFieldsStability(t *testing.T) {
+	name := "tf-policy-datatx-stability-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy_datatx"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteDataTxRuleNestedPolicyConfig(name, false),
+				Check: checkStep(t, "policy datatx fields: create",
+					resource.TestCheckResourceAttrSet(rn, "data_transform_rules.0.id"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.order_number", "1"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.key_type", ""),
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			{
+				Config: cteDataTxRuleNestedPolicyConfig(name, true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("data_transform_rules").AtSliceIndex(0).AtMapKey("order_number"),
+							knownvalue.Int64Exact(1),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("data_transform_rules").AtSliceIndex(0).AtMapKey("key_type"),
+							knownvalue.StringExact(""),
+						),
+						plancheck.ExpectKnownValue(
+							rn,
+							tfjsonpath.New("description"),
+							knownvalue.StringExact(""),
+						),
+					},
+				},
+				Check: checkStep(t, "policy datatx fields: unrelated update",
+					resource.TestCheckResourceAttr(rn, "security_rules.0.partial_match", "true"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.order_number", "1"),
+					resource.TestCheckResourceAttr(rn, "data_transform_rules.0.key_type", ""),
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			{
+				Config:             cteDataTxRuleNestedPolicyConfig(name, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEPolicyResource_neverDenyApplykeyValidation verifies that a
+// security_rules.effect containing "applykey" is rejected at plan time when
+// never_deny = false, since CipherTrust Manager silently strips "applykey"
+// server-side in that case, which otherwise produces a permanent
+// plan/apply loop (TFIN-496).
+func TestCTEPolicyResource_neverDenyApplykeyValidation(t *testing.T) {
+	name := "tf-policy-applykey-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// never_deny = false + applykey must be rejected at plan time.
+				Config:      cteApplykeyPolicyConfig(name, false, "deny,applykey"),
+				ExpectError: regexp.MustCompile(`(?i)Invalid security_rules\.effect with never_deny = false`),
+			},
+			{
+				// never_deny = true + applykey is valid and must succeed.
+				Config: cteApplykeyPolicyConfig(name, true, "deny,applykey"),
+				Check: checkStep(t, "policy applykey validation: never_deny=true allowed",
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "never_deny", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "security_rules.0.effect", "deny,applykey"),
+				),
+			},
+			{
+				// never_deny = false without applykey is valid and must succeed.
+				Config: cteApplykeyPolicyConfig(name, false, "deny"),
+				Check: checkStep(t, "policy applykey validation: never_deny=false without applykey allowed",
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "never_deny", "false"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_policy.cte_policy_applykey", "security_rules.0.effect", "deny"),
+				),
+			},
+		},
+	})
+}
+
+// cteIDTPolicyConfig renders an IDT ciphertrust_cte_policy with a single
+// idt_key_rules entry (present or absent depending on withRule), backed by a
+// real XTS-mode transformation key. Used by the TFIN-603 removal-refusal test.
+func cteIDTPolicyConfig(name, keyName string, withRule bool) string {
+	idtBlock := "idt_key_rules = []\n"
+	if withRule {
+		idtBlock = `idt_key_rules = [{
+    current_key             = "clear_key"
+    current_key_type        = ""
+    transformation_key      = ciphertrust_cm_key.idt_xform.name
+    transformation_key_type = ""
+  }]
+`
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cm_key" "idt_xform" {
+  name                         = %q
+  algorithm                    = "aes"
+  key_size                     = 256
+  xts                          = true
+  undeletable                  = false
+  remove_from_state_on_destroy = true
+
+  meta = {
+    permissions = {
+      read_key   = ["CTE Clients"]
+      export_key = ["CTE Clients"]
+    }
+    cte = {
+      persistent_on_client = true
+      encryption_mode      = "XTS"
+      cte_versioned        = false
+    }
+  }
+}
+
+resource "ciphertrust_cte_policy" "cte_policy_idt" {
+  name        = %q
+  policy_type = "IDT"
+
+  %s
+  security_rules = [{
+    effect = "permit"
+    action = "all_ops"
+  }]
+}
+`, keyName, name, idtBlock)
+}
+
+// TestCTEPolicyResource_idtKeyRulesRemovalRefused verifies TFIN-603: since
+// CipherTrust Manager has no route to delete an individual IDT key rule
+// (DELETE .../idtkeyrules/{id} returns 405), removing idt_key_rules from
+// config must be refused at apply time with a clear diagnostic rather than
+// silently succeeding while state is wiped to [] and the CM-side rule is
+// orphaned. A subsequent apply of the original (unchanged) config must show
+// no drift, proving the failed removal attempt left state uncorrupted.
+func TestCTEPolicyResource_idtKeyRulesRemovalRefused(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	name := "tf-policy-idt-" + suffix
+	keyName := "tf-idt-xform-" + suffix
+	const rn = "ciphertrust_cte_policy.cte_policy_idt"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteIDTPolicyConfig(name, keyName, true),
+				Check: checkStep(t, "idt policy: create with idt_key_rules",
+					resource.TestCheckResourceAttrSet(rn, "idt_key_rules.0.id"),
+					resource.TestCheckResourceAttr(rn, "idt_key_rules.0.current_key", "clear_key"),
+				),
+			},
+			{
+				// Removing idt_key_rules must be refused, not silently applied.
+				Config:      cteIDTPolicyConfig(name, keyName, false),
+				ExpectError: regexp.MustCompile(`(?i)IDT Key Rule Removal Not Supported|IDT key rules cannot be removed`),
+			},
+			{
+				// State must be uncorrupted by the failed removal attempt: the
+				// original config re-applies with no drift.
+				Config:             cteIDTPolicyConfig(name, keyName, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

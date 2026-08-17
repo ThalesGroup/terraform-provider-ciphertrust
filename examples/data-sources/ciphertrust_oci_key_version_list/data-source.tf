@@ -1,8 +1,16 @@
-data "ciphertrust_oci_key_list" "ciphertrust_keys" {
-  # Required parameters
-  key_id = "ciphertrust.oci_key.some_key.id"
-  # Optional parameters
+# Sort key versions by creation date, newest first.
+data "ciphertrust_oci_key_version_list" "sorted" {
+  key_id = "cm-key-id"
   filters = {
-    limit = "-1"
+    sort = "-createdAt"
+  }
+}
+
+# List key versions by origin, returning all matches.
+data "ciphertrust_oci_key_version_list" "by_origin" {
+  key_id = "cm-key-id"
+  filters = {
+    origin = "INTERNAL"
+    limit  = "-1"
   }
 }

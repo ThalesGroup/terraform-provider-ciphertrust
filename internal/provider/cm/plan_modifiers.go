@@ -13,7 +13,7 @@ import (
 // resource_log_forwarder.go, resource_property.go, resource_scheduler.go).
 // New resources should use the shared modifiers package instead:
 //   modifiers.ImmutableString(), modifiers.ImmutableInt64(), modifiers.ImmutableBool()
-// resource_cm_key.go was migrated to the shared package as part of TFIN-271.
+// resource_cm_key.go has already been migrated to the shared package.
 
 // NameImmutableModifier is a plan modifier that prevents the 'name' field from
 // being changed after resource creation. It produces a clear, actionable error
