@@ -57,10 +57,7 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
-				Description: "(Immutable) The new interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use.",
-				PlanModifiers: []planmodifier.Int64{
-					modifiers.ImmutableInt64(),
-				},
+				Description: "The interface will listen on the specified port. The port number should not be negative, 0 or the one already in-use. Mutable for interface_type nae, kmip, and web — CM applies the change in place. Changing the port of a default interface (web, nae, kmip) restarts CM services cluster-wide, so treat it as a planned change.",
 			},
 			"allow_unregistered": schema.BoolAttribute{
 				Optional:    true,
@@ -190,9 +187,20 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Defines what ethernet adapter the interface should listen to, use \"all\" for all. Defaults to all if not specified.",
 			},
 			"registration_token": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "Registration token in case auto registration is true.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "Registration token in case auto registration is true. Write-only: never " +
+					"stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a " +
+					"rotated token, change `registration_token` and bump `registration_token_version` in the " +
+					"same apply.",
+			},
+			"registration_token_version": schema.Int64Attribute{
+				Optional: true,
+				Description: "Arbitrary version number stored in state and used to trigger re-sending " +
+					"`registration_token` to CipherTrust Manager. Since `registration_token` is write-only, " +
+					"Terraform cannot detect a change in its value on its own; increment this on every apply " +
+					"where you want the current `registration_token` value re-sent.",
 			},
 			"trusted_cas": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -231,9 +239,20 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 						},
 					},
 					"password": schema.StringAttribute{
-						Optional:    true,
-						Sensitive:   true,
-						Description: "Password to the encrypted key.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Password to the encrypted key. Write-only: never stored in Terraform " +
+							"state or plan artifacts (requires Terraform 1.11+). To resend a rotated password " +
+							"(e.g. without changing certificate_chain), change `password` and bump " +
+							"`password_version` in the same apply.",
+					},
+					"password_version": schema.Int64Attribute{
+						Optional: true,
+						Description: "Arbitrary version number stored in state and used to trigger " +
+							"re-sending `password` to CipherTrust Manager. Since `password` is write-only, " +
+							"Terraform cannot detect a change in its value on its own; increment this on every " +
+							"apply where you want the current `password` value re-sent.",
 					},
 				},
 			},
@@ -294,9 +313,21 @@ func (r *resourceCMInterface) Schema(_ context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
-			"tls_ciphers": schema.ListNestedAttribute{
+			// Set, not List: CM re-orders the cipher-suite entries unpredictably on every
+			// write. Live-confirmed: repeated GETs are stable, but after a PATCH the returned
+			// order matches neither the previously-returned order nor the order just
+			// submitted — only the membership is preserved. While this was an order-sensitive
+			// ListNestedAttribute, Read() hydrated state in CM's post-write order, which
+			// never equalled the config's order, so every plan showed a positional diff and
+			// re-applying just re-shuffled it — the resource never converged. A Set takes
+			// ordering out of both state and diffing.
+			//
+			// Note CM rejects adding or removing members ("Adding or removing TLS cipher
+			// suites is not allowed", HTTP 400): a config must list every cipher suite the
+			// interface has, and only the `enabled` flags are actually mutable.
+			"tls_ciphers": schema.SetNestedAttribute{
 				Optional:    true,
-				Description: "The list of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled.",
+				Description: "The set of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. Ordering is not significant. CipherTrust Manager does not permit adding or removing cipher suites, so this must list every suite the interface already has; only the enabled flags can be changed.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"cipher_suite": schema.StringAttribute{
@@ -336,6 +367,18 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	var payload CMInterfaceJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// registration_token and certificate.password are write-only: the framework nulls
+	// them out of PlannedState during PlanResourceChange, before Create() ever runs, so
+	// plan.RegToken / plan.Certificate.Password are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMInterfaceTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -404,8 +447,8 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload.NetworkInterface = plan.NetworkInterface.ValueString()
 	}
-	if plan.RegToken.ValueString() != "" && plan.RegToken.ValueString() != types.StringNull().ValueString() {
-		payload.RegToken = plan.RegToken.ValueString()
+	if v := config.RegToken.ValueString(); v != "" {
+		payload.RegToken = v
 	}
 	if !reflect.DeepEqual((*CMInterfacTrustedCAsTFSDK)(nil), plan.TrustedCAs) {
 		r.client.Log.Debug("Trusted CAs should not be empty at this point")
@@ -425,6 +468,43 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 			trustedCAs.Local = localCAs
 		}
 		payload.TrustedCAs = &trustedCAs
+	}
+
+	// local_auto_gen_attributes (TFIN-534): Create() previously omitted this block entirely.
+	// Update() had the correct logic; copy it here so the first apply converges without
+	// requiring a redundant second apply.
+	if plan.LocalAutogenAttributes != nil {
+		var attributes CMInterfaceLocalAutogenAttrJSON
+		if plan.LocalAutogenAttributes.CN.ValueString() != "" && plan.LocalAutogenAttributes.CN.ValueString() != types.StringNull().ValueString() {
+			attributes.CN = plan.LocalAutogenAttributes.CN.ValueString()
+		}
+		var dnsArr []string
+		for _, s := range plan.LocalAutogenAttributes.DNSNames {
+			dnsArr = append(dnsArr, s.ValueString())
+		}
+		attributes.DNSNames = dnsArr
+		var emailsArr []string
+		for _, s := range plan.LocalAutogenAttributes.Emails {
+			emailsArr = append(emailsArr, s.ValueString())
+		}
+		attributes.Emails = emailsArr
+		var ipArr []string
+		for _, s := range plan.LocalAutogenAttributes.IPAddresses {
+			ipArr = append(ipArr, s.ValueString())
+		}
+		attributes.IPAddresses = ipArr
+		var namesArr []NamesParamsJSON
+		for _, n := range plan.LocalAutogenAttributes.Names {
+			namesArr = append(namesArr, NamesParamsJSON{
+				C: n.C.ValueString(), L: n.L.ValueString(),
+				O: n.O.ValueString(), OU: n.OU.ValueString(), ST: n.ST.ValueString(),
+			})
+		}
+		attributes.Names = namesArr
+		if plan.LocalAutogenAttributes.UID.ValueString() != "" && plan.LocalAutogenAttributes.UID.ValueString() != types.StringNull().ValueString() {
+			attributes.UID = plan.LocalAutogenAttributes.UID.ValueString()
+		}
+		payload.LocalAutogenAttributes = &attributes
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -477,8 +557,14 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 			plan.AllowUnregistered = types.BoolNull()
 		}
 	}
+	// "" is a meaningful value for auto_gen_ca_id, not a synonym for "unset": setting it to
+	// an empty string is the documented way to disable server-certificate auto-generation
+	// (see this attribute's Description). CM echoes the key back with an empty value rather
+	// than omitting it — live-confirmed: PATCH {"auto_gen_ca_id":""} returns 200 with
+	// "auto_gen_ca_id":"" and the subsequent GET agrees — so gate on r.Exists() alone.
+	// Collapsing "" to null here made an explicit auto_gen_ca_id = "" re-plan forever.
 	if !plan.AutogenCAId.IsNull() && !plan.AutogenCAId.IsUnknown() {
-		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() {
 			plan.AutogenCAId = types.StringValue(r.String())
 		} else {
 			plan.AutogenCAId = types.StringNull()
@@ -494,9 +580,9 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 	if !plan.AutoRegistration.IsNull() && !plan.AutoRegistration.IsUnknown() {
 		if r := gjson.Get(response, "auto_registration"); r.Exists() {
 			plan.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
-			plan.AutoRegistration = types.BoolNull()
 		}
+		// else: CM omits auto_registration from create response (write-only field).
+		// plan.AutoRegistration already holds the user's configured value — preserve it.
 	}
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
@@ -578,8 +664,13 @@ func (r *resourceCMInterface) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	// registration_token — write-only; plan.RegToken already holds the user's configured value.
-	// certificate — write-only; plan.Certificate already holds the user's configured value.
+	// registration_token / certificate.password are write-only — the framework nulls
+	// them from outgoing state/plan artifacts automatically, but null them explicitly
+	// too for clarity.
+	plan.RegToken = types.StringNull()
+	if plan.Certificate != nil {
+		plan.Certificate.Password = types.StringNull()
+	}
 
 	r.client.Log.Debug("[resource_interface.go -> Create Output][" + response + "]")
 
@@ -608,9 +699,9 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 	response, err := r.client.ReadDataByParam(ctx, id, state.Name.ValueString(), common.URL_INTERFACE)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"CM Interface Not Found — State Preserved",
-				"The CM Interface resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Interface"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Interface", state.Name.ValueString()),
 			)
 			return
 		}
@@ -651,8 +742,11 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AllowUnregistered = types.BoolNull()
 		}
 	}
+	// Gate on r.Exists() alone — "" is a real value meaning "auto-generation disabled", not
+	// "unset". See the matching comment in Create(); this is the site that produced the
+	// perpetual "+ auto_gen_ca_id = \"\"" diff, since Read() runs on every refresh.
 	if !state.AutogenCAId.IsNull() {
-		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() && r.String() != "" {
+		if r := gjson.Get(response, "auto_gen_ca_id"); r.Exists() {
 			state.AutogenCAId = types.StringValue(r.String())
 		} else {
 			state.AutogenCAId = types.StringNull()
@@ -665,13 +759,19 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 			state.AutogenDaysBeforeExpiry = types.Int64Null()
 		}
 	}
-	if !state.AutoRegistration.IsNull() {
-		if r := gjson.Get(response, "auto_registration"); r.Exists() {
-			state.AutoRegistration = types.BoolValue(r.Bool())
-		} else {
+	// auto_registration (Optional, write-only on create):
+	// - CM returns true  → store true in state.
+	// - CM returns false → field was cleared; null is the correct Terraform state.
+	// - CM omits key     → preserve prior state (write-only create: key absent from 201 and
+	//                      subsequent GET until the value is explicitly set/cleared).
+	if r := gjson.Get(response, "auto_registration"); r.Exists() {
+		if r.Bool() {
+			state.AutoRegistration = types.BoolValue(true)
+		} else if !state.AutoRegistration.IsNull() {
 			state.AutoRegistration = types.BoolNull()
 		}
 	}
+	// else: key absent — leave state.AutoRegistration unchanged.
 	if !state.CertUserField.IsNull() {
 		if r := gjson.Get(response, "cert_user_field"); r.Exists() && r.String() != "" {
 			state.CertUserField = types.StringValue(r.String())
@@ -829,37 +929,45 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 				}
 				laga.IPAddresses = ips
 			}
-			var names []NamesParamsTFSDK
-			for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
-				entry := NamesParamsTFSDK{}
-				if r := n.Get("C"); r.Exists() {
-					entry.C = types.StringValue(r.String())
-				} else {
-					entry.C = types.StringNull()
+			// names (TFIN-535): CM always returns a default names entry even when the user
+			// never configured it. Only hydrate from the API response when the user previously
+			// configured names (non-nil slice in prior state); otherwise preserve nil to prevent
+			// perpetual drift. Matches the preserve-prior-state pattern used for uid below.
+			if state.LocalAutogenAttributes.Names != nil {
+				var names []NamesParamsTFSDK
+				for _, n := range gjson.Get(response, "local_auto_gen_attributes.names").Array() {
+					entry := NamesParamsTFSDK{}
+					if r := n.Get("C"); r.Exists() {
+						entry.C = types.StringValue(r.String())
+					} else {
+						entry.C = types.StringNull()
+					}
+					if r := n.Get("L"); r.Exists() {
+						entry.L = types.StringValue(r.String())
+					} else {
+						entry.L = types.StringNull()
+					}
+					if r := n.Get("O"); r.Exists() {
+						entry.O = types.StringValue(r.String())
+					} else {
+						entry.O = types.StringNull()
+					}
+					if r := n.Get("OU"); r.Exists() {
+						entry.OU = types.StringValue(r.String())
+					} else {
+						entry.OU = types.StringNull()
+					}
+					if r := n.Get("ST"); r.Exists() {
+						entry.ST = types.StringValue(r.String())
+					} else {
+						entry.ST = types.StringNull()
+					}
+					names = append(names, entry)
 				}
-				if r := n.Get("L"); r.Exists() {
-					entry.L = types.StringValue(r.String())
-				} else {
-					entry.L = types.StringNull()
-				}
-				if r := n.Get("O"); r.Exists() {
-					entry.O = types.StringValue(r.String())
-				} else {
-					entry.O = types.StringNull()
-				}
-				if r := n.Get("OU"); r.Exists() {
-					entry.OU = types.StringValue(r.String())
-				} else {
-					entry.OU = types.StringNull()
-				}
-				if r := n.Get("ST"); r.Exists() {
-					entry.ST = types.StringValue(r.String())
-				} else {
-					entry.ST = types.StringNull()
-				}
-				names = append(names, entry)
+				laga.Names = names
+			} else {
+				laga.Names = nil
 			}
-			laga.Names = names
 			if r := gjson.Get(response, "local_auto_gen_attributes.uid"); r.Exists() && r.String() != "" {
 				laga.UID = types.StringValue(r.String())
 			} else {
@@ -894,8 +1002,8 @@ func (r *resourceCMInterface) Read(ctx context.Context, req resource.ReadRequest
 		}
 	}
 
-	// registration_token — write-only; state.RegToken already holds prior value.
-	// certificate — write-only; state.Certificate already holds prior value.
+	// registration_token / certificate.password are write-only — never stored in state,
+	// so there is nothing to hydrate or preserve here. Both are always null.
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
@@ -919,6 +1027,18 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	}
 	// Load prior state to obtain the stable resource UUID.
 	diags = req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// registration_token and certificate.password are write-only: the framework nulls
+	// them out of PlannedState during PlanResourceChange, before Update() ever runs, so
+	// plan.RegToken / plan.Certificate.Password are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMInterfaceTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -964,7 +1084,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.CertUserField.IsNull() && !plan.CertUserField.IsUnknown() {
 		payload["cert_user_field"] = plan.CertUserField.ValueString()
 	} else if !state.CertUserField.IsNull() {
-		payload["cert_user_field"] = "" // Reset/empty
+		// CM does not support clearing cert_user_field — it is an enum with no unset member
+		// and rejects "" with HTTP 400. Send the CM-documented default "CN" to reset.
+		payload["cert_user_field"] = "CN"
 	}
 
 	// custom_uid_size (Int64)
@@ -985,7 +1107,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if !plan.DefaultConnection.IsNull() && !plan.DefaultConnection.IsUnknown() {
 		payload["default_connection"] = plan.DefaultConnection.ValueString()
 	} else if !state.DefaultConnection.IsNull() {
-		payload["default_connection"] = "" // Reset/empty
+		// CM does not support clearing default_connection via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["default_connection"] = "local_account"
 	}
 
 	// kmip_enable_hard_delete (Int64)
@@ -1043,7 +1167,9 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MaximumTLSVersion.ValueString() != "" && plan.MaximumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["maximum_tls_version"] = plan.MaximumTLSVersion.ValueString()
 	} else if !state.MaximumTLSVersion.IsNull() {
-		payload["maximum_tls_version"] = ""
+		// CM does not support clearing maximum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["maximum_tls_version"] = "tls_1_3"
 	}
 
 	if plan.Meta != nil {
@@ -1063,24 +1189,46 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	if plan.MinimumTLSVersion.ValueString() != "" && plan.MinimumTLSVersion.ValueString() != types.StringNull().ValueString() {
 		payload["minimum_tls_version"] = plan.MinimumTLSVersion.ValueString()
 	} else if !state.MinimumTLSVersion.IsNull() {
-		payload["minimum_tls_version"] = ""
+		// CM does not support clearing minimum_tls_version via "": PATCH returns HTTP 200 but
+		// the value is silently unchanged. Send the CM-documented default to genuinely reset.
+		payload["minimum_tls_version"] = "tls_1_2"
 	}
 
 	if plan.Mode.ValueString() != "" && plan.Mode.ValueString() != types.StringNull().ValueString() {
 		payload["mode"] = plan.Mode.ValueString()
+	} else if !state.Mode.IsNull() {
+		// CM does not support clearing mode by omitting the field — without an explicit value
+		// the prior setting persists silently. Send the CM-documented default to genuinely reset.
+		payload["mode"] = "unauth-tls-pw-req"
+	}
+
+	// port (Int64) - Required, so always known/non-null in plan, but CM returns
+	// 409 "conflict with the current state" if the (unchanged) port is resent on
+	// every update — it interprets the value as a request to bind to a port
+	// already in use by this same interface. Only send it when it actually changed.
+	if !plan.Port.Equal(state.Port) {
+		payload["port"] = plan.Port.ValueInt64()
 	}
 
 	if plan.NetworkInterface.ValueString() != "" && plan.NetworkInterface.ValueString() != types.StringNull().ValueString() {
 		payload["network_interface"] = plan.NetworkInterface.ValueString()
+	} else if !state.NetworkInterface.IsNull() {
+		// CM does not support clearing network_interface by omitting the field — without an
+		// explicit value the prior setting persists silently. Send the CM-documented default.
+		payload["network_interface"] = "all"
 	}
 
-	// registration_token: send explicit "" clear when user removes the field and prior state
-	// held a value. CM accepts PATCH {"registration_token": ""} → HTTP 200, subsequent GET
+	// registration_token is write-only (never stored in state), so its own value can never
+	// be diffed against a prior value — registration_token_version is the explicit,
+	// state-tracked signal that the caller wants the current value re-sent (or cleared, if
+	// empty) to CM. CM accepts PATCH {"registration_token": ""} → HTTP 200, subsequent GET
 	// shows key absent (live-confirmed in ticket).
-	if !plan.RegToken.IsNull() && !plan.RegToken.IsUnknown() {
-		payload["registration_token"] = plan.RegToken.ValueString()
-	} else if !state.RegToken.IsNull() {
-		payload["registration_token"] = ""
+	if !plan.RegTokenVersion.Equal(state.RegTokenVersion) {
+		if v := config.RegToken.ValueString(); v != "" {
+			payload["registration_token"] = v
+		} else {
+			payload["registration_token"] = ""
+		}
 	}
 
 	// tls_ciphers: Null vs Empty vs Populated collection distinction
@@ -1140,12 +1288,23 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 	// certificate is absent from swagger ConfigurationUpdate AND ConfigurationAdd (undocumented
 	// CM API field); nil-clear follows the same convention used for local_auto_gen_attributes
 	// and meta in this Update().
+	//
+	// password is write-only (never stored in state), so it is read from config rather
+	// than plan. The whole certificate object is resent whenever the block is configured
+	// (matching CertChain/Generate/Format, which are not write-only and are resent
+	// unconditionally too) — password_version's sole purpose is to give Terraform a
+	// diffable signal to call Update() at all when only the password is being rotated
+	// and certificate_chain/format/generate are unchanged.
 	if plan.Certificate != nil {
+		var configPassword types.String
+		if config.Certificate != nil {
+			configPassword = config.Certificate.Password
+		}
 		payload["certificate"] = &CMInterfacCertificateJSON{
 			CertChain: plan.Certificate.CertChain.ValueString(),
 			Generate:  plan.Certificate.Generate.ValueBool(),
 			Format:    plan.Certificate.Format.ValueString(),
-			Password:  plan.Certificate.Password.ValueString(),
+			Password:  configPassword.ValueString(),
 		}
 	} else if state.Certificate != nil {
 		payload["certificate"] = nil
@@ -1180,6 +1339,14 @@ func (r *resourceCMInterface) Update(ctx context.Context, req resource.UpdateReq
 		plan.Name = state.Name
 	}
 
+	// registration_token / certificate.password are write-only — the framework nulls
+	// them from outgoing state/plan artifacts automatically, but null them explicitly
+	// too for clarity.
+	plan.RegToken = types.StringNull()
+	if plan.Certificate != nil {
+		plan.Certificate.Password = types.StringNull()
+	}
+
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -1206,6 +1373,10 @@ func (r *resourceCMInterface) Delete(ctx context.Context, req resource.DeleteReq
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_interface.go -> Delete][" + state.Name.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Interface", state.Name.ValueString()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

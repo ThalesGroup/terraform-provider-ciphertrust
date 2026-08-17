@@ -116,11 +116,16 @@ func Test_CM_ClusterNodeRead_PublicAddressDrift(t *testing.T) {
 	const newPublicAddress = "10.171.30.99"
 	const oldPublicAddress = "10.171.20.1"
 
-	// Fake joining node: auth + GET api/v1/cluster.
+	// Fake joining node: auth + GET api/v1/cluster + GET api/v1/system/info
+	// (common.NewClient always calls system/info to fetch the CM version).
 	nodeMux := http.NewServeMux()
 	nodeMux.HandleFunc("/api/v1/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"jwt":"fake-node-token","refresh_token":"fake-refresh"}`)
+	})
+	nodeMux.HandleFunc("/api/v1/system/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"version":"Development"}`)
 	})
 	nodeMux.HandleFunc("/api/v1/cluster", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -231,6 +236,11 @@ func newClusterNodeReadTestResource(t *testing.T, selfNodeID, statusCode, status
 	nodeMux.HandleFunc("/api/v1/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"jwt":"fake-node-token","refresh_token":"fake-refresh"}`)
+	})
+	// common.NewClient always calls system/info to fetch the CM version.
+	nodeMux.HandleFunc("/api/v1/system/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"version":"Development"}`)
 	})
 	nodeMux.HandleFunc("/api/v1/cluster", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -17,19 +17,19 @@ description: |-
 
 ### Required
 
-- `policy` (String)
+- `policy` (String) ID of the parent CTE Client Policy whose IDT key rules are to be listed.
 
 ### Read-Only
 
-- `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+- `rules` (Attributes List) List of IDT (Information Dispersal Technology) key rules configured on the policy. (see [below for nested schema](#nestedatt--rules))
 
 <a id="nestedatt--rules"></a>
 ### Nested Schema for `rules`
 
 Read-Only:
 
-- `current_key` (String)
-- `id` (String)
-- `order_number` (Number)
-- `policy_id` (String)
-- `transformation_key` (String)
+- `current_key` (String) Identifier of the current key linked with the rule.
+- `id` (String) ID of the IDT key rule within the parent CTE Client Policy.
+- `order_number` (Number) Precedence order of the rule in the parent policy.
+- `policy_id` (String) ID of the parent CTE Client Policy.
+- `transformation_key` (String) Identifier of the transformation key linked with the rule.

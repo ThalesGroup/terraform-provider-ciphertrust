@@ -2,6 +2,8 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
+
 	"github.com/google/uuid"
 	"os"
 	"testing"
@@ -37,10 +39,8 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 		}
 		data "ciphertrust_get_oci_compartments" "compartments" {
 			connection_id = ciphertrust_oci_connection.connection.id
-			limit = 1
 		}
 		data "ciphertrust_get_oci_vaults" "vaults" {
-			limit = 1
 			connection_id = ciphertrust_oci_connection.connection.id
 			compartment_id = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
 			region = data.ciphertrust_get_oci_regions.regions.oci_regions.0
@@ -52,7 +52,7 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 		}
 		data "ciphertrust_oci_vault_list" "by_name" {
 			filters = {
-				name = ciphertrust_oci_vault.vault.name
+				display_name = ciphertrust_oci_vault.vault.name
 			}
 		}
 		data "ciphertrust_oci_vault_list" "no_filters" {
@@ -66,11 +66,39 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 	vaultsDataSource := "data.ciphertrust_get_oci_vaults.vaults"
 	compartmentsDataSource := "data.ciphertrust_get_oci_compartments.compartments"
 
+	invalidFilterConfig := `
+		data "ciphertrust_oci_vault_list" "bad_filter" {
+			filters = {
+				totally_bogus_filter = "x"
+			}
+		}`
+
+	zeroMatchConfig := `
+		data "ciphertrust_oci_vault_list" "zero_match" {
+			filters = {
+				display_name = "definitely-does-not-exist-xyz"
+			}
+		}`
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmOCIVaults() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				// Step 1: Unrecognized filter key must be rejected at plan time.
+				Config:      invalidFilterConfig,
+				ExpectError: regexp.MustCompile(`Unrecognized filter key`),
+			},
+			{
+				// Step 2: valid filter with no matching vault must return empty list, not null.
+				Config: zeroMatchConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_oci_vault_list.zero_match", "vaults.#", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_oci_vault_list.zero_match", "matched", "0"),
+				),
+			},
+			{
+				// Step 3: infrastructure + data source checks.
 				Config: connectionConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Vault resource
@@ -83,6 +111,80 @@ func TestCckmOCIDataSourceVault(t *testing.T) {
 					// No-filter vault list: fragile count omitted; check at least one entry present
 					resource.TestCheckResourceAttrSet(vaultsNoFilters, "vaults.0.vault_id"),
 				),
+			},
+		},
+	})
+}
+
+func TestCckmOCIDataSourceGetVaultsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = ""
+						compartment_id = "ocid1.compartment.fake"
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "   "
+						compartment_id = "ocid1.compartment.fake"
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// empty compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = ""
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "   "
+						region         = "us-ashburn-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// empty region must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "ocid1.compartment.fake"
+						region         = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only region must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_vaults" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "ocid1.compartment.fake"
+						region         = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

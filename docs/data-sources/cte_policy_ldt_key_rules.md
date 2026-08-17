@@ -17,11 +17,11 @@ description: |-
 
 ### Required
 
-- `policy` (String)
+- `policy` (String) ID of the parent CTE Client Policy whose LDT key rules are to be listed.
 
 ### Read-Only
 
-- `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+- `rules` (Attributes List) List of LDT (Live Data Transformation) key rules configured on the policy. (see [below for nested schema](#nestedatt--rules))
 
 <a id="nestedatt--rules"></a>
 ### Nested Schema for `rules`

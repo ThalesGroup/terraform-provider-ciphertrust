@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -29,6 +28,8 @@ type dataSourceCTEProcessSets struct {
 }
 
 type CTEProcessSetsDataSourceModel struct {
+	Limit       types.Int64               `tfsdk:"limit"`
+	Skip        types.Int64               `tfsdk:"skip"`
 	ProcessSets []CTEProcessSetsListTFSDK `tfsdk:"process_sets"`
 }
 
@@ -39,53 +40,76 @@ func (d *dataSourceCTEProcessSets) Metadata(_ context.Context, req datasource.Me
 func (d *dataSourceCTEProcessSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of process sets to return. If unset, all process sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of process sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"process_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of process sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the process set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the process set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the process set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the process set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the process set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the process set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the process set.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the process set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"processes": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of processes belonging to the process set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the process within the process set.",
+										Optional:    true,
 									},
 									"directory": schema.StringAttribute{
-										Optional: true,
+										Description: "Directory containing the process executable.",
+										Optional:    true,
 									},
 									"signature": schema.StringAttribute{
-										Optional: true,
+										Description: "Signature associated with the process, used to identify the process.",
+										Optional:    true,
 									},
 									"file": schema.StringAttribute{
-										Optional: true,
+										Description: "Name of the process executable file.",
+										Optional:    true,
 									},
 									"resource_set_id": schema.StringAttribute{
-										Optional: true,
+										Description: "ID of the resource set linked to the process.",
+										Optional:    true,
 									},
 								},
 							},
@@ -99,24 +123,27 @@ func (d *dataSourceCTEProcessSets) Schema(_ context.Context, _ datasource.Schema
 
 func (d *dataSourceCTEProcessSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_process_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_process_sets.go -> Read][" + id + "]")
 	var state CTEProcessSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_PROCESS_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_PROCESS_SET, skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_process_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_process_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE process sets from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE process sets", total, limitVal)
 
 	processSets := []CTEProcessSetListItemJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &processSets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_process_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_process_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE process sets from CM",
 			err.Error(),
@@ -160,7 +187,7 @@ func (d *dataSourceCTEProcessSets) Read(ctx context.Context, req datasource.Read
 		state.ProcessSets = append(state.ProcessSets, processSetState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_process_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_process_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

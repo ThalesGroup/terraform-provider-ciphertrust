@@ -723,65 +723,54 @@ resource "ciphertrust_user" "test" {
 }
 
 // Test_CM_CMUserOutOfBandDeletion verifies that when a user is deleted directly on
-// CipherTrust Manager (out-of-band), the next terraform plan/refresh removes it
-// from state gracefully instead of returning a hard error.
+// CipherTrust Manager (out-of-band), the next terraform refresh surfaces an error
+// diagnostic (state preserved) so the operator is clearly informed of the drift.
 func Test_CM_CMUserOutOfBandDeletion(t *testing.T) {
 	username := fmt.Sprintf("tf-oob-%d", time.Now().Unix())
+	var capturedID string
 
-	deleteOutOfBand := func(resourceName string) resource.TestCheckFunc {
-		return func(s *terraform.State) error {
-			rs, ok := s.RootModule().Resources[resourceName]
-			if !ok {
-				return fmt.Errorf("resource %s not found in state", resourceName)
-			}
-			id := rs.Primary.ID
-			client, ok := createCMClient()
-			if !ok {
-				t.Skip("Skipping out-of-band deletion test: CM client could not be created (check CIPHERTRUST_* env vars)")
-			}
-			endpoint := common.URL_USER_MANAGEMENT + "/" + id
-			if _, err := client.DeleteByURL(context.Background(), id, endpoint); err != nil {
-				return fmt.Errorf("out-of-band delete failed: %s", err)
-			}
-			return nil
-		}
+	client, ok := createCMClient()
+	if !ok {
+		t.Skip("Skipping out-of-band deletion test: CM client could not be created (check CIPHERTRUST_* env vars)")
 	}
+
+	userConfig := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test_oob" {
+  username = "%s"
+  password = "CHAnge012!@#"
+}
+`, username)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Step 1: Create the user, then delete it from CM directly.
-			// ExpectNonEmptyPlan: true suppresses the post-step consistency
-			// check failure that occurs because the OOB delete causes the
-			// resource to disappear from state during the refresh check.
+			// Step 1: Create the user; capture its ID for out-of-band deletion.
 			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "test_oob" {
-  username = "%s"
-  password = "CHAnge012!@#"
-}
-`, username),
+				Config: userConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_user.test_oob", "id"),
-					deleteOutOfBand("ciphertrust_user.test_oob"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_user.test_oob"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						capturedID = rs.Primary.ID
+						return nil
+					},
 				),
-				ExpectNonEmptyPlan: false,
 			},
-			// Step 2: Refresh — Read() detects 404, preserves state.
+			// Step 2: Delete the user out-of-band, then refresh.
+			// Read() detects the 404 and returns an error (state preserved).
+			// The operator must run 'terraform state rm' to clean up.
 			{
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
-			},
-			// Step 3: Plan — user kept in state.
-			{
-				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_user" "test_oob" {
-  username = "%s"
-  password = "CHAnge012!@#"
-}
-`, username),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PreConfig: func() {
+					endpoint := common.URL_USER_MANAGEMENT + "/" + capturedID
+					if _, err := client.DeleteByURL(context.Background(), capturedID, endpoint); err != nil {
+						t.Logf("out-of-band delete failed (user may already be gone): %s", err)
+					}
+				},
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`CM User Not Found`),
 			},
 		},
 	})
@@ -1012,6 +1001,46 @@ resource "ciphertrust_user" "test" {
 						return nil
 					},
 				),
+			},
+		},
+	})
+}
+
+// Test_CM_User_NicknameAtCreateDoesNotCrash verifies that creating a ciphertrust_user
+// with nickname set to a value different from username no longer crashes with
+// "Provider produced inconsistent result after apply" (TFIN-551).
+// CM silently ignores the configured nickname and always assigns nickname = username —
+// the provider now preserves the configured value in state rather than overwriting it.
+// Also verifies that a subsequent terraform plan is clean (no drift).
+func Test_CM_User_NicknameAtCreateDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+	username := "tf-nick-crash-" + uuid.New().String()[:8]
+	nickname := "custom-nick-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_user" "test" {
+  username = %q
+  password = "CHAnge012!@#"
+  nickname = %q
+}`, username, nickname)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Create with nickname != username — must not crash.
+				// Before the fix: "was cty.StringVal(<nickname>), but now cty.StringVal(<username>)".
+				Config: cfg,
+				Check: checkStep(t, "create with explicit nickname — no crash",
+					resource.TestCheckResourceAttrSet("ciphertrust_user.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_user.test", "nickname", nickname),
+				),
+			},
+			{
+				// Regression: subsequent plan must be empty — no drift from Read() overwriting
+				// the configured nickname with the CM-returned username.
+				Config:             cfg,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

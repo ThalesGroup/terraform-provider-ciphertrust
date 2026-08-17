@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -110,7 +109,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Schema(_ context.Context, _ resource.Schem
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEPolicyLDTKeyRule) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_policy_ldtkeyrules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_policy_ldtkeyrules.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEPolicyAddLDTKeyRuleTFSDK
@@ -155,7 +154,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Create(ctx context.Context, req resource.C
 
 	payloadJSON, err := json.Marshal(ldtKeyRuleJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_ldtkeyrules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_ldtkeyrules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy LDT Key Rule Creation",
 			err.Error(),
@@ -170,7 +169,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Create(ctx context.Context, req resource.C
 		payloadJSON,
 	)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_ldtkeyrules.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_ldtkeyrules.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Policy LDT Key Rule on CipherTrust Manager: ",
 			"Could not create CTE Policy LDT Key Rule, unexpected error: "+err.Error(),
@@ -186,7 +185,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Create(ctx context.Context, req resource.C
 	plan.LDTKeyRule.ID = types.StringValue(newRule.ID)
 	plan.LDTKeyRule.OrderNumber = types.Int64Value(*newRule.OrderNumber)
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_ldtkeyrules.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_ldtkeyrules.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -212,14 +211,13 @@ func (r *resourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req resource.Rea
 		common.URL_CTE_POLICY+"/"+state.CTEClientPolicyID.ValueString()+"/ldtkeyrules",
 	)
 
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleRuleReadNotFound(ctx, err, response, "CTE Policy LDT Key Rule ("+state.LDTKeyRule.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 	var apiResponse LDTRuleJSON
 	err = json.Unmarshal([]byte(response), &apiResponse)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error reading CTE Policy LDT Key Rule from CipherTrust Manager: ",
 			err.Error(),
@@ -259,7 +257,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req resource.Rea
 		CurrentKey:        currentKey,
 		TransformationKey: transformationKey,
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 
@@ -322,7 +320,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Update(ctx context.Context, req resource.U
 
 	payloadJSON, err := json.Marshal(ldtKeyRuleJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_ldtkeyrules.go -> Update]["+plan.LDTKeyRule.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_ldtkeyrules.go -> Update][" + plan.LDTKeyRule.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy LDT Key Rule Update",
 			err.Error(),
@@ -337,7 +335,7 @@ func (r *resourceCTEPolicyLDTKeyRule) Update(ctx context.Context, req resource.U
 		payloadJSON,
 	)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy_ldtkeyrules.go -> Update]["+plan.LDTKeyRule.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy_ldtkeyrules.go -> Update][" + plan.LDTKeyRule.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE Policy LDT Key Rule on CipherTrust Manager: ",
 			"Could not update CTE Policy LDT Key Rule, unexpected error: "+err.Error()+string(payloadJSON),
@@ -371,8 +369,11 @@ func (r *resourceCTEPolicyLDTKeyRule) Delete(ctx context.Context, req resource.D
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_POLICY, state.CTEClientPolicyID.ValueString(), "ldtkeyrules", state.LDTKeyRule.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.CTEClientPolicyID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy_ldtkeyrules.go -> Delete]["+state.LDTKeyRule.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy_ldtkeyrules.go -> Delete][" + state.LDTKeyRule.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Policy LDT Key Rule "+state.LDTKeyRule.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Policy LDT Key Rule",
 			"Could not delete CTE Policy LDT Key Rule, unexpected error: "+err.Error(),

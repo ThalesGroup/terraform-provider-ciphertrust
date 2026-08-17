@@ -5,19 +5,76 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
 
+// awsKeyRotationFiltersTable documents the supported query parameters for the filters map.
+// All values are supplied as strings in the Terraform filters map regardless of the
+// underlying API type shown below.
+const awsKeyRotationFiltersTable = "\n\n> **Note:** Although some filters represent integers, all filter values must be specified as strings. " +
+	"For example, use `\"-1\"` rather than `-1`.\n\n" +
+	"| filter               | type    | description |\n" +
+	"|----------------------|---------|-------------|\n" +
+	"| skip                 | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit                | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort                 | string  | Fields to sort by. Valid sort fields are `updatedAt`, `createdAt`, `RotationDate`, and `ValidTo`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| key_source           | string  | Filter by key source. |\n" +
+	"| key_material_origin  | string  | Filter by key material origin. |\n" +
+	"| ImportState          | string  | Filter by ImportState. |\n" +
+	"| KeyMaterialState     | string  | Filter by key material state. |\n" +
+	"| RotationType         | string  | Filter by rotation type. |\n" +
+	"| last_import_status   | string  | Filter by last import status. |\n" +
+	"| KeyMaterialId        | string  | Filter by key material ID. |"
+
 var (
-	_ datasource.DataSource              = &dataSourceAWSKeyRotationList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSource                     = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSKeyRotationList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSKeyRotationList{}
+
+	awsKeyRotationValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "key_source": {},
+		"key_material_origin": {}, "ImportState": {}, "KeyMaterialState": {},
+		"RotationType": {}, "last_import_status": {}, "KeyMaterialId": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSKeyRotationList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsKeyRotationFilterValidator{}}
+}
+
+type awsKeyRotationFilterValidator struct{}
+
+func (v awsKeyRotationFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsKeyRotationFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsKeyRotationFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeyRotationsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyRotationValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_key_rotation_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSKeyRotationList() datasource.DataSource {
 	return &dataSourceAWSKeyRotationList{}
@@ -55,30 +112,38 @@ func (d *dataSourceAWSKeyRotationList) Metadata(_ context.Context, req datasourc
 
 func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of CipherTrust Manager AWS key rotations.\n\n" +
-			"Give a filter of 'limit=-1' to list more than 10 matches." +
-			"\n\n\n\nNote: This list is only available for CipherTrust Manager version 2.20 and greater.",
+		Description: "Use this data source to retrieve a list of AWS key rotations. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS key rotations (such as `key_source`, `RotationType`, or `KeyMaterialState`). " +
+			"Set `limit = \"-1\"` to return all matching rotations.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing AWS key rotations.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS key rotations." + awsKeyRotationFiltersTable,
 			},
 			"key_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager ID of an AWS key.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of records which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"rotations": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of AWS key rotations matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"account": schema.StringAttribute{
 							Computed:    true,
-							Description: "The account which owns this resource.",
+							Description: "The account that owns this resource.",
 						},
 						"aws_params": schema.SingleNestedAttribute{
 							Computed:    true,
@@ -94,7 +159,7 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 								},
 								"key_id": schema.StringAttribute{
 									Computed:    true,
-									Description: "Unique identifier for the key.",
+									Description: "AWS key ID.",
 								},
 								"key_material_description": schema.StringAttribute{
 									Computed:    true,
@@ -102,7 +167,7 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 								},
 								"key_material_id": schema.StringAttribute{
 									Computed:    true,
-									Description: "Unique identifier for the key material.",
+									Description: "AWS key material ID.",
 								},
 								"key_material_state": schema.StringAttribute{
 									Computed:    true,
@@ -156,7 +221,7 @@ func (d *dataSourceAWSKeyRotationList) Schema(_ context.Context, _ datasource.Sc
 						},
 						"source_key_name": schema.StringAttribute{
 							Computed:    true,
-							Description: "The name of CipherTrust Manager key used for the key material.",
+							Description: "The name of the CipherTrust Manager key used for the key material.",
 						},
 						"updated_at": schema.StringAttribute{
 							Computed:    true,

@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -28,6 +27,8 @@ type dataSourceCTEPolicyDataTXRule struct {
 
 type CTEPolicyDataTXRuleDataSourceModel struct {
 	PolicyID types.String                    `tfsdk:"policy"`
+	Limit    types.Int64                     `tfsdk:"limit"`
+	Skip     types.Int64                     `tfsdk:"skip"`
 	Rules    []CTEPolicyDataTxRulesListTFSDK `tfsdk:"rules"`
 }
 
@@ -39,47 +40,69 @@ func (d *dataSourceCTEPolicyDataTXRule) Schema(_ context.Context, _ datasource.S
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose data transformation rules are to be listed.",
+				Required:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of data transformation rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of data transformation rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of data transformation rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the data transformation rule within the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the data transformation rule.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the data transformation rule.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the data transformation rule.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the data transformation rule.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the data transformation rule was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the data transformation rule was last updated.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"order_number": schema.Int64Attribute{
-							Computed: true,
+							Description: "Precedence order of the rule in the parent policy.",
+							Computed:    true,
 						},
 						"key_id": schema.StringAttribute{
-							Computed: true,
+							Description: "Identifier of the key to link with the rule.",
+							Computed:    true,
 						},
 						"new_key_rule": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether this is a new key rule.",
+							Computed:    true,
 						},
 						"resource_set_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the resource set to link with the rule.",
+							Computed:    true,
 						},
 					},
 				},
@@ -90,29 +113,33 @@ func (d *dataSourceCTEPolicyDataTXRule) Schema(_ context.Context, _ datasource.S
 
 func (d *dataSourceCTEPolicyDataTXRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 	var state CTEPolicyDataTXRuleDataSourceModel
 	req.Config.Get(ctx, &state)
-	tflog.Info(ctx, "AnuragJain =====> "+state.PolicyID.ValueString())
+	d.client.Log.Info("AnuragJain =====> " + state.PolicyID.ValueString())
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/datatxrules")
+		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/datatxrules",
+		skipVal,
+		limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Data TX Rules from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policy data transformation rules", total, limitVal)
 
 	rules := []CTEPolicyDataTxRulesJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Data TX Rules from CM",
 			err.Error(),
@@ -138,7 +165,7 @@ func (d *dataSourceCTEPolicyDataTXRule) Read(ctx context.Context, req datasource
 		state.Rules = append(state.Rules, dataTxRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_datatxrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_datatxrules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

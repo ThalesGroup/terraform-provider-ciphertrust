@@ -1,6 +1,10 @@
 package provider
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"regexp"
@@ -9,6 +13,26 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
+
+// ociConnectionFixtureFingerprint is a placeholder fingerprint paired with the key generated
+// by generateTestRSAKeyPEM. CM never validates it against OCI because the tests that use
+// these values set skip_connection_params_test = true.
+const ociConnectionFixtureFingerprint = "41:95:17:c5:44:fa:f3:28:27:3b:e3:f6:ef:f3:8e:5c"
+
+// generateTestRSAKeyPEM returns a freshly generated 2048-bit RSA private key in PEM format.
+// Used by tests that need a syntactically valid key_file value but never contact real OCI
+// infrastructure (skip_connection_params_test = true).
+func generateTestRSAKeyPEM(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate test RSA key: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}))
+}
 
 // Test_CM_CckmOCIConnection exercises the full lifecycle of the ciphertrust_oci_connection resource:
 // Create, RefreshState, ImportState, Update (description change), and Update (region change).
@@ -230,6 +254,68 @@ resource "ciphertrust_oci_connection" "test" {
 `,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable|cannot be changed|cannot update`),
+			},
+		},
+	})
+}
+
+// Test_CM_CckmOCIConnection_ExplicitEmptyMetaAndDescription is a regression test for a bug
+// where setting `meta = {}` or `description = ""` explicitly in config crashed the first
+// terraform apply on Create with "Provider produced inconsistent result after apply"
+// (".meta: was cty.MapValEmpty(cty.String), but now null" / ".description: was
+// cty.StringVal(\"\"), but now null"). CM's create response omits both fields when they hold
+// no value, and the provider used to collapse that to null in state, contradicting the plan
+// Terraform had already proposed — orphaning the connection CM had created.
+//
+// This test requires no real OCI account: skip_connection_params_test = true prevents CM
+// from attempting to reach OCI, so a locally generated throwaway key is sufficient.
+func Test_CM_CckmOCIConnection_ExplicitEmptyMetaAndDescription(t *testing.T) {
+	RequireCM(t)
+
+	keyPEM := generateTestRSAKeyPEM(t)
+	name := "tf-" + uuid.New().String()[:8]
+	connectionResource := "ciphertrust_oci_connection.connection"
+
+	tmpl := `
+resource "ciphertrust_oci_connection" "connection" {
+  key_file = <<-EOT
+  %s
+  EOT
+  name                        = %q
+  pub_key_fingerprint         = %q
+  region                      = "us-phoenix-1"
+  tenancy_ocid                = "ocid1.tenancy.oc1..aaaaaaaafaketenancyfortest"
+  user_ocid                   = "ocid1.user.oc1..aaaaaaaafakeuserfortest"
+  skip_connection_params_test = true
+  meta                        = {}
+  description                 = ""
+}`
+
+	createConfig := providerConfig + fmt.Sprintf(tmpl, keyPEM, name, ociConnectionFixtureFingerprint)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Create with meta = {} and description = "" explicitly set in config.
+			// Must apply cleanly — no "Provider produced inconsistent result after apply" —
+			// and meta/description must resolve to their explicitly-empty values, not null.
+			{
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(connectionResource, "id"),
+					resource.TestCheckResourceAttr(connectionResource, "name", name),
+					resource.TestCheckResourceAttr(connectionResource, "meta.%", "0"),
+					resource.TestCheckResourceAttr(connectionResource, "description", ""),
+				),
+			},
+			// Step 2: RefreshState — reading the same values back from CM must not introduce
+			// a diff either.
+			{
+				RefreshState: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet(connectionResource, "id"),
+					resource.TestCheckResourceAttr(connectionResource, "meta.%", "0"),
+				),
 			},
 		},
 	})

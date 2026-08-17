@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -161,10 +162,10 @@ func Test_CM_GCPRead_OOBDelete_ErrorSentinel(t *testing.T) {
 }
 
 // Test_CM_GCPRead_OOBDelete_GracefulStateRemoval is an end-to-end unit test that
-// proves Read() silently removes the resource from state — instead of returning an
-// error diagnostic — when CM responds with 404.  This is the out-of-band deletion
-// scenario described in TFIN-326: after an OOB delete the next terraform plan must
-// propose a clean +create rather than hard-erroring.
+// proves Read() surfaces an error diagnostic (preserving state) when CM responds with
+// 404. This is the out-of-band deletion scenario. The previous behaviour was to emit a
+// warning; it was changed to an error so operators are clearly informed of the drift and
+// can make an explicit decision (terraform state rm or re-apply to recreate).
 //
 // The test uses net/http/httptest as a drop-in fake CM so no live endpoint is needed.
 func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
@@ -234,20 +235,21 @@ func Test_CM_GCPRead_OOBDelete_GracefulStateRemoval(t *testing.T) {
 	// Act: simulate a terraform plan/refresh after the connection was deleted out-of-band.
 	r.Read(ctx, req, resp)
 
-	// Assert 1: Read() must NOT add any error diagnostic on 404.
-	if resp.Diagnostics.HasError() {
-		t.Errorf("Read() must not add error diagnostics on OOB-delete 404, got: %v",
-			resp.Diagnostics)
+	// Assert 1: Read() MUST add an error diagnostic on 404 (changed from warning in prior
+	// behaviour — operators must be clearly informed of the resource drift).
+	if !resp.Diagnostics.HasError() {
+		t.Errorf("Read() on OOB-delete 404: expected an error diagnostic but got none")
 	}
 
-	// Assert 2: Read() must add a Warning diagnostic on 404 as per the State Preserved standard.
+	// Assert 2: Read() must add at least one diagnostic (error or warning) on 404.
 	if len(resp.Diagnostics) == 0 {
-		t.Error("Read() must add a Warning diagnostic on OOB-delete 404 to notify state preservation")
+		t.Error("Read() must add a diagnostic on OOB-delete 404")
 	}
 
-	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be false) on 404.
+	// Assert 3: Read() must NOT remove the resource from state (state.Raw.IsNull must be
+	// false) on 404 — state is preserved so the operator can decide.
 	if resp.State.Raw.IsNull() {
-		t.Errorf("Read() must preserve the resource in state (state.Raw.IsNull is false) on 404 as per CLAUDE.md convention, got null state")
+		t.Errorf("Read() must preserve the resource in state on 404, got null state")
 	}
 }
 
@@ -445,4 +447,93 @@ func Test_CM_GCPConnection_CloudNameEnumValidator(t *testing.T) {
 			t.Errorf("unexpected error for a null config value: %v", diags)
 		}
 	})
+}
+
+// Test_CM_GCPConnectionList_EmptyResponseSucceeds verifies that a CM response with an
+// empty body (zero-match filter) returns an empty gcp list attribute, not null (TFIN-566).
+func Test_CM_GCPConnectionList_EmptyResponseSucceeds(t *testing.T) {
+	ctx := context.Background()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "") // empty body = zero matches
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &common.Client{
+		CipherTrustURL: server.URL,
+		HTTPClient:     server.Client(),
+		Log:            hclog.NewNullLogger(),
+	}
+
+	d := &dataSourceGCPConnection{client: client}
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	dsVals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		dsVals[name] = tftypes.NewValue(attrType, nil)
+	}
+	rawConfig := tftypes.NewValue(dsType, dsVals)
+
+	req := datasource.ReadRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	resp := &datasource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: rawConfig},
+	}
+	d.Read(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error on empty response: %v", resp.Diagnostics)
+	}
+	var state GCPConnectionDataSourceModel
+	if err := resp.State.Get(ctx, &state); err != nil {
+		t.Fatalf("failed to decode state: %v", err)
+	}
+	if len(state.Gcp) != 0 {
+		t.Errorf("expected 0 gcp connections, got %d", len(state.Gcp))
+	}
+}
+
+// Test_CM_GCPConnectionList_UnrecognizedFilterRejectedAtConfig verifies that
+// ConfigValidators rejects unknown filter keys at config-validate time (TFIN-565).
+func Test_CM_GCPConnectionList_UnrecognizedFilterRejectedAtConfig(t *testing.T) {
+	ctx := context.Background()
+	d := &dataSourceGCPConnection{}
+
+	validators := d.ConfigValidators(ctx)
+	if len(validators) == 0 {
+		t.Fatal("expected at least one ConfigValidator on ciphertrust_gcp_connection_list")
+	}
+
+	var schemaResp datasource.SchemaResponse
+	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
+	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+
+	vals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
+	for name, attrType := range dsType.AttributeTypes {
+		if name == "filters" {
+			vals[name] = tftypes.NewValue(tftypes.Map{ElementType: tftypes.String},
+				map[string]tftypes.Value{"bogusKey": tftypes.NewValue(tftypes.String, "x")})
+		} else {
+			vals[name] = tftypes.NewValue(attrType, nil)
+		}
+	}
+	rawConfig := tftypes.NewValue(dsType, vals)
+
+	for _, v := range validators {
+		req := datasource.ValidateConfigRequest{
+			Config: tfsdk.Config{Schema: schemaResp.Schema, Raw: rawConfig},
+		}
+		resp := &datasource.ValidateConfigResponse{}
+		v.ValidateDataSource(ctx, req, resp)
+		if !resp.Diagnostics.HasError() {
+			t.Error("expected error for unrecognized filter key, got none")
+		}
+	}
 }

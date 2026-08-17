@@ -17,34 +17,34 @@ description: |-
 
 ### Read-Only
 
-- `user_sets` (Attributes List) (see [below for nested schema](#nestedatt--user_sets))
+- `user_sets` (Attributes List) List of user sets. (see [below for nested schema](#nestedatt--user_sets))
 
 <a id="nestedatt--user_sets"></a>
 ### Nested Schema for `user_sets`
 
 Optional:
 
-- `users` (Attributes List) (see [below for nested schema](#nestedatt--user_sets--users))
+- `users` (Attributes List) List of users belonging to the user set. (see [below for nested schema](#nestedatt--user_sets--users))
 
 Read-Only:
 
-- `account` (String)
-- `created_at` (String)
-- `description` (String)
-- `id` (String)
-- `labels` (Map of String)
-- `name` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the user set.
+- `created_at` (String) Date and time the user set was created.
+- `description` (String) Description of the user set.
+- `id` (String) The unique identifier of the user set.
+- `labels` (Map of String) Labels applied to the user set.
+- `name` (String) Name of the user set.
+- `updated_at` (String) Date and time the user set was last updated.
+- `uri` (String) URI of the user set.
 
 <a id="nestedatt--user_sets--users"></a>
 ### Nested Schema for `user_sets.users`
 
 Optional:
 
-- `gid` (Number)
-- `gname` (String)
-- `index` (Number)
-- `os_domain` (String)
-- `uid` (Number)
-- `uname` (String)
+- `gid` (Number) Group ID (GID) of the user.
+- `gname` (String) Group name of the user.
+- `index` (Number) Index of the user within the user set.
+- `os_domain` (String) OS domain of the user.
+- `uid` (Number) User ID (UID) of the user.
+- `uname` (String) Username of the user.

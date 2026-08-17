@@ -3,30 +3,28 @@
 page_title: "ciphertrust_aws_xks_keys_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of AWS XKS keys. Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters for listing AWS keys (e.g. region, alias, keyid). Use 'limit=-1' to return more than 10 matches.
+  Use this data source to retrieve a list of AWS XKS keys. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS XKS keys (such as region, alias, or keyid). Set limit = "-1" to return all matching keys.
 ---
 
 # ciphertrust_aws_xks_keys_list (Data Source)
 
-Use this data source to retrieve a list of AWS XKS keys. Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters for listing AWS keys (e.g. region, alias, keyid). Use 'limit=-1' to return more than 10 matches.
+Use this data source to retrieve a list of AWS XKS keys. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS XKS keys (such as `region`, `alias`, or `keyid`). Set `limit = "-1"` to return all matching keys.
 
 ## Example Usage
 
 ```terraform
-# List all AWS XKS keys (up to default limit of 10)
-data "ciphertrust_aws_xks_keys_list" "all_keys" {}
-
-# List AWS XKS keys filtered by region
-data "ciphertrust_aws_xks_keys_list" "keys_by_region" {
+# Sort XKS keys by creation date, newest first.
+data "ciphertrust_aws_xks_keys_list" "sorted" {
   filters = {
-    region = "ap-south-2"
+    sort = "-createdAt"
   }
 }
 
-# List all AWS XKS keys (no limit)
-data "ciphertrust_aws_xks_keys_list" "all_keys_no_limit" {
+# List XKS keys by region and alias.
+data "ciphertrust_aws_xks_keys_list" "by_region_and_alias" {
   filters = {
-    limit = "-1"
+    region = "us-east-1"
+    alias  = "my-xks-key"
   }
 }
 ```
@@ -36,7 +34,40 @@ data "ciphertrust_aws_xks_keys_list" "all_keys_no_limit" {
 
 ### Optional
 
-- `filters` (Map of String) A map of key:value pairs matching CipherTrust Manager API query parameters for listing AWS XKS keys.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS XKS keys.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter                   | type    | description |
+|--------------------------|---------|-------------|
+| skip                     | integer | Index of the first result to return (default: 0). |
+| limit                    | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort                     | string  | Fields to sort by. Valid sort fields are `connection`, `cloud_name`, `origin`, `enabled`, `region`, `key_id`, `alias`, `updatedAt`, `createdAt`, `CreationDate`, `multi_region_key_type`, `blocked`, `CustomKeyStoreID`, and `ValidTo`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| keyid                    | string  | Filter by AWS key ID. |
+| arn                      | string  | Filter by AWS key ARN. |
+| alias                    | string  | Filter by AWS key alias. |
+| kms                      | string  | Filter by KMS name. |
+| kms_id                   | string  | Filter by KMS ID. |
+| region                   | string  | Filter by AWS region. |
+| cloud_name               | string  | Filter by cloud name. |
+| origin                   | string  | Filter by AWS key origin. |
+| job_config_id            | string  | Filter by scheduler job configuration ID. |
+| cckm_policy_template_id  | string  | Filter by CCKM policy template ID. |
+| enabled                  | boolean | Filter by whether the key is enabled (`true` or `false`). |
+| gone                     | boolean | Filter by whether the key is marked as gone (`true` or `false`). |
+| tags                     | string  | JSON value. Filters keys whose `tags` attribute contains the specified value. |
+| keystate                 | string  | Filter by AWS key state. |
+| keyusage                 | string  | Filter by AWS key usage. |
+| keymanager               | string  | Filter by AWS key manager. |
+| rotation_job_enabled     | boolean | Filter by whether the rotation job is enabled (`true` or `false`). |
+| CustomerMasterKeySpec    | string  | Filter by AWS KMS CustomerMasterKeySpec. |
+| key_material_origin      | string  | Filter by key material origin. |
+| key_source               | string  | Filter by key source. |
+| multi_region             | boolean | Filter by whether the key is multi-region (`true` or `false`). |
+| multi_region_key_type    | string  | Filter by multi-region key type. |
+| blocked                  | boolean | Filter by whether the key is blocked (`true` or `false`) (AWS HYOK keys only). |
+| custom_key_store_id      | string  | Filter by custom key store ID (AWS HYOK keys only). |
+| custom_key_store_name    | string  | Filter by custom key store name (AWS HYOK keys only). |
 
 ### Read-Only
 
@@ -56,6 +87,7 @@ Read-Only:
 - `created_at` (String) Date the key was created.
 - `custom_key_store_id` (String) Custom keystore ID in AWS.
 - `external_accounts` (Set of String) Other AWS accounts that have access to this key.
+- `gone` (Boolean) True if the key's region has been removed from the KMS regions list. Key operations will fail until the region is restored.
 - `id` (String) Terraform ID (composite of region and AWS key ID for aws_key).
 - `key_admins` (Set of String) Key administrators - users.
 - `key_admins_roles` (Set of String) Key administrators - roles.
@@ -67,7 +99,7 @@ Read-Only:
 - `key_users_roles` (Set of String) Key users - roles.
 - `kms_id` (String) ID of the KMS.
 - `kms_name` (String) Name of the KMS. On input this accepts a KMS name or ID; the returned value is the KMS name.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `linked` (Boolean) True if the key is linked with AWS.
 - `local_key_id` (String) CipherTrust Manager key identifier of the external key.
 - `local_key_name` (String) CipherTrust Manager key name of the external key.

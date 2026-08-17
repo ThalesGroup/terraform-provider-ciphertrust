@@ -433,7 +433,7 @@ func Test_CM_HSMRot_ParseConfigEmpty(t *testing.T) {
 // testAccHsmRotConfig returns a minimal HCL config for the HSM root-of-truth
 // resource, built from TF_ACC_HSM_* env vars. Requires a live HSM.
 // Partition password is passed via TF_VAR_hsm_partition_password to avoid
-// embedding secrets in plaintext in test logs (TFIN-432).
+// embedding secrets in plaintext in test logs.
 func testAccHsmRotConfig(reset bool) string {
 	return providerConfig + fmt.Sprintf(`
 variable "hsm_partition_password" {
@@ -459,7 +459,7 @@ resource "ciphertrust_hsm_root_of_trust_setup" "setup_hsm" {
 
 // Test_CM_HsmRot_NoFalsePlanDriftAfterApply verifies that after a successful
 // apply with reset=true, subsequent terraform plan and terraform destroy both
-// succeed without an immutability false-positive (TFIN-432).
+// succeed without an immutability false-positive.
 func Test_CM_HsmRot_NoFalsePlanDriftAfterApply(t *testing.T) {
 	RequireCM(t)
 	if os.Getenv("TF_ACC_HSM") == "" {
@@ -492,7 +492,7 @@ func Test_CM_HsmRot_NoFalsePlanDriftAfterApply(t *testing.T) {
 				ExpectNonEmptyPlan: false,
 			},
 			// Step 3 — Destroy: resource.Test automatically destroys after the
-			// final step. If TFIN-432 is present, destroy is blocked by the
+			// final step. If the immutability false-positive regresses, destroy is blocked by the
 			// same refresh+plan immutability error. A clean exit from
 			// resource.Test (no error on the implicit destroy) is the assertion.
 		},

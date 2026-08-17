@@ -16,10 +16,82 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const ociKeysFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, " +
+	"all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter                    | type    | description |\n" +
+	"|---------------------------|---------|-------------|\n" +
+	"| skip                      | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit                     | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort                      | string  | Fields to sort by. Valid sort fields are `display_name`, `region`, `key_id`, `algorithm`, `length`, `updatedAt`, `createdAt`, `time_created`, `time_of_deletion`, `linked_state`, `blocked`, `local_hyok_key_id`, and `name`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| id                        | string  | Filter by CipherTrust Manager internal ID of the OCI key. |\n" +
+	"| key_name                  | string  | Filter by OCI key display name or OCI HYOK key name. |\n" +
+	"| algorithm                 | string  | Filter by OCI key algorithm. |\n" +
+	"| length                    | integer | Filter by OCI key length. |\n" +
+	"| key_id                    | string  | Filter by OCI key OCID. |\n" +
+	"| vault_name                | string  | Filter by OCI vault name. |\n" +
+	"| protection_mode           | string  | Filter by OCI key protection mode. |\n" +
+	"| job_config_id             | string  | Filter by job config ID. |\n" +
+	"| lifecycle_state           | string  | Filter by OCI key lifecycle state. |\n" +
+	"| tenancy                   | string  | Filter by OCI tenancy. |\n" +
+	"| compartment_name          | string  | Filter by compartment name. |\n" +
+	"| vault_id                  | string  | Filter by vault OCID. |\n" +
+	"| cckm_vault_id             | string  | Filter by CipherTrust Manager vault ID. |\n" +
+	"| curve_id                  | string  | Filter by curve ID. |\n" +
+	"| gone                      | string  | Filter by gone status. |\n" +
+	"| region                    | string  | Filter by region. |\n" +
+	"| local_hyok_key_id         | string  | Filter by local HYOK key ID. |\n" +
+	"| local_hyok_key_version_id | string  | Filter by local HYOK key version ID. |\n" +
+	"| local_key_store_id        | string  | Filter by local key store ID. |\n" +
+	"| linked_state              | boolean | Filter by whether the key is in a linked state (`true` or `false`). |\n" +
+	"| key_material_origin       | string  | Filter by key material origin. Valid values are `native`, `cckm`, `HYOK-CCKM`, and `HYOK-External`. |\n" +
+	"| blocked                   | boolean | Filter by whether the key is blocked (`true` or `false`). |\n" +
+	"| state                     | string  | Filter by key state. Valid values are `ACTIVE` and `DISABLED`. |"
+
 var (
-	_ datasource.DataSource              = &dataSourceOCIKeys{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIKeys{}
+	_ datasource.DataSource                     = &dataSourceOCIKeys{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIKeys{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIKeys{}
+
+	ociKeyValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "key_name": {},
+		"algorithm": {}, "length": {}, "key_id": {}, "vault_name": {},
+		"protection_mode": {}, "job_config_id": {}, "lifecycle_state": {},
+		"tenancy": {}, "compartment_name": {}, "vault_id": {}, "cckm_vault_id": {},
+		"curve_id": {}, "gone": {}, "region": {}, "local_hyok_key_id": {},
+		"local_hyok_key_version_id": {}, "local_key_store_id": {},
+		"linked_state": {}, "key_material_origin": {}, "blocked": {}, "state": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCIKeys) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociKeyFilterValidator{}}
+}
+
+type ociKeyFilterValidator struct{}
+
+func (v ociKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeysDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_key_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCIKeys() datasource.DataSource {
 	return &dataSourceOCIKeys{}
@@ -56,25 +128,28 @@ func (d *dataSourceOCIKeys) Metadata(_ context.Context, req datasource.MetadataR
 
 func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of CipherTrust Manager OCI keys.\n\n" +
-			"Give a filter of 'limit=-1' to list more than 10 matches.",
+		Description: "Use this data source to retrieve a list of OCI keys stored in CipherTrust Manager. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing OCI keys (such as `key_name`, `algorithm`, or `tenancy`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing OCI keys.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI keys." + ociKeysFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of keys which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"keys": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The list of OCI keys stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"account": schema.StringAttribute{
 							Computed:    true,
-							Description: "The account which owns this resource.",
+							Description: "The account that owns this resource.",
 						},
 						"auto_rotate": schema.BoolAttribute{
 							Computed:    true,
@@ -107,7 +182,7 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 						"labels": schema.MapAttribute{
 							ElementType: types.StringType,
 							Computed:    true,
-							Description: "A list of key:value pairs associated with the key.",
+							Description: "A map of key/value pairs associated with the key.",
 						},
 						"oci_key_params": schema.SingleNestedAttribute{
 							Computed:    true,
@@ -223,15 +298,15 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 						},
 						"external_key_params": schema.SingleNestedAttribute{
 							Computed:    true,
-							Description: "The attributes are related to BYOK keys.",
+							Description: "Attributes for BYOK (Bring Your Own Key) keys.",
 							Attributes: map[string]schema.Attribute{
 								"blocked": schema.BoolAttribute{
 									Computed:    true,
-									Description: "Whether the key is blocked or not.",
+									Description: "Whether the key is blocked.",
 								},
 								"linked_state": schema.BoolAttribute{
 									Computed:    true,
-									Description: "Whether key is in linked state or not.",
+									Description: "Whether the key is in a linked state.",
 								},
 								"name": schema.StringAttribute{
 									Computed:    true,
@@ -239,7 +314,7 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 								},
 								"policy": schema.StringAttribute{
 									Computed:    true,
-									Description: "The key's policy",
+									Description: "The key's policy.",
 								},
 								"state": schema.StringAttribute{
 									Computed:    true,
@@ -274,7 +349,7 @@ func (d *dataSourceOCIKeys) Schema(_ context.Context, _ datasource.SchemaRequest
 									},
 									"version_id": schema.StringAttribute{
 										Computed:    true,
-										Description: "The key version's OCID",
+										Description: "The key version's OCID.",
 									},
 								},
 							},
@@ -326,6 +401,7 @@ func (d *dataSourceOCIKeys) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
+	state.Keys = []models.DataSourceKeyTFSDK{}
 	for _, key := range keys.Resources {
 		keyTFSDK := models.DataSourceKeyTFSDK{
 			Account:           types.StringValue(key.Account),

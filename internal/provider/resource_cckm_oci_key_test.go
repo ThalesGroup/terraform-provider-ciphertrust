@@ -121,8 +121,7 @@ func scheduleOciKeyVersionDeletionOutOfBand(keyID, versionID string) {
 //   - Update lifecycle: disable/re-enable, freeform tags, rename, scheduler add/change/remove.
 //   - Post-update immutability checks: algorithm, length, and vault on the key; cckm_key_id
 //     on the version. All produce a plan-time error and leave resources untouched.
-//   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
-//     (schedule_for_deletion_days) retains with warning.
+//   - OOB version deletion: RefreshState errors with SCHEDULING_DELETION; Update also errors.
 //   - OOB key deletion: RefreshState retains key as SCHEDULING_DELETION (drift reported);
 //     Update triggers "Provider produced inconsistent result".
 func TestCckmOCIKeyNative(t *testing.T) {
@@ -478,7 +477,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create a valid key + v1; verify attributes and data sources.
-				Config: createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
@@ -512,10 +512,12 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 2: refresh state - verify no unexpected drift.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 2") },
 				RefreshState: true,
 			},
 			{
 				// Step 3: import the key resource and verify all computed attributes round-trip.
+				PreConfig:               func() { logTestStep(t.Name(), "Step 3") },
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -523,6 +525,7 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 4: import the key version resource.
+				PreConfig:         func() { logTestStep(t.Name(), "Step 4") },
 				ResourceName:      v1Resource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -533,7 +536,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 5: disable key + rename + add freeform tag.
-				Config: updateConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 5") },
+				Config:    updateConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "false"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "DISABLED"),
@@ -543,7 +547,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 6: re-enable key (name stays keyNameUpdated).
-				Config: restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 6") },
+				Config:    restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "enable_key", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -553,7 +558,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 7: add scheduler_one and enable auto-rotation.
-				Config: addRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 7") },
+				Config:    addRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -561,7 +567,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 8: switch auto-rotation to scheduler_two.
-				Config: changeRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 8") },
+				Config:    changeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "true"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -569,7 +576,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 9: remove enable_auto_rotation block - auto_rotate must become false.
-				Config: removeRotationConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 9") },
+				Config:    removeRotationConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "auto_rotate", "false"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "ENABLED"),
@@ -578,34 +586,39 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			{
 				// Step 10: changing algorithm must be rejected at plan time.
 				// State is unchanged (PlanOnly) - key must NOT be destroyed.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 10") },
 				Config:      badAlgorithmConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 11: changing length must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 11") },
 				Config:      badLengthConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 12: changing vault must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
 				Config:      badVaultConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 13: changing cckm_key_id on the version must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 13") },
 				Config:      badCckmKeyIdConfig,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`Immutable attribute change detected`),
+				ExpectError: regexp.MustCompile(`Attribute is immutable`),
 			},
 			{
 				// Step 14: re-apply a clean config to confirm key and version are still ENABLED
 				// with all immutable attributes unchanged. Schedulers are destroyed here as a
 				// side effect since they are not present in this config.
 				// Capture key and v1 IDs for the OOB deletion tests that follow.
-				Config: afterImmutabilityConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 14") },
+				Config:    afterImmutabilityConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.algorithm", "RSA"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.length", "256"),
@@ -632,7 +645,8 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			{
 				// Step 15: add v2 (depends_on v1) so that v1 becomes non-current.
 				// Only non-current versions are eligible for OOB scheduled deletion.
-				Config: twoVersionsConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 15") },
+				Config:    twoVersionsConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttrSet(v1Resource, "id"),
@@ -641,77 +655,41 @@ func TestCckmOCIKeyNative(t *testing.T) {
 			},
 			{
 				// Step 16: schedule v1 for deletion OOB, then refresh state.
-				// Expected: v1 retained with lifecycle_state = SCHEDULING_DELETION;
-				// v2 remains ENABLED.
+				// Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 16")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedKeyID, capturedV1ID)
 				},
 				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[v1Resource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", v1Resource)
-						}
-						if rs.Primary.ID != capturedV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-					resource.TestCheckResourceAttr(v2Resource, "oci_key_version_params.lifecycle_state", "ENABLED"),
-				),
+				ExpectError:  regexp.MustCompile(`OCI key version was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 17: apply update with schedule_for_deletion_days = 7 on v1.
-				// v1 is already SCHEDULING_DELETION. Expected: provider issues a warning
-				// (not an error) and retains v1 in state with SCHEDULING_DELETION.
-				Config: twoVersionsUpdateV1Config,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[v1Resource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", v1Resource)
-						}
-						if rs.Primary.ID != capturedV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(v1Resource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				// Step 17: attempt to apply update with schedule_for_deletion_days = 7 on v1.
+				// v1 is already SCHEDULING_DELETION. The pre-apply refresh triggers Read which
+				// errors before Update can run. Expected: apply fails with the SCHEDULING_DELETION error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 17") },
+				Config:      twoVersionsUpdateV1Config,
+				ExpectError: regexp.MustCompile(`OCI key version was found in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 18: schedule the key itself for deletion OOB, then refresh state.
-				// OCI auto-disables keys when scheduling deletion, causing drift on enable_key
-				// (plan wants true from schema default, read-back is false).
-				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
+				// Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 18")
 					scheduleOciKeyDeletionOutOfBand(capturedKeyID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedKeyID {
-							return fmt.Errorf("expected key id %q, got %q", capturedKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`OCI key was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 19: apply a rename on the SCHEDULING_DELETION key.
-				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
-				// but the plan used the schema default (true). The Terraform framework raises
-				// "Provider produced inconsistent result".
+				// Step 19: attempt to apply a config change while the key is still in
+				// SCHEDULING_DELETION. Read errors before any apply logic runs.
+				// Expected: same SCHEDULING_DELETION error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 19") },
 				Config:      oobKeyUpdateConfig,
-				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
+				ExpectError: regexp.MustCompile(`OCI key was found in SCHEDULING_DELETION state`),
 			},
 		},
 	})
@@ -736,7 +714,6 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 		data "ciphertrust_get_oci_buckets" "buckets" {
 			connection_id  = ciphertrust_oci_connection.oci_connection.id
 			compartment_id = ciphertrust_oci_vault.vault.compartment_id
-			limit          = 1
 		}
 
 		resource "ciphertrust_oci_vault" "vp_vault" {
@@ -792,7 +769,8 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create an HSM-protected native key and a version on the VP vault.
-				Config: baseConfig + createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    baseConfig + createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
@@ -811,7 +789,8 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
 				// Verify the trigger attribute is reflected in state.
-				Config: baseConfig + restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    baseConfig + restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
@@ -821,6 +800,7 @@ func TestCckmOCIKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 3: refresh state to re-read version attributes from the API,
 				// then verify updated_at changed after the restore.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 3") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
@@ -902,15 +882,179 @@ func TestCckmOCIKeyInvalidCreateConfigs(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: enable_key = false at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 1") },
 				Config:      disableAtCreateConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 			{
 				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      schedulerAtCreateConfig,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
+			},
+		},
+	})
+}
+
+func TestCckmOCIKeyCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: name empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = ""
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: name whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "   "
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: vault empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = ""
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: vault whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = "   "
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: oci_key_params.compartment_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = ""
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 6: oci_key_params.compartment_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "   "
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 7: oci_key_params.algorithm invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "INVALID"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+			// Step 8: oci_key_params.protection_mode invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_key" "test" {
+						name  = "valid-name"
+						vault = "valid-vault-id"
+						oci_key_params = {
+							algorithm       = "AES"
+							compartment_id  = "valid-compartment-id"
+							length          = 32
+							protection_mode = "INVALID"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}
+
+func TestCckmOCIKeyVersionCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: cckm_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_key_version" "test" {
+						cckm_key_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: cckm_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_key_version" "test" {
+						cckm_key_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

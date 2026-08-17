@@ -1,7 +1,16 @@
-data "ciphertrust_oci_key_list" "ciphertrust_keys" {
-  # Optional parameters
+# Sort OCI keys by creation date, newest first.
+data "ciphertrust_oci_key_list" "sorted" {
   filters = {
-    vault_name = "vault-name"
-    limit      = "-1"
+    sort = "-createdAt"
+  }
+}
+
+# List active AES keys in a specific vault, returning all matches.
+data "ciphertrust_oci_key_list" "active_aes_in_vault" {
+  filters = {
+    vault_name      = "prod-vault"
+    algorithm       = "AES"
+    lifecycle_state = "ENABLED"
+    limit           = "-1"
   }
 }

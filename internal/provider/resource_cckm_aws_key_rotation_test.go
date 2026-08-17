@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -140,6 +141,54 @@ func TestCckmAWSKeyRotationNative(t *testing.T) {
 					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.aws_params.key_material_state"),
 					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.aws_params.key_material_id"),
 				),
+			},
+		},
+	})
+}
+
+func TestCckmAWSKeyRotationCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_key_rotation" "test" {
+						key_id  = ""
+						trigger = "v1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_key_rotation" "test" {
+						key_id  = "   "
+						trigger = "v1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: trigger empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_key_rotation" "test" {
+						key_id  = "valid-key-id"
+						trigger = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: trigger whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_key_rotation" "test" {
+						key_id  = "valid-key-id"
+						trigger = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

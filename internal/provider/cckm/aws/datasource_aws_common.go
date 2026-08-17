@@ -295,6 +295,10 @@ func commonKeyListItemAttributes() map[string]schema.Attribute {
 			Computed:    true,
 			Description: "Date the key was created.",
 		},
+		"gone": schema.BoolAttribute{
+			Computed:    true,
+			Description: "True if the key's region has been removed from the KMS regions list. Key operations will fail until the region is restored.",
+		},
 		"external_accounts": schema.SetAttribute{
 			Computed:    true,
 			ElementType: types.StringType,
@@ -339,7 +343,7 @@ func commonKeyListItemAttributes() map[string]schema.Attribute {
 		"labels": schema.MapAttribute{
 			Computed:    true,
 			ElementType: types.StringType,
-			Description: "A list of key:value pairs associated with the key.",
+			Description: "A map of key/value pairs associated with the key.",
 		},
 		"local_key_id": schema.StringAttribute{
 			Computed:    true,

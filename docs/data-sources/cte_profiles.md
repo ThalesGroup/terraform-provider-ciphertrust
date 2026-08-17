@@ -58,23 +58,23 @@ output "cte_profiles" {
 
 ### Read-Only
 
-- `cte_profiles` (Attributes List) (see [below for nested schema](#nestedatt--cte_profiles))
+- `cte_profiles` (Attributes List) List of CTE client profiles. (see [below for nested schema](#nestedatt--cte_profiles))
 
 <a id="nestedatt--cte_profiles"></a>
 ### Nested Schema for `cte_profiles`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
+- `account` (String) Account of the profile.
+- `application` (String) Application associated with the profile.
 - `cache_settings` (Attributes) Cache settings for the server. (see [below for nested schema](#nestedatt--cte_profiles--cache_settings))
 - `concise_logging` (Boolean) Whether to allow concise logging.
 - `connect_timeout` (Number) Connect timeout in seconds. Valid values are 5 to 150.
-- `created_at` (String)
-- `description` (String)
+- `created_at` (String) Date and time the profile was created.
+- `description` (String) Description of the profile.
 - `duplicate_settings` (Attributes) Duplicate setting parameters. (see [below for nested schema](#nestedatt--cte_profiles--duplicate_settings))
 - `file_settings` (Attributes) File settings for the profile. (see [below for nested schema](#nestedatt--cte_profiles--file_settings))
-- `id` (String)
+- `id` (String) The unique identifier of the profile.
 - `ldt_qos_cap_cpu_allocation` (Boolean) Whether to allow CPU allocation for Quality of Service (QoS) capabilities.
 - `ldt_qos_cpu_percent` (Number) CPU application percentage if ldt_qos_cap_cpu_allocation is true. Valid values are 0 to 100.
 - `ldt_qos_rekey_option` (String) Rekey option and applicable options are RekeyRate and CPU.
@@ -85,7 +85,7 @@ Read-Only:
 - `metadata_scan_interval` (Number) Time interval in seconds to scan files under the GuardPoint. The default value is 600.
 - `mfa_exempt_user_set_id` (String) ID of the user set to be exempted from MFA. MFA will not be enforced on the users of this set.
 - `mfa_exempt_user_set_name` (String) Name of the user set to be exempted from MFA. MFA will not be enforced on the users of this set.
-- `name` (String)
+- `name` (String) Name of the profile.
 - `oidc_connection_id` (String) ID of the OIDC connection.
 - `oidc_connection_name` (String) Name of the OIDC connection.
 - `policy_evaluation_logger` (Attributes) Logger configurations for policy evaluation. (see [below for nested schema](#nestedatt--cte_profiles--policy_evaluation_logger))
@@ -97,9 +97,9 @@ Read-Only:
 - `server_settings` (Attributes List) Server configuration of cluster nodes. These settings are allowed only in cluster environment. (see [below for nested schema](#nestedatt--cte_profiles--server_settings))
 - `syslog_settings` (Attributes) Parameters to configure the Syslog server. (see [below for nested schema](#nestedatt--cte_profiles--syslog_settings))
 - `system_admin_logger` (Attributes) Logger configurations for the System administrator. (see [below for nested schema](#nestedatt--cte_profiles--system_admin_logger))
-- `updated_at` (String)
+- `updated_at` (String) Date and time the profile was last updated.
 - `upload_settings` (Attributes) Configure log upload to the Syslog server. (see [below for nested schema](#nestedatt--cte_profiles--upload_settings))
-- `uri` (String)
+- `uri` (String) URI of the profile.
 
 <a id="nestedatt--cte_profiles--cache_settings"></a>
 ### Nested Schema for `cte_profiles.cache_settings`
@@ -235,10 +235,10 @@ Read-Only:
 
 Read-Only:
 
-- `connection_timeout` (Number)
-- `drop_if_busy` (Boolean)
-- `job_completion_timeout` (Number)
-- `max_interval` (Number)
-- `max_messages` (Number)
-- `min_interval` (Number)
-- `upload_threshold` (String)
+- `connection_timeout` (Number) Timeout in seconds for the log upload connection.
+- `drop_if_busy` (Boolean) Whether to drop the log upload if the upload channel is busy.
+- `job_completion_timeout` (Number) Timeout in seconds to wait for a log upload job to complete.
+- `max_interval` (Number) Maximum interval in seconds between log uploads.
+- `max_messages` (Number) Maximum number of messages per log upload.
+- `min_interval` (Number) Minimum interval in seconds between log uploads.
+- `upload_threshold` (String) Applicable threshold for log upload.

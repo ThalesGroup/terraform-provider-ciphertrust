@@ -23,10 +23,15 @@ import (
 // attribute change, so the resource was never recreated.
 func Test_CM_ClusterRead_NotClusteredRemovesResource(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/cluster", func(w http.ResponseWriter, r *http.Request) {
+	// ReadDataByParam with id="" constructs ".../cluster/" (trailing slash) so we
+	// register both the exact path and the subtree to cover both call patterns.
+	notClusteredBody := `{"nodeID":"","status":{"code":"none","description":"not clustered"},"nodeCount":0}`
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"nodeID":"","status":{"code":"none","description":"not clustered"},"nodeCount":0}`)
-	})
+		fmt.Fprint(w, notClusteredBody)
+	}
+	mux.HandleFunc("/api/v1/cluster", handler)
+	mux.HandleFunc("/api/v1/cluster/", handler)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 

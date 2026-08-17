@@ -37,7 +37,7 @@ resource "ciphertrust_aws_key_rotation" "rotate" {
 
 ### Required
 
-- `key_id` (String) CipherTrust Manager UUID of the AWS native symmetric key to rotate. This attribute cannot be changed after creation.
+- `key_id` (String) (Immutable) CipherTrust Manager UUID of the AWS native symmetric key to rotate.
 - `trigger` (String) Arbitrary user-supplied value that controls when a rotation is requested. Changing this value causes resource replacement, which requests exactly one additional on-demand rotation.
 
 ### Read-Only

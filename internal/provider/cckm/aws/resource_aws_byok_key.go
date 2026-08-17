@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -63,8 +65,7 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		Description: "Use this resource to create and manage AWS EXTERNAL (BYOK) keys in CipherTrust Manager. " +
 			"Key material from a CipherTrust Manager source key is uploaded to AWS via the upload-key API. " +
-			"If the KMS is not found during refresh the key is kept in state until the KMS is recovered. " +
-			"A key pending deletion is kept in state on refresh with a warning.",
+			"If the KMS is not found during refresh the key is kept in state until the KMS is recovered.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -75,46 +76,61 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "AWS region in which to create the key.",
+				Description: "(Immutable) AWS region in which to create the key.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"source_key_identifier": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "CipherTrust Manager key ID to upload to AWS as BYOK material. " +
+				Description: "(Immutable) CipherTrust Manager key ID to upload to AWS as BYOK material. " +
 					"Leave blank to create an EXTERNAL key in PendingImport state with no key material uploaded. " +
 					"Populated on read from the API once material has been imported.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"source_key_tier": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
-				Description: "Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). " +
+				Description: "(Immutable) Source of the key material. The only valid value when specified is 'local' (a CipherTrust Manager key). " +
 					"Leave blank when not importing key material.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("local"),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
 				},
 			},
 			"enable_key": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Enable or disable the key. Default is true. " +
+				Description: "Enable or disable the key. Default is true. " +
 					"Cannot be set to false at creation time; disable via update after the key has been created.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key.",
+				Description: "(Conditionally immutable) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"primary_region": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) Updates the primary region of a multi-region key. Only valid during updates.",
+				Description: "Updates the primary region of a multi-region key. Only valid during updates." + mrKeyRefreshLimitationNote,
 			},
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the AWS KMS key " +
+				Description: "Number of days to wait before permanently deleting the AWS KMS key " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to 7. Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -134,10 +150,16 @@ func (r *resourceAWSByokKey) Schema(_ context.Context, _ resource.SchemaRequest,
 					"key_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource of the primary key to replicate.",
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`\S`),
+								"must contain at least one non-whitespace character",
+							),
+						},
 					},
 					"make_primary": schema.BoolAttribute{
 						Optional:    true,
-						Description: "Promote the replica to primary after replication. Only valid during replication creation.",
+						Description: "Promote the replica to primary after replication. Only valid during replication creation." + mrKeyRefreshLimitationNote,
 					},
 				},
 			},
@@ -374,7 +396,7 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), state.ID.ValueString(), "reading", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -388,8 +410,9 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 	if readKeyState == "PendingDeletion" || readKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "AWS", "BYOK key", readKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString()})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -417,7 +440,7 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -427,33 +450,8 @@ func (r *resourceAWSByokKey) Update(ctx context.Context, req resource.UpdateRequ
 	if updateKeyState == "PendingDeletion" || updateKeyState == "PendingReplicaDeletion" {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "AWS", "BYOK key", updateKeyState, "AWS")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
-		// Policy updates are permitted by AWS on keys pending deletion.
-		if plan.KeyPolicy != nil || state.KeyPolicy != nil {
-			planUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: plan.KeyPolicy}
-			stateUpdate := &AWSKeyUpdateInputTFSDK{KeyID: keyID, KeyPolicy: state.KeyPolicy}
-			var policyDiags diag.Diagnostics
-			updateKeyPolicy(ctx, id, r.client, planUpdate, stateUpdate, &policyDiags)
-			for _, d := range policyDiags {
-				if d.Severity() == diag.SeverityError {
-					resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
-				} else {
-					resp.Diagnostics.Append(d)
-				}
-			}
-			// Re-fetch to reflect any policy change in state.
-			if updated, err := r.client.GetById(ctx, id, keyID, common.URL_AWS_KEY); err == nil {
-				response = updated
-			}
-		}
-		// key_policy IS updated in this path - reflect the new config value in state.
-		state.KeyPolicy = plan.KeyPolicy
-		r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
 		return
 	}
 	keyEnabled := gjson.Get(response, "aws_param.Enabled").Bool()
@@ -567,7 +565,7 @@ func (r *resourceAWSByokKey) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	keyID := state.ID.ValueString()
-	response, _ := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
+	response := getAwsKey(ctx, id, r.client, state.KMSID.ValueString(), keyID, "deleting", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -660,24 +658,7 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	planParam := byokAwsParamFromObject(ctx, plan.AWSParam, &resp.Diagnostics)
-	stateParam := byokAwsParamFromObject(ctx, state.AWSParam, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	var changed []string
-	if planParam != nil && stateParam != nil {
-		if !planParam.CustomerMasterKeySpec.IsNull() && !planParam.CustomerMasterKeySpec.IsUnknown() &&
-			planParam.CustomerMasterKeySpec != stateParam.CustomerMasterKeySpec {
-			changed = append(changed, "customer_master_key_spec")
-		}
-		if !planParam.KeyUsage.IsNull() && !planParam.KeyUsage.IsUnknown() &&
-			planParam.KeyUsage != stateParam.KeyUsage {
-			changed = append(changed, "key_usage")
-		}
-	}
-
 	id := uuid.NewString()
 	if !plan.KMSID.IsNull() && !plan.KMSID.IsUnknown() && plan.KMSID != state.KMSID {
 		kmsID := state.KMSID.ValueString()
@@ -694,32 +675,9 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 		}
 	}
 
-	if planParam != nil && stateParam != nil &&
-		!planParam.MultiRegion.IsNull() && !planParam.MultiRegion.IsUnknown() &&
-		planParam.MultiRegion != stateParam.MultiRegion {
-		changed = append(changed, "multi_region")
-	}
-
-	if plan.Region != state.Region {
-		changed = append(changed, "region")
-	}
-
 	if plan.ReplicateKey != nil && state.ReplicateKey != nil {
 		if plan.ReplicateKey.KeyID != state.ReplicateKey.KeyID {
 			changed = append(changed, "replicate_key.key_id")
-		}
-	}
-
-	// source_key_identifier and source_key_tier are set once on create (via upload-key) and are
-	// thereafter managed exclusively by the aws_key_material resource. Prevent changes here.
-	stateSourceKeyID := state.SourceKeyID.ValueString()
-	if stateSourceKeyID != "" {
-		planSourceKeyID := plan.SourceKeyID.ValueString()
-		if !plan.SourceKeyID.IsNull() && !plan.SourceKeyID.IsUnknown() && planSourceKeyID != stateSourceKeyID {
-			changed = append(changed, "source_key_identifier")
-		}
-		if !plan.SourceKeyTier.IsNull() && !plan.SourceKeyTier.IsUnknown() && plan.SourceKeyTier != state.SourceKeyTier {
-			changed = append(changed, "source_key_tier")
 		}
 	}
 
@@ -738,7 +696,7 @@ func (r *resourceAWSByokKey) ModifyPlan(ctx context.Context, req resource.Modify
 
 	if len(changed) > 0 {
 		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
+			"Attribute is immutable",
 			fmt.Sprintf(
 				"The following attributes cannot be modified after creation: %s. "+
 					"Delete and recreate the resource to apply these changes.",

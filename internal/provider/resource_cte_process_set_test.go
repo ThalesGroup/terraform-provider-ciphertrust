@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteProcessSetConfig renders a ciphertrust_cte_process_set. When secondProcess
@@ -82,22 +82,136 @@ func TestCTEProcessSetResource(t *testing.T) {
 	})
 }
 
-// TestCTEProcessSetResource_nameImmutable verifies a name change is rejected.
-func TestCTEProcessSetResource_nameImmutable(t *testing.T) {
+// TestCTEProcessSetResource_nameRequiresReplace verifies a name change is
+// planned as a destroy+create rather than an in-place update (TFIN-497).
+func TestCTEProcessSetResource_nameRequiresReplace(t *testing.T) {
 	name := "tf-procset-imm-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: cteProcessSetConfig(name, "Original", false),
-				Check: checkStep(t, "process_set immutable: create",
-					resource.TestCheckResourceAttr("ciphertrust_cte_process_set.process_set", "name", name),
+				Check: checkStep(t, "process_set requires replace: create",
+					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
-				Config:      cteProcessSetConfig(name+"-renamed", "Original", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change process set name|immutable`),
+				Config: cteProcessSetConfig(name+"-renamed", "Original", false),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: checkStep(t, "process_set requires replace: rename",
+					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
+				),
+			},
+		},
+	})
+}
+
+// TestCTEProcessSetResource_processesClearing verifies that removing processes
+// from config actually clears them in CM and does not create a permanent plan
+// loop (TFIN-498).
+func TestCTEProcessSetResource_processesClearing(t *testing.T) {
+	name := "tf-procset-clear-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with a process entry
+			{
+				Config: cteProcessSetConfig(name, "Created via TF", false),
+				Check: checkStep(t, "process_set processes: create with processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "1"),
+				),
+			},
+			// Remove processes from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				Check: checkStep(t, "process_set processes: remove processes",
+					resource.TestCheckResourceAttr(rn, "processes.#", "0"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-498)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEProcessSetResource_labels verifies that the top-level labels
+// attribute actually reaches CM: setting it, changing it, and clearing it
+// each produce the expected state and no permanent plan loop (TFIN-598).
+func TestCTEProcessSetResource_labels(t *testing.T) {
+	name := "tf-procset-labels-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_process_set.process_set"
+
+	withLabel := func(name, value string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+  labels = {
+    env = %q
+  }
+}
+`, name, value)
+	}
+	withoutLabels := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_process_set" "process_set" {
+  name = %q
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with labels set
+			{
+				Config: withLabel(name, "test"),
+				Check: checkStep(t, "process_set labels: create",
+					resource.TestCheckResourceAttr(rn, "labels.env", "test"),
+				),
+			},
+			// Plan again should show no changes
+			{
+				Config:             withLabel(name, "test"),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// Change labels value
+			{
+				Config: withLabel(name, "changed"),
+				Check: checkStep(t, "process_set labels: update",
+					resource.TestCheckResourceAttr(rn, "labels.env", "changed"),
+				),
+			},
+			// Remove labels from config entirely
+			{
+				Config: withoutLabels,
+				Check: checkStep(t, "process_set labels: clear",
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
+				),
+			},
+			// Plan again should show no changes (no clear-loop)
+			{
+				Config:             withoutLabels,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})
