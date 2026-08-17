@@ -147,9 +147,9 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	var processes []CTEProcessJSON
 	for _, process := range plan.Processes {
@@ -291,7 +291,7 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 	// Initialize as an empty (non-nil) slice so that when plan.Processes is
 	// empty, the PATCH body explicitly sends "processes": [] rather than

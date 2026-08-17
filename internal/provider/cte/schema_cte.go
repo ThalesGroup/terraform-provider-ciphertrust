@@ -1026,7 +1026,7 @@ type CTEClientGroupJSON struct {
 	SharedDomainList        []string `json:"shared_domain_list"`
 	SystemLocked            bool     `json:"system_locked"`
 	AuthBinaries            string   `json:"auth_binaries,omitempty"`
-	ReSign                  bool     `json:"re_sign,omitempty"`
+	ReSign                  bool     `json:"re_sign"`
 	ClientList              []string `json:"client_list"`
 	InheritAttributes       bool     `json:"inherit_attributes"`
 	ClientID                string   `json:"client_id"`

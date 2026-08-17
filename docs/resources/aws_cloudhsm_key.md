@@ -121,8 +121,8 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key" {
 - `key_type` (String) Key type.
 - `key_users` (Set of String) Key users - users.
 - `key_users_roles` (Set of String) Key users - roles.
-- `kms_id` (String) ID of the KMS
-- `kms_name` (String) Name or of the KMS.
+- `kms_id` (String) ID of the KMS.
+- `kms_name` (String) Name of the KMS.
 - `labels` (Map of String) A map of key/value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS CloudHSM key is linked with AWS.
 - `local_key_id` (String) CipherTrust Manager key identifier of the external key.
@@ -130,8 +130,8 @@ resource "ciphertrust_aws_cloudhsm_key" "cloudhsm_key" {
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `region` (String) AWS region in which the CloudHSM key resides.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
-- `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
-- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
+- `rotated_from` (String) CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.
+- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
 - `rotation_status` (String) Rotation status of the key.
 - `synced_at` (String) Date the key was synchronized.
 - `updated_at` (String) Date the key was last updated.

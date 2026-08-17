@@ -75,6 +75,126 @@ func TestCTECSIGroupResource(t *testing.T) {
 	})
 }
 
+// TestCTECSIGroupResource_descriptionQuoteNotCorrupted is a regression test
+// for TFIN-636 Scenario 1: Create()/Update() built the outgoing payload with
+// common.TrimString(plan.X.String()) instead of plan.X.ValueString() for
+// description (among other fields, e.g. client_profile -- not exercised here
+// since client_profile must reference an existing CM CTE Client Profile
+// rather than accept an arbitrary string). types.String.String() returns a
+// Go %q-quoted debug representation (adds outer quotes, escapes internal "
+// as \"), and TrimString only strips the outer quote pair, leaving the
+// escaped backslash in the value sent to CM -- permanently corrupting any
+// value containing a literal " character. If the value were corrupted on
+// the way to CM, Read would keep reporting a mangled value, so the
+// follow-up PlanOnly steps would show a perpetual diff instead of "No
+// changes".
+func TestCTECSIGroupResource_descriptionQuoteNotCorrupted(t *testing.T) {
+	name := "tf-csi-quote-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_csigroup.csigroup"
+	const wantCreateDescription = `He said "hello" to me`
+	const wantUpdateDescription = `Updated: she said "goodbye" now`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteCSIGroupConfig(name, wantCreateDescription, false),
+				Check: checkStep(t, "csigroup quote: create",
+					resource.TestCheckResourceAttr(rn, "description", wantCreateDescription),
+				),
+			},
+			{
+				Config:             cteCSIGroupConfig(name, wantCreateDescription, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: cteCSIGroupConfig(name, wantUpdateDescription, true),
+				Check: checkStep(t, "csigroup quote: update",
+					resource.TestCheckResourceAttr(rn, "description", wantUpdateDescription),
+				),
+			},
+			{
+				Config:             cteCSIGroupConfig(name, wantUpdateDescription, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTECSIGroupResource_addGuardPolicyNoCrash is a regression test for
+// TFIN-636 Scenario 2: guard_policies[*].gp_id used
+// stringplanmodifier.UseStateForUnknown() instead of
+// UseNonNullStateForUnknown(). For a brand-new guard_policies map key with no
+// prior state, UseStateForUnknown() planned a concrete null (not "unknown")
+// for gp_id, so Terraform's plan-consistency check rejected the apply once
+// Update() resolved it to a real UUID -- crashing with "Provider produced
+// inconsistent result after apply" on every first-time addition of a guard
+// policy via op_type = "update-guard-policies".
+func TestCTECSIGroupResource_addGuardPolicyNoCrash(t *testing.T) {
+	name := "tf-csi-gp-" + uuid.New().String()[:8]
+	policyName := "tf-csi-gp-policy-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_csigroup.csigroup"
+
+	policyCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "csi_policy" {
+  name           = %q
+  policy_type    = "CSI"
+  never_deny     = true
+  security_rules = [{ effect = "permit" }]
+  description    = "Created via TF test"
+}
+`, policyName)
+
+	createCfg := policyCfg + fmt.Sprintf(`
+resource "ciphertrust_cte_csigroup" "csigroup" {
+  name                     = %q
+  kubernetes_namespace     = "default"
+  kubernetes_storage_class = "standard"
+}
+`, name)
+
+	addGuardPolicyCfg := policyCfg + fmt.Sprintf(`
+resource "ciphertrust_cte_csigroup" "csigroup" {
+  name                     = %q
+  kubernetes_namespace     = "default"
+  kubernetes_storage_class = "standard"
+  op_type                  = "update-guard-policies"
+  guard_policies = {
+    (ciphertrust_cte_policy.csi_policy.name) = {}
+  }
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "csigroup guard policy: create",
+					resource.TestCheckResourceAttrSet(rn, "id"),
+				),
+			},
+			{
+				// The regression: this apply used to crash with "Provider
+				// produced inconsistent result after apply" instead of
+				// completing.
+				Config: addGuardPolicyCfg,
+				Check: checkStep(t, "csigroup guard policy: add (no crash)",
+					resource.TestCheckResourceAttrSet(rn, "guard_policies."+policyName+".gp_id"),
+					resource.TestCheckResourceAttr(rn, "guard_policies."+policyName+".guard_enabled", "true"),
+				),
+			},
+			{
+				Config:             addGuardPolicyCfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTECSIGroupResource_nameImmutable verifies a name change is rejected.
 func TestCTECSIGroupResource_nameImmutable(t *testing.T) {
 	name := "tf-csi-imm-" + uuid.New().String()[:8]

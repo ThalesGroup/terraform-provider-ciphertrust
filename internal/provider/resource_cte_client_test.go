@@ -32,6 +32,65 @@ resource "ciphertrust_cte_client" "client" {
 `, name, extra)
 }
 
+// cteClientDescriptionConfig renders a ciphertrust_cte_client with an explicit
+// description, letting callers pass values that need to round-trip verbatim
+// (e.g. a literal double quote).
+func cteClientDescriptionConfig(name, description string) string {
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  description              = %q
+}
+`, name, description)
+}
+
+// TestCTEClientResource_descriptionQuoteNotCorrupted is a regression test for
+// TFIN-639: Create()/Update() built the outgoing payload with
+// common.TrimString(plan.Description.String()) instead of
+// plan.Description.ValueString(). types.String.String() returns a Go
+// %q-quoted debug representation (adds outer quotes, escapes internal " as
+// \"), and TrimString only strips the outer quote pair, leaving the escaped
+// backslash in the value sent to CM -- permanently corrupting any description
+// containing a literal " character. If the value were corrupted on the way
+// to CM, Read would keep reporting a different (mangled) value than the
+// configured one, so the follow-up PlanOnly step would show a perpetual
+// diff instead of "No changes".
+func TestCTEClientResource_descriptionQuoteNotCorrupted(t *testing.T) {
+	name := "tf-client-quote-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+	const wantCreateDescription = `He said "hello" to me`
+	const wantUpdateDescription = `Updated: she said "goodbye" now`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientDescriptionConfig(name, wantCreateDescription),
+				Check: checkStep(t, "client quote: create",
+					resource.TestCheckResourceAttr(rn, "description", wantCreateDescription),
+				),
+			},
+			{
+				Config:             cteClientDescriptionConfig(name, wantCreateDescription),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: cteClientDescriptionConfig(name, wantUpdateDescription),
+				Check: checkStep(t, "client quote: update",
+					resource.TestCheckResourceAttr(rn, "description", wantUpdateDescription),
+				),
+			},
+			{
+				Config:             cteClientDescriptionConfig(name, wantUpdateDescription),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 func TestCTEClientResource(t *testing.T) {
 	name := "tf-client-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"

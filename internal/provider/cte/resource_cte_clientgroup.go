@@ -222,19 +222,19 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	payload.ClusterType = common.TrimString(plan.ClusterType.ValueString())
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
-	if plan.CommunicationEnabled.ValueBool() != types.BoolNull().ValueBool() {
+	if !plan.CommunicationEnabled.IsNull() {
 		payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 	}
 	if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
-		payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.String())
+		payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.ValueString())
 	}
 	if v := config.Password.ValueString(); v != "" {
 		payload.Password = v
 	}
 	if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+		payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 		if plan.PasswordCreationMethod.ValueString() == "MANUAL" && (config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString()) {
 			resp.Diagnostics.AddError(
 				"Error creating CTE Client Group on CipherTrust Manager: ",
@@ -244,7 +244,7 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 		}
 	}
 	if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
-		payload.ProfileID = common.TrimString(plan.ProfileID.String())
+		payload.ProfileID = common.TrimString(plan.ProfileID.ValueString())
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -455,23 +455,23 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		}
 
 		//Now handle the mutable fields
-		if plan.ClientLocked.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.ClientLocked.IsNull() {
 			payload.ClientLocked = plan.ClientLocked.ValueBool()
 		}
-		if plan.CommunicationEnabled.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.CommunicationEnabled.IsNull() {
 			payload.CommunicationEnabled = plan.CommunicationEnabled.ValueBool()
 		}
 		if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-			payload.Description = common.TrimString(plan.Description.String())
+			payload.Description = common.TrimString(plan.Description.ValueString())
 		}
-		if plan.EnableDomainSharing.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.EnableDomainSharing.IsNull() {
 			payload.EnableDomainSharing = plan.EnableDomainSharing.ValueBool()
 		}
 		if plan.EnabledCapabilities.ValueString() != "" && plan.EnabledCapabilities.ValueString() != types.StringNull().ValueString() {
-			payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.String())
+			payload.EnabledCapabilities = common.TrimString(plan.EnabledCapabilities.ValueString())
 		}
 		if plan.LDTDesignatedPrimarySet.ValueString() != "" && plan.LDTDesignatedPrimarySet.ValueString() != types.StringNull().ValueString() {
-			payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.String())
+			payload.LDTDesignatedPrimarySet = common.TrimString(plan.LDTDesignatedPrimarySet.ValueString())
 		}
 		// password is write-only (never stored in state), so its own value can never
 		// be diffed against a prior value — password_version is the explicit,
@@ -481,7 +481,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			payload.Password = config.Password.ValueString()
 		}
 		if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 			if plan.PasswordCreationMethod.ValueString() == "MANUAL" {
 				if config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString() {
 					resp.Diagnostics.AddError(
@@ -494,14 +494,14 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			}
 		}
 		if plan.ProfileID.ValueString() != "" && plan.ProfileID.ValueString() != types.StringNull().ValueString() {
-			payload.ProfileID = common.TrimString(plan.ProfileID.String())
+			payload.ProfileID = common.TrimString(plan.ProfileID.ValueString())
 		}
 		if plan.SharedDomainList != nil {
 			for _, domain := range plan.SharedDomainList {
 				payload.SharedDomainList = append(payload.SharedDomainList, domain.ValueString())
 			}
 		}
-		if plan.SystemLocked.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.SystemLocked.IsNull() {
 			payload.SystemLocked = plan.SystemLocked.ValueBool()
 		}
 
@@ -589,7 +589,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 		if plan.AuthBinaries.ValueString() != "" && plan.AuthBinaries.ValueString() != types.StringNull().ValueString() {
 			payload.AuthBinaries = strings.TrimSpace(plan.AuthBinaries.ValueString())
 		}
-		if plan.ReSign.ValueBool() != types.BoolNull().ValueBool() {
+		if !plan.ReSign.IsNull() {
 			payload.ReSign = plan.ReSign.ValueBool()
 		}
 
@@ -687,7 +687,7 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			payload.Password = config.Password.ValueString()
 		}
 		if plan.PasswordCreationMethod.ValueString() != "" && plan.PasswordCreationMethod.ValueString() != types.StringNull().ValueString() {
-			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.String())
+			payload.PasswordCreationMethod = common.TrimString(plan.PasswordCreationMethod.ValueString())
 		}
 		if plan.PasswordCreationMethod.ValueString() == "MANUAL" && (config.Password.ValueString() == "" || config.Password.ValueString() == types.StringNull().ValueString()) {
 			resp.Diagnostics.AddError(
@@ -1008,7 +1008,69 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			return
 		}
 	} else if opType == "ldt-pause" {
-		if plan.Paused.ValueBool() != types.BoolNull().ValueBool() {
+		// Add error checks for fields we cant change in op_type = ldt-pause
+		if !stringSlicesEqual(plan.ClientList, state.ClientList) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "client_list cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.InheritAttributes != state.InheritAttributes {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "inherit_attributes cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.AuthBinaries != state.AuthBinaries {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "auth_binaries cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ReSign != state.ReSign {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "re_sign cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if !plan.PasswordVersion.Equal(state.PasswordVersion) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "password cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.PasswordCreationMethod != state.PasswordCreationMethod {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "password_creation_method cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ClientLocked != state.ClientLocked {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "client_locked cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.CommunicationEnabled != state.CommunicationEnabled {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "communication_enabled cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.Description != state.Description {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "description cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.EnableDomainSharing != state.EnableDomainSharing {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "enable_domain_sharing cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.EnabledCapabilities != state.EnabledCapabilities {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "enabled_capabilities cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "ldt_designated_primary_set cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.ProfileID != state.ProfileID {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "profile_id cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if !reflect.DeepEqual(plan.SharedDomainList, state.SharedDomainList) {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "shared_domain_list cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+		if plan.SystemLocked != state.SystemLocked {
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group LDT pause", "system_locked cannot be changed with op_type 'ldt-pause'")
+			return
+		}
+
+		if !plan.Paused.IsNull() {
 			payload.Paused = plan.Paused.ValueBool()
 		}
 

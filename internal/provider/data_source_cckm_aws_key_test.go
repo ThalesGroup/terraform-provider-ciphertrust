@@ -137,3 +137,29 @@ func TestCckmAWSDataSourceKey(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSDataSourceKeyRotationListCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty key_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_key_rotation_list" "test" {
+						key_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only key_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_key_rotation_list" "test" {
+						key_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}

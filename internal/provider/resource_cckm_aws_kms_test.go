@@ -270,3 +270,35 @@ func TestCckmAWSKms(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSKmsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: connection_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_kms" "test" {
+						account_id    = "123456789012"
+						connection_id = ""
+						name          = "valid-name"
+						regions       = ["us-east-1"]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: connection_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_kms" "test" {
+						account_id    = "123456789012"
+						connection_id = "   "
+						name          = "valid-name"
+						regions       = ["us-east-1"]
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}

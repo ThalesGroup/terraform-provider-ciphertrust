@@ -346,37 +346,106 @@ resource "ciphertrust_interface" "test" {
 	})
 }
 
-// Test_CM_Interface_Port_Immutable verifies that changing the port attribute
-// of ciphertrust_interface triggers a plan-time validation error because the port is immutable.
-func Test_CM_Interface_Port_Immutable(t *testing.T) {
+// Test_CM_AccCMInterface_PortUpdate verifies that port is mutable in place:
+// CM's PATCH /v1/configs/interfaces/{interface} documents "Interface types
+// supporting port update are: NAE, KMIP, WEB" (swagger-configs.yaml), so
+// changing port must apply as a normal update, not error at plan time, and
+// the resource id must remain stable across the change.
+func Test_CM_AccCMInterface_PortUpdate(t *testing.T) {
+	RequireCM(t)
+	var interfaceID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { interfaceSweep(9016) },
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9016
+  interface_type = "nae"
+}
+`,
+				Check: checkStep(t, "port update: create",
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "port", "9016"),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_interface.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						interfaceID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: providerConfig + `
+resource "ciphertrust_interface" "test" {
+  port           = 9017
+  interface_type = "nae"
+}
+`,
+				Check: checkStep(t, "port update: applied",
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["ciphertrust_interface.test"]
+						if !ok {
+							return fmt.Errorf("resource not found in state")
+						}
+						if rs.Primary.ID != interfaceID {
+							return fmt.Errorf("expected id %q, got %q", interfaceID, rs.Primary.ID)
+						}
+						return nil
+					},
+					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "updated_at"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "port", "9017"),
+				),
+			},
+			{
+				// No further drift after the update.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMInterface_PortDriftDestroy is a regression test: previously,
+// drifting port in config (without ever applying it) also blocked
+// `terraform destroy`, because the Immutable modifier fired regardless of
+// destroy intent. With port now mutable, a drifted-but-unapplied port must
+// both plan cleanly and allow the implicit destroy (run by the test
+// framework using this step's config) to succeed.
+func Test_CM_AccCMInterface_PortDriftDestroy(t *testing.T) {
 	RequireCM(t)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				PreConfig: func() { interfaceSweep(9088) },
+				PreConfig: func() { interfaceSweep(9018) },
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
-  port           = 9088
+  port           = 9018
   interface_type = "nae"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_interface.test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_interface.test", "port", "9088"),
+					resource.TestCheckResourceAttr("ciphertrust_interface.test", "port", "9018"),
 				),
 			},
 			{
-				// Changing the port must emit a plan-time diagnostic error and fail.
+				// Drifted config, never applied (PlanOnly) — must plan a normal (non-empty)
+				// update, not an "Attribute is immutable" error.
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 				Config: providerConfig + `
 resource "ciphertrust_interface" "test" {
-  port           = 9089
+  port           = 9019
   interface_type = "nae"
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 		},
 	})

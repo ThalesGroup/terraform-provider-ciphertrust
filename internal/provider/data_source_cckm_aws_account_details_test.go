@@ -46,3 +46,29 @@ func TestCckmAWSDataSourceAccountDetails(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSDataSourceAccountDetailsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_account_details" "test" {
+						connection_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_aws_account_details" "test" {
+						connection_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}

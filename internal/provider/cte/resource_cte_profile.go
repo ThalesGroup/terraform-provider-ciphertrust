@@ -573,7 +573,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	// Add Name to the payload
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	// Set cache_settings in the request
 	var cacheSettings CTEProfileCacheSettingsJSON
@@ -619,7 +619,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			fileSettings.AllowPurge = plan.FileSettings.AllowPurge.ValueBool()
 		}
 		if plan.FileSettings.FileThreshold.ValueString() != "" && plan.FileSettings.FileThreshold.ValueString() != types.StringNull().ValueString() {
-			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.String())
+			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.ValueString())
 		}
 		if plan.FileSettings.MaxFileSize.ValueInt64() != types.Int64Null().ValueInt64() {
 			fileSettings.MaxFileSize = plan.FileSettings.MaxFileSize.ValueInt64()
@@ -660,10 +660,10 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	if !reflect.DeepEqual((*CTEProfileManagementServiceLoggerTFSDK)(nil), plan.Client_Logging_Config) {
 		r.client.Log.Debug("Loggers should not be empty at this point")
 		if plan.Client_Logging_Config.Duplicates.ValueString() != "" && plan.Client_Logging_Config.Duplicates.ValueString() != types.StringNull().ValueString() {
-			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
+			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
 		}
 		if plan.Client_Logging_Config.FileEnabled.ValueBool() != types.BoolNull().ValueBool() {
 			managementServiceLogger.FileEnabled = plan.Client_Logging_Config.FileEnabled.ValueBool()
@@ -680,9 +680,9 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 		}
 		if plan.Client_Logging_Config.Threshold.ValueString() != "" && plan.Client_Logging_Config.Threshold.ValueString() != types.StringNull().ValueString() {
 			managementServiceLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 			securityAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 
 		}
 		if plan.Client_Logging_Config.UploadEnabled.ValueBool() != types.BoolNull().ValueBool() {
@@ -768,7 +768,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			syslogSettings.Local = plan.SyslogSettings.Local.ValueBool()
 		}
 		if plan.SyslogSettings.Threshold.ValueString() != "" && plan.SyslogSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.String())
+			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.ValueString())
 		}
 		var servers []CTEProfileSyslogSettingServerJSON
 		for _, item := range plan.SyslogSettings.Servers {
@@ -823,7 +823,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			uploadSettings.MinInterval = plan.UploadSettings.MinInterval.ValueInt64()
 		}
 		if plan.UploadSettings.Threshold.ValueString() != "" && plan.UploadSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.String())
+			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.ValueString())
 		}
 		payload.UploadSettings = &uploadSettings
 	}
@@ -967,7 +967,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			fileSettings.AllowPurge = plan.FileSettings.AllowPurge.ValueBool()
 		}
 		if plan.FileSettings.FileThreshold.ValueString() != "" && plan.FileSettings.FileThreshold.ValueString() != types.StringNull().ValueString() {
-			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.String())
+			fileSettings.FileThreshold = common.TrimString(plan.FileSettings.FileThreshold.ValueString())
 		}
 		if plan.FileSettings.MaxFileSize.ValueInt64() != types.Int64Null().ValueInt64() {
 			fileSettings.MaxFileSize = plan.FileSettings.MaxFileSize.ValueInt64()
@@ -1001,10 +1001,10 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	if !reflect.DeepEqual((*CTEProfileManagementServiceLoggerTFSDK)(nil), plan.Client_Logging_Config) {
 		r.client.Log.Debug("Loggers should not be empty at this point")
 		if plan.Client_Logging_Config.Duplicates.ValueString() != "" && plan.Client_Logging_Config.Duplicates.ValueString() != types.StringNull().ValueString() {
-			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
-			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.String())
+			policyEvaluationLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			managementServiceLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			systemAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
+			securityAdminLogger.Duplicates = common.TrimString(plan.Client_Logging_Config.Duplicates.ValueString())
 		}
 		if plan.Client_Logging_Config.FileEnabled.ValueBool() != types.BoolNull().ValueBool() {
 			managementServiceLogger.FileEnabled = plan.Client_Logging_Config.FileEnabled.ValueBool()
@@ -1021,9 +1021,9 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 		}
 		if plan.Client_Logging_Config.Threshold.ValueString() != "" && plan.Client_Logging_Config.Threshold.ValueString() != types.StringNull().ValueString() {
 			managementServiceLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			policyEvaluationLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 			securityAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
-			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.String())
+			systemAdminLogger.Threshold = common.TrimString(plan.Client_Logging_Config.Threshold.ValueString())
 
 		}
 		if plan.Client_Logging_Config.UploadEnabled.ValueBool() != types.BoolNull().ValueBool() {
@@ -1109,7 +1109,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			syslogSettings.Local = plan.SyslogSettings.Local.ValueBool()
 		}
 		if plan.SyslogSettings.Threshold.ValueString() != "" && plan.SyslogSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.String())
+			syslogSettings.Threshold = common.TrimString(plan.SyslogSettings.Threshold.ValueString())
 		}
 		var servers []CTEProfileSyslogSettingServerJSON
 		for _, item := range plan.SyslogSettings.Servers {
@@ -1164,7 +1164,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			uploadSettings.MinInterval = plan.UploadSettings.MinInterval.ValueInt64()
 		}
 		if plan.UploadSettings.Threshold.ValueString() != "" && plan.UploadSettings.Threshold.ValueString() != types.StringNull().ValueString() {
-			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.String())
+			uploadSettings.Threshold = common.TrimString(plan.UploadSettings.Threshold.ValueString())
 		}
 		payload.UploadSettings = &uploadSettings
 	}

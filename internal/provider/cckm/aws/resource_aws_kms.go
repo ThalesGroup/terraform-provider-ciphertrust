@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
@@ -120,7 +121,12 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager AWS connection ID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"connection_name": schema.StringAttribute{
 				Computed:    true,
@@ -131,7 +137,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "True if the KMS was added by a scheduler.",
 			},
 			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 				Computed:    true,
 			},
 			"dev_account": schema.StringAttribute{
@@ -163,7 +169,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date and time the KMS was last updated",
+				Description: "Date and time the KMS was last updated.",
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,
@@ -186,7 +192,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.ValueString()), common.URL_AWS_CONNECTION)
 	if connErr != nil {
 		msg := "Error creating AWS KMS, failed to read AWS connection by 'connection_id'."
 		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
@@ -206,19 +212,19 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	mutex.CckmMutex.Lock(mutexKey)
 	defer mutex.CckmMutex.Unlock(mutexKey)
 
-	payload.AccountID = common.TrimString(plan.AccountID.String())
-	payload.Connection = common.TrimString(plan.ConnectionID.String())
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.AccountID = common.TrimString(plan.AccountID.ValueString())
+	payload.Connection = common.TrimString(plan.ConnectionID.ValueString())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
 	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.ValueString())
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.ValueString())
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -302,7 +308,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
-		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.ValueString()), common.URL_AWS_CONNECTION)
 		if connErr != nil {
 			msg := "Error updating AWS KMS, failed to read AWS connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
@@ -336,13 +342,13 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.ValueString())
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.ValueString())
 	}
 	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
-		payload.Connection = common.TrimString(plan.ConnectionID.String())
+		payload.Connection = common.TrimString(plan.ConnectionID.ValueString())
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {

@@ -65,7 +65,7 @@ resource "ciphertrust_oci_acl" "group_acl" {
 The 'view' or 'viewhyokkey' permissions must be included with 'key' or 'hyok key' actions respectively.
 
 To remove a user or group from the vault ACL entirely, delete the resource.
-- `vault_id` (String) (Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL
+- `vault_id` (String) (Immutable) The CipherTrust Manager OCI vault resource ID in which to set the ACL.
 
 ### Optional
 

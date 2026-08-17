@@ -411,3 +411,105 @@ func TestCckmAWSCustomKeyStoreEmptyAwsParams(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSCustomKeyStoreCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: kms_id empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = ""
+						name   = "valid-name"
+						region = "us-east-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: kms_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "   "
+						name   = "valid-name"
+						region = "us-east-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: name empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = ""
+						region = "us-east-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: name whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = "   "
+						region = "us-east-1"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: region empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = "valid-name"
+						region = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 6: region whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = "valid-name"
+						region = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 7: aws_param.custom_key_store_type invalid value
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = "valid-name"
+						region = "us-east-1"
+						aws_param = {
+						custom_key_store_type = "INVALID"
+					}
+				}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+			// Step 8: aws_param.xks_proxy_connectivity invalid value
+			{
+				Config: `
+					resource "ciphertrust_aws_custom_keystore" "test" {
+						kms_id = "valid-kms-id"
+						name   = "valid-name"
+						region = "us-east-1"
+						aws_param = {
+							xks_proxy_connectivity = "INVALID"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}

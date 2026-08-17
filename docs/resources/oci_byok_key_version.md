@@ -86,7 +86,7 @@ resource "ciphertrust_oci_byok_key_version" "version" {
 
 - `account` (String) The account which owns this resource.
 - `cloud_name` (String) CipherTrust Manager cloud name.
-- `created_at` (String) Date/time the application was created
+- `created_at` (String) Date/time the application was created.
 - `id` (String) The key's CipherTrust Manager resource ID.
 - `key_material_origin` (String) CipherTrust Manager origin of the key version's material.
 - `oci_key_version_params` (Attributes) OCI key attributes. (see [below for nested schema](#nestedatt--oci_key_version_params))
@@ -111,4 +111,4 @@ Read-Only:
 - `time_created` (String) The time the key version was created.
 - `time_of_deletion` (String) The time when the key version will be deleted.
 - `vault_id` (String) OCI Vault OCID.
-- `version_id` (String) OCI version ID
+- `version_id` (String) OCI version ID.

@@ -361,3 +361,29 @@ func TestCckmAWSPolicyTemplateSetFieldLifecycle(t *testing.T) {
 		},
 	})
 }
+
+func TestCckmAWSPolicyTemplateCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: name empty string
+			{
+				Config: `
+					resource "ciphertrust_aws_policy_template" "test" {
+						name = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: name whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_aws_policy_template" "test" {
+						name = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+		},
+	})
+}

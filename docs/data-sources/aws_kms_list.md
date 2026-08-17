@@ -69,13 +69,13 @@ Read-Only:
 - `auto_added` (Boolean) True if the KMS was added by a scheduler.
 - `connection_id` (String) CipherTrust Manager connection ID which manages this account.
 - `connection_name` (String) The connection name as returned by CipherTrust Manager.
-- `created_at` (String) Date/time the application was created
+- `created_at` (String) Date/time the application was created.
 - `dev_account` (String) The developer account which owns this resource's application.
 - `id` (String) The CipherTrust Manager ID of this KMS.
 - `name` (String) The name given to the KMS.
 - `regions` (List of String) AWS regions managed by the KMS.
 - `status` (String) The status of the KMS, archived or active.
-- `updated_at` (String) Date and time the KMS was last updated
+- `updated_at` (String) Date and time the KMS was last updated.
 - `uri` (String) CipherTrust Manager's unique identifier for the resource.
 
 <a id="nestedatt--kms--acls"></a>

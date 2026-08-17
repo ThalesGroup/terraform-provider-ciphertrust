@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/tidwall/gjson"
 )
 
 // TestCTEClientGroupResource walks a client group through create -> attribute
@@ -123,6 +125,67 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
+// TestCTEClientGroupResource_descriptionQuoteNotCorrupted is a regression
+// test for TFIN-624: Create()/Update() built the outgoing payload with
+// common.TrimString(plan.Description.String()) instead of
+// plan.Description.ValueString(). types.String.String() returns a Go
+// %q-quoted debug representation (adds outer quotes, escapes internal " as
+// \"), and TrimString only strips the outer quote pair, leaving the escaped
+// backslash in the value sent to CM -- permanently corrupting any
+// description containing a literal " character. If the value were corrupted
+// on the way to CM, Read would keep reporting a different (mangled) value
+// than the configured one, so the follow-up PlanOnly step would show a
+// perpetual diff instead of "No changes".
+func TestCTEClientGroupResource_descriptionQuoteNotCorrupted(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-quote-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+	const wantCreateDescription = `He said "hello" to me`
+	const wantUpdateDescription = `Updated: she said "goodbye" now`
+
+	cfg := func(description string, update bool) string {
+		op := ""
+		if update {
+			op = "  op_type      = \"update\"\n"
+		}
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = %q
+%s}
+`, cgName, description, op)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg(wantCreateDescription, false),
+				Check: checkStep(t, "client_group quote: create",
+					resource.TestCheckResourceAttr(rn, "description", wantCreateDescription),
+				),
+			},
+			{
+				Config:             cfg(wantCreateDescription, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: cfg(wantUpdateDescription, true),
+				Check: checkStep(t, "client_group quote: update",
+					resource.TestCheckResourceAttr(rn, "description", wantUpdateDescription),
+				),
+			},
+			{
+				Config:             cfg(wantUpdateDescription, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEClientGroupResource_nameRequiresReplace verifies a name change is
 // planned as a destroy+create rather than an in-place update (TFIN-489).
 func TestCTEClientGroupResource_nameRequiresReplace(t *testing.T) {
@@ -205,6 +268,79 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
+// TestCTEClientGroupResource_ldtPauseFieldGuard verifies op_type = "ldt-pause"
+// rejects a config that also changes an unrelated field in the same apply
+// (TFIN-625). Before the fix, the ldt-pause branch had no field-change
+// guard at all: the apply would succeed, only the paused flag would be sent
+// to CM, but the unrelated field's new value would still be recorded in
+// state -- a false value only caught on the next refresh. Also verifies
+// normal ldt-pause-only usage (toggling paused with no other field change)
+// still succeeds and produces no follow-up plan diff.
+func TestCTEClientGroupResource_ldtPauseFieldGuard(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-ldtpause-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+}
+`, cgName)
+
+	// op_type = ldt-pause with an unrelated field (description) also changed
+	// in the same apply -- must be rejected.
+	pauseWithSneakedFieldCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "sneaked-in-via-ldt-pause"
+  op_type      = "ldt-pause"
+  paused       = true
+}
+`, cgName)
+
+	// op_type = ldt-pause with only paused changed -- must succeed.
+	pauseOnlyCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+  op_type      = "ldt-pause"
+  paused       = true
+}
+`, cgName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group ldt-pause guard: create",
+					resource.TestCheckResourceAttr(rn, "description", "Initial create"),
+				),
+			},
+			{
+				Config:      pauseWithSneakedFieldCfg,
+				ExpectError: regexp.MustCompile(`description cannot be changed with op_type 'ldt-pause'`),
+			},
+			{
+				Config: pauseOnlyCfg,
+				Check: checkStep(t, "client_group ldt-pause guard: pause only",
+					resource.TestCheckResourceAttr(rn, "description", "Initial create"),
+					resource.TestCheckResourceAttr(rn, "paused", "true"),
+				),
+			},
+			{
+				Config:             pauseOnlyCfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // TestCTEClientGroupResource_drift mutates the description out-of-band and asserts
 // the next plan is non-empty.
 func TestCTEClientGroupResource_drift(t *testing.T) {
@@ -238,6 +374,250 @@ resource "ciphertrust_cte_client_group" "cg" {
 				Config:             cfg,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupResource_explicitFalseReachesCM verifies TFIN-640: setting
+// re_sign explicitly to false (after it was true) actually reaches CipherTrust
+// Manager rather than being silently dropped. Before the fix, the guard
+// `plan.ReSign.ValueBool() != types.BoolNull().ValueBool()` could never
+// distinguish "explicitly false" from "unset" (types.BoolNull().ValueBool()
+// is always false, the Go zero value), so the assignment to payload.ReSign
+// was skipped whenever the desired value was false. For ReSign specifically
+// this was compounded by the `,omitempty` tag on CTEClientGroupJSON.ReSign:
+// even after fixing the guard to `!plan.ReSign.IsNull()`, a plain (non-pointer)
+// bool with `omitempty` still drops the field whenever its value is false,
+// with no way to distinguish "explicitly assigned false" from "left at zero
+// value" -- so the full fix required both the guard fix and dropping
+// `omitempty` from that field. Terraform state alone can't catch this
+// regression (Update() writes state from plan unconditionally), so this test
+// reads the live CM object directly via cteGetByID/gjson rather than relying
+// on resource.TestCheckResourceAttr against state.
+func TestCTEClientGroupResource_explicitFalseReachesCM(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-falsedrop-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+	var capturedID string
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+}
+`, cgName)
+
+	reSignTrueCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+  op_type      = "auth-binaries"
+  re_sign      = true
+}
+`, cgName)
+
+	reSignFalseCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                 = %q
+  cluster_type         = "NON-CLUSTER"
+  description          = "Initial create"
+  op_type              = "auth-binaries"
+  re_sign              = false
+  enabled_capabilities = "RESIGN"
+}
+`, cgName)
+
+	checkCMEnabledCapabilities := func(want string) resource.TestCheckFunc {
+		return func(s *terraform.State) error {
+			body, ok := cteGetByID(common.URL_CTE_CLIENT_GROUP, capturedID)
+			if !ok {
+				return fmt.Errorf("could not fetch live CTE client group %s from CM", capturedID)
+			}
+			got := gjson.Get(body, "enabled_capabilities").String()
+			if got != want {
+				return fmt.Errorf("live CM enabled_capabilities = %q, want %q (body: %s)", got, want, body)
+			}
+			return nil
+		}
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group explicit-false: create",
+					cteCaptureID(rn, &capturedID),
+				),
+			},
+			{
+				// enabled_capabilities is Optional (not Computed) but Read()
+				// populates it from CM's derived value regardless -- a
+				// separate, pre-existing schema quirk unrelated to TFIN-640.
+				// ExpectNonEmptyPlan tolerates that drift so this step can
+				// still assert on the re_sign behavior we're actually testing.
+				Config:             reSignTrueCfg,
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client_group explicit-false: re_sign=true reaches CM",
+					resource.TestCheckResourceAttr(rn, "re_sign", "true"),
+					checkCMEnabledCapabilities("RESIGN"),
+				),
+			},
+			{
+				// Same pre-existing enabled_capabilities drift as the step
+				// above: config still says "RESIGN" (matching the prior
+				// state so the op_type=auth-binaries immutability guard for
+				// enabled_capabilities doesn't fire), but after this apply
+				// Read() correctly reports "" now that the fix landed.
+				Config:             reSignFalseCfg,
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client_group explicit-false: re_sign=false reaches CM (TFIN-640)",
+					resource.TestCheckResourceAttr(rn, "re_sign", "false"),
+					checkCMEnabledCapabilities(""),
+				),
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupResource_explicitFalseBooleanFields verifies the same
+// TFIN-640 guard fix for the remaining boolean fields that share the broken
+// `ValueBool() != types.BoolNull().ValueBool()` pattern: client_locked,
+// communication_enabled, enable_domain_sharing, system_locked, and paused.
+// Unlike ReSign, these fields' JSON tags never had `omitempty`, so Go's zero
+// value for bool (false) was already marshaled as an explicit `false` even
+// when the buggy guard skipped the assignment -- meaning these fields did not
+// actually exhibit an observable drop of the false value before this fix,
+// only the (harmless in this case, but fragile) code smell. This test locks
+// in that true/false behavior via the corrected null-check so a future change
+// to these fields' JSON tags doesn't silently reintroduce the same class of
+// bug ReSign had.
+func TestCTEClientGroupResource_explicitFalseBooleanFields(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-falsebool-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+	var capturedID string
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+}
+`, cgName)
+
+	boolsTrueCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                  = %q
+  cluster_type          = "NON-CLUSTER"
+  description           = "Initial create"
+  op_type               = "update"
+  client_locked         = true
+  communication_enabled = true
+  enable_domain_sharing = true
+  system_locked         = true
+}
+`, cgName)
+
+	boolsFalseCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                  = %q
+  cluster_type          = "NON-CLUSTER"
+  description           = "Initial create"
+  op_type               = "update"
+  client_locked         = false
+  communication_enabled = false
+  enable_domain_sharing = false
+  system_locked         = false
+}
+`, cgName)
+
+	pauseTrueCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                  = %q
+  cluster_type          = "NON-CLUSTER"
+  description           = "Initial create"
+  op_type               = "ldt-pause"
+  paused                = true
+}
+`, cgName)
+
+	pauseFalseCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                  = %q
+  cluster_type          = "NON-CLUSTER"
+  description           = "Initial create"
+  op_type               = "ldt-pause"
+  paused                = false
+}
+`, cgName)
+
+	checkCMBools := func(want bool) resource.TestCheckFunc {
+		return func(s *terraform.State) error {
+			body, ok := cteGetByID(common.URL_CTE_CLIENT_GROUP, capturedID)
+			if !ok {
+				return fmt.Errorf("could not fetch live CTE client group %s from CM", capturedID)
+			}
+			for _, field := range []string{"client_locked", "communication_enabled", "enable_domain_sharing", "system_locked"} {
+				got := gjson.Get(body, field).Bool()
+				if got != want {
+					return fmt.Errorf("live CM %s = %v, want %v (body: %s)", field, got, want, body)
+				}
+			}
+			return nil
+		}
+	}
+
+	checkCMLdtStatus := func(wantPaused bool) resource.TestCheckFunc {
+		return func(s *terraform.State) error {
+			body, ok := cteGetByID(common.URL_CTE_CLIENT_GROUP, capturedID)
+			if !ok {
+				return fmt.Errorf("could not fetch live CTE client group %s from CM", capturedID)
+			}
+			status := gjson.Get(body, "ldt_status").String()
+			isPaused := status == "Paused"
+			if isPaused != wantPaused {
+				return fmt.Errorf("live CM ldt_status = %q (paused=%v), want paused=%v (body: %s)", status, isPaused, wantPaused, body)
+			}
+			return nil
+		}
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group explicit-false bools: create",
+					cteCaptureID(rn, &capturedID),
+				),
+			},
+			{
+				Config: boolsTrueCfg,
+				Check: checkStep(t, "client_group explicit-false bools: true reaches CM",
+					checkCMBools(true),
+				),
+			},
+			{
+				Config: boolsFalseCfg,
+				Check: checkStep(t, "client_group explicit-false bools: false reaches CM (TFIN-640)",
+					checkCMBools(false),
+				),
+			},
+			{
+				Config: pauseTrueCfg,
+				Check: checkStep(t, "client_group explicit-false paused: true reaches CM",
+					checkCMLdtStatus(true),
+				),
+			},
+			{
+				Config: pauseFalseCfg,
+				Check: checkStep(t, "client_group explicit-false paused: false reaches CM (TFIN-640)",
+					checkCMLdtStatus(false),
+				),
 			},
 		},
 	})
