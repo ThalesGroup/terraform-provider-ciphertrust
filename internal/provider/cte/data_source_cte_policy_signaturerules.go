@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -28,6 +27,8 @@ type dataSourceCTEPolicySignatureRule struct {
 
 type CTEPolicySignatureRuleDataSourceModel struct {
 	PolicyID types.String                       `tfsdk:"policy"`
+	Limit    types.Int64                        `tfsdk:"limit"`
+	Skip     types.Int64                        `tfsdk:"skip"`
 	Rules    []CTEPolicySignatureRulesListTFSDK `tfsdk:"rules"`
 }
 
@@ -39,10 +40,20 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose signature rules are to be listed.",
+				Required:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of signature rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of signature rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of signature rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -50,25 +61,32 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 							Description: "ID of the Signature Rule within the parent CTE Client Policy",
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the signature rule.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the signature rule.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature rule was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature rule was last updated.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the parent CTE Client Policy.",
+							Computed:    true,
 						},
 						"signature_set_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the signature set linked to the rule.",
+							Computed:    true,
 						},
 						"signature_set_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the signature set linked to the rule.",
+							Computed:    true,
 						},
 					},
 				},
@@ -79,28 +97,32 @@ func (d *dataSourceCTEPolicySignatureRule) Schema(_ context.Context, _ datasourc
 
 func (d *dataSourceCTEPolicySignatureRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_signaturerules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_signaturerules.go -> Read][" + id + "]")
 	var state CTEPolicySignatureRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/signaturerules")
+		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/signaturerules",
+		skipVal,
+		limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_signaturerules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_signaturerules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Signature Rules from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policy signature rules", total, limitVal)
 
 	rules := []CTEPolicySignatureRulesJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_signaturerules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_signaturerules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy Signature Rules from CM",
 			err.Error(),
@@ -122,7 +144,7 @@ func (d *dataSourceCTEPolicySignatureRule) Read(ctx context.Context, req datasou
 		state.Rules = append(state.Rules, signatureRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_signaturerules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_signaturerules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

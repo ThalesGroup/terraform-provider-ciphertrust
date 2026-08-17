@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -90,6 +91,9 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"aliases": schema.ListNestedAttribute{
 				Optional:    true,
 				Description: "Aliases associated with the key. The alias and alias-type must be specified. The alias index is assigned by this operation, and need not be specified.",
+				PlanModifiers: []planmodifier.List{
+					aliasListIndexModifier{},
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"alias": schema.StringAttribute{
@@ -99,9 +103,6 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						"index": schema.StringAttribute{
 							Computed:    true,
 							Description: "Index assigned by the server. Read-only.",
-							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
-							},
 						},
 						"type": schema.StringAttribute{
 							Optional:    true,
@@ -183,8 +184,11 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"description": schema.StringAttribute{
-				Optional:    true,
-				Description: "It store information about key",
+				Optional: true,
+				// clearRejectStringModifier removed (TFIN-573): CM genuinely accepts and persists
+				// PATCH {"description": ""} — confirmed live. Removing from config clears the field.
+				Description: "Information about the key. Can be cleared by removing from config — " +
+					"CM accepts an empty-string PATCH to clear this field.",
 			},
 			"destroy_date": schema.StringAttribute{
 				Optional:    true,
@@ -226,7 +230,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Description: "(Immutable) Information which is used to create a Key using HKDF.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.ImmutableObjectExceptWriteOnly("salt"),
 				},
 				Attributes: map[string]schema.Attribute{
 					"hash_algorithm": schema.StringAttribute{
@@ -249,8 +253,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Description: "Info is an optional hex value for HKDF based derivation.",
 					},
 					"salt": schema.StringAttribute{
-						Optional:    true,
-						Description: "Salt is an optional hex value for HKDF based derivation.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Salt is an optional hex value for HKDF based derivation. Write-only: " +
+							"never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+							"There is no supported way to change this after creation.",
 					},
 				},
 			},
@@ -292,12 +300,10 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"material": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
-				Description: "(Immutable) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\\n'.",
+				Optional:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				Description: "If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\\n'. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change a key's material after creation — destroy and recreate the resource to import different material.",
 			},
 			"muid": schema.StringAttribute{
 				Optional:    true,
@@ -327,11 +333,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 			"meta": schema.SingleNestedAttribute{
 				Optional: true,
-				Description: "(Immutable) Optional end-user or service data stored with the key. " +
-					"PATCH merges JSON objects: removing a field from config does NOT clear it on the server. " +
+				Description: "Optional end-user or service data stored with the key. Fields can be added or " +
+					"changed in place; a field already set cannot be cleared by omitting it (PATCH merges JSON " +
+					"objects — removing a field from config does NOT clear it on the server). " +
 					"On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.MergePatchObject(),
 				},
 				Attributes: map[string]schema.Attribute{
 					"owner_id": schema.StringAttribute{
@@ -424,12 +431,14 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"password": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				Description: "(Immutable) For pkcs12 format, either password or secretDataLink should be specified. This should be the base64 encoded value of the password.",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Description: "For pkcs12 format, either password or secretDataLink should be specified. " +
+					"This should be the base64 encoded value of the password. Write-only: never stored in " +
+					"Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way " +
+					"to change this after creation — destroy and recreate the resource to import with a " +
+					"different password.",
 			},
 			"process_start_date": schema.StringAttribute{
 				Optional:    true,
@@ -457,8 +466,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Description: "Message explaining revocation.",
 			},
 			"rotation_frequency_days": schema.StringAttribute{
-				Optional:    true,
-				Description: "Number of days from current date to rotate the key. It should be greater than or equal to 0. Default is an empty string. If set to 0, rotationFrequencyDays set to an empty string and auto rotation of key will be disabled.",
+				Optional: true,
+				Description: "Number of days from current date to rotate the key. It should be greater than or equal to 0. Default is an empty string. If set to 0, rotationFrequencyDays set to an empty string and auto rotation of key will be disabled. " +
+					"Once set, this field cannot be cleared back to empty by omitting it from config — CM does not honour empty-string PATCH requests for this field.",
+				PlanModifiers: []planmodifier.String{
+					clearRejectStringModifier{FieldName: "rotation_frequency_days"},
+				},
 			},
 			"secret_data_encoding": schema.StringAttribute{
 				Optional:    true,
@@ -518,10 +531,14 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				},
 			},
 			"usage_mask": schema.Int64Attribute{
-				Optional:    true,
-				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks). Must be between 0 and 4194303 (inclusive).",
+				Optional: true,
+				Description: "Cryptographic usage mask. Add the usage masks to allow certain usages. Sign (1), Verify (2), Encrypt (4), Decrypt (8), Wrap Key (16), Unwrap Key (32), Export (64), MAC Generate (128), MAC Verify (256), Derive Key (512), Content Commitment (1024), Key Agreement (2048), Certificate Sign (4096), CRL Sign (8192), Generate Cryptogram (16384), Validate Cryptogram (32768), Translate Encrypt (65536), Translate Decrypt (131072), Translate Wrap (262144), Translate Unwrap (524288), FPE Encrypt (1048576), FPE Decrypt (2097152). Add the usage mask values to allow the usages. To set all usage mask bits, use 4194303. Equivalent usageMask values for deprecated usages 'fpe' (FPE Encrypt + FPE Decrypt = 3145728), 'blob' (Encrypt + Decrypt = 12), 'hmac' (MAC Generate + MAC Verify = 384), 'encrypt' (Encrypt + Decrypt = 12), 'sign' (Sign + Verify = 3), 'any' (4194303 - all usage masks). Must be between 0 and 4194303 (inclusive). " +
+					"Once set, this field cannot be cleared by omitting it from config — CM does not honour omitted-field PATCH requests for this field.",
 				Validators: []validator.Int64{
 					int64validator.Between(0, 4194303),
+				},
+				PlanModifiers: []planmodifier.Int64{
+					clearRejectInt64Modifier{FieldName: "usage_mask"},
 				},
 			},
 			"uuid": schema.StringAttribute{
@@ -692,7 +709,7 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Description: "(Immutable) Information which is used to wrap a Key using HKDF.",
 				PlanModifiers: []planmodifier.Object{
-					modifiers.ImmutableObject(),
+					modifiers.ImmutableObjectExceptWriteOnly("salt"),
 				},
 				Attributes: map[string]schema.Attribute{
 					"hash_algorithm": schema.StringAttribute{
@@ -715,8 +732,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 						Description: "Info is an optional hex value for HKDF based derivation.",
 					},
 					"salt": schema.StringAttribute{
-						Optional:    true,
-						Description: "Salt is an optional hex value for HKDF based derivation.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "Salt is an optional hex value for HKDF based derivation. Write-only: " +
+							"never stored in Terraform state or plan artifacts (requires Terraform 1.11+). " +
+							"There is no supported way to change this after creation.",
 					},
 				},
 			},
@@ -824,7 +845,12 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
-				Description: "Optional map of string key-value labels to associate with the key.",
+				Description: "Optional map of string key-value labels to associate with the key. Once set, this " +
+					"field cannot be cleared back to empty by omitting it from config — CM does not honour " +
+					"empty-object PATCH requests for this field.",
+				PlanModifiers: []planmodifier.Map{
+					clearRejectMapModifier{FieldName: "labels"},
+				},
 			},
 			"all_versions": schema.BoolAttribute{
 				Optional:    true,
@@ -832,6 +858,20 @@ func (r *resourceCMKey) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			},
 		},
 	}
+}
+
+// revokeKey calls CM's dedicated key revoke endpoint. This is a separate operation from the
+// general key PATCH/POST endpoint, which does not accept revocation fields under any name.
+// Note the request body uses "reason"/"message", not the revocationReason/revocationMessage
+// names CM reports back on GET.
+func (r *resourceCMKey) revokeKey(ctx context.Context, id, reason, message string) error {
+	payload := CMKeyRevokeJSON{Reason: reason, Message: message}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = r.client.PostDataV2(ctx, id, common.URL_KEY_MANAGEMENT+"/"+id+"/revoke", payloadJSON)
+	return err
 }
 
 // Create creates the resource and sets the initial Terraform state.
@@ -844,6 +884,18 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	var payload CMKeyJSON
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// material, password, hkdf_create_parameters.salt, and wrap_hkdf.salt are write-only:
+	// the framework nulls them out of PlannedState during PlanResourceChange, before
+	// Create() ever runs, so their plan values are always null here. req.Config is
+	// populated fresh from the HCL configuration on every RPC (not derived from the
+	// nullified plan), so it reliably carries the actual values.
+	var config CMKeyTFSDK
+	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -879,8 +931,10 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.DefaultIV.ValueString() != "" {
 		payload.DefaultIV = plan.DefaultIV.ValueString()
 	}
-	if plan.Description.ValueString() != "" {
-		payload.Description = plan.Description.ValueString()
+	// Create: only include description when explicitly set — omit when unset (nil = omitempty drops it).
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() && plan.Description.ValueString() != "" {
+		v := plan.Description.ValueString()
+		payload.Description = &v
 	}
 	if plan.DestroyDate.ValueString() != "" {
 		payload.DestroyDate = plan.DestroyDate.ValueString()
@@ -915,8 +969,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if plan.MacSignKeyIdentifierType.ValueString() != "" {
 		payload.MacSignKeyIdentifierType = plan.MacSignKeyIdentifierType.ValueString()
 	}
-	if plan.Material.ValueString() != "" {
-		payload.Material = plan.Material.ValueString()
+	if v := config.Material.ValueString(); v != "" {
+		payload.Material = v
 	}
 	if plan.MUID.ValueString() != "" {
 		payload.MUID = plan.MUID.ValueString()
@@ -930,20 +984,14 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 	if !plan.Padded.IsNull() && !plan.Padded.IsUnknown() {
 		payload.Padded = plan.Padded.ValueBool()
 	}
-	if plan.Password.ValueString() != "" {
-		payload.Password = plan.Password.ValueString()
+	if v := config.Password.ValueString(); v != "" {
+		payload.Password = v
 	}
 	if plan.ProcessStartDate.ValueString() != "" {
 		payload.ProcessStartDate = plan.ProcessStartDate.ValueString()
 	}
 	if plan.ProtectStopDate.ValueString() != "" {
 		payload.ProtectStopDate = plan.ProtectStopDate.ValueString()
-	}
-	if plan.RevocationMessage.ValueString() != "" {
-		payload.RevocationMessage = plan.RevocationMessage.ValueString()
-	}
-	if plan.RevocationReason.ValueString() != "" {
-		payload.RevocationReason = plan.RevocationReason.ValueString()
 	}
 	if plan.RotationFrequencyDays.ValueString() != "" {
 		payload.RotationFrequencyDays = plan.RotationFrequencyDays.ValueString()
@@ -975,7 +1023,8 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		payload.UnExportable = &v
 	}
 	if !plan.UsageMask.IsNull() && !plan.UsageMask.IsUnknown() {
-		payload.UsageMask = plan.UsageMask.ValueInt64()
+		v := plan.UsageMask.ValueInt64()
+		payload.UsageMask = &v
 	}
 	if plan.UUID.ValueString() != "" {
 		payload.UUID = plan.UUID.ValueString()
@@ -1041,8 +1090,11 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if plan.HKDFCreateParameters.Info.ValueString() != "" {
 			hkdfCreateParameters.Info = plan.HKDFCreateParameters.Info.ValueString()
 		}
-		if plan.HKDFCreateParameters.Salt.ValueString() != "" {
-			hkdfCreateParameters.Salt = plan.HKDFCreateParameters.Salt.ValueString()
+		// salt is write-only: read from config, not plan.
+		if config.HKDFCreateParameters != nil {
+			if v := config.HKDFCreateParameters.Salt.ValueString(); v != "" {
+				hkdfCreateParameters.Salt = v
+			}
 		}
 		payload.HKDFCreateParameters = &hkdfCreateParameters
 	}
@@ -1179,8 +1231,11 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		if plan.HKDFWrap.Info.ValueString() != "" {
 			wrapHKDF.Info = plan.HKDFWrap.Info.ValueString()
 		}
-		if plan.HKDFWrap.Salt.ValueString() != "" {
-			wrapHKDF.Salt = plan.HKDFWrap.Salt.ValueString()
+		// salt is write-only: read from config, not plan.
+		if config.HKDFWrap != nil {
+			if v := config.HKDFWrap.Salt.ValueString(); v != "" {
+				wrapHKDF.Salt = v
+			}
 		}
 		payload.HKDFWrap = &wrapHKDF
 	}
@@ -1253,6 +1308,19 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
+	// Revocation is a dedicated CM operation, not a field on the general key payload
+	// (see revokeKey). Issue it only after the key itself exists.
+	if plan.RevocationReason.ValueString() != "" || plan.RevocationMessage.ValueString() != "" {
+		if err := r.revokeKey(ctx, plan.ID.ValueString(), plan.RevocationReason.ValueString(), plan.RevocationMessage.ValueString()); err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Create][" + id + "]")
+			resp.Diagnostics.AddError(
+				"Error revoking key on CipherTrust Manager: ",
+				"Key was created (id: "+plan.ID.ValueString()+") but could not be revoked, unexpected error: "+err.Error(),
+			)
+			return
+		}
+	}
+
 	// Hydrate boolean fields from POST response only when the server explicitly returns
 	// them. If a field is absent from the response (the API omits false-default values,
 	// and xts/unexportable/undeletable are not always echoed), preserve the plan value
@@ -1320,12 +1388,40 @@ func (r *resourceCMKey) Create(ctx context.Context, req resource.CreateRequest, 
 		}
 	}
 
+	// material, password, hkdf_create_parameters.salt, and wrap_hkdf.salt are write-only —
+	// the framework nulls them from outgoing state/plan artifacts automatically, but null
+	// them explicitly too for clarity.
+	plan.Material = types.StringNull()
+	plan.Password = types.StringNull()
+	if plan.HKDFCreateParameters != nil {
+		plan.HKDFCreateParameters.Salt = types.StringNull()
+	}
+	if plan.HKDFWrap != nil {
+		plan.HKDFWrap.Salt = types.StringNull()
+	}
+
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+}
+
+// gjsonPermissionValues reads a meta.permissions field from a vault/keys2 response.
+// CM persists meta.permissions under whichever casing (PascalCase or snake_case) was
+// last PATCHed - including via non-Terraform clients - and echoes that casing back on
+// GET, so both forms must be checked.
+func gjsonPermissionValues(response, pascalKey, snakeKey string) []types.String {
+	r := gjson.Get(response, "meta.permissions."+pascalKey)
+	if !r.Exists() {
+		r = gjson.Get(response, "meta.permissions."+snakeKey)
+	}
+	var out []types.String
+	for _, item := range r.Array() {
+		out = append(out, types.StringValue(item.String()))
+	}
+	return out
 }
 
 // Read refreshes the Terraform state with the latest data.
@@ -1344,13 +1440,9 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_KEY_MANAGEMENT)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Key Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed key %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this key has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the key was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Key"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Key", state.ID.ValueString()),
 			)
 			return
 		}
@@ -1397,11 +1489,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 	// usage_mask is Optional only — hydrate only when the user configured it (state
 	// non-null) to avoid perpetual drift for keys created without a usage_mask.
+	// CM omits the "usageMask" key from the response entirely when its value is 0
+	// (confirmed live) — indistinguishable on the wire from "field never set". Since
+	// this block only runs when the field was already configured, absence here means
+	// the value is 0, not that it should go back to null.
 	if !state.UsageMask.IsNull() {
 		if r := gjson.Get(response, "usageMask"); r.Exists() {
 			plan.UsageMask = types.Int64Value(r.Int())
 		} else {
-			plan.UsageMask = types.Int64Null()
+			plan.UsageMask = types.Int64Value(0)
 		}
 	}
 	// key_size: Optional field; hydrate only when the user configured it (state non-null)
@@ -1536,11 +1632,17 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 	// When state is null (labels never configured), keep null regardless of what the
 	// server returns. This prevents server-auto-added internal labels (e.g.,
 	// "ncryptify-reserved/composite-key") from appearing in state and causing drift.
+	// When state IS non-null, filter out ncryptify-reserved/* keys: CM auto-adds these
+	// to composite/asymmetric (RSA/EC) keys and its merge-PATCH cannot remove them,
+	// so copying them to state causes a permanent unresolvable diff (TFIN-576).
 	if !state.Labels.IsNull() {
 		labelsResult := gjson.Get(response, "labels")
 		if labelsResult.Exists() && labelsResult.Type != gjson.Null {
 			m := make(map[string]string)
 			for k, v := range labelsResult.Map() {
+				if strings.HasPrefix(k, "ncryptify-reserved/") {
+					continue // CM-internal: cannot be set or removed by users
+				}
 				m[k] = v.String()
 			}
 			if len(m) == 0 {
@@ -1616,9 +1718,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		}
 	}
 
-	// Bug 4 fix — hydrate meta unconditionally
+	// Hydrate meta only when the user has a meta block configured (state has meta != nil).
+	// CM may auto-inject meta.ownerId for keys created with assign_self_as_owner=true even
+	// when the user never configured a meta block. Silently importing that auto-injected value
+	// into state would cause MergePatchObject to fire "Cannot Clear Field After Creation" on
+	// every subsequent plan, leaving the user stuck. Keying on plan.Metadata (loaded from
+	// prior state above) instead of metaResult avoids this: if the user never configured meta,
+	// plan.Metadata is nil and we leave it nil regardless of what the server returned.
 	metaResult := gjson.Get(response, "meta")
-	if metaResult.Exists() && metaResult.Type != gjson.Null {
+	if plan.Metadata != nil && metaResult.Exists() && metaResult.Type != gjson.Null {
 		var metaVal KeyMetadataTFSDK
 		if r := gjson.Get(response, "meta.ownerId"); r.Exists() && r.String() != "" {
 			metaVal.OwnerId = types.StringValue(r.String())
@@ -1628,33 +1736,15 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 		permsResult := gjson.Get(response, "meta.permissions")
 		if permsResult.Exists() && permsResult.Type != gjson.Null {
 			var perms KeyMetadataPermissionsTFSDK
-			for _, item := range gjson.Get(response, "meta.permissions.DecryptWithKey").Array() {
-				perms.DecryptWithKey = append(perms.DecryptWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.EncryptWithKey").Array() {
-				perms.EncryptWithKey = append(perms.EncryptWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.ExportKey").Array() {
-				perms.ExportKey = append(perms.ExportKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.MACVerifyWithKey").Array() {
-				perms.MACVerifyWithKey = append(perms.MACVerifyWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.MACWithKey").Array() {
-				perms.MACWithKey = append(perms.MACWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.ReadKey").Array() {
-				perms.ReadKey = append(perms.ReadKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.SignVerifyWithKey").Array() {
-				perms.SignVerifyWithKey = append(perms.SignVerifyWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.SignWithKey").Array() {
-				perms.SignWithKey = append(perms.SignWithKey, types.StringValue(item.String()))
-			}
-			for _, item := range gjson.Get(response, "meta.permissions.UseKey").Array() {
-				perms.UseKey = append(perms.UseKey, types.StringValue(item.String()))
-			}
+			perms.DecryptWithKey = gjsonPermissionValues(response, "DecryptWithKey", "decrypt_with_key")
+			perms.EncryptWithKey = gjsonPermissionValues(response, "EncryptWithKey", "encrypt_with_key")
+			perms.ExportKey = gjsonPermissionValues(response, "ExportKey", "export_key")
+			perms.MACVerifyWithKey = gjsonPermissionValues(response, "MACVerifyWithKey", "mac_verify_with_key")
+			perms.MACWithKey = gjsonPermissionValues(response, "MACWithKey", "mac_with_key")
+			perms.ReadKey = gjsonPermissionValues(response, "ReadKey", "read_key")
+			perms.SignVerifyWithKey = gjsonPermissionValues(response, "SignVerifyWithKey", "sign_verify_with_key")
+			perms.SignWithKey = gjsonPermissionValues(response, "SignWithKey", "sign_with_key")
+			perms.UseKey = gjsonPermissionValues(response, "UseKey", "use_key")
 			metaVal.Permissions = &perms
 		} else {
 			metaVal.Permissions = nil
@@ -1682,9 +1772,11 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 			metaVal.CTE = nil
 		}
 		plan.Metadata = &metaVal
-	} else {
+	} else if plan.Metadata != nil {
+		// User had meta configured but server no longer returns it — clear from state.
 		plan.Metadata = nil
 	}
+	// else: plan.Metadata was nil (user has no meta block) — leave nil regardless of server response.
 
 	// public_key_parameters is a Create-only request field; GET /vault/keys2/{id} never
 	// returns it (swagger-keys.yaml Key schema has no publicKeyParameters property).
@@ -1693,6 +1785,47 @@ func (r *resourceCMKey) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
+}
+
+// permissionsEqual compares two KeyMetadataPermissionsTFSDK by set membership per
+// action, not list order. CM's stored order isn't guaranteed to match the plan's
+// config order, so a plain reflect.DeepEqual on these slices can flag a false
+// positive change and trigger an unnecessary permissions PATCH on every apply.
+func permissionsEqual(a, b *KeyMetadataPermissionsTFSDK) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	sameSet := func(x, y []types.String) bool {
+		if len(x) != len(y) {
+			return false
+		}
+		toSet := func(s []types.String) map[string]int {
+			m := make(map[string]int, len(s))
+			for _, v := range s {
+				m[v.ValueString()]++
+			}
+			return m
+		}
+		xs, ys := toSet(x), toSet(y)
+		if len(xs) != len(ys) {
+			return false
+		}
+		for k, v := range xs {
+			if ys[k] != v {
+				return false
+			}
+		}
+		return true
+	}
+	return sameSet(a.DecryptWithKey, b.DecryptWithKey) &&
+		sameSet(a.EncryptWithKey, b.EncryptWithKey) &&
+		sameSet(a.ExportKey, b.ExportKey) &&
+		sameSet(a.MACVerifyWithKey, b.MACVerifyWithKey) &&
+		sameSet(a.MACWithKey, b.MACWithKey) &&
+		sameSet(a.ReadKey, b.ReadKey) &&
+		sameSet(a.SignVerifyWithKey, b.SignVerifyWithKey) &&
+		sameSet(a.SignWithKey, b.SignWithKey) &&
+		sameSet(a.UseKey, b.UseKey)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -1761,19 +1894,46 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	if plan.DeactivationDate.ValueString() != "" {
 		payload.DeactivationDate = plan.DeactivationDate.ValueString()
 	}
-	if plan.Description.ValueString() != "" {
-		payload.Description = plan.Description.ValueString()
+	// Update: 3-way transition for description (TFIN-573).
+	// CM accepts PATCH {"description": ""} to clear — confirmed live.
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		v := plan.Description.ValueString()
+		payload.Description = &v
+	} else if !state.Description.IsNull() {
+		// Transitioning from set to null: send "" to CM to clear the field.
+		v := ""
+		payload.Description = &v
 	}
+	// else: description was never set — payload.Description stays nil (omitempty omits it).
 	if plan.KeyId.ValueString() != "" {
 		payload.KeyId = plan.KeyId.ValueString()
 	}
-	// Add meta to payload if set
+	// Add meta to payload only for the sub-fields (owner_id/permissions/cte) that actually
+	// changed from state. CM's ABAC policies (e.g. "CTE Section Key Meta update by CTE Admin")
+	// deny the *entire* UpdateKey call whenever meta.cte is present in the PATCH and differs
+	// from what's stored server-side — even for a superuser, and even when the field the user
+	// actually intends to change (e.g. undeletable) has nothing to do with meta. meta.cte drifts
+	// from Terraform's view the moment a real CTE client uses the key (CM stamps is_used=true,
+	// a field this schema doesn't model), so unconditionally resending it broke Update() for any
+	// key with a configured cte block once it entered real CTE use. Gating each sub-field
+	// independently lets an unrelated attribute change go out with no "meta" key at all.
 	var metadata KeyMetadataJSON
+	var hasMetadataChange bool
 	if plan.Metadata != nil {
-		if plan.Metadata.OwnerId.ValueString() != "" {
-			metadata.OwnerId = plan.Metadata.OwnerId.ValueString()
+		var statePermissions *KeyMetadataPermissionsTFSDK
+		var stateCTE *KeyMetadataCTETFSDK
+		var stateOwnerId string
+		if state.Metadata != nil {
+			statePermissions = state.Metadata.Permissions
+			stateCTE = state.Metadata.CTE
+			stateOwnerId = state.Metadata.OwnerId.ValueString()
 		}
-		if plan.Metadata.Permissions != nil {
+
+		if v := plan.Metadata.OwnerId.ValueString(); v != "" && v != stateOwnerId {
+			metadata.OwnerId = v
+			hasMetadataChange = true
+		}
+		if plan.Metadata.Permissions != nil && !permissionsEqual(plan.Metadata.Permissions, statePermissions) {
 			var permission KeyMetadataPermissionsJSON
 			var decryptWithKey []string
 			var encryptWithKey []string
@@ -1822,8 +1982,9 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 			permission.SignWithKey = signWithKey
 			permission.UseKey = useKey
 			metadata.Permissions = &permission
+			hasMetadataChange = true
 		}
-		if plan.Metadata.CTE != nil {
+		if plan.Metadata.CTE != nil && !reflect.DeepEqual(plan.Metadata.CTE, stateCTE) {
 			var cteParams KeyMetadataCTEJSON
 			if !plan.Metadata.CTE.PersistentOnClient.IsNull() && !plan.Metadata.CTE.PersistentOnClient.IsUnknown() {
 				cteParams.PersistentOnClient = plan.Metadata.CTE.PersistentOnClient.ValueBool()
@@ -1835,7 +1996,10 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 				cteParams.CTEVersioned = plan.Metadata.CTE.CTEVersioned.ValueBool()
 			}
 			metadata.CTE = &cteParams
+			hasMetadataChange = true
 		}
+	}
+	if hasMetadataChange {
 		payload.Metadata = &metadata
 	}
 
@@ -1847,12 +2011,6 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 	if plan.ProtectStopDate.ValueString() != "" {
 		payload.ProtectStopDate = plan.ProtectStopDate.ValueString()
-	}
-	if plan.RevocationMessage.ValueString() != "" {
-		payload.RevocationMessage = plan.RevocationMessage.ValueString()
-	}
-	if plan.RevocationReason.ValueString() != "" {
-		payload.RevocationReason = plan.RevocationReason.ValueString()
 	}
 	if plan.RotationFrequencyDays.ValueString() != "" {
 		payload.RotationFrequencyDays = plan.RotationFrequencyDays.ValueString()
@@ -1866,7 +2024,8 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 		payload.UnExportable = &v
 	}
 	if !plan.UsageMask.IsNull() && !plan.UsageMask.IsUnknown() {
-		payload.UsageMask = plan.UsageMask.ValueInt64()
+		v := plan.UsageMask.ValueInt64()
+		payload.UsageMask = &v
 	}
 	if !plan.AllVersions.IsNull() && !plan.AllVersions.IsUnknown() {
 		payload.AllVersions = plan.AllVersions.ValueBool()
@@ -1901,6 +2060,22 @@ func (r *resourceCMKey) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	plan.ID = types.StringValue(gjson.Get(responseBody, "id").String())
+
+	// Revocation is a dedicated CM operation, not a field on the general key payload
+	// (see revokeKey). Only call it when revocation actually changed, so an already-revoked
+	// key doesn't get re-revoked on every unrelated apply.
+	revocationChanged := plan.RevocationReason.ValueString() != state.RevocationReason.ValueString() ||
+		plan.RevocationMessage.ValueString() != state.RevocationMessage.ValueString()
+	if revocationChanged && (plan.RevocationReason.ValueString() != "" || plan.RevocationMessage.ValueString() != "") {
+		if err := r.revokeKey(ctx, plan.ID.ValueString(), plan.RevocationReason.ValueString(), plan.RevocationMessage.ValueString()); err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_key.go -> Update][" + plan.ID.ValueString() + "]")
+			resp.Diagnostics.AddError(
+				"Error revoking key on CipherTrust Manager: ",
+				"Could not revoke key, unexpected error: "+err.Error(),
+			)
+			return
+		}
+	}
 
 	// Resolve Optional bool fields that may remain unknown after PATCH if the user
 	// did not explicitly configure them (IsUnknown means plan modifier left them open).
@@ -1997,6 +2172,10 @@ func (r *resourceCMKey) Delete(ctx context.Context, req resource.DeleteRequest, 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_key.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Key", state.ID.ValueString()),
+			)
 			return
 		}
 		if strings.Contains(strings.ToLower(err.Error()), "key is not deletable") && state.RemoveFromStateOnDestroy.ValueBool() {

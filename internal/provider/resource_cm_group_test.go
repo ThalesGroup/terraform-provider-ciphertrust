@@ -102,7 +102,8 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 				),
 			},
 			{
-				// Out-of-band deletion; next plan should detect drift and recreate.
+				// Out-of-band deletion; next plan surfaces a hard error (state preserved).
+				// The operator must run 'terraform state rm' to clean up.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -114,9 +115,9 @@ func Test_CM_AccCMGroup_driftDetection(t *testing.T) {
 						common.URL_GROUP+"/"+capturedID,
 					)
 				},
-				Config:             cmGroupConfig(name, "Drift test", ""),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				Config:      cmGroupConfig(name, "Drift test", ""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`CM Group Not Found`),
 			},
 		},
 	})
@@ -614,8 +615,8 @@ func Test_CM_AccCMGroup_DeleteOutOfBand(t *testing.T) {
 						}
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -1015,7 +1016,7 @@ resource "ciphertrust_groups" "test_group" {
 
 // TestCipherTrust_CMGroup_ClientMetadataNullClear verifies that removing
 // client_metadata from config clears it on CM and converges without a
-// perpetual plan diff (TFIN-402).
+// perpetual plan diff.
 func Test_CM_CipherTrust_CMGroup_ClientMetadataNullClear(t *testing.T) {
 	RequireCM(t)
 

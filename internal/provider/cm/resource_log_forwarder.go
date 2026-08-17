@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -52,9 +53,6 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "connection id of log-forwarder connection (elasticsearch, loki, syslog).",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
@@ -82,19 +80,35 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 						Attributes: map[string]schema.Attribute{
 							"activity_kmip": schema.StringAttribute{
 								Optional:    true,
-								Description: "Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Computed:    true,
+								Description: "Index to be used for entries coming from the KMIP activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"activity_nae": schema.StringAttribute{
 								Optional:    true,
-								Description: "Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Computed:    true,
+								Description: "Index to be used for entires coming from the NAE activity log. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"client_audit_records": schema.StringAttribute{
 								Optional:    true,
-								Description: "Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters.",
+								Computed:    true,
+								Description: "Index to be used for entries coming from client audit records. Client audit logs are forwarded only if this index is provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"server_audit_records": schema.StringAttribute{
 								Optional:    true,
-								Description: "Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters.",
+								Computed:    true,
+								Description: "Index to be used for entries coming from server audit records. Logs will not be forwarded if index is not provided. Consult Elasticsearch documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 						},
 					},
@@ -110,19 +124,35 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 						Attributes: map[string]schema.Attribute{
 							"activity_kmip": schema.StringAttribute{
 								Optional:    true,
-								Description: "Labels to be used for entries coming from the KMIP activity log, for example \"jobs=activity_kmip\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Computed:    true,
+								Description: "Labels to be used for entries coming from the KMIP activity log, for example \"jobs=activity_kmip\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"activity_nae": schema.StringAttribute{
 								Optional:    true,
-								Description: "Labels to be used for entries coming from the NAE activity log, for example \"jobs=activity_nae\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Computed:    true,
+								Description: "Labels to be used for entries coming from the NAE activity log, for example \"jobs=activity_nae\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"client_audit_records": schema.StringAttribute{
 								Optional:    true,
-								Description: "Labels to be used for entries coming from client audit records, for example \"jobs=client_audit_records\". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters.",
+								Computed:    true,
+								Description: "Labels to be used for entries coming from client audit records, for example \"jobs=client_audit_records\". Client audit logs are forwarded only if this label is provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"server_audit_records": schema.StringAttribute{
 								Optional:    true,
-								Description: "Labels to be used for entries coming from server audit records, for example \"jobs=server_audit_records\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters.",
+								Computed:    true,
+								Description: "Labels to be used for entries coming from server audit records, for example \"jobs=server_audit_records\". Logs will not be forwarded if label is not provided. Consult Loki documentation for allowed characters. Once set, this cannot currently be cleared by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
 							},
 						},
 					},
@@ -138,19 +168,35 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 						Attributes: map[string]schema.Attribute{
 							"activity_kmip": schema.BoolAttribute{
 								Optional:    true,
-								Description: "When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them.",
+								Computed:    true,
+								Description: "When true, KMIP Activity logs will be forwarded. You need to enable KMIP Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.Bool{
+									boolplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"activity_nae": schema.BoolAttribute{
 								Optional:    true,
-								Description: "When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them.",
+								Computed:    true,
+								Description: "When true, NAE Activity logs will be forwarded. You need to enable NAE Acitivity logs before forwarding them. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.Bool{
+									boolplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"client_audit_records": schema.BoolAttribute{
 								Optional:    true,
-								Description: "When true, Client Audit Records will be forwarded.",
+								Computed:    true,
+								Description: "When true, Client Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.Bool{
+									boolplanmodifier.UseStateForUnknown(),
+								},
 							},
 							"server_audit_records": schema.BoolAttribute{
 								Optional:    true,
-								Description: "When true, Server Audit Records will be forwarded.",
+								Computed:    true,
+								Description: "When true, Server Audit Records will be forwarded. Once set to true, this cannot currently be turned off by removing it from configuration or setting it to null - the previous value is preserved.",
+								PlanModifiers: []planmodifier.Bool{
+									boolplanmodifier.UseStateForUnknown(),
+								},
 							},
 						},
 					},
@@ -280,10 +326,10 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 		)
 		return
 	}
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	// hydrateLogForwarderState fills in id/account/timestamps and the nested
+	// params from the live CM response, resolving any leaf sub-fields the
+	// config omitted (Optional+Computed) that would otherwise remain Unknown.
+	hydrateLogForwarderState(response, &plan)
 
 	r.client.Log.Debug("[resource_log_forwarder.go -> Create Output][" + response + "]")
 
@@ -295,35 +341,10 @@ func (r *resourceCMLogForwarders) Create(ctx context.Context, req resource.Creat
 	}
 }
 
-// Read refreshes the Terraform state with the latest data.
-func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state CMLogForwardersTFSDK
-	id := uuid.New().String()
-	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Read][" + id + "]")
-
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
-	if err != nil {
-		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Log Forwarder Not Found — State Preserved",
-				"The Log Forwarder resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
-			)
-			return
-		}
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Read][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Error Reading CipherTrust Log Forwarder",
-			"Could not read Log Forwarder: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
+// hydrateLogForwarderState populates all fields of state from a CM GET/PATCH response body.
+// Called by both Read() and Update() so Update() always writes live CM values rather than
+// the plan-shaped (potentially incomplete) payload.
+func hydrateLogForwarderState(response string, state *CMLogForwardersTFSDK) {
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 	state.Type = types.StringValue(gjson.Get(response, "type").String())
@@ -332,7 +353,6 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
 	state.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
 
-	// Hydrate elasticsearch_params
 	if gjson.Get(response, "elasticsearch_params").Exists() {
 		var esIndices CMLogForwardersESOrLokiParamsTFSDK
 		if r := gjson.Get(response, "elasticsearch_params.indices.activity_kmip"); r.Exists() {
@@ -362,7 +382,6 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.ElasticsearchParams = nil
 	}
 
-	// Hydrate loki_params
 	if gjson.Get(response, "loki_params").Exists() {
 		var lokiLabels CMLogForwardersESOrLokiParamsTFSDK
 		if r := gjson.Get(response, "loki_params.labels.activity_kmip"); r.Exists() {
@@ -392,28 +411,24 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 		state.LokiParams = nil
 	}
 
-	// Hydrate syslog_params.
-	// CMLogForwardersSyslogTFSDK.SyslogParams has tfsdk tag "forward_logs".
-	// gjson path follows json:"syslog_params" on CMLogForwardersSyslogJSON.SyslogParams,
-	// so the nested path is "syslog_params.syslog_params.*".
 	if gjson.Get(response, "syslog_params").Exists() {
 		var syslogInner CMLogForwardersSyslogParamsTFSDK
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_kmip"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_kmip"); r.Exists() {
 			syslogInner.ActivityKMIP = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityKMIP = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.activity_nae"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.activity_nae"); r.Exists() {
 			syslogInner.ActivityNAE = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ActivityNAE = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.client_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.client_audit_records"); r.Exists() {
 			syslogInner.ClientAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ClientAuditRecords = types.BoolNull()
 		}
-		if r := gjson.Get(response, "syslog_params.syslog_params.server_audit_records"); r.Exists() {
+		if r := gjson.Get(response, "syslog_params.forward_logs.server_audit_records"); r.Exists() {
 			syslogInner.ServerAuditRecords = types.BoolValue(r.Bool())
 		} else {
 			syslogInner.ServerAuditRecords = types.BoolNull()
@@ -424,6 +439,38 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 	} else {
 		state.SyslogParams = nil
 	}
+}
+
+// Read refreshes the Terraform state with the latest data.
+func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state CMLogForwardersTFSDK
+	id := uuid.New().String()
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_log_forwarder.go -> Read][" + id + "]")
+
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
+	if err != nil {
+		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Log Forwarder"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Log Forwarder", state.ID.ValueString()),
+			)
+			return
+		}
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Read][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error Reading CipherTrust Log Forwarder",
+			"Could not read Log Forwarder: "+state.ID.ValueString()+", unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	hydrateLogForwarderState(response, &state)
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, &state)
@@ -437,9 +484,16 @@ func (r *resourceCMLogForwarders) Read(ctx context.Context, req resource.ReadReq
 func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	id := uuid.New().String()
 	var plan CMLogForwardersTFSDK
+	var state CMLogForwardersTFSDK
 	payload := make(map[string]interface{})
 
 	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	diags = req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -506,12 +560,14 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 			syslogParamLabels["server_audit_records"] = plan.SyslogParams.SyslogParams.ServerAuditRecords.ValueBool()
 		}
 		if len(syslogParamLabels) > 0 {
-			syslogParams["syslog_params"] = syslogParamLabels
+			syslogParams["forward_logs"] = syslogParamLabels
 			payload["syslog_params"] = syslogParams
 		}
 	}
 
-	if plan.Name.ValueString() != "" && plan.Name.ValueString() != types.StringNull().ValueString() {
+	// Only include name when it actually changed — CM rejects PATCH with an unchanged name
+	// ("Connection exists with the same name"), but accepts a genuine rename (TFIN-577 Bug 1).
+	if plan.Name.ValueString() != state.Name.ValueString() {
 		payload["name"] = plan.Name.ValueString()
 	}
 	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
@@ -528,10 +584,10 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	response, err := r.client.UpdateDataV2(
+	_, err = r.client.UpdateDataV2(
 		ctx,
-		id,
-		common.URL_CM_LOG_FORWARDS+"/"+plan.ID.ValueString(),
+		plan.ID.ValueString(),
+		common.URL_CM_LOG_FORWARDS,
 		payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")
@@ -542,12 +598,24 @@ func (r *resourceCMLogForwarders) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-	plan.UpdatedAt = types.StringValue(gjson.Get(response, "updatedAt").String())
+	// Re-fetch live values after PATCH so state reflects the true CM state, not the
+	// plan-shaped payload. This prevents false drift when only a subset of nested
+	// params (e.g. two of four elasticsearch_params.indices fields) was sent — CM's
+	// merge-PATCH preserves omitted sub-fields, but writing plan back would null them
+	// out in state, triggering "changed outside of Terraform" on the next plan (TFIN-577 Bug 3).
+	liveResponse, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_CM_LOG_FORWARDS)
+	if err != nil {
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Update][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error reading Log Forwarder after update: ",
+			"Update succeeded but could not re-read live state: "+err.Error(),
+		)
+		return
+	}
 
-	diags = resp.State.Set(ctx, plan)
+	hydrateLogForwarderState(liveResponse, &state)
+
+	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -571,6 +639,10 @@ func (r *resourceCMLogForwarders) Delete(ctx context.Context, req resource.Delet
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_log_forwarder.go -> Delete][" + id + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "Log Forwarder", state.ID.ValueString()),
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_log_forwarder.go -> Delete][" + id + "]")

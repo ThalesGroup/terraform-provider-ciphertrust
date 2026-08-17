@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -27,7 +30,6 @@ var (
 	_ resource.Resource                = &resourceAWSPolicyTemplate{}
 	_ resource.ResourceWithConfigure   = &resourceAWSPolicyTemplate{}
 	_ resource.ResourceWithImportState = &resourceAWSPolicyTemplate{}
-	_ resource.ResourceWithModifyPlan  = &resourceAWSPolicyTemplate{}
 )
 
 func NewResourceAWSPolicyTemplate() resource.Resource {
@@ -70,12 +72,15 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			"account_id": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "AWS account used to create the key policy.",
+				Description: "(Immutable) AWS account used to create the key policy.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"auto_push": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "(Updatable) On update, automatically push policy changes. Must be set to true if 'is_verified' is true.",
+				Description: "On update, automatically push policy changes. Must be set to true if 'is_verified' is true.",
 				Default:     booldefault.StaticBool(false),
 			},
 			"is_verified": schema.BoolAttribute{
@@ -85,32 +90,35 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			"external_accounts": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.",
+				Description: "AWS accounts that can use this key. External accounts are mutually exclusive to policy. If no policy parameters are specified the default policy is created.",
 			},
 			"key_admins": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key administrators - users.",
+				Description: "Key administrators - users.",
 			},
 			"key_admins_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key administrators - roles.",
+				Description: "Key administrators - roles.",
 			},
 			"key_users": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key users - users.",
+				Description: "Key users - users.",
 			},
 			"key_users_roles": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) Key users - roles.",
+				Description: "Key users - roles.",
 			},
 			"kms_id": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
+				Description: "(Immutable) ID of the KMS to which the template belongs. 'account_id', 'external_accounts' or 'kms_id' must be provided.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"kms_name": schema.StringAttribute{
 				Computed:    true,
@@ -118,12 +126,21 @@ func (r *resourceAWSPolicyTemplate) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name for the policy template.",
+				Description: "(Immutable) Name for the policy template.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"policy": schema.StringAttribute{
 				Computed: true,
 				Optional: true,
-				Description: "(Updatable) AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. " +
+				Description: "AWS key policy json. 'policy' is mutually exclusive to all other policy parameters. " +
 					"If no policy parameters are specified the default policy is created.",
 				Validators: []validator.String{
 					stringvalidator.ConflictsWith(
@@ -183,7 +200,7 @@ func (r *resourceAWSPolicyTemplate) Create(ctx context.Context, req resource.Cre
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 
 	var diags diag.Diagnostics
-	r.setPolicyTemplateState(response, &plan, &diags)
+	r.setPolicyTemplateState(response, &plan, &plan, &diags)
 	for _, d := range diags {
 		resp.Diagnostics.AddWarning(d.Summary(), d.Detail())
 	}
@@ -207,7 +224,7 @@ func (r *resourceAWSPolicyTemplate) Read(ctx context.Context, req resource.ReadR
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.setPolicyTemplateState(response, &state, &resp.Diagnostics)
+	r.setPolicyTemplateState(response, &state, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -257,7 +274,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 			keyPolicyParams.KeyUsers == nil && keyPolicyParams.KeyUsersRoles == nil {
 			// terraform import can lead to this
 			r.client.Log.Debug("[resource_aws_policy_template.go -> Update][nothing to update]")
-			r.setPolicyTemplateState(response, &plan, &resp.Diagnostics)
+			r.setPolicyTemplateState(response, &plan, &plan, &resp.Diagnostics)
 			resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 			return
 		}
@@ -288,7 +305,7 @@ func (r *resourceAWSPolicyTemplate) Update(ctx context.Context, req resource.Upd
 	}
 	r.client.Log.Debug("[resource_aws_policy_template.go -> Update][response:" + redactAWSResponse(response) + "]")
 
-	r.setPolicyTemplateState(response, &plan, &resp.Diagnostics)
+	r.setPolicyTemplateState(response, &plan, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -330,51 +347,6 @@ func (r *resourceAWSPolicyTemplate) Delete(ctx context.Context, req resource.Del
 			r.client.Log.Error(details)
 			resp.Diagnostics.AddError(details, "")
 		}
-	}
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceAWSPolicyTemplate) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state AWSKeyPolicyTemplateTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	// Guard against false positives when account_id is not set in config (null in plan)
-	// but has a value in state (set by the API after create).
-	if !plan.AccountID.IsNull() && !plan.AccountID.IsUnknown() && plan.AccountID != state.AccountID {
-		changed = append(changed, "account_id")
-	}
-	// Guard against false positives when kms_id is not set in config (null in plan)
-	// but has a value in state (set by the API after create).
-	if !plan.KmsID.IsNull() && !plan.KmsID.IsUnknown() && plan.KmsID != state.KmsID {
-		changed = append(changed, "kms_id")
-	}
-	if plan.Name != state.Name {
-		changed = append(changed, "name")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
 	}
 }
 
@@ -500,7 +472,10 @@ func (r *resourceAWSPolicyTemplate) getUpdatePolicyTemplateParams(ctx context.Co
 }
 
 // setPolicyTemplateState populates Terraform state for an AWS key policy template from an API response JSON string.
-func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, state *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
+// planned is the prior state or plan model used to preserve explicit empty-set values when the API returns no data for
+// a field. If planned has an explicit empty set (not null) for a field and the API returns empty, state is set to an
+// empty set rather than null, preventing "Provider produced inconsistent result after apply" errors.
+func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, state *AWSKeyPolicyTemplateTFSDK, planned *AWSKeyPolicyTemplateTFSDK, diags *diag.Diagnostics) {
 	state.AccountID = types.StringValue(gjson.Get(response, "account_id").String())
 	state.KmsID = types.StringValue(gjson.Get(response, "kms").String())
 	state.KmsName = types.StringValue(gjson.Get(response, "kms_name").String())
@@ -509,37 +484,46 @@ func (r *resourceAWSPolicyTemplate) setPolicyTemplateState(response string, stat
 	if len(externalAccounts) != 0 {
 		state.ExternalAccounts = utils.StringSliceJSONToSetValue(externalAccounts, diags)
 	} else {
-		state.ExternalAccounts = types.SetNull(types.StringType)
+		state.ExternalAccounts = emptyOrNullSet(planned.ExternalAccounts)
 	}
 	state.IsVerified = types.BoolValue(gjson.Get(response, "is_verified").Bool())
 	keyAdmins := gjson.Get(response, "key_admins").Array()
 	if len(keyAdmins) != 0 {
 		state.KeyAdmins = utils.StringSliceJSONToSetValue(keyAdmins, diags)
 	} else {
-		state.KeyAdmins = types.SetNull(types.StringType)
+		state.KeyAdmins = emptyOrNullSet(planned.KeyAdmins)
 	}
 	keyAdminsRoles := gjson.Get(response, "key_admins_roles").Array()
 	if len(keyAdminsRoles) != 0 {
 		state.KeyAdminsRoles = utils.StringSliceJSONToSetValue(keyAdminsRoles, diags)
 	} else {
-		state.KeyAdminsRoles = types.SetNull(types.StringType)
+		state.KeyAdminsRoles = emptyOrNullSet(planned.KeyAdminsRoles)
 	}
 	keyUsers := gjson.Get(response, "key_users").Array()
 	if len(keyUsers) != 0 {
 		state.KeyUsers = utils.StringSliceJSONToSetValue(keyUsers, diags)
 	} else {
-		state.KeyUsers = types.SetNull(types.StringType)
+		state.KeyUsers = emptyOrNullSet(planned.KeyUsers)
 	}
 	keyUsersRoles := gjson.Get(response, "key_users_roles").Array()
 	if len(keyUsersRoles) != 0 {
 		state.KeyUsersRoles = utils.StringSliceJSONToSetValue(keyUsersRoles, diags)
 	} else {
-		state.KeyUsersRoles = types.SetNull(types.StringType)
+		state.KeyUsersRoles = emptyOrNullSet(planned.KeyUsersRoles)
 	}
 	equivalent := getPoliciesAreEqual(r.client, gjson.Get(response, "policy").String(), state.Policy.ValueString(), diags)
 	if !equivalent {
 		state.Policy = types.StringValue(gjson.Get(response, "policy").String())
 	}
+}
+
+// emptyOrNullSet returns an empty Set of string if planned was an explicit empty set (not null), or SetNull otherwise.
+// This preserves the distinction between an omitted field (null) and an explicitly cleared field ([]).
+func emptyOrNullSet(planned types.Set) types.Set {
+	if !planned.IsNull() {
+		return types.SetValueMust(types.StringType, []attr.Value{})
+	}
+	return types.SetNull(types.StringType)
 }
 
 // getPoliciesAreEqual reports whether two AWS key policy JSON strings are semantically equal after normalisation.

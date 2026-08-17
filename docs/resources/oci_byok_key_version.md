@@ -74,19 +74,19 @@ resource "ciphertrust_oci_byok_key_version" "version" {
 
 ### Required
 
-- `cckm_key_id` (String) CipherTrust Manager Key ID.
-- `source_key_id` (String) ID of the key that will be uploaded from a key source to OCI.
+- `cckm_key_id` (String) (Immutable) CipherTrust Manager Key ID.
+- `source_key_id` (String) (Immutable) ID of the key that will be uploaded from a key source to OCI.
 
 ### Optional
 
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the OCI BYOK key version when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
-- `source_key_tier` (String) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the OCI BYOK key version when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `source_key_tier` (String) (Immutable) Key source from where the key will be uploaded. The default is 'local'. The only option is 'local'.
 
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
 - `cloud_name` (String) CipherTrust Manager cloud name.
-- `created_at` (String) Date/time the application was created
+- `created_at` (String) Date/time the application was created.
 - `id` (String) The key's CipherTrust Manager resource ID.
 - `key_material_origin` (String) CipherTrust Manager origin of the key version's material.
 - `oci_key_version_params` (Attributes) OCI key attributes. (see [below for nested schema](#nestedatt--oci_key_version_params))
@@ -111,4 +111,4 @@ Read-Only:
 - `time_created` (String) The time the key version was created.
 - `time_of_deletion` (String) The time when the key version will be deleted.
 - `vault_id` (String) OCI Vault OCID.
-- `version_id` (String) OCI version ID
+- `version_id` (String) OCI version ID.

@@ -13,13 +13,11 @@ Use this data source to retrieve a list of OCI vaults available to the connectio
 ## Example Usage
 
 ```terraform
-data "ciphertrust_get_oci_vaults" "connection_vaults" {
-  # Required parameters
-  connection_id  = "oci-connection-id-or-name"
-  region         = "oci-region"
-  compartment_id = "compartment-ocid"
-  # Optional parameters
-  limit = 5
+# Retrieve OCI vaults in a compartment and region.
+data "ciphertrust_get_oci_vaults" "vaults" {
+  connection_id  = "oci-prod-connection"
+  compartment_id = "ocid1.compartment.oc1..example"
+  region         = "us-ashburn-1"
 }
 ```
 
@@ -30,11 +28,7 @@ data "ciphertrust_get_oci_vaults" "connection_vaults" {
 
 - `compartment_id` (String) Compartment OCID to get vaults from.
 - `connection_id` (String) CipherTrust Manager OCI connection name or ID.
-- `region` (String) OCI region OCID to get vaults from.
-
-### Optional
-
-- `limit` (Number) Number of records to return in a paginated 'List' call. It might not return the exact number as the first page might return one more than provided limit because of the inclusion of the root vault (tenancy).
+- `region` (String) OCI region identifier to list vaults from.
 
 ### Read-Only
 

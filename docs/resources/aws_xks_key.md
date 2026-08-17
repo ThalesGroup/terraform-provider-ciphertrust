@@ -101,11 +101,11 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 ### Optional
 
 - `aws_param` (Attributes) AWS key parameters. Alias, description, and tags are updatable for linked keys; all other fields are computed. (see [below for nested schema](#nestedatt--aws_param))
-- `bypass_policy_lockout_safety_check` (Boolean) Whether to bypass the key policy lockout safety check.
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Only applied when the key is in a linked state. Cannot be set to false at creation time; disable the key via update after it is created.
-- `enable_rotation` (Attributes) (Updatable) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. (see [below for nested schema](#nestedatt--enable_rotation))
-- `key_policy` (Attributes) (Updatable) Key policy parameters. Only applicable to keys in a linked state. (see [below for nested schema](#nestedatt--key_policy))
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `bypass_policy_lockout_safety_check` (Boolean) (Immutable once set) Whether to bypass the key policy lockout safety check when linking an XKS key with AWS. Only valid when local_hosted_params.linked = true.
+- `enable_key` (Boolean) Enable or disable the key. Requires local_hosted_params.linked = true. Cannot be set to false at creation time; disable the key via update after it is created.
+- `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. XKS keys require local_hosted_params.linked = true. (see [below for nested schema](#nestedatt--enable_rotation))
+- `key_policy` (Attributes) Key policy parameters. Only applicable to keys in a linked state. XKS keys require local_hosted_params.linked = true. (see [below for nested schema](#nestedatt--key_policy))
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the AWS KMS key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
 ### Read-Only
 
@@ -126,15 +126,15 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 - `key_users_roles` (Set of String) Key users - roles.
 - `kms_id` (String) ID of the KMS.
 - `kms_name` (String) Name of the KMS.
-- `labels` (Map of String) A list of key:value pairs associated with the key.
+- `labels` (Map of String) A map of key/value pairs associated with the key.
 - `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 - `local_key_id` (String) CipherTrust Manager key identifier of the external key.
 - `local_key_name` (String) CipherTrust Manager key name of the external key.
 - `policy_template_tag` (Map of String) AWS key tag for an associated policy template.
 - `region` (String) AWS region in which the XKS key resides.
 - `rotated_at` (String) Time when this key was rotated by a scheduled rotation job.
-- `rotated_from` (String) CipherTrust Manager key ID from of the key this key has been rotated from by a scheduled rotation job.
-- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated too by a scheduled rotation job.
+- `rotated_from` (String) CipherTrust Manager key ID of the key this key has been rotated from by a scheduled rotation job.
+- `rotated_to` (String) CipherTrust Manager key ID which this key has been rotated to by a scheduled rotation job.
 - `rotation_status` (String) Rotation status of the key.
 - `synced_at` (String) Date the key was synchronized.
 - `updated_at` (String) Date the key was last updated.
@@ -145,14 +145,14 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
 
 Required:
 
-- `custom_key_store_id` (String) ID of the custom keystore where XKS key is to be created.
-- `source_key_id` (String) ID of the source key for AWS XKS key.
-- `source_key_tier` (String) Source key tier for AWS XKS key. Current option is local. Default is local.
+- `custom_key_store_id` (String) (Immutable) ID of the custom keystore where XKS key is to be created.
+- `source_key_id` (String) (Immutable) ID of the source key for AWS XKS key.
+- `source_key_tier` (String) (Immutable) Source key tier for AWS XKS key. Current option is local. Default is local.
 
 Optional:
 
-- `blocked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
-- `linked` (Boolean) (Updatable) Parameter to indicate if AWS XKS key is linked with AWS.
+- `blocked` (Boolean) Parameter to indicate if AWS XKS key is blocked for any data plane operation.
+- `linked` (Boolean) Parameter to indicate if AWS XKS key is linked with AWS.
 
 
 <a id="nestedatt--aws_param"></a>
@@ -160,9 +160,9 @@ Optional:
 
 Optional:
 
-- `alias` (Set of String) (Updatable) Alias(es) assigned to the key. Only applicable when the key is in a linked state. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = [].
-- `description` (String) (Updatable) Description of the AWS key. Both linked and unlinked keys can be created with a description but ony updatable for keys in a linked state.
-- `tags` (Map of String) (Updatable) Tags assigned to the key. Only applicable when the key is in a linked state. To remove all tags set tags = {}.
+- `alias` (Set of String) Alias(es) assigned to the key. At most one alias may be set at creation time; additional aliases can be added via update after the key has been created. To remove all aliases set alias = []. Setting alias on an unlinked key requires CipherTrust Manager 2.23 or later. Changing the alias requires local_hosted_params.linked = true.
+- `description` (String) Description of the AWS key. Both linked and unlinked keys can be created with a description. Updating the description requires local_hosted_params.linked = true.
+- `tags` (Map of String) Tags assigned to the key. Requires local_hosted_params.linked = true. To remove all tags set tags = {}.
 
 Read-Only:
 

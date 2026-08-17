@@ -97,16 +97,16 @@ resource "ciphertrust_oci_key" "key" {
 
 ### Required
 
-- `name` (String) (Updatable) Name for the key.
+- `name` (String) Name for the key.
 - `oci_key_params` (Attributes) OCI key attributes. (see [below for nested schema](#nestedatt--oci_key_params))
-- `vault` (String) CipherTrust Manager OCI vault resource ID.
+- `vault` (String) (Conditionally immutable) CipherTrust Manager OCI vault resource ID. This attribute can only be changed if the previously configured vault no longer exists in CipherTrust Manager.
 
 ### Optional
 
-- `enable_auto_rotation` (Attributes) (Updatable) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. (see [below for nested schema](#nestedatt--enable_auto_rotation))
-- `enable_key` (Boolean) (Updatable) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.
+- `enable_auto_rotation` (Attributes) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. (see [below for nested schema](#nestedatt--enable_auto_rotation))
+- `enable_key` (Boolean) Enable or disable the key. Default is true. Cannot be set to false at creation time; configure via update after the key is created.
 - `restore_from_backup_trigger` (String) Triggers a restore of the key from its most recent OCI backup each time the trigger value changes. Applicable only to HSM-protected keys in OCI Virtual Private Vaults with backup (Object Storage bucket) configured.
-- `schedule_for_deletion_days` (Number) (Updatable) Number of days to wait before permanently deleting the OCI key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
+- `schedule_for_deletion_days` (Number) Number of days to wait before permanently deleting the OCI key when this resource is destroyed. If omitted during resource creation, the value defaults to 7. Once set, the last configured value is retained in state and is used during destroy unless changed explicitly.
 
 ### Read-Only
 
@@ -131,16 +131,16 @@ resource "ciphertrust_oci_key" "key" {
 
 Required:
 
-- `algorithm` (String) The algorithm used by the key's versions to encrypt or decrypt. Options are AES, RSA and ECDSA.
-- `compartment_id` (String) (Updatable) The compartment's OCID in which to create the key.
-- `length` (Number) The length of the key in bytes. Options are: AES (16, 24, 32), RSA (256, 384, 512), ECDSA (32, 48, 66).
-- `protection_mode` (String) The protection mode of the key. Options are: HSM or SOFTWARE.
+- `algorithm` (String) (Immutable) The algorithm used by the key's versions to encrypt or decrypt. Options are AES, RSA and ECDSA.
+- `compartment_id` (String) The compartment's OCID in which to create the key.
+- `length` (Number) (Immutable) The length of the key in bytes. Options are: AES (16, 24, 32), RSA (256, 384, 512), ECDSA (32, 48, 66).
+- `protection_mode` (String) (Immutable) The protection mode of the key. Options are: HSM or SOFTWARE.
 
 Optional:
 
-- `curve_id` (String) The curve ID of the ECDSA key. Options are NIST_P256, NIST_P384 and NIST_P521.
-- `defined_tags` (Attributes Set) (Updatable) Defined tags for the key. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
-- `freeform_tags` (Map of String) (Updatable) Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.
+- `curve_id` (String) (Immutable) The curve ID of the ECDSA key. Options are NIST_P256, NIST_P384 and NIST_P521.
+- `defined_tags` (Attributes Set) The defined tags associated with the key. Removing this attribute from the configuration does not remove existing tags. To remove all defined tags, explicitly set `defined_tags = []`. (see [below for nested schema](#nestedatt--oci_key_params--defined_tags))
+- `freeform_tags` (Map of String) Freeform tags for the key as key:value pairs. Removing this attribute from the configuration does not remove existing tags. To clear all freeform tags, explicitly set freeform_tags = {}.
 
 Read-Only:
 
@@ -160,8 +160,8 @@ Read-Only:
 
 Optional:
 
-- `tag` (String) The tag's namespace as defined in OCI.
-- `values` (Map of String) The key:value pairs to associate with the tag as defined in OCI.
+- `tag` (String) The OCI tag namespace.
+- `values` (Map of String) The key:value pairs associated with the tag namespace.
 
 
 
@@ -170,8 +170,8 @@ Optional:
 
 Required:
 
-- `job_config_id` (String) (Updatable) CipherTrust Manager resource ID of a key rotation scheduler.
-- `key_source` (String) (Updatable) Currently, the only option is 'ciphertrust'.
+- `job_config_id` (String) CipherTrust Manager resource ID of a key rotation scheduler.
+- `key_source` (String) Currently, the only option is 'ciphertrust'.
 
 
 <a id="nestedatt--version_summary"></a>
@@ -184,4 +184,4 @@ Read-Only:
 - `source_key_id` (String) CipherTrust Manager key ID used to create the version.
 - `source_key_name` (String) Name of the key used to create the version.
 - `source_key_tier` (String) Source of the key used to create the version.
-- `version_id` (String) The key version's OCID
+- `version_id` (String) The key version's OCID.

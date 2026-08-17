@@ -19,8 +19,10 @@ import (
 // getOciKeyVersion checks the parent key and its vault, then reads the key version.
 func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 	keyID string, versionID string, versionOpLabel string, diags *diag.Diagnostics) string {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_version_common.go -> getOciKeyVersion][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_version_common.go -> getOciKeyVersion][" + id + "]")
 
-	keyJSON, _ := getOciKey(ctx, id, client, "", keyID, "reading", diags)
+	keyJSON := getOciKey(ctx, id, client, "", keyID, "reading", diags)
 	if diags.HasError() || keyJSON == "" {
 		return "" // parent key not found or error - version kept in state
 	}
@@ -63,6 +65,9 @@ func getOciKeyVersion(ctx context.Context, id string, client *common.Client,
 
 // deleteKeyVersion schedules an OCI key version for deletion.
 func deleteKeyVersion(ctx context.Context, id string, client *common.Client, keyID string, versionID string, days int64, diags *diag.Diagnostics) {
+	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_version_common.go -> deleteKeyVersion][" + id + "]")
+	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_version_common.go -> deleteKeyVersion][" + id + "]")
+
 	response := getOciKeyVersion(ctx, id, client, keyID, versionID, "deleting", diags)
 	if diags.HasError() {
 		return // parent key or vault not found - hard error, version kept in state
@@ -200,7 +205,9 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 
 	keyVersionState := gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
 	numRetries := int(client.CCKMConfig.OCIOperationTimeout / ociKeySleepSeconds)
-	for retry := 0; retry < numRetries && keyVersionState != expectedState; retry++ {
+	client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] key_id: %s version_id: %s waiting for state '%s', max_retries: %d", keyID, versionID, expectedState, numRetries))
+	loop := 0
+	for loop = 0; loop < numRetries && keyVersionState != expectedState; loop++ {
 		time.Sleep(time.Duration(ociKeySleepSeconds) * time.Second)
 		response, err = client.GetById(ctx, id, versionID, common.URL_OCI+"/keys/"+keyID+"/versions")
 		if err != nil {
@@ -211,12 +218,16 @@ func waitForKeyVersionState(ctx context.Context, id string, client *common.Clien
 			return
 		}
 		keyVersionState = gjson.Get(response, "oci_key_version_params.lifecycle_state").String()
+		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] loop: %d keyVersionState:%s key_id: %s version_id: %s", loop, keyVersionState, keyID, versionID))
 	}
 	if keyVersionState != expectedState {
 		msg := fmt.Sprintf("Failed to confirm OCI key version state is '%s' in the given time. Consider extending provider configuration option 'oci_operation_timeout'.", expectedState)
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
+		client.Log.Error(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] TIMED OUT after %d retries: keyVersionState: %s key_id: %s version_id: %s", loop, keyVersionState, keyID, versionID))
 		client.Log.Error(details)
 		diags.AddError(details, "")
+	} else {
+		client.Log.Debug(fmt.Sprintf("[oci_key_version_common.go -> waitForKeyVersionState] resolved in %d retries: keyVersionState: %s key_id: %s version_id: %s.", loop, keyVersionState, keyID, versionID))
 	}
 	client.Log.Debug("[oci_key_version_common.go -> waitForKeyVersionState][response:" + redactOCIResponse(response) + "]")
 }

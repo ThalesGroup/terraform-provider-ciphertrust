@@ -3,34 +3,31 @@
 page_title: "ciphertrust_aws_key_rotation_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of CipherTrust Manager AWS key rotations.
-  Give a filter of 'limit=-1' to list more than 10 matches.
-  Note: This list is only available for CipherTrust Manager version 2.20 and greater.
+  Use this data source to retrieve a list of AWS key rotations. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS key rotations (such as key_source, RotationType, or KeyMaterialState). Set limit = "-1" to return all matching rotations.
 ---
 
 # ciphertrust_aws_key_rotation_list (Data Source)
 
-Use this data source to retrieve a list of CipherTrust Manager AWS key rotations.
-
-Give a filter of 'limit=-1' to list more than 10 matches.
-
-
-
-Note: This list is only available for CipherTrust Manager version 2.20 and greater.
+Use this data source to retrieve a list of AWS key rotations. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS key rotations (such as `key_source`, `RotationType`, or `KeyMaterialState`). Set `limit = "-1"` to return all matching rotations.
 
 ## Example Usage
 
 ```terraform
-# List rotation history for a specific AWS key
-data "ciphertrust_aws_key_rotation_list" "rotation_list" {
-  key_id = "77b4acd3-80e4-4270-81b5-11bb13b8053a"
-}
-
-# List rotation history with filters
-data "ciphertrust_aws_key_rotation_list" "rotation_list_filtered" {
+# List rotations for a key sorted by rotation date, newest first.
+data "ciphertrust_aws_key_rotation_list" "sorted" {
   key_id = "77b4acd3-80e4-4270-81b5-11bb13b8053a"
   filters = {
-    limit = "-1"
+    sort = "-RotationDate"
+  }
+}
+
+# List all on-demand rotations with active key material for a key.
+data "ciphertrust_aws_key_rotation_list" "on_demand_active" {
+  key_id = "77b4acd3-80e4-4270-81b5-11bb13b8053a"
+  filters = {
+    RotationType     = "ON_DEMAND"
+    KeyMaterialState = "Active"
+    limit            = "-1"
   }
 }
 ```
@@ -44,19 +41,34 @@ data "ciphertrust_aws_key_rotation_list" "rotation_list_filtered" {
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing AWS key rotations.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS key rotations.
+
+> **Note:** Although some filters represent integers, all filter values must be specified as strings. For example, use `"-1"` rather than `-1`.
+
+| filter               | type    | description |
+|----------------------|---------|-------------|
+| skip                 | integer | Index of the first result to return (default: 0). |
+| limit                | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort                 | string  | Fields to sort by. Valid sort fields are `updatedAt`, `createdAt`, `RotationDate`, and `ValidTo`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| key_source           | string  | Filter by key source. |
+| key_material_origin  | string  | Filter by key material origin. |
+| ImportState          | string  | Filter by ImportState. |
+| KeyMaterialState     | string  | Filter by key material state. |
+| RotationType         | string  | Filter by rotation type. |
+| last_import_status   | string  | Filter by last import status. |
+| KeyMaterialId        | string  | Filter by key material ID. |
 
 ### Read-Only
 
-- `matched` (Number) The number of records which matched the filters.
-- `rotations` (Attributes List) (see [below for nested schema](#nestedatt--rotations))
+- `matched` (Number) The total number of records matching the given filters.
+- `rotations` (Attributes List) List of AWS key rotations matching the given filters. (see [below for nested schema](#nestedatt--rotations))
 
 <a id="nestedatt--rotations"></a>
 ### Nested Schema for `rotations`
 
 Read-Only:
 
-- `account` (String) The account which owns this resource.
+- `account` (String) The account that owns this resource.
 - `aws_params` (Attributes) AWS key-material attributes. (see [below for nested schema](#nestedatt--rotations--aws_params))
 - `created_at` (String) Date and time the CipherTrust Manager resource for this rotation was created.
 - `id` (String) The CipherTrust Manager ID for this rotation.
@@ -66,7 +78,7 @@ Read-Only:
 - `key_source_container_name` (String) Name of the CipherTrust Manager key source container.
 - `kms_id` (String) CipherTrust Manager AWS KMS ID.
 - `source_key_id` (String) The CipherTrust Manager ID of the key used for the key material.
-- `source_key_name` (String) The name of CipherTrust Manager key used for the key material.
+- `source_key_name` (String) The name of the CipherTrust Manager key used for the key material.
 - `updated_at` (String) Date and time the CipherTrust Manager resource for this rotation was updated.
 - `uri` (String) CipherTrust Manager's unique identifier for the resource.
 
@@ -77,9 +89,9 @@ Read-Only:
 
 - `expiration_model` (String) The key expiry model of the key material. Only applicable to EXTERNAL SYMMETRIC_DEFAULT keys.
 - `import_state` (String) The import state of the key material. Only applicable to EXTERNAL SYMMETRIC_DEFAULT keys.
-- `key_id` (String) Unique identifier for the key.
+- `key_id` (String) AWS key ID.
 - `key_material_description` (String) User specified key material description. Only applicable to EXTERNAL SYMMETRIC_DEFAULT keys.
-- `key_material_id` (String) Unique identifier for the key material.
+- `key_material_id` (String) AWS key material ID.
 - `key_material_state` (String) The state of the key material.
 - `rotation_date` (String) Date and time the key material rotation completed.
 - `rotation_type` (String) Whether the key material rotation was a scheduled automatic rotation or an on-demand rotation.

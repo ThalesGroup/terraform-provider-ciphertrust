@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -42,6 +43,54 @@ func TestCckmOCIDataSourceGetBuckets(t *testing.T) {
 					// At least one bucket is returned.
 					resource.TestCheckResourceAttrSet("data.ciphertrust_get_oci_buckets.test", "buckets.0.name"),
 				),
+			},
+		},
+	})
+}
+
+func TestCckmOCIDataSourceGetBucketsCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// empty connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_buckets" "test" {
+						connection_id  = ""
+						compartment_id = "ocid1.compartment.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only connection_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_buckets" "test" {
+						connection_id  = "   "
+						compartment_id = "ocid1.compartment.fake"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// empty compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_buckets" "test" {
+						connection_id  = "my-connection"
+						compartment_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			{
+				// whitespace-only compartment_id must be rejected at plan time
+				Config: `
+					data "ciphertrust_get_oci_buckets" "test" {
+						connection_id  = "my-connection"
+						compartment_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
 			},
 		},
 	})

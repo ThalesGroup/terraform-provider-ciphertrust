@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -27,6 +26,8 @@ type dataSourceCTEPolicy struct {
 
 type CTEPolicyDataSourceModel struct {
 	PolicyName types.String         `tfsdk:"policy_name"`
+	Limit      types.Int64          `tfsdk:"limit"`
+	Skip       types.Int64          `tfsdk:"skip"`
 	Policies   []CTEPolicyListTFSDK `tfsdk:"cte_policies"`
 }
 
@@ -38,55 +39,79 @@ func (d *dataSourceCTEPolicy) Schema(_ context.Context, _ datasource.SchemaReque
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy_name": schema.StringAttribute{
-				Optional: true,
+				Description: "Name of the CTE policy to filter by. If omitted, all CTE policies are returned.",
+				Optional:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CTE policies to return. If unset, all matching policies are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CTE policies to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"cte_policies": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CTE policies matching the given filter.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the CTE policy.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the CTE policy.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the CTE policy.",
+							Computed:    true,
 						},
 						"policy_type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the CTE policy, Standard, LDT, IDT, Cloud_Object_Storage or CSI.",
+							Computed:    true,
 						},
 						"metadata": schema.SingleNestedAttribute{
-							Computed: true,
+							Description: "Metadata of the CTE policy.",
+							Computed:    true,
 							Attributes: map[string]schema.Attribute{
 								"restrict_update": schema.BoolAttribute{
-									Computed: true,
+									Description: "Whether to restrict updates to the CTE policy.",
+									Computed:    true,
 								},
 							},
 						},
 						"never_deny": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the policy allows all data access operations, disabling security controls. This should be enabled only when applying key configurations initially.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the CTE policy.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CTE policy was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the CTE policy was last updated.",
+							Computed:    true,
 						},
 						"policy_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Version of the CTE policy.",
+							Computed:    true,
 						},
 						"policy_key_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Key version of the CTE policy.",
+							Computed:    true,
 						},
 						"migrated_policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the policy this CTE policy was migrated from, if applicable.",
+							Computed:    true,
 						},
 						"updated_by": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user who last updated the CTE policy.",
+							Computed:    true,
 						},
 					},
 				},
@@ -97,26 +122,28 @@ func (d *dataSourceCTEPolicy) Schema(_ context.Context, _ datasource.SchemaReque
 
 func (d *dataSourceCTEPolicy) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy.go -> Read][" + id + "]")
 	var state CTEPolicyDataSourceModel
 	req.Config.Get(ctx, &state)
-	tflog.Info(ctx, "PrathamMaini =====> "+state.PolicyName.ValueString())
+	d.client.Log.Info("PrathamMaini =====> " + state.PolicyName.ValueString())
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString())
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_POLICY+"?name="+state.PolicyName.ValueString(), skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policies", total, limitVal)
 
 	policies := []CTEPolicyListJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &policies)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
@@ -145,7 +172,7 @@ func (d *dataSourceCTEPolicy) Read(ctx context.Context, req datasource.ReadReque
 		state.Policies = append(state.Policies, ctePolicy)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

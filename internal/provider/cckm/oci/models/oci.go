@@ -53,7 +53,6 @@ type GetOCICompartmentsJSON struct {
 
 type GetOCICompartmentsDataSourceModelTFSDK struct {
 	Connection   types.String             `tfsdk:"connection_id"`
-	Limit        types.Int64              `tfsdk:"limit"`
 	Compartments []GetOCICompartmentTFSDK `tfsdk:"compartments"`
 }
 

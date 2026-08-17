@@ -13,11 +13,9 @@ Use this data source to retrieve a list of OCI compartments available to the con
 ## Example Usage
 
 ```terraform
-data "ciphertrust_get_oci_compartments" "connection_compartments" {
-  # Required parameters
-  connection_id = "oci-connection-id-or-name"
-  # Optional parameters
-  limit = 5
+# Retrieve OCI compartments available to a connection.
+data "ciphertrust_get_oci_compartments" "compartments" {
+  connection_id = "oci-prod-connection"
 }
 ```
 
@@ -27,10 +25,6 @@ data "ciphertrust_get_oci_compartments" "connection_compartments" {
 ### Required
 
 - `connection_id` (String) CipherTrust Manager OCI connection name or ID.
-
-### Optional
-
-- `limit` (Number) Number of records to return in a paginated 'List' call. It might not return the exact number as the first page might return one more than provided limit because of the inclusion of the root compartment (tenancy).
 
 ### Read-Only
 

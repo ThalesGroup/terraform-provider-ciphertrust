@@ -72,7 +72,10 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"conditions": schema.ListNestedAttribute{
 				Optional:    true,
-				Description: "Conditions are rules for matching the other attributes of the operation",
+				Description: "(Immutable) Conditions are rules for matching the other attributes of the operation. Changing this value forces the resource to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"negate": schema.BoolAttribute{
@@ -126,8 +129,11 @@ func (r *resourceCMPolicy) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"resources": schema.ListAttribute{
 				Optional:    true,
-				Description: "Resources is a list of URI strings, which must be in URI format.",
+				Description: "(Immutable) Resources is a list of URI strings, which must be in URI format. Changing this value forces the resource to be destroyed and recreated.",
 				ElementType: types.StringType,
+				PlanModifiers: []planmodifier.List{
+					modifiers.ImmutableList(),
+				},
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,
@@ -283,9 +289,9 @@ func (r *resourceCMPolicy) Create(ctx context.Context, req resource.CreateReques
 	if !plan.IncludeDescendantAccounts.IsNull() {
 		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
 			plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-		} else {
-			plan.IncludeDescendantAccounts = types.BoolNull()
 		}
+		// CM does not echo include_descendant_accounts in the POST response (confirmed live).
+		// Preserve the plan value — ImmutableBool() ensures it cannot change post-creation.
 	}
 
 	if plan.Resources != nil {
@@ -377,9 +383,9 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Read][" + id + "]")
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"Policy Not Found — State Preserved",
-				"The Policy resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM Policy"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM Policy", state.ID.ValueString()),
 			)
 			return
 		}
@@ -424,9 +430,9 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 	if !state.IncludeDescendantAccounts.IsNull() {
 		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
 			state.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-		} else {
-			state.IncludeDescendantAccounts = types.BoolNull()
 		}
+		// CM does not return include_descendant_accounts in GET responses (confirmed live).
+		// Preserve the state value — ImmutableBool() ensures it cannot change post-creation.
 	}
 
 	if state.Resources != nil {
@@ -502,224 +508,19 @@ func (r *resourceCMPolicy) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
+// All configurable fields carry immutability plan modifiers, so Update() is
+// unreachable under normal operation — it exists as a defensive backstop.
+// AddError (not AddWarning) ensures any unexpected reach of this path fails
+// loudly rather than silently succeeding with stale state.
 func (r *resourceCMPolicy) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	id := uuid.New().String()
-	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy.go -> Update][" + id + "]")
-	defer r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy.go -> Update][" + id + "]")
-
-	var plan CMPolicyTFSDK
-	var state CMPolicyTFSDK
-
-	diags := req.Plan.Get(ctx, &plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	diags = req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var payload CMPolicyJSON
-
-	if len(plan.Actions) == 0 {
-		if len(state.Actions) > 0 {
-			payload.Actions = []string{} // Explicitly clear on CM
-		}
-	} else {
-		var actions []string
-		for _, str := range plan.Actions {
-			actions = append(actions, str.ValueString())
-		}
-		payload.Actions = actions
-	}
-
-	if !plan.Allow.IsNull() && !plan.Allow.IsUnknown() {
-		v := plan.Allow.ValueBool()
-		payload.Allow = &v
-	}
-
-	if len(plan.Conditions) == 0 {
-		if len(state.Conditions) > 0 {
-			payload.Conditions = []CMPolicyConditionJSON{} // Explicitly clear on CM
-		}
-	} else {
-		var conditions []CMPolicyConditionJSON
-		for _, condition := range plan.Conditions {
-			var conditionJSON CMPolicyConditionJSON
-			if !condition.Negate.IsNull() && !condition.Negate.IsUnknown() {
-				v := condition.Negate.ValueBool()
-				conditionJSON.Negate = &v
-			}
-			if !condition.Op.IsNull() && !condition.Op.IsUnknown() {
-				conditionJSON.Op = condition.Op.ValueString()
-			}
-			if !condition.Path.IsNull() && !condition.Path.IsUnknown() {
-				conditionJSON.Path = condition.Path.ValueString()
-			}
-			var values []string
-			for _, v := range condition.Values {
-				values = append(values, v.ValueString())
-			}
-			conditionJSON.Values = values
-			conditions = append(conditions, conditionJSON)
-		}
-		payload.Conditions = conditions
-	}
-
-	if !plan.Effect.IsNull() && !plan.Effect.IsUnknown() {
-		v := plan.Effect.ValueString()
-		payload.Effect = &v
-	}
-
-	if !plan.IncludeDescendantAccounts.IsNull() && !plan.IncludeDescendantAccounts.IsUnknown() {
-		v := plan.IncludeDescendantAccounts.ValueBool()
-		payload.IncludeDescendantAccounts = &v
-	}
-
-	if !plan.Name.IsNull() && !plan.Name.IsUnknown() {
-		v := plan.Name.ValueString()
-		payload.Name = &v
-	}
-
-	if len(plan.Resources) == 0 {
-		if len(state.Resources) > 0 {
-			payload.Resources = []string{} // Explicitly clear on CM
-		}
-	} else {
-		var resources []string
-		for _, str := range plan.Resources {
-			resources = append(resources, str.ValueString())
-		}
-		payload.Resources = resources
-	}
-
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Update][" + id + "]")
-		resp.Diagnostics.AddError("Invalid data input: Policy Update", err.Error())
-		return
-	}
-
-	response, err := r.client.UpdateDataV2(ctx, state.ID.ValueString(), common.URL_CM_POLICIES, payloadJSON)
-	if err != nil {
-		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Update][" + id + "]")
-		resp.Diagnostics.AddError(
-			"Error Updating CipherTrust Policy",
-			"Could not update policy "+state.ID.ValueString()+", unexpected error: "+err.Error(),
-		)
-		return
-	}
-
-	plan.ID = types.StringValue(gjson.Get(response, "id").String())
-	plan.URI = types.StringValue(gjson.Get(response, "uri").String())
-	plan.Account = types.StringValue(gjson.Get(response, "account").String())
-	plan.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
-
-	// effect is Optional+Computed with Default="deny" — always hydrate.
-	if r := gjson.Get(response, "effect"); r.Exists() {
-		plan.Effect = types.StringValue(r.String())
-	} else {
-		plan.Effect = types.StringNull()
-	}
-
-	// Optional-only fields: only hydrate when the new plan (desired config) is non-null.
-	// This prevents CM's server defaults from overwriting null plan values and causing drift.
-	if !plan.Name.IsNull() {
-		if r := gjson.Get(response, "name"); r.Exists() {
-			plan.Name = types.StringValue(r.String())
-		} else {
-			plan.Name = types.StringNull()
-		}
-	}
-
-	if !plan.Allow.IsNull() {
-		if r := gjson.Get(response, "allow"); r.Exists() {
-			plan.Allow = types.BoolValue(r.Bool())
-		} else {
-			plan.Allow = types.BoolNull()
-		}
-	}
-
-	if !plan.IncludeDescendantAccounts.IsNull() {
-		if r := gjson.Get(response, "include_descendant_accounts"); r.Exists() {
-			plan.IncludeDescendantAccounts = types.BoolValue(r.Bool())
-		} else {
-			plan.IncludeDescendantAccounts = types.BoolNull()
-		}
-	}
-
-	if plan.Resources != nil {
-		rResources := gjson.Get(response, "resources")
-		if !rResources.Exists() {
-			plan.Resources = nil
-		} else {
-			var respResources []types.String
-			for _, res := range rResources.Array() {
-				respResources = append(respResources, types.StringValue(res.String()))
-			}
-			plan.Resources = respResources
-		}
-	}
-
-	if plan.Actions != nil {
-		rActions := gjson.Get(response, "actions")
-		if !rActions.Exists() {
-			plan.Actions = nil
-		} else {
-			var respActions []types.String
-			for _, act := range rActions.Array() {
-				respActions = append(respActions, types.StringValue(act.String()))
-			}
-			plan.Actions = respActions
-		}
-	}
-
-	if plan.Conditions != nil {
-		rConditions := gjson.Get(response, "conditions")
-		if !rConditions.Exists() {
-			plan.Conditions = nil
-		} else {
-			var respConditions []CMPolicyConditionTFSDK
-			for _, c := range rConditions.Array() {
-				var cond CMPolicyConditionTFSDK
-				if nr := c.Get("negate"); nr.Exists() {
-					cond.Negate = types.BoolValue(nr.Bool())
-				} else {
-					cond.Negate = types.BoolNull()
-				}
-				if or_ := c.Get("op"); or_.Exists() {
-					cond.Op = types.StringValue(or_.String())
-				} else {
-					cond.Op = types.StringNull()
-				}
-				if pr := c.Get("path"); pr.Exists() {
-					cond.Path = types.StringValue(pr.String())
-				} else {
-					cond.Path = types.StringNull()
-				}
-				rVals := c.Get("values")
-				if !rVals.Exists() {
-					cond.Values = nil
-				} else {
-					var vals []types.String
-					for _, v := range rVals.Array() {
-						vals = append(vals, types.StringValue(v.String()))
-					}
-					cond.Values = vals
-				}
-				respConditions = append(respConditions, cond)
-			}
-			plan.Conditions = respConditions
-		}
-	}
-
-	diags = resp.State.Set(ctx, plan)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_policy.go -> Update]")
+	resp.Diagnostics.AddError(
+		"Cannot update a CM policy",
+		"The CM admin policy API (/v1/admin/policies) has no documented update endpoint — "+
+			"only Create, Get, List, and Delete are supported. All policy fields are immutable: "+
+			"change any field by destroying and recreating the resource.",
+	)
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_policy.go -> Update]")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -738,6 +539,10 @@ func (r *resourceCMPolicy) Delete(ctx context.Context, req resource.DeleteReques
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_policy.go -> Delete][" + state.ID.ValueString() + "]")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM Policy", state.ID.ValueString()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

@@ -43,6 +43,7 @@ Read-Only:
 - `certificate_thumbprint` (String) Thumbprint of the certificate associated with the connection, when certificate-based authentication is used.
 - `client_id` (String) Unique Identifier (client ID) for the Azure application.
 - `client_secret` (String, Sensitive) Secret key for the Azure application. Required in Azure Stack connection. CM never returns this field on GET, so it is not populated by this data source.
+- `client_secret_version` (Number) Not populated by this data source — client_secret is write-only and resource-only.
 - `cloud_name` (String) Name of the cloud.
 
 	Options:

@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -29,6 +28,8 @@ type dataSourceCTESignatureSets struct {
 }
 
 type CTESignatureSetsDataSourceModel struct {
+	Limit         types.Int64                 `tfsdk:"limit"`
+	Skip          types.Int64                 `tfsdk:"skip"`
 	SignatureSets []CTESignatureSetsListTFSDK `tfsdk:"signature_sets"`
 }
 
@@ -39,57 +40,82 @@ func (d *dataSourceCTESignatureSets) Metadata(_ context.Context, req datasource.
 func (d *dataSourceCTESignatureSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of signature sets to return. If unset, all signature sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of signature sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"signature_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of signature sets matching the given filters.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the signature set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the signature set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the signature set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature set was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the signature set was last updated.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the signature set.",
+							Computed:    true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the signature set. Valid values are signature-set (application signing) and hadoop-signature-set (Hadoop data protection).",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the signature set.",
+							Computed:    true,
 						},
 						"reference_version": schema.Int64Attribute{
-							Computed: true,
+							Description: "Reference version of the signature set.",
+							Computed:    true,
 						},
 						"source_list": schema.ListAttribute{
+							Description: "List of directories/files added to the signature set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"signing_status": schema.StringAttribute{
-							Computed: true,
+							Description: "Signing status of the signature set.",
+							Computed:    true,
 						},
 						"percentage_complete": schema.Int64Attribute{
-							Computed: true,
+							Description: "Percentage of the signing operation completed for the signature set.",
+							Computed:    true,
 						},
 						"updated_by": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user who last updated the signature set.",
+							Computed:    true,
 						},
 						"docker_img_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker image scanned to generate the signature set, if applicable.",
+							Computed:    true,
 						},
 						"docker_cont_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker container scanned to generate the signature set, if applicable.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the signature set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
@@ -102,24 +128,27 @@ func (d *dataSourceCTESignatureSets) Schema(_ context.Context, _ datasource.Sche
 
 func (d *dataSourceCTESignatureSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_signature_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_signature_sets.go -> Read][" + id + "]")
 	var state CTESignatureSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_SIGNATURE_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_SIGNATURE_SET, skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_signature_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_signature_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE signature sets from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE signature sets", total, limitVal)
 
 	signatureSets := []SignatureSetJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &signatureSets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_signature_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_signature_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE signature sets from CM",
 			err.Error(),
@@ -162,7 +191,7 @@ func (d *dataSourceCTESignatureSets) Read(ctx context.Context, req datasource.Re
 		state.SignatureSets = append(state.SignatureSets, signatureSetState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_signature_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_signature_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

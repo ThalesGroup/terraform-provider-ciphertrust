@@ -1,16 +1,14 @@
-# List all AWS KMS resources (up to default limit of 10)
-data "ciphertrust_aws_kms_list" "all_kms" {}
-
-# List AWS KMS resources matching a name
-data "ciphertrust_aws_kms_list" "kms_by_name" {
+# Sort KMS resources by last updated, newest first.
+data "ciphertrust_aws_kms_list" "sorted" {
   filters = {
-    name = "my-kms"
+    sort = "-updatedAt"
   }
 }
 
-# List all AWS KMS resources (no limit)
-data "ciphertrust_aws_kms_list" "all_kms_no_limit" {
+# List KMS resources for a specific account and cloud partition.
+data "ciphertrust_aws_kms_list" "by_account_and_cloud" {
   filters = {
-    limit = "-1"
+    account_id = "123456789012"
+    cloud_name = "aws"
   }
 }

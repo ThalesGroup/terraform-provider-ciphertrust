@@ -58,26 +58,26 @@ output "signature_sets" {
 
 ### Read-Only
 
-- `signature_sets` (Attributes List) (see [below for nested schema](#nestedatt--signature_sets))
+- `signature_sets` (Attributes List) List of signature sets matching the given filters. (see [below for nested schema](#nestedatt--signature_sets))
 
 <a id="nestedatt--signature_sets"></a>
 ### Nested Schema for `signature_sets`
 
 Read-Only:
 
-- `account` (String)
-- `created_at` (String)
-- `description` (String)
-- `docker_cont_id` (String)
-- `docker_img_id` (String)
-- `id` (String)
-- `labels` (Map of String)
-- `name` (String)
-- `percentage_complete` (Number)
-- `reference_version` (Number)
-- `signing_status` (String)
-- `source_list` (List of String)
-- `type` (String)
-- `updated_at` (String)
-- `updated_by` (String)
-- `uri` (String)
+- `account` (String) Account of the signature set.
+- `created_at` (String) Date and time the signature set was created.
+- `description` (String) Description of the signature set.
+- `docker_cont_id` (String) ID of the docker container scanned to generate the signature set, if applicable.
+- `docker_img_id` (String) ID of the docker image scanned to generate the signature set, if applicable.
+- `id` (String) The unique identifier of the signature set.
+- `labels` (Map of String) Labels applied to the signature set.
+- `name` (String) Name of the signature set.
+- `percentage_complete` (Number) Percentage of the signing operation completed for the signature set.
+- `reference_version` (Number) Reference version of the signature set.
+- `signing_status` (String) Signing status of the signature set.
+- `source_list` (List of String) List of directories/files added to the signature set.
+- `type` (String) Type of the signature set. Valid values are signature-set (application signing) and hadoop-signature-set (Hadoop data protection).
+- `updated_at` (String) Date and time the signature set was last updated.
+- `updated_by` (String) Name of the user who last updated the signature set.
+- `uri` (String) URI of the signature set.

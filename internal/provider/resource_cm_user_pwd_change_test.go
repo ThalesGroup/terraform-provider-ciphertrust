@@ -1,10 +1,14 @@
 package provider
 
 import (
+	"context"
 	"os"
 	"regexp"
 	"testing"
 
+	providercm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	fwschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -446,4 +450,36 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 			},
 		},
 	})
+}
+
+// Test_CM_UserPwdChange_PasswordWriteOnly verifies that password and new_password
+// have WriteOnly: true in the schema (TFIN-549). WriteOnly prevents the framework
+// from persisting these values to terraform.tfstate entirely. The test inspects the
+// schema directly — no live CM interaction required — matching the pattern already
+// used by ciphertrust_user.password.
+func Test_CM_UserPwdChange_PasswordWriteOnly(t *testing.T) {
+	ctx := context.Background()
+	r := providercm.NewResourceCMPwdChange()
+
+	schemaResp := &fwresource.SchemaResponse{}
+	r.Schema(ctx, fwresource.SchemaRequest{}, schemaResp)
+
+	for _, field := range []string{"password", "new_password"} {
+		attr, ok := schemaResp.Schema.Attributes[field]
+		if !ok {
+			t.Errorf("expected attribute %q to be present in schema", field)
+			continue
+		}
+		strAttr, ok := attr.(fwschema.StringAttribute)
+		if !ok {
+			t.Errorf("expected attribute %q to be a StringAttribute", field)
+			continue
+		}
+		if !strAttr.WriteOnly {
+			t.Errorf("attribute %q must have WriteOnly: true to prevent plaintext persisting in tfstate (TFIN-549)", field)
+		}
+		if !strAttr.Sensitive {
+			t.Errorf("attribute %q must have Sensitive: true", field)
+		}
+	}
 }

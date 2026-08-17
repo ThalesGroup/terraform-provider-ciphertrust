@@ -15,10 +15,58 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const ociCompartmentsFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, " +
+	"all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter         | type    | description |\n" +
+	"|----------------|---------|-------------|\n" +
+	"| skip           | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit          | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort           | string  | Fields to sort by. Valid sort fields are `createdAt` and `updatedAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| id             | string  | Filter the results by id. |\n" +
+	"| name           | string  | Filter the results by OCI display name. |\n" +
+	"| compartment_id | string  | Filter the results by compartment OCID. |\n" +
+	"| tenancy        | string  | Filter the results by OCI tenancy. |"
+
 var (
-	_ datasource.DataSource              = &dataSourceOCICompartmentsList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSource                     = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCICompartmentsList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCICompartmentsList{}
+
+	ociCompartmentValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {},
+		"name": {}, "compartment_id": {}, "tenancy": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCICompartmentsList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociCompartmentFilterValidator{}}
+}
+
+type ociCompartmentFilterValidator struct{}
+
+func (v ociCompartmentFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociCompartmentFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociCompartmentFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config models.OCICompartmentListDataSourceModelTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociCompartmentValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_compartments_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCICompartmentsList() datasource.DataSource {
 	return &dataSourceOCICompartmentsList{}
@@ -49,19 +97,19 @@ func (d *dataSourceOCICompartmentsList) Metadata(_ context.Context, req datasour
 
 func (d *dataSourceOCICompartmentsList) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager.\n\n" +
-			"Give a filter of 'limit=-1' to list more than 10 matches.\n\n" +
-			"Available filters: id, name, compartment_id (compartment OCID), tenancy.",
+		Description: "Use this data source to retrieve a list of OCI compartments saved in CipherTrust Manager. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing OCI compartments (such as `name`, `compartment_id`, or `tenancy`). " +
+			"Set `limit = \"-1\"` to return all matching compartments.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A map of key:value filter pairs. Supported keys: id, name, " +
-					"compartment_id (the parent compartment OCID), tenancy.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI compartments." + ociCompartmentsFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The total number of compartments that matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"compartments": schema.ListNestedAttribute{
 				Computed:    true,
@@ -86,7 +134,7 @@ func (d *dataSourceOCICompartmentsList) Schema(_ context.Context, _ datasource.S
 						},
 						"compartment_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The parent compartment OCID.",
+							Description: "The compartment's OCID.",
 						},
 						"parent_compartment_id": schema.StringAttribute{
 							Computed:    true,
@@ -106,7 +154,7 @@ func (d *dataSourceOCICompartmentsList) Schema(_ context.Context, _ datasource.S
 						},
 						"lifecycle_state": schema.StringAttribute{
 							Computed:    true,
-							Description: "The compartment's current lifecycle state (e.g. ACTIVE).",
+							Description: "The compartment's current lifecycle state (for example, `ACTIVE`).",
 						},
 						"is_accessible": schema.BoolAttribute{
 							Computed:    true,
@@ -183,6 +231,7 @@ func (d *dataSourceOCICompartmentsList) Read(ctx context.Context, req datasource
 		return
 	}
 
+	state.Compartments = []models.OCICompartmentTFSDK{}
 	for _, c := range list.Resources {
 		compartment := models.OCICompartmentTFSDK{
 			ID:                  types.StringValue(c.ID),

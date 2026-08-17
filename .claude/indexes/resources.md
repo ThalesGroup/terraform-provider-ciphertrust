@@ -18,6 +18,7 @@ Every resource registered in [internal/provider/provider.go](../../internal/prov
 | `ciphertrust_cluster` | `cm.NewResourceCMCluster` | [cm/resource_cm_cluster.go:29](../../internal/provider/cm/resource_cm_cluster.go#L29) |
 | `ciphertrust_cluster_node` | `cm.NewResourceCMClusterNode` | [cm/resource_cm_cluster_node.go:58](../../internal/provider/cm/resource_cm_cluster_node.go#L58) |
 | `ciphertrust_interface` | `cm.NewResourceCMInterface` | [cm/resource_interface.go:28](../../internal/provider/cm/resource_interface.go#L28) |
+| `ciphertrust_interface_certificate_renewal` | `cm.NewResourceInterfaceCertificateRenewal` | [cm/resource_interface_certificate_renewal.go:32](../../internal/provider/cm/resource_interface_certificate_renewal.go#L32) |
 | `ciphertrust_license` | `cm.NewResourceCMLicense` | [cm/resource_license.go:27](../../internal/provider/cm/resource_license.go#L27) |
 | `ciphertrust_ntp` | `cm.NewResourceCMNTP` | [cm/resource_ntp.go:27](../../internal/provider/cm/resource_ntp.go#L27) |
 | `ciphertrust_trial_license` | `cm.NewResourceCMTrialLicense` | [cm/resource_trial_license.go:25](../../internal/provider/cm/resource_trial_license.go#L25) |

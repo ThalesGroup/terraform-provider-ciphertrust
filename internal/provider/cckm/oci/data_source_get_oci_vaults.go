@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -56,19 +57,32 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 			"connection_id": schema.StringAttribute{
 				Required:    true,
 				Description: "CipherTrust Manager OCI connection name or ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"compartment_id": schema.StringAttribute{
 				Required:    true,
 				Description: "Compartment OCID to get vaults from.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "OCI region OCID to get vaults from.",
-			},
-			"limit": schema.Int64Attribute{
-				Optional:    true,
-				Description: "Number of records to return in a paginated 'List' call. It might not return the exact number as the first page might return one more than provided limit because of the inclusion of the root vault (tenancy).",
-				Validators:  []validator.Int64{int64validator.AtLeast(1)},
+				Description: "OCI region identifier to list vaults from.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"vaults": schema.ListNestedAttribute{
 				Description: "A list of vaults available to the connection.",
@@ -132,9 +146,8 @@ func (d *dataSourceGetOCIVaults) Schema(_ context.Context, _ datasource.SchemaRe
 	}
 }
 
-// Read retrieves OCI vaults available to the connection in the given region and
-// compartment by calling the CM get-vaults API. Automatically paginates until all
-// results are returned (or the optional limit is reached).
+// Read retrieves all OCI vaults available to the connection in the given region and
+// compartment, automatically paginating until all results are collected.
 func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
 	d.client.Log.Debug(common.MSG_METHOD_START + "[data_source_get_oci_vaults.go -> Read][" + id + "]")
@@ -146,58 +159,49 @@ func (d *dataSourceGetOCIVaults) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	connection := state.Connection.ValueString()
 	payload := models.GetOCIVaultsPayloadJSON{
-		Connection:    connection,
+		Connection:    state.Connection.ValueString(),
 		CompartmentID: state.CompartmentID.ValueString(),
 		Region:        state.Region.ValueString(),
 	}
-	limit := state.Limit.ValueInt64()
-	if limit != 0 {
-		payload.Limit = &limit
-	}
 
 	var data []models.DataSourceGetOCIVaultJSON
-	vaults := d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
+	for {
+		page := d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if page == nil {
+			break
+		}
+		data = append(data, page.Data...)
+		if page.NextPage == "" {
+			break
+		}
+		np := page.NextPage
+		payload.NextPage = &np
 	}
-	if vaults != nil {
-		data = append(data, vaults.Data...)
-		nextPage := vaults.NextPage
-		for nextPage != "" && (limit == 0 || int64(len(data)) < limit) {
-			payload.NextPage = &nextPage
-			vaults = d.fetchVaults(ctx, id, payload, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			if vaults == nil {
-				break
-			}
-			data = append(data, vaults.Data...)
-			nextPage = vaults.NextPage
-		}
 
-		for _, vault := range data {
-			ociVault := models.DataSourceGetOCIVaultTFSDK{
-				CompartmentID:      types.StringValue(vault.CompartmentID),
-				DisplayName:        types.StringValue(vault.DisplayName),
-				VaultID:            types.StringValue(vault.VaultID),
-				LifecycleState:     types.StringValue(vault.LifecycleState),
-				ManagementEndpoint: types.StringValue(vault.ManagementEndpoint),
-				TimeCreated:        types.StringValue(vault.TimeCreated),
-				VaultType:          types.StringValue(vault.VaultType),
-			}
-			setFreeformTagsState(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			setDefinedTagsState(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			state.Vaults = append(state.Vaults, ociVault)
+	state.Vaults = []models.DataSourceGetOCIVaultTFSDK{}
+	for _, vault := range data {
+		ociVault := models.DataSourceGetOCIVaultTFSDK{
+			CompartmentID:      types.StringValue(vault.CompartmentID),
+			DisplayName:        types.StringValue(vault.DisplayName),
+			VaultID:            types.StringValue(vault.VaultID),
+			LifecycleState:     types.StringValue(vault.LifecycleState),
+			ManagementEndpoint: types.StringValue(vault.ManagementEndpoint),
+			TimeCreated:        types.StringValue(vault.TimeCreated),
+			VaultType:          types.StringValue(vault.VaultType),
 		}
+		setFreeformTagsState(ctx, vault.FreeformTags, &ociVault.FreeformTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		setDefinedTagsState(ctx, vault.DefinedTags, &ociVault.DefinedTags, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		state.Vaults = append(state.Vaults, ociVault)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }

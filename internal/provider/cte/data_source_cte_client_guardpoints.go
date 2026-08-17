@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -28,6 +27,8 @@ type dataSourceCTEClientGuardPoint struct {
 
 type CTEClientGuardPointDataSourceModel struct {
 	ClientName       types.String                   `tfsdk:"client_name"`
+	Limit            types.Int64                    `tfsdk:"limit"`
+	Skip             types.Int64                    `tfsdk:"skip"`
 	ClientGuardPoint []CTEClientGuardPointListTFSDK `tfsdk:"client_guardpoint"`
 }
 
@@ -39,129 +40,178 @@ func (d *dataSourceCTEClientGuardPoint) Schema(_ context.Context, _ datasource.S
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"client_name": schema.StringAttribute{
-				Required: true,
+				Description: "Name of the CTE client whose GuardPoints are to be listed.",
+				Required:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of client guardpoints to return. If unset, all guardpoints are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of client guardpoints to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"client_guardpoint": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of GuardPoints configured on the client.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the GuardPoint.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the GuardPoint.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the GuardPoint.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the GuardPoint.",
+							Computed:    true,
 						},
 						"dev_account": schema.StringAttribute{
-							Computed: true,
+							Description: "Dev account of the GuardPoint.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the GuardPoint was created.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the GuardPoint was last updated.",
+							Computed:    true,
 						},
 						"client_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the client the GuardPoint is applied to.",
+							Computed:    true,
 						},
 						"client_group_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the client group the GuardPoint is applied to, if applicable.",
+							Computed:    true,
 						},
 						"client_group_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the client group the GuardPoint is applied to, if applicable.",
+							Computed:    true,
 						},
 						"client_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the client the GuardPoint is applied to.",
+							Computed:    true,
 						},
 						"guard_point_type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the GuardPoint, e.g. directory_auto, directory_manual, rawdevice_manual, rawdevice_auto, cloudstorage_auto, cloudstorage_manual or ransomware_protection.",
+							Computed:    true,
 						},
 						"guard_enabled": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the GuardPoint is enabled.",
+							Computed:    true,
 						},
 						"automount_enabled": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether automount is enabled for the GuardPoint.",
+							Computed:    true,
 						},
 						"guard_path": schema.StringAttribute{
-							Computed: true,
+							Description: "Path of the GuardPoint.",
+							Computed:    true,
 						},
 						"policy_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the CTE policy applied to the GuardPoint.",
+							Computed:    true,
 						},
 						"pending_operation": schema.StringAttribute{
-							Computed: true,
+							Description: "Pending operation on the GuardPoint, if any.",
+							Computed:    true,
 						},
 						"disk_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the disk associated with the GuardPoint (raw partition GuardPoints).",
+							Computed:    true,
 						},
 						"diskgroup_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the disk group associated with the GuardPoint (raw partition GuardPoints).",
+							Computed:    true,
 						},
 						"preserve_sparse_regions": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether to preserve sparse file regions. Only applicable for raw partition GuardPoints.",
+							Computed:    true,
 						},
 						"docker_img_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker image the GuardPoint is applied to, if applicable.",
+							Computed:    true,
 						},
 						"docker_cont_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the docker container the GuardPoint is applied to, if applicable.",
+							Computed:    true,
 						},
 						"early_access": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether secure start (early access) is enabled for the GuardPoint.",
+							Computed:    true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the resource the GuardPoint is applied to.",
+							Computed:    true,
 						},
 						"policy_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the CTE policy applied to the GuardPoint.",
+							Computed:    true,
 						},
 						"network_share_credentials_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the network share credentials associated with the GuardPoint, if applicable.",
+							Computed:    true,
 						},
 						"disabled_reason": schema.StringAttribute{
-							Computed: true,
+							Description: "Reason the GuardPoint is disabled, if applicable.",
+							Computed:    true,
 						},
 						"guard_point_state": schema.StringAttribute{
-							Computed: true,
+							Description: "State of the GuardPoint.",
+							Computed:    true,
 						},
 						"attr": schema.MapAttribute{
+							Description: "Additional attributes of the GuardPoint.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"is_idt_capable_device": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the device is IDT (Information Dispersal Technology) capable.",
+							Computed:    true,
 						},
 						"cifs_enabled": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether CIFS is enabled for the GuardPoint.",
+							Computed:    true,
 						},
 						"is_esg_capable_device": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether the device is ESG (Efficient Storage GuardPoint) capable.",
+							Computed:    true,
 						},
 						"metadata": schema.StringAttribute{
-							Computed: true,
+							Description: "Metadata associated with the GuardPoint.",
+							Computed:    true,
 						},
 						"csi_guard_status": schema.StringAttribute{
-							Computed: true,
+							Description: "CSI guard status of the GuardPoint (Kubernetes CSI GuardPoints).",
+							Computed:    true,
 						},
 						"mfa_enabled": schema.BoolAttribute{
-							Computed: true,
+							Description: "Whether MFA (Multi-Factor Authentication) is enabled for the GuardPoint.",
+							Computed:    true,
 						},
 						"native_domain": schema.StringAttribute{
-							Computed: true,
+							Description: "Native domain of the GuardPoint.",
+							Computed:    true,
 						},
 						"gp_network_path": schema.StringAttribute{
-							Computed: true,
+							Description: "Network path of the GuardPoint (network share GuardPoints).",
+							Computed:    true,
 						},
 						"dps_name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the designated primary set associated with the GuardPoint, if applicable.",
+							Computed:    true,
 						},
 						"dps_id": schema.StringAttribute{
-							Computed: true,
+							Description: "ID of the designated primary set associated with the GuardPoint, if applicable.",
+							Computed:    true,
 						},
 					},
 				},
@@ -172,22 +222,24 @@ func (d *dataSourceCTEClientGuardPoint) Schema(_ context.Context, _ datasource.S
 
 func (d *dataSourceCTEClientGuardPoint) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cteclientguardpoint.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cteclientguardpoint.go -> Read][" + id + "]")
 	var state CTEClientGuardPointDataSourceModel
 	req.Config.Get(ctx, &state)
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints")
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_CLIENT+"/"+state.ClientName.ValueString()+"/guardpoints", skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cteclientguardpoint.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cteclientguardpoint.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client guardpoints", total, limitVal)
 	client_guardpoints := []CTEClientGuardPointListJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &client_guardpoints)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cteclientguardpoint.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cteclientguardpoint.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
@@ -248,7 +300,7 @@ func (d *dataSourceCTEClientGuardPoint) Read(ctx context.Context, req datasource
 		client_guardpoint.Attr = Attr
 		state.ClientGuardPoint = append(state.ClientGuardPoint, client_guardpoint)
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cteclientguardpoint.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cteclientguardpoint.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

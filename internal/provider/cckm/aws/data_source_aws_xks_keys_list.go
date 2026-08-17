@@ -16,9 +16,39 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSXKSKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSXKSKey{}
+	_ datasource.DataSource                     = &dataSourceAWSXKSKey{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSXKSKey{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSXKSKey{}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSXKSKey) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsXKSKeyFilterValidator{}}
+}
+
+type awsXKSKeyFilterValidator struct{}
+
+func (v awsXKSKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsXKSKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsXKSKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSXKSKeyListDataSourceTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_xks_keys_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSXKSKeys() datasource.DataSource {
 	return &dataSourceAWSXKSKey{}
@@ -50,14 +80,14 @@ func (d *dataSourceAWSXKSKey) Metadata(_ context.Context, req datasource.Metadat
 func (d *dataSourceAWSXKSKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of AWS XKS keys. " +
-			"Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters " +
-			"for listing AWS keys (e.g. region, alias, keyid). " +
-			"Use 'limit=-1' to return more than 10 matches.",
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS XKS keys (such as `region`, `alias`, or `keyid`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A map of key:value pairs matching CipherTrust Manager API query parameters for listing AWS XKS keys.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS XKS keys." + awsKeyFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
