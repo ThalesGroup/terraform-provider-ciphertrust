@@ -17,19 +17,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
-	_ resource.Resource                = &resourceCTEPolicy{}
-	_ resource.ResourceWithConfigure   = &resourceCTEPolicy{}
-	_ resource.ResourceWithImportState = &resourceCTEPolicy{}
+	_ resource.Resource                   = &resourceCTEPolicy{}
+	_ resource.ResourceWithConfigure      = &resourceCTEPolicy{}
+	_ resource.ResourceWithImportState    = &resourceCTEPolicy{}
+	_ resource.ResourceWithValidateConfig = &resourceCTEPolicy{}
 )
 
 func NewResourceCTEPolicy() resource.Resource {
@@ -56,22 +57,34 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the policy.",
+				Description: "Name of the policy. Changing this value forces the policy to be destroyed and recreated.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Description: "Description of the policy.",
 				Computed:    true,
-				Default:     stringdefault.StaticString(""),
+				// TFIN-583: no Default here -- the framework never marks a
+				// Default-bearing attribute unknown (see
+				// MarkComputedNilsAsUnknown), which made UseStateForUnknown()
+				// a no-op and let every unrelated update silently reset an
+				// omitted description back to "". UseStateForUnknown() keeps
+				// the last known value stable instead; Create() below
+				// resolves the initial unknown to the real API value.
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"policy_type": schema.StringAttribute{
 				Required: true,
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"Standard", "LDT", "IDT", "Cloud_Object_Storage", "CSI"}...),
 				},
-				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI",
+				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI. Changing this value forces the policy to be destroyed and recreated.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"data_transform_rules": schema.ListNestedAttribute{
@@ -90,6 +103,13 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Optional:    true,
 							Computed:    true,
 							Description: "Precedence order of the rule in the policy.",
+							// TFIN-583: without this, order_number is
+							// marked (known after apply) on every plan that
+							// touches the resource, even when it hasn't
+							// changed.
+							PlanModifiers: []planmodifier.Int64{
+								int64planmodifier.UseStateForUnknown(),
+							},
 						},
 
 						"key_id": schema.StringAttribute{
@@ -99,7 +119,15 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 						"key_type": schema.StringAttribute{
 							Optional:    true,
 							Computed:    true,
-							Default:     stringdefault.StaticString(""),
+							// TFIN-583: no Default -- see the top-level
+							// description attribute for why Default and
+							// UseStateForUnknown() don't mix (Default
+							// pre-empts the unknown-marking the plan
+							// modifier relies on). Create() below resolves
+							// the initial unknown to the real API value.
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
 							Description: "Specify the type of the key. Must be one of name, id, slug, alias, uri, uuid, muid or key_id. If not specified, the type of the key is inferred.",
 						},
 						"resource_set_id": schema.StringAttribute{
@@ -373,10 +401,46 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
+// ValidateConfig rejects config combinations that CipherTrust Manager would
+// silently mutate server-side, which would otherwise cause a permanent
+// terraform plan/apply loop (TFIN-496).
+func (r *resourceCTEPolicy) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config CTEPolicyTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// never_deny defaults to false when omitted from config, and CM strips
+	// "applykey" from every security_rules.effect in that case.
+	if config.NeverDeny.ValueBool() || config.NeverDeny.IsUnknown() {
+		return
+	}
+
+	for i, rule := range config.SecurityRules {
+		if rule.Effect.IsNull() || rule.Effect.IsUnknown() {
+			continue
+		}
+		for _, effect := range strings.Split(rule.Effect.ValueString(), ",") {
+			if strings.TrimSpace(effect) == "applykey" {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("security_rules").AtListIndex(i).AtName("effect"),
+					"Invalid security_rules.effect with never_deny = false",
+					fmt.Sprintf(
+						"CipherTrust Manager strips \"applykey\" from a security rule's effect when the policy's never_deny is false (the default), which causes terraform to perpetually plan and revert this change. Either set never_deny = true or remove \"applykey\" from effect (%q) for this rule.",
+						rule.Effect.ValueString(),
+					),
+				)
+				break
+			}
+		}
+	}
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cte_policy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cte_policy.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEPolicyTFSDK
@@ -389,14 +453,14 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	// Add Name to the payload
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 
 	// Add Policy Type to the payload
-	payload.PolicyType = common.TrimString(plan.PolicyType.String())
+	payload.PolicyType = common.TrimString(plan.PolicyType.ValueString())
 
 	// Add Description to the payload if set
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 
 	// Add never_deny to the payload if set
@@ -460,7 +524,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 
 	var metadata CTEPolicyMetadataJSON
 	if !reflect.DeepEqual((*CTEPolicyMetadataTFSDK)(nil), plan.Metadata) {
-		tflog.Debug(ctx, "Metadata should not be empty at this point")
+		r.client.Log.Debug("Metadata should not be empty at this point")
 		if plan.Metadata.RestrictUpdate.ValueBool() != types.BoolNull().ValueBool() {
 			metadata.RestrictUpdate = bool(plan.Metadata.RestrictUpdate.ValueBool())
 		}
@@ -549,7 +613,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy Creation",
 			err.Error(),
@@ -559,7 +623,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_POLICY, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Policy on CipherTrust Manager: ",
 			"Could not create CTE Policy, unexpected error: "+err.Error(),
@@ -576,6 +640,12 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 
 	// Policy ID from top level
 	plan.ID = types.StringValue(apiResp.ID)
+
+	// TFIN-583: description no longer has a schema Default, so when config
+	// omits it, plan.Description is unknown at this point -- resolve it to
+	// the real API value before State.Set (mirrors the order_number/ID
+	// handling for the rule blocks below).
+	plan.Description = types.StringValue(apiResp.Description)
 
 	//Security Rule ID fetched from response
 	if len(apiResp.SecurityRules) > 0 {
@@ -603,6 +673,9 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 		for i, rule := range apiResp.DataTransformRules {
 			plan.DataTransformRules[i].ID = types.StringValue(rule.ID)
 			plan.DataTransformRules[i].OrderNumber = types.Int64Value(*rule.OrderNumber)
+			// TFIN-583: key_type no longer has a schema Default, so resolve
+			// the initial unknown to the real API value here too.
+			plan.DataTransformRules[i].KeyType = types.StringValue(rule.KeyType)
 		}
 	}
 
@@ -627,7 +700,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -649,16 +722,14 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_POLICY)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE Policy ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
 	var apiResp CTEPolicyListJSON
 	err = json.Unmarshal([]byte(response), &apiResp)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy.go -> Read]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error parsing CTE Policy response",
 			err.Error(),
@@ -693,10 +764,13 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 		ruleEndpoint := fmt.Sprintf("%s/%s/securityrules", common.URL_CTE_POLICY, state.ID.ValueString())
 
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			// Rule was deleted directly on CM — remove from state by skipping it
-			tflog.Debug(ctx, "Security rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Security Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			// TFIN-623: this previously silently dropped the missing nested
+			// rule (`continue`, debug log only). Aborting the whole Read()
+			// here instead -- state has not yet been persisted via
+			// resp.State.Set, so returning immediately leaves the resource's
+			// prior state untouched (kept) rather than partially refreshed.
+			return
 		}
 
 		var apiRule SecurityRuleJSON
@@ -727,9 +801,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.KeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/keyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			tflog.Debug(ctx, "Key rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule KeyRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -751,9 +824,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.DataTransformRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/datatxrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			tflog.Debug(ctx, "Data transform rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Data Transformation Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule DataTxRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -775,9 +847,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.IDTKeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/idtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			tflog.Debug(ctx, "IDT key rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy IDT Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule IDTRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -799,9 +870,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.LDTKeyRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/ldtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			tflog.Debug(ctx, "LDT key rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy LDT Key Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule LDTRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -846,9 +916,8 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	for _, rule := range state.SignatureRules {
 		ruleEndpoint := fmt.Sprintf("%s/%s/signaturerules", common.URL_CTE_POLICY, state.ID.ValueString())
 		response, err := r.client.GetById(ctx, id, rule.ID.ValueString(), ruleEndpoint)
-		if err != nil || response == "" {
-			tflog.Debug(ctx, "Signature rule not found on CM, removing from state: "+rule.ID.ValueString())
-			continue
+		if handleRuleReadNotFound(ctx, err, response, "CTE Policy Signature Rule ("+rule.ID.ValueString()+")", &resp.Diagnostics) {
+			return
 		}
 		var apiRule SignatureRuleJSON
 		if err := json.Unmarshal([]byte(response), &apiRule); err != nil {
@@ -862,7 +931,7 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 	state.SignatureRules = refreshedSignatureRules
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy.go -> Read][" + id + "]")
 	diags = resp.State.Set(ctx, state)
 	resp.Diagnostics.Append(diags...)
 }
@@ -895,7 +964,7 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	// Add Description to the payload if set
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+		payload.Description = common.TrimString(plan.Description.ValueString())
 	}
 
 	// Add never_deny to the payload if set
@@ -910,7 +979,7 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	var metadata CTEPolicyMetadataJSON
 	if !reflect.DeepEqual((*CTEPolicyMetadataTFSDK)(nil), plan.Metadata) {
-		tflog.Debug(ctx, "Metadata should not be empty at this point")
+		r.client.Log.Debug("Metadata should not be empty at this point")
 		if plan.Metadata.RestrictUpdate.ValueBool() != types.BoolNull().ValueBool() {
 			metadata.RestrictUpdate = bool(plan.Metadata.RestrictUpdate.ValueBool())
 		}
@@ -920,7 +989,7 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Invalid data input: CTE Policy Update",
 			err.Error(),
@@ -930,7 +999,7 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	response, err := r.client.UpdateData(ctx, state.ID.ValueString(), common.URL_CTE_POLICY, payloadJSON, "id")
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cte_policy.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_policy.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE Policy on CipherTrust Manager: ",
 			"Could not create CTE Policy, unexpected error: "+err.Error(),
@@ -957,6 +1026,24 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	plan.ID = types.StringValue(response)
+
+	// Read back the policy from CM after the update completes to refresh any
+	// server-computed/normalized fields before writing plan to state
+	// (TFIN-547), following the same GetById-then-merge-into-plan pattern
+	// used in resource_cm_user.go's Update().
+	readBackID := uuid.New().String()
+	getResp, getErr := r.client.GetById(ctx, readBackID, plan.ID.ValueString(), common.URL_CTE_POLICY)
+	if getErr == nil && getResp != "" {
+		var apiResp CTEPolicyListJSON
+		if err := json.Unmarshal([]byte(getResp), &apiResp); err == nil {
+			plan.Description = types.StringValue(apiResp.Description)
+			plan.NeverDeny = types.BoolValue(apiResp.NeverDeny)
+			plan.Metadata = &CTEPolicyMetadataTFSDK{
+				RestrictUpdate: types.BoolValue(apiResp.Metadata.RestrictUpdate),
+			}
+		}
+	}
+
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -977,8 +1064,11 @@ func (r *resourceCTEPolicy) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_POLICY, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cte_policy.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cte_policy.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE Policy "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE Policy",
 			"Could not delete CTE Policy, unexpected error: "+err.Error(),
@@ -1040,7 +1130,7 @@ func updateSecurityRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPoli
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Deleted security rule: "+stateRule.ID.ValueString())
+			r.client.Log.Debug("Deleted security rule: " + stateRule.ID.ValueString())
 		}
 	}
 
@@ -1086,7 +1176,7 @@ func updateSecurityRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPoli
 			}
 			plan.SecurityRules[i].ID = types.StringValue(newRule.ID)
 			plan.SecurityRules[i].OrderNumber = types.Int64Value(*newRule.OrderNumber)
-			tflog.Debug(ctx, "Created new security rule: "+newRule.ID)
+			r.client.Log.Debug("Created new security rule: " + newRule.ID)
 
 		} else {
 			// Case 2: Existing rule — compare fields and PATCH if changed
@@ -1114,7 +1204,7 @@ func updateSecurityRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPoli
 				planRule.UserSetID.ValueString() == stateRule.UserSetID.ValueString() {
 				// Nothing changed — skip
 				plan.SecurityRules[i].OrderNumber = stateRule.OrderNumber
-				tflog.Debug(ctx, "Security rule unchanged, skipping PATCH: "+ruleID)
+				r.client.Log.Debug("Security rule unchanged, skipping PATCH: " + ruleID)
 				continue
 			}
 
@@ -1155,7 +1245,7 @@ func updateSecurityRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPoli
 				return err
 			}
 			plan.SecurityRules[i].OrderNumber = types.Int64Value(*updatedRule.OrderNumber)
-			tflog.Debug(ctx, "Updated security rule: "+ruleID)
+			r.client.Log.Debug("Updated security rule: " + ruleID)
 		}
 	}
 
@@ -1197,7 +1287,7 @@ func updateKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFS
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Deleted key rule: "+stateRule.ID.ValueString())
+			r.client.Log.Debug("Deleted key rule: " + stateRule.ID.ValueString())
 		}
 	}
 
@@ -1236,7 +1326,7 @@ func updateKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFS
 			}
 			plan.KeyRules[i].ID = types.StringValue(newRule.ID)
 			plan.KeyRules[i].OrderNumber = types.Int64Value(*newRule.OrderNumber)
-			tflog.Debug(ctx, "Created new key rule: "+newRule.ID)
+			r.client.Log.Debug("Created new key rule: " + newRule.ID)
 
 		} else {
 			// Case 2: Existing rule — compare and PATCH if changed
@@ -1254,7 +1344,7 @@ func updateKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFS
 				!orderNumberChanged &&
 				planRule.KeyType.ValueString() == stateRule.KeyType.ValueString() &&
 				planRule.ResourceSetID.ValueString() == stateRule.ResourceSetID.ValueString() {
-				tflog.Debug(ctx, "Key rule unchanged, skipping PATCH: "+ruleID)
+				r.client.Log.Debug("Key rule unchanged, skipping PATCH: " + ruleID)
 				plan.KeyRules[i].OrderNumber = stateRule.OrderNumber
 				continue
 			}
@@ -1291,7 +1381,7 @@ func updateKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFS
 			}
 			plan.KeyRules[i].OrderNumber = types.Int64Value(*updatedRule.OrderNumber)
 
-			tflog.Debug(ctx, "Updated key rule: "+ruleID)
+			r.client.Log.Debug("Updated key rule: " + ruleID)
 		}
 	}
 
@@ -1333,7 +1423,7 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Deleted data transform rule: "+stateRule.ID.ValueString())
+			r.client.Log.Debug("Deleted data transform rule: " + stateRule.ID.ValueString())
 		}
 	}
 
@@ -1372,7 +1462,7 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 			}
 			plan.DataTransformRules[i].ID = types.StringValue(newRule.ID)
 			plan.DataTransformRules[i].OrderNumber = types.Int64Value(*newRule.OrderNumber)
-			tflog.Debug(ctx, "Created new data transform rule: "+newRule.ID)
+			r.client.Log.Debug("Created new data transform rule: " + newRule.ID)
 
 		} else {
 			// Case 2: Existing rule — compare and PATCH if changed
@@ -1390,7 +1480,7 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 				!orderNumberChanged &&
 				planRule.KeyType.ValueString() == stateRule.KeyType.ValueString() &&
 				planRule.ResourceSetID.ValueString() == stateRule.ResourceSetID.ValueString() {
-				tflog.Debug(ctx, "Data transform rule unchanged, skipping PATCH: "+ruleID)
+				r.client.Log.Debug("Data transform rule unchanged, skipping PATCH: " + ruleID)
 				plan.DataTransformRules[i].OrderNumber = stateRule.OrderNumber
 				continue
 			}
@@ -1426,7 +1516,7 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 				return err
 			}
 			plan.DataTransformRules[i].OrderNumber = types.Int64Value(*updatedRule.OrderNumber)
-			tflog.Debug(ctx, "Updated data transform rule: "+ruleID)
+			r.client.Log.Debug("Updated data transform rule: " + ruleID)
 		}
 	}
 
@@ -1434,16 +1524,46 @@ func updateDataTxRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 }
 
 func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicyTFSDK, state CTEPolicyTFSDK, resp *resource.UpdateResponse) error {
-	// No IDT key rules in state — nothing to update
-	if len(state.IDTKeyRules) == 0 {
+	// TFIN-603: CipherTrust Manager has no route to delete an individual IDT
+	// key rule (DELETE .../idtkeyrules/{id} returns 405 Method Not Allowed).
+	// Previously this case only logged a warning and tried to restore
+	// plan.IDTKeyRules from state, but since plan is passed by value here
+	// that reassignment never propagated back to the caller's plan variable
+	// in Update() — the caller's resp.State.Set(ctx, plan) still wrote
+	// idt_key_rules = [], permanently orphaning the live CM rule with no
+	// Terraform-native way to reconcile it again. Refuse the apply instead
+	// so state can never reach that terminal condition.
+	if len(state.IDTKeyRules) > 0 && len(plan.IDTKeyRules) == 0 {
+		resp.Diagnostics.AddError(
+			"IDT Key Rule Removal Not Supported",
+			"IDT key rules cannot be removed once created; CipherTrust Manager has no API route to delete an "+
+				"individual IDT key rule. Restore the idt_key_rules block in your configuration to keep managing "+
+				"this policy, or destroy and recreate the entire policy if removal is truly required.",
+		)
+		return fmt.Errorf("IDT key rule removal is not supported by CipherTrust Manager")
+	}
+
+	// Nothing in state and nothing planned — nothing to do.
+	if len(state.IDTKeyRules) == 0 && len(plan.IDTKeyRules) == 0 {
 		return nil
 	}
 
-	// User removed IDT key rule block — warn and ignore since deletion not supported
-	if len(plan.IDTKeyRules) == 0 {
-		tflog.Warn(ctx, "IDT key rules cannot be deleted once created. Ignoring removal.")
-		plan.IDTKeyRules = state.IDTKeyRules
-		return nil
+	// TFIN-603: adding an idt_key_rules entry to a policy that currently has
+	// none in state is not handled through this path — CipherTrust Manager
+	// only accepts idt_key_rules embedded in the policy creation payload,
+	// and there is no confirmed API route to add one to an existing policy
+	// afterward (nor, as above, to remove one). Previously this silently
+	// no-op'd (returning nil without any API call) and let the plan's
+	// unvalidated values — including a fabricated id: null — get written
+	// straight to state. Fail clearly instead.
+	if len(state.IDTKeyRules) == 0 && len(plan.IDTKeyRules) > 0 {
+		resp.Diagnostics.AddError(
+			"IDT Key Rule Addition Not Supported",
+			"Adding idt_key_rules to a policy that does not already have one is not supported via update; "+
+				"CipherTrust Manager does not expose an API route to add an IDT key rule to an existing policy. "+
+				"Set idt_key_rules at policy creation time instead.",
+		)
+		return fmt.Errorf("adding an IDT key rule via update is not supported by CipherTrust Manager")
 	}
 
 	if len(plan.IDTKeyRules) > 1 {
@@ -1454,9 +1574,41 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 		return fmt.Errorf("only one IDT key rule is allowed per policy")
 	}
 
-	// State rule has no ID yet — nothing to update
+	// TFIN-603: state rule has no ID. In practice this only happens to state
+	// that was already corrupted by the bug above prior to this fix
+	// (removal silently emptied idt_key_rules while the rule stayed live on
+	// CM, then re-adding the block wrote id: null with no API call).
+	// Reconcile by listing the policy's IDT key rules directly from CM
+	// (GET .../idtkeyrules) so the real ID can be recovered without already
+	// knowing it, rather than silently continuing with an invalid ID.
 	if state.IDTKeyRules[0].ID.ValueString() == "" {
-		return nil
+		ruleEndpoint := fmt.Sprintf("%s/%s/idtkeyrules", common.URL_CTE_POLICY, state.ID.ValueString())
+		jsonStr, _, err := r.client.GetAllPagedWithLimit(ctx, uuid.New().String(), ruleEndpoint, 0, 10)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"IDT Key Rule State Inconsistent",
+				"IDT key rule in state has no ID and the existing IDT key rules could not be listed from "+
+					"CipherTrust Manager to reconcile it: "+err.Error(),
+			)
+			return err
+		}
+		var existingRules []CTEPolicyIDTKeyRulesJSON
+		if err := json.Unmarshal([]byte(jsonStr), &existingRules); err != nil {
+			resp.Diagnostics.AddError("Error parsing IDT key rules list response while reconciling", err.Error())
+			return err
+		}
+		if len(existingRules) == 0 {
+			resp.Diagnostics.AddError(
+				"IDT Key Rule State Inconsistent",
+				"IDT key rule in state has no ID and CipherTrust Manager reports no IDT key rule exists for this "+
+					"policy. State cannot be automatically reconciled; correct idt_key_rules in state manually with "+
+					"the correct id from CipherTrust Manager before applying again.",
+			)
+			return fmt.Errorf("IDT key rule state is inconsistent: no ID in state and none found on CM")
+		}
+		state.IDTKeyRules[0].ID = types.StringValue(existingRules[0].ID)
+		plan.IDTKeyRules[0].ID = state.IDTKeyRules[0].ID
+		r.client.Log.Debug("Reconciled IDT key rule ID from CM: " + state.IDTKeyRules[0].ID.ValueString())
 	}
 
 	planRule := plan.IDTKeyRules[0]
@@ -1468,7 +1620,7 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 		planRule.CurrentKeyType.ValueString() == stateRule.CurrentKeyType.ValueString() &&
 		planRule.TransformationKey.ValueString() == stateRule.TransformationKey.ValueString() &&
 		planRule.TransformationKeyType.ValueString() == stateRule.TransformationKeyType.ValueString() {
-		tflog.Debug(ctx, "IDT key rule unchanged, skipping PATCH: "+ruleID)
+		r.client.Log.Debug("IDT key rule unchanged, skipping PATCH: " + ruleID)
 		return nil
 	}
 
@@ -1497,7 +1649,7 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 	}
 
 	plan.IDTKeyRules[0].ID = stateRule.ID
-	tflog.Debug(ctx, "Updated IDT key rule: "+ruleID)
+	r.client.Log.Debug("Updated IDT key rule: " + ruleID)
 	return nil
 }
 
@@ -1536,7 +1688,7 @@ func updateLDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Deleted LDT key rule: "+stateRule.ID.ValueString())
+			r.client.Log.Debug("Deleted LDT key rule: " + stateRule.ID.ValueString())
 		}
 	}
 
@@ -1585,7 +1737,7 @@ func updateLDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 			}
 			plan.LDTKeyRules[i].ID = types.StringValue(newRule.ID)
 			plan.LDTKeyRules[i].OrderNumber = types.Int64Value(*newRule.OrderNumber)
-			tflog.Debug(ctx, "Created new LDT key rule: "+newRule.ID)
+			r.client.Log.Debug("Created new LDT key rule: " + newRule.ID)
 
 		} else {
 			// Case 2: Existing rule — compare and PATCH if changed
@@ -1610,7 +1762,7 @@ func updateLDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 			if !currentKeyChanged && !transformationKeyChanged && !orderNumberChanged &&
 				planRule.IsExclusionRule.ValueBool() == stateRule.IsExclusionRule.ValueBool() &&
 				planRule.ResourceSetID.ValueString() == stateRule.ResourceSetID.ValueString() {
-				tflog.Debug(ctx, "LDT key rule unchanged, skipping PATCH: "+ruleID)
+				r.client.Log.Debug("LDT key rule unchanged, skipping PATCH: " + ruleID)
 				plan.LDTKeyRules[i].OrderNumber = stateRule.OrderNumber
 				continue
 			}
@@ -1662,7 +1814,7 @@ func updateLDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 				return err
 			}
 			plan.LDTKeyRules[i].OrderNumber = types.Int64Value(*updatedRule.OrderNumber)
-			tflog.Debug(ctx, "Updated LDT key rule: "+ruleID)
+			r.client.Log.Debug("Updated LDT key rule: " + ruleID)
 		}
 	}
 
@@ -1704,7 +1856,7 @@ func updateSignatureRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPol
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Deleted signature rule: "+stateRule.ID.ValueString())
+			r.client.Log.Debug("Deleted signature rule: " + stateRule.ID.ValueString())
 		}
 	}
 
@@ -1748,7 +1900,7 @@ func updateSignatureRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPol
 			}
 
 			if planRule.SignatureSetID.ValueString() == stateRule.SignatureSetID.ValueString() {
-				tflog.Debug(ctx, "Signature rule unchanged, skipping PATCH: "+ruleID)
+				r.client.Log.Debug("Signature rule unchanged, skipping PATCH: " + ruleID)
 				continue
 			}
 
@@ -1771,7 +1923,7 @@ func updateSignatureRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPol
 				)
 				return err
 			}
-			tflog.Debug(ctx, "Updated signature rule: "+ruleID)
+			r.client.Log.Debug("Updated signature rule: " + ruleID)
 		}
 	}
 
@@ -1780,7 +1932,7 @@ func updateSignatureRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPol
 
 func (r *resourceCTEPolicy) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_client.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_client.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_client.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_client.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

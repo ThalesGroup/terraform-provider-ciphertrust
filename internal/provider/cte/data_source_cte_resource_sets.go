@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -29,6 +28,8 @@ type dataSourceCTEResourceSets struct {
 }
 
 type CTEResourceSetsDataSourceModel struct {
+	Limit       types.Int64                `tfsdk:"limit"`
+	Skip        types.Int64                `tfsdk:"skip"`
 	ResourceSet []CTEResourceSetsListTFSDK `tfsdk:"resource_sets"`
 }
 
@@ -39,56 +40,80 @@ func (d *dataSourceCTEResourceSets) Metadata(_ context.Context, req datasource.M
 func (d *dataSourceCTEResourceSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of resource sets to return. If unset, all resource sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of resource sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"resource_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of resource sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the resource set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the resource set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the resource set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the resource set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the resource set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the resource set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the resource set.",
+							Computed:    true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
+							Description: "Type of the resource set, Directory or Classification.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the resource set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"resources": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of resources (directories/files) belonging to the resource set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the resource within the resource set.",
+										Optional:    true,
 									},
 									"directory": schema.StringAttribute{
-										Optional: true,
+										Description: "Directory of the resource.",
+										Optional:    true,
 									},
 									"file": schema.StringAttribute{
-										Optional: true,
+										Description: "File name or pattern of the resource.",
+										Optional:    true,
 									},
 									"include_subfolders": schema.BoolAttribute{
-										Optional: true,
+										Description: "Whether to include subfolders of the directory in the resource.",
+										Optional:    true,
 									},
 									"hdfs": schema.BoolAttribute{
-										Optional: true,
+										Description: "Whether this resource is HDFS (Hadoop Distributed File System).",
+										Optional:    true,
 									},
 								},
 							},
@@ -102,24 +127,27 @@ func (d *dataSourceCTEResourceSets) Schema(_ context.Context, _ datasource.Schem
 
 func (d *dataSourceCTEResourceSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_resource_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_resource_sets.go -> Read][" + id + "]")
 	var state CTEResourceSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_RESOURCE_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_RESOURCE_SET, skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_resource_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_resource_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE resource sets from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE resource sets", total, limitVal)
 
 	resourceSets := []CTEResourceSetsListJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &resourceSets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_resource_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_resource_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE resource sets from CM",
 			err.Error(),
@@ -164,7 +192,7 @@ func (d *dataSourceCTEResourceSets) Read(ctx context.Context, req datasource.Rea
 		state.ResourceSet = append(state.ResourceSet, resourceSetState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_resource_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_resource_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

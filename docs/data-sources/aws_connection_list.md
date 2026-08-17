@@ -17,7 +17,7 @@ description: |-
 
 ### Optional
 
-- `filters` (Map of String)
+- `filters` (Map of String) Optional filters passed as query parameters to the CM AWS connections list API. Supported keys: "id", "name", "products", "meta_contains", "cloud_name", "createdBefore", "createdAfter", "last_connection_ok", "last_connection_before", "last_connection_after", and "labels".
 
 ### Read-Only
 
@@ -52,7 +52,7 @@ aws-cn
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products associated with the connection
-- `secret_access_key` (String) Secret associated with the access key ID of the AWS user
+- `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user
 
 Read-Only:
 
@@ -83,4 +83,8 @@ Required:
 
 Optional:
 
-- `private_key` (String) The private key associated with the certificate
+- `private_key` (String, Sensitive) The private key associated with the certificate
+
+Read-Only:
+
+- `private_key_version` (Number) Not populated by this data source — private_key is write-only and resource-only.

@@ -1,7 +1,5 @@
+# Retrieve OCI object storage buckets in a compartment.
 data "ciphertrust_get_oci_buckets" "buckets" {
-  # Required parameters
-  connection_id  = "oci-connection-id-or-name"
-  compartment_id = "compartment-ocid"
-  # Optional parameters
-  limit = 5
+  connection_id  = "oci-prod-connection"
+  compartment_id = "ocid1.compartment.oc1..example"
 }

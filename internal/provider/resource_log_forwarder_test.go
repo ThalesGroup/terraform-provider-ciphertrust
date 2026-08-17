@@ -175,8 +175,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "elasticsearch"
-  elasticsearch_params {
-    indices {
+  elasticsearch_params = {
+    indices = {
       activity_kmip = "kmip-index"
     }
   }
@@ -189,7 +189,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "es-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "elasticsearch_params.0.indices.0.activity_kmip", "kmip-index"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "elasticsearch_params.indices.activity_kmip", "kmip-index"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -206,8 +206,8 @@ resource "ciphertrust_log_forwarder" "test" {
 					payload := []byte(`{"elasticsearch_params":{"indices":{"activity_kmip":"kmip-index-modified"}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -232,9 +232,9 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
-      activity_kmip = "kmip-label"
+  loki_params = {
+    labels = {
+      activity_kmip = "job=kmip-label"
     }
   }
 }
@@ -246,7 +246,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "loki-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "loki_params.0.labels.0.activity_kmip", "kmip-label"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "loki_params.labels.activity_kmip", "job=kmip-label"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -260,11 +260,11 @@ resource "ciphertrust_log_forwarder" "test" {
 					if !ok {
 						return
 					}
-					payload := []byte(`{"loki_params":{"labels":{"activity_kmip":"kmip-label-modified"}}}`)
+					payload := []byte(`{"loki_params":{"labels":{"activity_kmip":"job=kmip-label-modified"}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -289,8 +289,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -303,7 +303,7 @@ resource "ciphertrust_log_forwarder" "test" {
 			{
 				Config: cfg,
 				Check: checkStep(t, "syslog-drift: create",
-					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.0.forward_logs.0.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
 					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "updated_at"),
 					func(s *terraform.State) error {
 						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
@@ -317,11 +317,11 @@ resource "ciphertrust_log_forwarder" "test" {
 					if !ok {
 						return
 					}
-					payload := []byte(`{"syslog_params":{"syslog_params":{"activity_kmip":false}}}`)
+					payload := []byte(`{"syslog_params":{"forward_logs":{"activity_kmip":false}}}`)
 					_, _ = client.UpdateDataV2(
 						context.Background(),
-						uuid.New().String(),
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -401,8 +401,8 @@ resource "ciphertrust_log_forwarder" "test" {
 						t.Logf("out-of-band delete warning: %v", err)
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -478,7 +478,7 @@ resource "ciphertrust_log_forwarder" "test" {
 					_, _ = client.UpdateDataV2(
 						context.Background(),
 						capturedID,
-						common.URL_CM_LOG_FORWARDS+"/"+capturedID,
+						common.URL_CM_LOG_FORWARDS,
 						payload,
 					)
 				},
@@ -563,8 +563,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
+  loki_params = {
+    labels = {
       activity_kmip = "job=kmip"
     }
   }
@@ -582,8 +582,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "loki"
-  loki_params {
-    labels {
+  loki_params = {
+    labels = {
       activity_kmip = "job=kmip-updated"
     }
   }
@@ -614,8 +614,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "elasticsearch"
-  elasticsearch_params {
-    indices {
+  elasticsearch_params = {
+    indices = {
       activity_kmip = "kmip-index"
     }
   }
@@ -647,8 +647,8 @@ resource "ciphertrust_log_forwarder" "test" {
   connection_id = %q
   name          = %q
   type          = "syslog"
-  syslog_params {
-    forward_logs {
+  syslog_params = {
+    forward_logs = {
       activity_kmip = true
     }
   }
@@ -663,13 +663,14 @@ resource "ciphertrust_log_forwarder" "test" {
 	})
 }
 
-// Test_CM_AccCMLogForwarder_ImmutableConnectionID verifies that changing the connection_id
-// on an existing log forwarder schedules resource replacement (recreation).
-func Test_CM_AccCMLogForwarder_ImmutableConnectionID(t *testing.T) {
+// Test_CM_LogForwarder_ConnectionIDUpdateInPlace verifies that changing connection_id
+// produces a non-empty in-place plan without an immutability error (TFIN-529:
+// ImmutableString() removed from connection_id — CM accepts in-place changes).
+func Test_CM_LogForwarder_ConnectionIDUpdateInPlace(t *testing.T) {
 	RequireCM(t)
 	connID1 := requireLogForwarderConnID(t)
-	connID2 := "00000000-0000-0000-0000-000000000000" // Use a dummy UUID for the replacement step
-	rName := "tf-lf-replace-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+	connID2 := "00000000-0000-0000-0000-000000000001"
+	rName := "tf-lf-connupd-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -688,7 +689,7 @@ resource "ciphertrust_log_forwarder" "test_lf" {
 				),
 			},
 			{
-				// Changing connection_id (ImmutableString) must trigger resource replacement (PlanNotEmpty)
+				// Changing connection_id must produce an in-place plan (no replace, no error).
 				Config: providerConfig + fmt.Sprintf(`
 resource "ciphertrust_log_forwarder" "test_lf" {
   connection_id = %q
@@ -698,6 +699,303 @@ resource "ciphertrust_log_forwarder" "test_lf" {
 `, connID2, rName),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
+// Test_CM_LogForwarder_UpdateInPlace verifies that Update() reaches CM with the correct
+// URL and that no destroy+recreate happens on a name change (TFIN-528 regression).
+func Test_CM_LogForwarder_UpdateInPlace(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-updinplace-" + uuid.New().String()[:8]
+	rNameUpdated := rName + "-v2"
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, rName),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+}
+`, connID, rNameUpdated),
+				Check: checkStep(t, "update name in place",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rNameUpdated),
+					func(s *terraform.State) error {
+						newID := s.RootModule().Resources["ciphertrust_log_forwarder.test"].Primary.ID
+						if newID != capturedID {
+							return fmt.Errorf("resource was recreated: old ID=%s new ID=%s", capturedID, newID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_LogForwarder_SyslogCreateUpdate verifies that type=syslog can be created
+// and updated without 400 errors (TFIN-530: fixed forward_logs JSON tag).
+func Test_CM_LogForwarder_SyslogCreateUpdate(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-syslogupd-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "syslog create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "type", "syslog"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip        = true
+      server_audit_records = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "syslog update forward_logs",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "type", "syslog"),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_UpdateWithoutNameNoReject verifies that updating a mutable
+// field (syslog_params) without changing the name does not fail with
+// "Connection exists with the same name" (TFIN-577 Bug 1 regression guard).
+func Test_CM_AccLogForwarder_UpdateWithoutNameNoReject(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-nonamereset-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip        = true
+      server_audit_records = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "update syslog_params without rename",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_RenameSucceeds verifies that changing name in config
+// performs a successful in-place rename via PATCH (TFIN-577 Bug 1 happy path).
+func Test_CM_AccLogForwarder_RenameSucceeds(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-rename-" + uuid.New().String()[:8]
+	rNameNew := rName + "-v2"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "create with original name",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rName),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rNameNew),
+				Check: checkStep(t, "renamed",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "name", rNameNew),
+				),
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_UpdatedAtNoPerpetualDrift verifies that a second terraform
+// plan after a successful update shows no diff — updated_at must not be left as
+// (known after apply) indefinitely (TFIN-577 Bug 2).
+func Test_CM_AccLogForwarder_UpdatedAtNoPerpetualDrift(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-updatedrift-" + uuid.New().String()[:8]
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+    }
+  }
+}
+`, connID, rName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_log_forwarder.test", "updated_at"),
+				),
+			},
+			{
+				Config:             cfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_AccLogForwarder_PartialSyslogUpdateNoStateDrift verifies that updating only
+// a subset of syslog_params.forward_logs fields does not corrupt state for the
+// fields that were omitted from the update payload (TFIN-577 Bug 3).
+func Test_CM_AccLogForwarder_PartialSyslogUpdateNoStateDrift(t *testing.T) {
+	RequireCM(t)
+	connID := requireLogForwarderConnID(t)
+	rName := "tf-lf-partial-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip        = true
+      activity_nae         = true
+      client_audit_records = true
+      server_audit_records = true
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "all four fields set",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.server_audit_records", "true"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_log_forwarder" "test" {
+  connection_id = %q
+  name          = %q
+  type          = "syslog"
+  syslog_params = {
+    forward_logs = {
+      activity_kmip = true
+      activity_nae  = false
+    }
+  }
+}
+`, connID, rName),
+				Check: checkStep(t, "partial update — omitted fields preserved in live state",
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_kmip", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.activity_nae", "false"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.client_audit_records", "true"),
+					resource.TestCheckResourceAttr("ciphertrust_log_forwarder.test", "syslog_params.forward_logs.server_audit_records", "true"),
+				),
 			},
 		},
 	})

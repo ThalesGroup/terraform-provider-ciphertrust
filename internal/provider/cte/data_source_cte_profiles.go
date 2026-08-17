@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -28,6 +27,8 @@ type dataSourceCTEProfiles struct {
 }
 
 type CTEProfilesDataSourceModel struct {
+	Limit    types.Int64            `tfsdk:"limit"`
+	Skip     types.Int64            `tfsdk:"skip"`
 	Profiles []CTEProfilesListTFSDK `tfsdk:"cte_profiles"`
 }
 
@@ -38,33 +39,50 @@ func (d *dataSourceCTEProfiles) Metadata(_ context.Context, req datasource.Metad
 func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of CTE client profiles to return. If unset, all profiles are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of CTE client profiles to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"cte_profiles": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of CTE client profiles.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the profile.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the profile.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the profile.",
+							Computed:    true,
 						},
 						"application": schema.StringAttribute{
-							Computed: true,
+							Description: "Application associated with the profile.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the profile was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the profile.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the profile was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the profile.",
+							Computed:    true,
 						},
 						"cache_settings": schema.SingleNestedAttribute{
 							Computed:    true,
@@ -388,25 +406,32 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 							Description: "Configure log upload to the Syslog server.",
 							Attributes: map[string]schema.Attribute{
 								"upload_threshold": schema.StringAttribute{
-									Computed: true,
+									Description: "Applicable threshold for log upload.",
+									Computed:    true,
 								},
 								"drop_if_busy": schema.BoolAttribute{
-									Computed: true,
+									Description: "Whether to drop the log upload if the upload channel is busy.",
+									Computed:    true,
 								},
 								"max_interval": schema.Int64Attribute{
-									Computed: true,
+									Description: "Maximum interval in seconds between log uploads.",
+									Computed:    true,
 								},
 								"min_interval": schema.Int64Attribute{
-									Computed: true,
+									Description: "Minimum interval in seconds between log uploads.",
+									Computed:    true,
 								},
 								"max_messages": schema.Int64Attribute{
-									Computed: true,
+									Description: "Maximum number of messages per log upload.",
+									Computed:    true,
 								},
 								"job_completion_timeout": schema.Int64Attribute{
-									Computed: true,
+									Description: "Timeout in seconds to wait for a log upload job to complete.",
+									Computed:    true,
 								},
 								"connection_timeout": schema.Int64Attribute{
-									Computed: true,
+									Description: "Timeout in seconds for the log upload connection.",
+									Computed:    true,
 								},
 							},
 						},
@@ -419,24 +444,27 @@ func (d *dataSourceCTEProfiles) Schema(_ context.Context, _ datasource.SchemaReq
 
 func (d *dataSourceCTEProfiles) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_profiles.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_profiles.go -> Read][" + id + "]")
 	var state CTEProfilesDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_PROFILE)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_PROFILE, skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_profiles.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_profiles.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Client profiles from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client profiles", total, limitVal)
 
 	profiles := []CTEProfilesListJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &profiles)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_profiles.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_profiles.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Client profiles from CM",
 			err.Error(),
@@ -574,7 +602,7 @@ func (d *dataSourceCTEProfiles) Read(ctx context.Context, req datasource.ReadReq
 		state.Profiles = append(state.Profiles, profileState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_profiles.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_profiles.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

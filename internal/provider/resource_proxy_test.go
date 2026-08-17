@@ -184,6 +184,9 @@ func Test_CM_Proxy_Idempotency(t *testing.T) {
 // reports no changes (no perpetual cleartext→masked diff).
 func Test_CM_CipherTrustProxy_NoSpuriousDiffAfterApply(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 
 	resource.Test(t, resource.TestCase{
@@ -209,10 +212,75 @@ resource "ciphertrust_proxy" "test" {
 	})
 }
 
+// Test_CM_CipherTrustProxy_HTTPProxyCredentialedUpdate verifies that updating http_proxy
+// from one credentialed URL to another does not crash with "Provider produced inconsistent
+// result after apply". CM's own password masking can corrupt the visible (non-password)
+// portion of its PUT/GET response (e.g. "http://..." coming back as "httxxxxxx://...");
+// Update() must always commit the planned cleartext value regardless of what CM's masked
+// response looks like, since http_proxy is a non-Computed attribute.
+//
+// ExpectNonEmptyPlan is set on the update steps: CM's masking corruption is not limited to
+// the in-flight PUT response Update() sees — the same corruption can occur on a later GET
+// too, which Read()'s own (unchanged, still-correct-in-principle) drift-detection logic
+// then surfaces as a real diff against the cleartext config value. That's a separate,
+// pre-existing, non-deterministic residual effect of CM's own bug (not a provider crash)
+// and out of scope for this fix, which only guarantees the apply itself never crashes.
+func Test_CM_CipherTrustProxy_HTTPProxyCredentialedUpdate(t *testing.T) {
+	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
+	t.Cleanup(func() { proxyCleanup(t) })
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://svc:pass1@10.171.30.20:3300"
+}
+`,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttrSet("ciphertrust_proxy.test", "id"),
+				),
+			},
+			{
+				// Update to a different credentialed value — must not crash.
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://u:p@10.171.30.20:3300"
+}
+`,
+				Check: checkStep(t, "update",
+					resource.TestCheckResourceAttrSet("ciphertrust_proxy.test", "id"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// A second update with yet another username shape, matching the second
+				// reproduction in the bug report.
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://proxyuser:p@10.171.30.20:3300"
+}
+`,
+				Check: checkStep(t, "second update",
+					resource.TestCheckResourceAttrSet("ciphertrust_proxy.test", "id"),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 // Test_CM_CipherTrustProxy_HTTPProxyHostPortDriftDetection verifies that an OOB
 // host/port change on http_proxy is surfaced by terraform plan -refresh-only.
 func Test_CM_CipherTrustProxy_HTTPProxyHostPortDriftDetection(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 	var capturedResourceID string
 
@@ -274,6 +342,9 @@ resource "ciphertrust_proxy" "test" {
 // host/port change on https_proxy is surfaced by terraform plan -refresh-only.
 func Test_CM_CipherTrustProxy_HTTPSProxyHostPortDriftDetection(t *testing.T) {
 	RequireCM(t)
+	if os.Getenv("CM_TEST_HTTP_PROXY") == "" {
+		t.Skip("CM_TEST_HTTP_PROXY not set — skipping proxy acceptance test to prevent modifying live CM proxy config")
+	}
 	t.Cleanup(func() { proxyCleanup(t) })
 	var capturedResourceID string
 
@@ -343,24 +414,27 @@ func Test_CM_Proxy_InvalidValuesRejected(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			// ProxyURL() rejects values containing whitespace (a proxy address never has spaces).
 			{
 				Config: providerConfig + `
 resource "ciphertrust_proxy" "invalid" {
-  http_proxy = "totally_not_a_url###garbage"
+  http_proxy = "http://host with spaces:8080"
 }
 `,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)Invalid URL`),
+				ExpectError: regexp.MustCompile(`(?i)Invalid Proxy Address`),
 			},
+			// ProxyURL() rejects empty string.
 			{
 				Config: providerConfig + `
 resource "ciphertrust_proxy" "invalid" {
-  https_proxy = "not_a_valid_url_at_all!!!"
+  https_proxy = "   "
 }
 `,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)Invalid URL`),
+				ExpectError: regexp.MustCompile(`(?i)Invalid Proxy Address`),
 			},
+			// PEM certificate validator is unchanged.
 			{
 				Config: providerConfig + `
 resource "ciphertrust_proxy" "invalid" {
@@ -369,6 +443,78 @@ resource "ciphertrust_proxy" "invalid" {
 `,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)Invalid PEM Certificate`),
+			},
+			{
+				// Well-formed PEM envelope, but the decoded body is not a real X.509
+				// certificate — must be rejected, not just PEM-envelope-checked.
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "invalid" {
+  certificate = "-----BEGIN CERTIFICATE-----\nTm90QVJlYWxDZXJ0Qm9keUp1c3RHYXJiYWdlQmFzZTY0IQ==\n-----END CERTIFICATE-----"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)Invalid PEM Certificate`),
+			},
+		},
+	})
+}
+
+// Test_CM_Proxy_SchemelessURLAccepted verifies that schemeless proxy addresses
+// (CM documented "Scenario 3") are accepted at plan time. (TFIN-526)
+// PlanOnly: true — never applies to live CM (proxy config is a system singleton).
+func Test_CM_Proxy_SchemelessURLAccepted(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Schemeless with credentials — CM documents this as valid Scenario 3.
+			// ExpectNonEmptyPlan: true because this is a new resource (no prior state).
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy  = "proxy-user:ssl12345@10.171.30.20:3300"
+  https_proxy = "cckmdev-proxy.example.com:443"
+}`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				// Key assertion: no ExpectError — the validator must not fire.
+			},
+		},
+	})
+}
+
+// Test_CM_Proxy_UpdateCredentialedProxy verifies that the plan for updating
+// http_proxy to a credentialed URL is accepted without a validator error, and
+// that the plan-level state is consistent (no "inconsistent result" diagnostic).
+// (TFIN-527)
+//
+// This test is PlanOnly to avoid modifying the live CM proxy configuration
+// (ciphertrust_proxy is a system singleton — applying changes would affect CM).
+// The TFIN-527 fix (preserving plan value in Update()) is validated by the unit
+// test infrastructure; the acceptance test here confirms plan-level correctness.
+func Test_CM_Proxy_UpdateCredentialedProxy(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: Plan with first credentialed URL — must not error.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://u:pass1@10.171.30.20:3300"
+}`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+			// Step 2: Plan with a different credentialed URL — must not error.
+			// Before TFIN-527, this path crashed at apply due to CM masking corruption.
+			{
+				Config: providerConfig + `
+resource "ciphertrust_proxy" "test" {
+  http_proxy = "http://proxyuser:p@10.171.30.20:3300"
+}`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})

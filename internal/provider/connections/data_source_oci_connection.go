@@ -23,8 +23,15 @@ type OCIConnectionDataSourceJSON struct {
 }
 
 var (
-	_ datasource.DataSource              = &dataSourceOCIConnection{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIConnection{}
+	_ datasource.DataSource                     = &dataSourceOCIConnection{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIConnection{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIConnection{}
+
+	ociConnectionValidFilterKeys = map[string]struct{}{
+		"id": {}, "name": {}, "products": {}, "meta_contains": {},
+		"createdBefore": {}, "createdAfter": {}, "last_connection_ok": {},
+		"last_connection_before": {}, "last_connection_after": {},
+	}
 )
 
 func NewDataSourceOCIConnection() datasource.DataSource {
@@ -42,6 +49,36 @@ type OCIConnectionDataSourceModel struct {
 
 func (d *dataSourceOCIConnection) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_oci_connection_list"
+}
+
+// ConfigValidators rejects unrecognized filter keys at plan time (TFIN-570).
+func (d *dataSourceOCIConnection) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociConnectionFilterValidator{}}
+}
+
+type ociConnectionFilterValidator struct{}
+
+func (v ociConnectionFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are recognized CM API parameters."
+}
+func (v ociConnectionFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociConnectionFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config OCIConnectionDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociConnectionValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_connection_list. "+
+					"CM silently ignores unknown keys and returns the full unfiltered list.", k),
+			)
+		}
+	}
 }
 
 func (d *dataSourceOCIConnection) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
@@ -131,7 +168,7 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_OCI_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_OCI_CONNECTION+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_oci_connection.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
@@ -139,6 +176,10 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 			err.Error(),
 		)
 		return
+	}
+
+	if jsonStr == "" {
+		jsonStr = "[]"
 	}
 
 	var ociConnections []OCIConnectionDataSourceJSON
@@ -152,6 +193,8 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
+	// Initialize to non-nil empty slice so zero-match filters return [] not null (TFIN-570).
+	state.Oci = []OCIConnectionCommonTFSDK{}
 	for _, oci := range ociConnections {
 		ociConn := OCIConnectionCommonTFSDK{
 			CMCreateConnectionResponseCommonTFSDK: CMCreateConnectionResponseCommonTFSDK{

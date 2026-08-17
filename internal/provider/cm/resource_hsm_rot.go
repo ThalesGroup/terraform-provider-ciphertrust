@@ -47,7 +47,7 @@ func (r *resourceHSMRootOfTrust) ValidateConfig(ctx context.Context, _ resource.
 // Schema defines the schema for the resource.
 func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (`luna`), Luna PCIe (`lunapci`), Luna T-Series (`lunatct`), ProtectServer HSM (`protectserver`), AWS CloudHSM (`aws`), DPoD (`dpod`), Entrust nShield Connect (`nshield`), and IBM HPCS (`ibmhpcs`). **Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data.** **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
+		Description: "Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (`luna`), Luna PCIe (`lunapci`), Luna T-Series (`lunatct`), ProtectServer HSM (`protectserver`), AWS CloudHSM (`aws`), DPoD (`dpod`), Entrust nShield Connect (`nshield`), and IBM HPCS (`ibmhpcs`). **Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data.** **Destroy warning: `terraform destroy` on this resource always sends `reset=true` and `delay=5` to the CM API, triggering a full appliance wipe regardless of the `reset` and `delay` values configured during creation. This reflects the current provider implementation; if the CM API later supports configurable teardown semantics, the provider behavior may be revised.** **Only available on CipherTrust Manager — not supported on CDSPaaS.**",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -85,15 +85,19 @@ func (r *resourceHSMRootOfTrust) Schema(_ context.Context, _ resource.SchemaRequ
 				},
 			},
 			"reset": schema.BoolAttribute{
-				Optional:    true,
-				Description: "(Immutable) If true CipherTrust Manager will perform a reset operation after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data.",
+				Optional: true,
+				Description: "(Immutable) If true, CipherTrust Manager performs a reset after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data. " +
+					"Note: this attribute affects setup behavior only. Current provider behavior: `terraform destroy` always sends reset=true regardless of this setting. " +
+					"If the CM API later supports configurable teardown semantics, the provider behavior may be revised.",
 				PlanModifiers: []planmodifier.Bool{
 					modifiers.ImmutableBool(),
 				},
 			},
 			"delay": schema.Int64Attribute{
-				Optional:    true,
-				Description: "(Immutable) Delay in seconds before reset, defaults to 5 seconds.",
+				Optional: true,
+				Description: "(Immutable) Delay in seconds before the post-setup reset, defaults to 5 seconds. " +
+					"Note: this attribute affects setup behavior only. Current provider behavior: `terraform destroy` always sends delay=5 regardless of this setting. " +
+					"If the CM API later supports configurable teardown semantics, the provider behavior may be revised.",
 				PlanModifiers: []planmodifier.Int64{
 					modifiers.ImmutableInt64(),
 				},
@@ -239,15 +243,15 @@ func (r *resourceHSMRootOfTrust) Read(ctx context.Context, req resource.ReadRequ
 	// Reading that value back would overwrite state.Reset from true to false,
 	// causing ImmutableBool.PlanModifyBool() to fire 'old: false, new: true'
 	// on every subsequent plan and destroy. Same pattern as priorLicense in
-	// resource_license.go (TFIN-430 fix).
+	// resource_license.go.
 	priorReset := state.Reset
 
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_HSM_Server)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"HSM Root of Trust Setup Not Found — State Preserved",
-				"The HSM Root of Trust Setup resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "HSM Root of Trust"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "HSM Root of Trust", state.ID.ValueString()),
 			)
 			return
 		}
@@ -402,8 +406,11 @@ func (r *resourceHSMRootOfTrust) Delete(ctx context.Context, req resource.Delete
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, payloadBytes)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Resource already deleted out-of-band; treat terraform destroy as successful.
 			r.client.Log.Debug("[resource_hsm_rot.go -> Delete] resource already absent, skipping [" + state.ID.ValueString() + "]")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "HSM Root of Trust", state.ID.ValueString()),
+			)
 			return
 		}
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_hsm_rot.go -> Delete][" + state.ID.ValueString() + "]")

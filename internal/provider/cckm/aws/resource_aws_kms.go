@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -69,7 +71,10 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"account_id": schema.StringAttribute{
 				Required:    true,
-				Description: "ID of the AWS account.",
+				Description: "(Immutable) ID of the AWS account.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"acls": schema.SetNestedAttribute{
 				Computed:    true,
@@ -99,7 +104,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			"archive": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
+				Description: "Set to true to archive the KMS. An archived KMS is not deleted but cannot be used to manage keys. Set to false to recover the KMS and set its status back to Active, after which it can be used for all operations. Cannot be set to true at creation time; archive the KMS via update after it has been created. **Only available on CipherTrust Manager - not supported on CDSPaaS.**",
 			},
 			"arn": schema.StringAttribute{
 				Computed:    true,
@@ -107,16 +112,21 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) Amazon Resource Name (ARN) of the role to be assumed.",
+				Description: "Amazon Resource Name (ARN) of the role to be assumed.",
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
-				Description: "(Updatable) External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
+				Description: "External ID for the role to be assumed. This parameter can be specified only with \"assume_role_arn\".",
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager AWS connection ID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Description: "CipherTrust Manager AWS connection ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"connection_name": schema.StringAttribute{
 				Computed:    true,
@@ -127,7 +137,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 				Description: "True if the KMS was added by a scheduler.",
 			},
 			"created_at": schema.StringAttribute{
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 				Computed:    true,
 			},
 			"dev_account": schema.StringAttribute{
@@ -143,12 +153,15 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Unique name for the KMS.",
+				Description: "(Immutable) Unique name for the KMS.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"regions": schema.ListAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				Description: "(Updatable) AWS regions to be added to the KMS.",
+				Description: "AWS regions to be added to the KMS.",
 			},
 			"status": schema.StringAttribute{
 				Computed:    true,
@@ -156,7 +169,7 @@ func (r *resourceCCKMAWSKMS) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date and time the KMS was last updated",
+				Description: "Date and time the KMS was last updated.",
 			},
 			"uri": schema.StringAttribute{
 				Computed:    true,
@@ -179,7 +192,7 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+	connResponse, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.ValueString()), common.URL_AWS_CONNECTION)
 	if connErr != nil {
 		msg := "Error creating AWS KMS, failed to read AWS connection by 'connection_id'."
 		details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
@@ -199,19 +212,19 @@ func (r *resourceCCKMAWSKMS) Create(ctx context.Context, req resource.CreateRequ
 	mutex.CckmMutex.Lock(mutexKey)
 	defer mutex.CckmMutex.Unlock(mutexKey)
 
-	payload.AccountID = common.TrimString(plan.AccountID.String())
-	payload.Connection = common.TrimString(plan.ConnectionID.String())
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.AccountID = common.TrimString(plan.AccountID.ValueString())
+	payload.Connection = common.TrimString(plan.ConnectionID.ValueString())
+	payload.Name = common.TrimString(plan.Name.ValueString())
 	payload.Regions = make([]string, 0, len(plan.Regions.Elements()))
 	resp.Diagnostics.Append(plan.Regions.ElementsAs(ctx, &payload.Regions, false)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.ValueString())
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.ValueString())
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -295,7 +308,7 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if plan.ConnectionID.ValueString() != state.ConnectionID.ValueString() {
-		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.String()), common.URL_AWS_CONNECTION)
+		connResp, connErr := r.client.GetById(ctx, id, common.TrimString(plan.ConnectionID.ValueString()), common.URL_AWS_CONNECTION)
 		if connErr != nil {
 			msg := "Error updating AWS KMS, failed to read AWS connection by 'connection_id'."
 			details := utils.ApiError(msg, map[string]interface{}{"error": connErr.Error(), "connection_id": plan.ConnectionID.ValueString()})
@@ -329,13 +342,13 @@ func (r *resourceCCKMAWSKMS) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.ValueString())
 	}
 	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.ValueString())
 	}
 	if plan.ConnectionID.ValueString() != "" && plan.ConnectionID.ValueString() != types.StringNull().ValueString() {
-		payload.Connection = common.TrimString(plan.ConnectionID.String())
+		payload.Connection = common.TrimString(plan.ConnectionID.ValueString())
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -440,33 +453,18 @@ func (r *resourceCCKMAWSKMS) ModifyPlan(ctx context.Context, req resource.Modify
 		return
 	}
 
-	var plan, state KMSModelTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.AccountID != state.AccountID {
-		changed = append(changed, "account_id")
-	}
-	if plan.Name != state.Name {
-		changed = append(changed, "name")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
+	// CDSPaaS does not support archiving a KMS.
+	if r.client != nil && r.client.IsCDSPaaS {
+		var plan KMSModelTFSDK
+		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+		if !resp.Diagnostics.HasError() && !plan.Archive.IsNull() && !plan.Archive.IsUnknown() && plan.Archive.ValueBool() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("archive"),
+				"'archive' is not supported on CDSPaaS",
+				"The 'archive' attribute is only supported on on-premises CipherTrust Manager. "+
+					"CDSPaaS does not support archiving a KMS; this attribute must be omitted or set to false.",
+			)
+		}
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -29,6 +28,8 @@ type dataSourceCTEUserSets struct {
 }
 
 type CTEUserSetsDataSourceModel struct {
+	Limit   types.Int64            `tfsdk:"limit"`
+	Skip    types.Int64            `tfsdk:"skip"`
 	UserSet []CTEUserSetsListTFSDK `tfsdk:"user_sets"`
 }
 
@@ -39,56 +40,80 @@ func (d *dataSourceCTEUserSets) Metadata(_ context.Context, req datasource.Metad
 func (d *dataSourceCTEUserSets) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of user sets to return. If unset, all user sets are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of user sets to skip before returning results, for pagination. Defaults to 0.",
+			},
 			"user_sets": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of user sets.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier of the user set.",
+							Computed:    true,
 						},
 						"uri": schema.StringAttribute{
-							Computed: true,
+							Description: "URI of the user set.",
+							Computed:    true,
 						},
 						"account": schema.StringAttribute{
-							Computed: true,
+							Description: "Account of the user set.",
+							Computed:    true,
 						},
 						"created_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the user set was created.",
+							Computed:    true,
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Description: "Name of the user set.",
+							Computed:    true,
 						},
 						"updated_at": schema.StringAttribute{
-							Computed: true,
+							Description: "Date and time the user set was last updated.",
+							Computed:    true,
 						},
 						"description": schema.StringAttribute{
-							Computed: true,
+							Description: "Description of the user set.",
+							Computed:    true,
 						},
 						"labels": schema.MapAttribute{
+							Description: "Labels applied to the user set.",
 							Computed:    true,
 							ElementType: types.StringType,
 						},
 						"users": schema.ListNestedAttribute{
-							Optional: true,
+							Description: "List of users belonging to the user set.",
+							Optional:    true,
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"index": schema.Int64Attribute{
-										Optional: true,
+										Description: "Index of the user within the user set.",
+										Optional:    true,
 									},
 									"gid": schema.Int64Attribute{
-										Optional: true,
+										Description: "Group ID (GID) of the user.",
+										Optional:    true,
 									},
 									"gname": schema.StringAttribute{
-										Optional: true,
+										Description: "Group name of the user.",
+										Optional:    true,
 									},
 									"os_domain": schema.StringAttribute{
-										Optional: true,
+										Description: "OS domain of the user.",
+										Optional:    true,
 									},
 									"uid": schema.Int64Attribute{
-										Optional: true,
+										Description: "User ID (UID) of the user.",
+										Optional:    true,
 									},
 									"uname": schema.StringAttribute{
-										Optional: true,
+										Description: "Username of the user.",
+										Optional:    true,
 									},
 								},
 							},
@@ -102,24 +127,27 @@ func (d *dataSourceCTEUserSets) Schema(_ context.Context, _ datasource.SchemaReq
 
 func (d *dataSourceCTEUserSets) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_user_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_user_sets.go -> Read][" + id + "]")
 	var state CTEUserSetsDataSourceModel
+	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_USER_SET)
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_USER_SET, skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_user_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_user_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE usersets from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE user sets", total, limitVal)
 
 	usersets := []CTEUserSetsListJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &usersets)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_user_sets.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_user_sets.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE usersets from CM",
 			err.Error(),
@@ -177,7 +205,7 @@ func (d *dataSourceCTEUserSets) Read(ctx context.Context, req datasource.ReadReq
 		state.UserSet = append(state.UserSet, userState)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_user_sets.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_user_sets.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

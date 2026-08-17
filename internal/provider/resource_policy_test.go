@@ -122,8 +122,13 @@ resource "ciphertrust_policies" "test" {
 					})
 					_, _ = client.UpdateDataV2(context.Background(), policyID, common.URL_CM_POLICIES, modifiedPayload)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				// All policy fields (actions, resources, conditions) now carry ImmutableList/
+				// ImmutableString modifiers (TFIN-515). When CM changes them out-of-band the
+				// refresh reads new server values into state; the subsequent plan sees config !=
+				// refreshed-state on an immutable field and emits AddError rather than a plain
+				// diff. ExpectError reflects the actual post-TFIN-515 behaviour.
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
@@ -252,8 +257,7 @@ resource "ciphertrust_policies" "drift" {
 	})
 }
 
-// Test_CM_AccCMPolicy_OutOfBandDeletion verifies that Read() calls RemoveResource on 404
-// and plans recreation after OOB deletion.
+// Test_CM_AccCMPolicy_OutOfBandDeletion verifies that Read() returns AddError + preserves state on 404 (PR #476 behavior).
 func Test_CM_AccCMPolicy_OutOfBandDeletion(t *testing.T) {
 	RequireCM(t)
 	var policyID string
@@ -296,8 +300,8 @@ resource "ciphertrust_policies" "oob" {
   effect  = "allow"
 }
 `,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -330,76 +334,6 @@ resource "ciphertrust_policies" "idem" {
 			},
 			{
 				Config:             config,
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: false,
-			},
-		},
-	})
-}
-
-func Test_CM_AccCMPolicy_update(t *testing.T) {
-	RequireCM(t)
-	var policyID string
-
-	initialConfig := providerConfig + `
-resource "ciphertrust_policies" "test" {
-  name    = "tf-acc-update-policy"
-  effect  = "allow"
-  actions = ["ReadKey"]
-  conditions = [{
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["aes"]
-  }]
-}
-`
-
-	updatedConfig := providerConfig + `
-resource "ciphertrust_policies" "test" {
-  name    = "tf-acc-update-policy"
-  effect  = "allow"
-  actions = ["ReadKey"]
-  conditions = [{
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["aes"]
-  }, {
-    op     = "equals"
-    path   = "context.resource.alg"
-    values = ["rsa"]
-  }]
-}
-`
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: initialConfig,
-				Check: checkStep(t, "create",
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "effect", "allow"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.#", "1"),
-					func(s *terraform.State) error {
-						policyID = s.RootModule().Resources["ciphertrust_policies.test"].Primary.ID
-						return nil
-					},
-				),
-			},
-			{
-				Config: updatedConfig,
-				Check: checkStep(t, "update",
-					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.#", "2"),
-					func(s *terraform.State) error {
-						updatedID := s.RootModule().Resources["ciphertrust_policies.test"].Primary.ID
-						if updatedID != policyID {
-							return fmt.Errorf("expected no destroy+recreate: ID changed from %s to %s", policyID, updatedID)
-						}
-						return nil
-					},
-				),
-			},
-			{
-				Config:             updatedConfig,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -601,41 +535,130 @@ resource "ciphertrust_policies" "test" {
 	})
 }
 
-// Test_CM_AccPolicy_ClearCollections verifies that clearing resources, actions, or conditions
-// triggers a 3-way transition to send an explicit empty array to CipherTrust Manager.
-func Test_CM_AccPolicy_ClearCollections(t *testing.T) {
+// Test_CM_AccCMPolicy_ImmutableResources verifies that changing resources after
+// creation produces a plan-time immutable error (TFIN-515 Bug 1).
+func Test_CM_AccCMPolicy_ImmutableResources(t *testing.T) {
 	RequireCM(t)
-	policyName := "TFTestPolicyClear-" + uuid.New().String()[:8]
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policies" "clear_test" {
-    name      = %q
-    resources = ["kylo:*:vault:keys:test"]
-    allow     = true
-    effect    = "allow"
+resource "ciphertrust_policies" "test" {
+  name      = %q
+  effect    = "deny"
+  actions   = ["ReadKey"]
+  resources = ["kylo:*:vault:keys:original"]
 }
 `, policyName),
-				Check: checkStep(t, "clear: create",
-					resource.TestCheckResourceAttrSet("ciphertrust_policies.clear_test", "id"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "1"),
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.0", "kylo:*:vault:keys:test"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "resources.0", "kylo:*:vault:keys:original"),
 				),
 			},
 			{
 				Config: providerConfig + fmt.Sprintf(`
-resource "ciphertrust_policies" "clear_test" {
-    name   = %q
-    allow  = true
-    effect = "allow"
+resource "ciphertrust_policies" "test" {
+  name      = %q
+  effect    = "deny"
+  actions   = ["ReadKey"]
+  resources = ["kylo:*:vault:keys:changed"]
 }
 `, policyName),
-				Check: checkStep(t, "clear: update",
-					resource.TestCheckResourceAttr("ciphertrust_policies.clear_test", "resources.#", "0"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_ImmutableConditions verifies that changing conditions after
+// creation produces a plan-time immutable error (TFIN-515 Bug 2).
+func Test_CM_AccCMPolicy_ImmutableConditions(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  effect  = "deny"
+  actions = ["ReadKey"]
+  conditions = [{
+    op     = "equals"
+    path   = "subject/username"
+    values = ["alice"]
+  }]
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "conditions.0.op", "equals"),
 				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name    = %q
+  effect  = "deny"
+  actions = ["ReadKey"]
+  conditions = [{
+    op     = "equals"
+    path   = "subject/username"
+    values = ["bob"]
+  }]
+}
+`, policyName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
+			},
+		},
+	})
+}
+
+// Test_CM_AccCMPolicy_IncludeDescendantAccountsNoCreateCrash verifies that creating
+// a policy with include_descendant_accounts = true does not crash with
+// "provider produced inconsistent result after apply" (TFIN-515 Bug 3).
+// CM does not echo this field in POST or GET responses; the provider must preserve
+// the configured value rather than nulling it out.
+func Test_CM_AccCMPolicy_IncludeDescendantAccountsNoCreateCrash(t *testing.T) {
+	RequireCM(t)
+	policyName := "tftest-policy-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name                        = %q
+  effect                      = "deny"
+  actions                     = ["ReadKey"]
+  include_descendant_accounts = true
+}
+`, policyName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("ciphertrust_policies.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_policies.test", "include_descendant_accounts", "true"),
+				),
+			},
+			{
+				// Idempotency: second plan must be empty — no drift from missing field in CM response.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_policies" "test" {
+  name                        = %q
+  effect                      = "deny"
+  actions                     = ["ReadKey"]
+  include_descendant_accounts = true
+}
+`, policyName),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

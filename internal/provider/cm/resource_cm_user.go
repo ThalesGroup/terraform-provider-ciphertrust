@@ -224,10 +224,21 @@ func (r *resourceCMUser) Create(ctx context.Context, req resource.CreateRequest,
 			} else {
 				plan.Name = types.StringNull()
 			}
-			if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
-				plan.Nickname = types.StringValue(gj.String())
+			// nickname (TFIN-551): CM silently ignores the configured nickname at creation
+			// and always assigns nickname = username (same behaviour as PATCH, fixed in
+			// Update() for TFIN-407). Two cases:
+			// - User explicitly set nickname: preserve plan value. Overwriting with the
+			//   GET-returned username would trip the framework's post-apply consistency check.
+			// - Nickname not configured (null/unknown): hydrate from CM. The framework
+			//   requires all Computed attributes to be known after apply (Terraform ≥ 1.11).
+			if !plan.Nickname.IsNull() && !plan.Nickname.IsUnknown() {
+				// Preserve the configured value — CM ignores it but the plan promised it.
 			} else {
-				plan.Nickname = types.StringNull()
+				if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+					plan.Nickname = types.StringValue(gj.String())
+				} else {
+					plan.Nickname = types.StringNull()
+				}
 			}
 			if gj := gjson.Get(userResponse, "email"); gj.Exists() {
 				plan.Email = types.StringValue(gj.String())
@@ -262,9 +273,9 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 	r.client.Log.Trace(userResponse)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"CM User Not Found — State Preserved",
-				"The CM User resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM User"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM User", state.ID.ValueString()),
 			)
 			return
 		}
@@ -309,11 +320,15 @@ func (r *resourceCMUser) Read(ctx context.Context, req resource.ReadRequest, res
 		state.Name = types.StringNull()
 	}
 
-	if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
-		state.Nickname = types.StringValue(gj.String())
-	} else {
-		state.Nickname = types.StringNull()
+	// nickname: only hydrate from CM when the user never configured a custom value.
+	// When state holds a user-configured nickname (non-null), preserve it — CM always
+	// returns username, so unconditional overwrite would cause perpetual drift (TFIN-551).
+	if state.Nickname.IsNull() {
+		if gj := gjson.Get(userResponse, "nickname"); gj.Exists() {
+			state.Nickname = types.StringValue(gj.String())
+		}
 	}
+	// else: user configured a nickname — preserve state.Nickname unchanged.
 	if !state.Metadata.IsNull() {
 		metaResult := gjson.Get(userResponse, "user_metadata")
 		if !metaResult.Exists() {
@@ -575,10 +590,9 @@ func (r *resourceCMUser) Delete(ctx context.Context, req resource.DeleteRequest,
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user.go -> Delete][" + state.UserID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			// Resource was already deleted outside of Terraform — desired state achieved.
 			resp.Diagnostics.AddWarning(
-				"CipherTrust User Not Found on Delete",
-				"The CipherTrust User resource returned HTTP 404 during deletion. It was likely removed outside of Terraform. Treating as successfully deleted.",
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM User", state.ID.ValueString()),
 			)
 			return
 		}

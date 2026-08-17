@@ -16,9 +16,39 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceAWSCloudHSMKey{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSource                     = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSCloudHSMKey{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSCloudHSMKey{}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSCloudHSMKey) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsCloudHSMKeyFilterValidator{}}
+}
+
+type awsCloudHSMKeyFilterValidator struct{}
+
+func (v awsCloudHSMKeyFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsCloudHSMKeyFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsCloudHSMKeyFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSCloudHSMKeyListDataSourceTFSDK
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsKeyValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_cloudhsm_keys_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSCloudHSMKeys() datasource.DataSource {
 	return &dataSourceAWSCloudHSMKey{}
@@ -50,14 +80,14 @@ func (d *dataSourceAWSCloudHSMKey) Metadata(_ context.Context, req datasource.Me
 func (d *dataSourceAWSCloudHSMKey) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of AWS CloudHSM keys. " +
-			"Supply a 'filters' map of key:value pairs matching the CipherTrust Manager API query parameters " +
-			"for listing AWS keys (e.g. region, alias, keyid). " +
-			"Use 'limit=-1' to return more than 10 matches.",
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS CloudHSM keys (such as `region`, `alias`, or `keyid`). " +
+			"Set `limit = \"-1\"` to return all matching keys.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A map of key:value pairs matching CipherTrust Manager API query parameters for listing AWS CloudHSM keys.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS CloudHSM keys." + awsKeyFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,

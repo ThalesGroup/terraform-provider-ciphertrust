@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/mutex"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -29,7 +31,6 @@ var (
 	_ resource.Resource                = &resourceCCKMAWSAcl{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMAWSAcl{}
 	_ resource.ResourceWithImportState = &resourceCCKMAWSAcl{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMAWSAcl{}
 )
 
 func NewResourceCCKMAWSAcl() resource.Resource {
@@ -80,7 +81,7 @@ const awsACLTable = `The following table lists the accepted values:
 |Create (HYOK Key)                |  hyokkeycreate                | Permission to create an AWS HYOK key. |
 |Block/Unblock (HYOK Key)         |  hyokkeyblockunblock          | Permission to block/unblock an AWS HYOK key. |
 |Delete (HYOK Key)                |  hyokkeydelete                | Permission to delete an AWS HYOK key (applicable only to unlinked key). |
-|Link (HYOK Key)                  |  hyokkeylink                  | Permission to link an HYOK key in CM to HYOK key in AWS. |
+|Link (HYOK Key)                  |  hyokkeylink                  | Permission to link an HYOK key in CipherTrust Manager to HYOK key in AWS. |
 |List (CloudHSM Key)              |  viewcloudhsmkey              | Permission to view AWS CloudHSM keys. |
 |Create (CloudHSM Key)            |  cloudhsmkeycreate            | Permission to create an AWS CloudHSM key. |
 |Delete (CloudHSM Key)            |  cloudhsmkeydelete            | Permission to delete an AWS CloudHSM key. |
@@ -123,7 +124,7 @@ func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 			"actions": schema.SetAttribute{
 				Required:            true,
 				ElementType:         types.StringType,
-				MarkdownDescription: "(Updatable) " + awsACLTable,
+				MarkdownDescription: "" + awsACLTable,
 				Validators:          []validator.Set{setvalidator.SizeAtLeast(1)},
 			},
 			"kms_actions": schema.SetAttribute{
@@ -132,8 +133,9 @@ func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 				ElementType: types.StringType,
 			},
 			"group": schema.StringAttribute{
-				Optional:    true,
-				Description: "The CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+				Optional:      true,
+				Description:   "(Immutable) The CipherTrust Manager group the ACL applies to. Specify either \"user_id\" or \"group\".",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -141,13 +143,20 @@ func (r *resourceCCKMAWSAcl) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"user_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "ID of the CipherTrust Manager user the ACL applies to. For example: \"user::local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\" .Specify either \"user_id\" or \"group\".",
+				Optional:      true,
+				Description:   "(Immutable) ID of the CipherTrust Manager user the ACL applies to. For example: \"local|57a191ec-8644-4e2f-aaa9-59ca2ba0dbf9\". Specify either \"user_id\" or \"group\".",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"kms_id": schema.StringAttribute{
 				Required:    true,
-				Description: "The CipherTrust Manager AWS KMS ID in which to set the ACL",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Description: "(Immutable) The CipherTrust Manager AWS KMS ID in which to set the ACL.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 		},
 	}
@@ -228,7 +237,7 @@ func (r *resourceCCKMAWSAcl) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "AWS KMS ACL not found. If it no longer exists, remove it from your Terraform config."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
@@ -266,7 +275,7 @@ func (r *resourceCCKMAWSAcl) Update(ctx context.Context, req resource.UpdateRequ
 	r.client.Log.Debug("[resource_aws_acls.go -> Update][get response:" + redactAWSResponse(response) + "]")
 
 	if !acls.AclExistsInResponse(response, resourceID) {
-		msg := "AWS KMS ACL was not found, cannot update."
+		msg := fmt.Sprintf(utils.NotFoundRetainedFmt, "AWS KMS ACL")
 		details := utils.ApiError(msg, map[string]interface{}{"kms_id": kmsID, "id": resourceID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
@@ -349,55 +358,10 @@ func (r *resourceCCKMAWSAcl) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 	if acl != nil {
-		response = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true)
+		_ = r.applyAcls(ctx, id, kmsID, acl, &resp.Diagnostics, true)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	}
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceCCKMAWSAcl) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state KMSAclTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	// Guard against false positives when group is not set in config (null in plan)
-	// while state holds an empty string returned by the API.
-	if !plan.Group.IsNull() && !plan.Group.IsUnknown() && plan.Group != state.Group {
-		changed = append(changed, "group")
-	}
-	if plan.KmsID != state.KmsID {
-		changed = append(changed, "kms_id")
-	}
-	// Guard against false positives when user_id is not set in config (null in plan)
-	// while state holds an empty string returned by the API.
-	if !plan.UserID.IsNull() && !plan.UserID.IsUnknown() && plan.UserID != state.UserID {
-		changed = append(changed, "user_id")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
 	}
 }
 
@@ -446,7 +410,7 @@ func (r *resourceCCKMAWSAcl) setAWSAclState(resourceID string, responseJSON stri
 	inputActions := state.Actions
 	// Reset Actions before calling SetAclCommonState so that kms_actions correctly
 	// reflects only what the API returned, not stale user input when the ACL is not found.
-	state.AclTFSDK.Actions, _ = types.SetValue(types.StringType, []attr.Value{})
+	state.Actions, _ = types.SetValue(types.StringType, []attr.Value{})
 	acls.SetAclCommonState(r.client, resourceID, responseJSON, &state.AclTFSDK, diags)
 	if len(state.Actions.Elements()) != 0 {
 		state.KmsActions = state.Actions

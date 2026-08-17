@@ -29,13 +29,18 @@ resource "ciphertrust_license" "test" {
 	return base
 }
 
-// Test_CM_License_ImmutableLicense verifies that ImmutableString() rejects license changes at plan time.
-func Test_CM_License_ImmutableLicense(t *testing.T) {
+// Test_CM_License_WriteOnlyLicenseProducesNoDiff verifies that license is write-only:
+// Terraform Core excludes a write-only attribute's own value from diff computation, so
+// changing `license` alone (with everything else unchanged) produces an empty plan rather
+// than an error or an update. license has no companion `*_version` field and Update()
+// unconditionally rejects all changes — the only supported way to change the license is to
+// destroy and recreate the resource (e.g. `terraform apply -replace`).
+func Test_CM_License_WriteOnlyLicenseProducesNoDiff(t *testing.T) {
 	RequireCM(t)
 
 	licenseCode := os.Getenv("TF_ACC_LICENSE_CODE")
 	if licenseCode == "" {
-		t.Skip("TF_ACC_LICENSE_CODE not set — skipping license immutability acceptance test")
+		t.Skip("TF_ACC_LICENSE_CODE not set — skipping license write-only acceptance test")
 	}
 	t.Setenv("TF_VAR_cm_license_code", licenseCode)
 
@@ -46,10 +51,11 @@ func Test_CM_License_ImmutableLicense(t *testing.T) {
 				Config: cmLicenseConfig("instance"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("ciphertrust_license.test", "id"),
+					resource.TestCheckNoResourceAttr("ciphertrust_license.test", "license"),
 				),
 			},
 			{
-				// Change license value — ImmutableString() must reject at plan time.
+				// Change license value — write-only, so no diff is produced and no error occurs.
 				Config: providerConfig + `
 variable "cm_license_code" {
   type = string
@@ -59,8 +65,8 @@ resource "ciphertrust_license" "test" {
   license   = "CHANGED-LICENSE-VALUE"
   bind_type = "instance"
 }`,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)Attribute is immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 		},
 	})

@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,6 +67,15 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 			}
 		}`
 
+	badFilter := awsConnectionResource + keyStoreResourceConfig + `
+		data "ciphertrust_aws_custom_keystore_list" "bad_filter" {
+			filters = { totally_bogus_filter = "x" }
+		}`
+	zeroMatch := awsConnectionResource + keyStoreResourceConfig + `
+		data "ciphertrust_aws_custom_keystore_list" "zero_match" {
+			filters = { name = "definitely-does-not-exist-xyz" }
+		}`
+
 	keyStoreResourceName := "ciphertrust_aws_custom_keystore.custom_keystore"
 	dsByName := "data.ciphertrust_aws_custom_keystore_list.by_name"
 	dsByKmsID := "data.ciphertrust_aws_custom_keystore_list.by_kms_id"
@@ -108,6 +118,20 @@ func TestCckmAWSDataSourceCustomKeyStore(t *testing.T) {
 					resource.TestCheckResourceAttrSet(dsByKmsID, "custom_key_stores.0.kms_id"),
 					resource.TestCheckResourceAttrSet(dsByKmsID, "custom_key_stores.0.name"),
 					resource.TestCheckResourceAttr(dsByKmsID, "custom_key_stores.0.aws_param.custom_key_store_type", "EXTERNAL_KEY_STORE"),
+				),
+			},
+			{
+				// Bogus filter key - provider rejects it at plan time.
+				Config:      badFilter,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("not a supported filter key"),
+			},
+			{
+				// Valid filter key with a value that cannot match any key store.
+				Config: zeroMatch,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_custom_keystore_list.zero_match", "matched", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_custom_keystore_list.zero_match", "custom_key_stores.#", "0"),
 				),
 			},
 		},

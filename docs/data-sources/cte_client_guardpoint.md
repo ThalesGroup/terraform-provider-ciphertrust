@@ -17,53 +17,53 @@ description: |-
 
 ### Required
 
-- `client_name` (String)
+- `client_name` (String) Name of the CTE client whose GuardPoints are to be listed.
 
 ### Read-Only
 
-- `client_guardpoint` (Attributes List) (see [below for nested schema](#nestedatt--client_guardpoint))
+- `client_guardpoint` (Attributes List) List of GuardPoints configured on the client. (see [below for nested schema](#nestedatt--client_guardpoint))
 
 <a id="nestedatt--client_guardpoint"></a>
 ### Nested Schema for `client_guardpoint`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `attr` (Map of String)
-- `automount_enabled` (Boolean)
-- `cifs_enabled` (Boolean)
-- `client_group_id` (String)
-- `client_group_name` (String)
-- `client_id` (String)
-- `client_name` (String)
-- `created_at` (String)
-- `csi_guard_status` (String)
-- `dev_account` (String)
-- `disabled_reason` (String)
-- `disk_name` (String)
-- `diskgroup_name` (String)
-- `docker_cont_id` (String)
-- `docker_img_id` (String)
-- `dps_id` (String)
-- `dps_name` (String)
-- `early_access` (Boolean)
-- `gp_network_path` (String)
-- `guard_enabled` (Boolean)
-- `guard_path` (String)
-- `guard_point_state` (String)
-- `guard_point_type` (String)
-- `id` (String)
-- `is_esg_capable_device` (Boolean)
-- `is_idt_capable_device` (Boolean)
-- `metadata` (String)
-- `mfa_enabled` (Boolean)
-- `native_domain` (String)
-- `network_share_credentials_id` (String)
-- `pending_operation` (String)
-- `policy_id` (String)
-- `policy_name` (String)
-- `preserve_sparse_regions` (Boolean)
-- `type` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the GuardPoint.
+- `application` (String) Application associated with the GuardPoint.
+- `attr` (Map of String) Additional attributes of the GuardPoint.
+- `automount_enabled` (Boolean) Whether automount is enabled for the GuardPoint.
+- `cifs_enabled` (Boolean) Whether CIFS is enabled for the GuardPoint.
+- `client_group_id` (String) ID of the client group the GuardPoint is applied to, if applicable.
+- `client_group_name` (String) Name of the client group the GuardPoint is applied to, if applicable.
+- `client_id` (String) ID of the client the GuardPoint is applied to.
+- `client_name` (String) Name of the client the GuardPoint is applied to.
+- `created_at` (String) Date and time the GuardPoint was created.
+- `csi_guard_status` (String) CSI guard status of the GuardPoint (Kubernetes CSI GuardPoints).
+- `dev_account` (String) Dev account of the GuardPoint.
+- `disabled_reason` (String) Reason the GuardPoint is disabled, if applicable.
+- `disk_name` (String) Name of the disk associated with the GuardPoint (raw partition GuardPoints).
+- `diskgroup_name` (String) Name of the disk group associated with the GuardPoint (raw partition GuardPoints).
+- `docker_cont_id` (String) ID of the docker container the GuardPoint is applied to, if applicable.
+- `docker_img_id` (String) ID of the docker image the GuardPoint is applied to, if applicable.
+- `dps_id` (String) ID of the designated primary set associated with the GuardPoint, if applicable.
+- `dps_name` (String) Name of the designated primary set associated with the GuardPoint, if applicable.
+- `early_access` (Boolean) Whether secure start (early access) is enabled for the GuardPoint.
+- `gp_network_path` (String) Network path of the GuardPoint (network share GuardPoints).
+- `guard_enabled` (Boolean) Whether the GuardPoint is enabled.
+- `guard_path` (String) Path of the GuardPoint.
+- `guard_point_state` (String) State of the GuardPoint.
+- `guard_point_type` (String) Type of the GuardPoint, e.g. directory_auto, directory_manual, rawdevice_manual, rawdevice_auto, cloudstorage_auto, cloudstorage_manual or ransomware_protection.
+- `id` (String) The unique identifier of the GuardPoint.
+- `is_esg_capable_device` (Boolean) Whether the device is ESG (Efficient Storage GuardPoint) capable.
+- `is_idt_capable_device` (Boolean) Whether the device is IDT (Information Dispersal Technology) capable.
+- `metadata` (String) Metadata associated with the GuardPoint.
+- `mfa_enabled` (Boolean) Whether MFA (Multi-Factor Authentication) is enabled for the GuardPoint.
+- `native_domain` (String) Native domain of the GuardPoint.
+- `network_share_credentials_id` (String) ID of the network share credentials associated with the GuardPoint, if applicable.
+- `pending_operation` (String) Pending operation on the GuardPoint, if any.
+- `policy_id` (String) ID of the CTE policy applied to the GuardPoint.
+- `policy_name` (String) Name of the CTE policy applied to the GuardPoint.
+- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions. Only applicable for raw partition GuardPoints.
+- `type` (String) Type of the resource the GuardPoint is applied to.
+- `updated_at` (String) Date and time the GuardPoint was last updated.
+- `uri` (String) URI of the GuardPoint.

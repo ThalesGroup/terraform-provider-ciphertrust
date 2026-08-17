@@ -3,25 +3,30 @@
 page_title: "ciphertrust_oci_key_version_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of OCI key versions.
-  Give a filter of 'limit=-1' to list more than 10 matches.
+  Use this data source to retrieve a list of OCI key versions stored in CipherTrust Manager. Supply the key_id of the parent key and an optional filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI key versions (such as version_id or origin). Set limit = "-1" to return all matching key versions.
 ---
 
 # ciphertrust_oci_key_version_list (Data Source)
 
-Use this data source to retrieve a list of OCI key versions.
-
-Give a filter of 'limit=-1' to list more than 10 matches.
+Use this data source to retrieve a list of OCI key versions stored in CipherTrust Manager. Supply the `key_id` of the parent key and an optional `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI key versions (such as `version_id` or `origin`). Set `limit = "-1"` to return all matching key versions.
 
 ## Example Usage
 
 ```terraform
-data "ciphertrust_oci_key_list" "ciphertrust_keys" {
-  # Required parameters
-  key_id = "ciphertrust.oci_key.some_key.id"
-  # Optional parameters
+# Sort key versions by creation date, newest first.
+data "ciphertrust_oci_key_version_list" "sorted" {
+  key_id = "cm-key-id"
   filters = {
-    limit = "-1"
+    sort = "-createdAt"
+  }
+}
+
+# List key versions by origin, returning all matches.
+data "ciphertrust_oci_key_version_list" "by_origin" {
+  key_id = "cm-key-id"
+  filters = {
+    origin = "INTERNAL"
+    limit  = "-1"
   }
 }
 ```
@@ -31,29 +36,41 @@ data "ciphertrust_oci_key_list" "ciphertrust_keys" {
 
 ### Required
 
-- `key_id` (String) CipherTrust Manager key ID of the key to list versions of.
+- `key_id` (String) CipherTrust Manager resource ID of the key whose versions to list.
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing OCI key versions.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI key versions.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter     | type    | description |
+|------------|---------|-------------|
+| skip       | integer | Index of the first result to return (default: 0). |
+| limit      | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort       | string  | Fields to sort by. Valid sort fields are `version_id`, `origin`, `key_id`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| version_id | string  | Filter by key version OCID. |
+| id         | string  | Filter by CipherTrust Manager internal ID. |
+| origin     | string  | Filter by OCI key version origin. |
+| is_primary | boolean | Filter by whether the key version belongs to a primary vault (`true` or `false`). |
 
 ### Read-Only
 
-- `matched` (Number) The number of key versions which matched the filters.
-- `versions` (Attributes List) (see [below for nested schema](#nestedatt--versions))
+- `matched` (Number) The total number of records matching the given filters.
+- `versions` (Attributes List) The list of OCI key versions stored in CipherTrust Manager. (see [below for nested schema](#nestedatt--versions))
 
 <a id="nestedatt--versions"></a>
 ### Nested Schema for `versions`
 
 Read-Only:
 
-- `account` (String) The account which owns this resource.
-- `byok_key_version_params` (Attributes) The attributes are related to BYOK key versions. (see [below for nested schema](#nestedatt--versions--byok_key_version_params))
+- `account` (String) The account that owns this resource.
+- `byok_key_version_params` (Attributes) Attributes for BYOK key versions. (see [below for nested schema](#nestedatt--versions--byok_key_version_params))
 - `created_at` (String) Date/time the key version was created in CipherTrust Manager.
 - `id` (String) The version's CipherTrust Manager resource ID.
 - `key_material_origin` (String) CipherTrust Manager origin of the key version's material.
 - `oci_key_version_params` (Attributes) OCI key version attributes. (see [below for nested schema](#nestedatt--versions--oci_key_version_params))
-- `refreshed_at` (String) Date/time the key was refreshed.
+- `refreshed_at` (String) Date/time the key version was refreshed.
 - `source_key_id` (String) CipherTrust Manager key ID used to create the version.
 - `source_key_name` (String) Name of the key used to create the version.
 - `source_key_tier` (String) Source of the key used to create the version.
@@ -81,10 +98,10 @@ Read-Only:
 - `key_id` (String) The key's OCID.
 - `lifecycle_state` (String) The key version's current lifecycle state.
 - `origin` (String) CipherTrust Manager origin of the key version's material.
-- `public_key` (String) Version's public key.
+- `public_key` (String) The key version's public key.
 - `replication_id` (String) The replication ID associated with a key version operation.
-- `restored_from_key_version_id` (String) Key version OCID from which this key version was restored.
+- `restored_from_key_version_id` (String) The OCID of the key version from which this key version was restored.
 - `time_created` (String) The time the key version was created.
 - `time_of_deletion` (String) The time when the key version will be deleted.
 - `vault_id` (String) The vault's OCID.
-- `version_id` (String) Version OCID.
+- `version_id` (String) The key version's OCID.

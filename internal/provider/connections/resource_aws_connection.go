@@ -27,9 +27,17 @@ import (
 
 const notFoundError = "status: 404"
 
+// awsDefaultCloudName and awsDefaultSTSEndpoints are the documented CM server defaults.
+// When the user removes cloud_name or aws_sts_regional_endpoints from their Terraform config,
+// the provider sends the explicit default value in the PATCH so CM resets the field.
+// aws_region has no universal default and uses UseStateWhenClearingString() instead.
+const awsDefaultCloudName = "aws"
+const awsDefaultSTSEndpoints = "legacy"
+
 var (
-	_ resource.Resource              = &resourceCCKMAWSConnection{}
-	_ resource.ResourceWithConfigure = &resourceCCKMAWSConnection{}
+	_ resource.Resource               = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithConfigure  = &resourceCCKMAWSConnection{}
+	_ resource.ResourceWithModifyPlan = &resourceCCKMAWSConnection{}
 )
 
 func NewResourceCCKMAWSConnection() resource.Resource {
@@ -84,20 +92,49 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"assume_role_arn": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "AWS IAM role ARN",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 			"assume_role_external_id": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Specify AWS Role external ID",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
+			// aws_region: Optional+Computed. CM supports changing between valid regions but
+			// has no mechanism to unset the value once configured (omission, null, and "" are
+			// all treated as no-change by the PATCH endpoint). UseStateWhenClearingString()
+			// preserves the existing value when the user removes this attribute from config
+			// and emits a warning that clearing is unsupported. Updates between valid regions
+			// are fully supported (CM accepts the new value).
 			"aws_region": schema.StringAttribute{
 				Optional: true,
+				Computed: true,
 				Description: "AWS region. only used when aws_sts_regional_endpoints is equal to regional otherwise, it takes default values according to Cloud Name given." +
 					"Default values are: \n" +
 					"for aws, default region will be \"us-east-1\" \n" +
 					"for aws-us-gov, default region will be \"us-gov-east-1\" \n" +
-					"for aws-cn, default region will be \"cn-north-1\"",
+					"for aws-cn, default region will be \"cn-north-1\"\n" +
+					"Note: once set, this field cannot be cleared back to unset via Terraform " +
+					"(the CM API provides no reset mechanism), but it can be updated to any valid region.",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
+			// last_connection_ok/error/at: retain UseStateForUnknown() — these are Computed-only
+			// status fields. Without the modifier the plan value is Unknown after an update,
+			// causing "provider produced inconsistent result after apply" when CM hasn't run
+			// a connectivity test yet (fields absent from response → null, but plan expects
+			// the prior state value). UseStateForUnknown() preserves the prior value in the
+			// plan, and the post-PATCH r.Exists() hydration overwrites it with the real value.
+			// aws_sts_regional_endpoints: CM default is "legacy". When removed from config,
+			// the provider sends the explicit default value in the PATCH so CM resets the field.
+			// This differs from aws_region which has no universal default.
 			"aws_sts_regional_endpoints": schema.StringAttribute{
 				Optional: true,
 				Description: "By default, AWS Security Token Service (AWS STS) is available as a global service, and all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints instead of the global endpoint to reduce latency, build in redundancy, and increase session token validity. valid values are: \n" +
@@ -107,6 +144,9 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 					stringvalidator.OneOf("legacy", "regional"),
 				},
 			},
+			// cloud_name: CM default is "aws". When removed from config, the provider sends
+			// the explicit default value in the PATCH so CM resets the field. This differs
+			// from aws_region which has no universal default.
 			"cloud_name": schema.StringAttribute{
 				Optional: true,
 				Description: "Name of the cloud. Options are: \n" +
@@ -119,7 +159,11 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
 				Description: "Description about the connection",
+				PlanModifiers: []planmodifier.String{
+					modifiers.UseStateWhenClearingString(),
+				},
 			},
 
 			"iam_role_anywhere": schema.SingleNestedAttribute{
@@ -142,9 +186,19 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 						Description: "Specify AWS IAM Anywhere Trust Anchor ARN",
 					},
 					"private_key": schema.StringAttribute{
-						Optional:    true,
-						Sensitive:   true,
-						Description: "The private key associated with the certificate",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
+						Description: "The private key associated with the certificate. Write-only: never " +
+							"stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend " +
+							"a rotated key, change `private_key` and bump `private_key_version` in the same apply.",
+					},
+					"private_key_version": schema.Int64Attribute{
+						Optional: true,
+						Description: "Arbitrary version number stored in state and used to trigger " +
+							"re-sending `private_key` to CipherTrust Manager. Since `private_key` is " +
+							"write-only, Terraform cannot detect a change in its value on its own; increment " +
+							"this on every apply where you want the current `private_key` value re-sent.",
 					},
 				},
 			},
@@ -170,7 +224,10 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				ElementType: types.StringType,
 				Description: "Array of the CipherTrust products associated with the connection. " +
 					"Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. " +
-					"Any other value is rejected by CipherTrust Manager with a 422 error.",
+					"Any other value is rejected by CipherTrust Manager with a 422 error. " +
+					"Note: once set, this field cannot be cleared back to unset via Terraform. " +
+					"The CM API silently ignores an empty products list on update; the prior value is preserved in state and a warning is emitted. " +
+					"To remove all products, destroy and recreate the resource.",
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(
 						stringvalidator.OneOf("cckm", "ddc", "cte", "data discovery", "backup/restore", "logger", "hsm_anchored_domain", "csm"),
@@ -178,9 +235,12 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 				},
 			},
 			"secret_access_key": schema.StringAttribute{
-				Optional:    true,
-				Sensitive:   true,
-				WriteOnly:   true,
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 				Description: "Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.",
 			},
 			"secret_access_key_version": schema.Int64Attribute{
@@ -231,6 +291,41 @@ func (r *resourceCCKMAWSConnection) Schema(_ context.Context, _ resource.SchemaR
 	}
 }
 
+// ModifyPlan enforces the products-clear restriction at plan time (TFIN-479).
+// The CM PATCH endpoint silently ignores an empty products list, so a transition
+// from a non-empty list to null/[] would silently no-op and then cause perpetual
+// drift on every subsequent plan. Block the operation with a clear diagnostic
+// so the user understands they must destroy and recreate to remove products.
+func (r *resourceCCKMAWSConnection) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Only relevant for updates (both state and plan are non-null).
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state AWSConnectionModelTFSDK
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var plan AWSConnectionModelTFSDK
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Block: non-empty products → null/empty (clearing is unsupported by the CM API).
+	if len(state.Products) > 0 && len(plan.Products) == 0 {
+		resp.Diagnostics.AddError(
+			"Cannot clear products: unsupported by CipherTrust Manager API",
+			"CipherTrust Manager does not support clearing the products field once it has been "+
+				"set (the PATCH endpoint silently ignores an empty list). "+
+				"Remove this change from your configuration, or destroy and recreate the resource "+
+				"to remove all products.",
+		)
+	}
+}
+
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -257,28 +352,35 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	payload.Name = common.TrimString(plan.Name.String())
+	payload.Name = plan.Name.ValueString()
 
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		payload.Description = plan.Description.ValueString()
 	}
-	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+	if !plan.AccessKeyID.IsNull() && !plan.AccessKeyID.IsUnknown() {
+		payload.AccessKeyID = plan.AccessKeyID.ValueString()
 	}
-	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+	if !plan.AssumeRoleARN.IsNull() && !plan.AssumeRoleARN.IsUnknown() {
+		payload.AssumeRoleARN = plan.AssumeRoleARN.ValueString()
 	}
-	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+	if !plan.AssumeRoleExternalID.IsNull() && !plan.AssumeRoleExternalID.IsUnknown() {
+		payload.AssumeRoleExternalID = plan.AssumeRoleExternalID.ValueString()
 	}
-	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
+		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
-	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+	// aws_sts_regional_endpoints: send explicit default when cleared so CM resets the field.
+	// CM treats omission and empty string as no-op; the explicit default is the only reset mechanism.
+	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
+		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
+	} else if plan.AWSSTSRegionalEndpoints.IsNull() {
+		payload.AWSSTSRegionalEndpoints = awsDefaultSTSEndpoints
 	}
-	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+	// cloud_name: same pattern — send explicit default when cleared.
+	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
+		payload.CloudName = plan.CloudName.ValueString()
+	} else if plan.CloudName.IsNull() {
+		payload.CloudName = awsDefaultCloudName
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -295,8 +397,13 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		if plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != "" && plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.TrustAnchorARN = plan.IAMRoleAnywhere.TrustAnchorARN.ValueString()
 		}
-		if plan.IAMRoleAnywhere.PrivateKey.ValueString() != "" && plan.IAMRoleAnywhere.PrivateKey.ValueString() != types.StringNull().ValueString() {
-			varIAMRoleAnywhere.PrivateKey = plan.IAMRoleAnywhere.PrivateKey.ValueString()
+		// private_key is write-only: the framework nulls it out of PlannedState during
+		// PlanResourceChange, before Create() ever runs, so plan.IAMRoleAnywhere.PrivateKey
+		// is always null here. config.IAMRoleAnywhere carries the actual configured value.
+		if config.IAMRoleAnywhere != nil {
+			if v := config.IAMRoleAnywhere.PrivateKey.ValueString(); v != "" {
+				varIAMRoleAnywhere.PrivateKey = v
+			}
 		}
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
@@ -398,9 +505,49 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 		}
 	}
 
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
+	// aws_region is Optional+Computed (Computed added for UseStateWhenClearingString()).
+	// When the user omits aws_region from config, plan holds Unknown; resolve to a known
+	// value from the CREATE response to prevent "provider returned invalid result object".
+	if plan.AWSRegion.IsUnknown() {
+		if r := gjson.Get(response, "aws_region"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+			plan.AWSRegion = types.StringValue(r.String())
+		} else {
+			plan.AWSRegion = types.StringNull()
+		}
+	}
+
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
+
+	// iam_role_anywhere.private_key is write-only — same as above.
+	if plan.IAMRoleAnywhere != nil {
+		plan.IAMRoleAnywhere.PrivateKey = types.StringNull()
+	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
@@ -426,13 +573,9 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_AWS_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"AWS Connection Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed AWS connection %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "AWS Connection"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "AWS Connection", state.ID.ValueString()),
 			)
 			return
 		}
@@ -465,8 +608,7 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	state.Name = types.StringValue(gjson.Get(response, "name").String())
 
 	// description: purely user-settable; CM only returns what was explicitly set.
-	// Use r.Exists() to surface drift when the value changes vs config.
-	if r := gjson.Get(response, "description"); r.Exists() {
+	if r := gjson.Get(response, "description"); r.Exists() && r.Type != gjson.Null {
 		state.Description = types.StringValue(r.String())
 	} else {
 		state.Description = types.StringNull()
@@ -482,12 +624,12 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			state.AccessKeyID = types.StringValue(r.String())
 		}
 	}
-	if r := gjson.Get(response, "assume_role_arn"); r.Exists() {
+	if r := gjson.Get(response, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
 		state.AssumeRoleARN = types.StringValue(r.String())
 	} else {
 		state.AssumeRoleARN = types.StringNull()
 	}
-	if r := gjson.Get(response, "assume_role_external_id"); r.Exists() {
+	if r := gjson.Get(response, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
 		state.AssumeRoleExternalID = types.StringValue(r.String())
 	} else {
 		state.AssumeRoleExternalID = types.StringNull()
@@ -497,26 +639,37 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 	// (e.g. cloud_name="aws", aws_sts_regional_endpoints="legacy", aws_region="us-east-1")
 	// even when the user did not configure them. Guard with IsNull to prevent perpetual
 	// drift for users who never set these fields (same pattern as is_role_anywhere).
-	if !state.AWSRegion.IsNull() {
-		if r := gjson.Get(response, "aws_region"); r.Exists() {
-			state.AWSRegion = types.StringValue(r.String())
-		} else {
-			state.AWSRegion = types.StringNull()
-		}
+	// aws_region: UseStateWhenClearingString() handles the "clear" case at plan time.
+	// Read() unconditionally observes the live CM value so drift is always visible.
+	if r := gjson.Get(response, "aws_region"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		state.AWSRegion = types.StringValue(r.String())
+	} else {
+		state.AWSRegion = types.StringNull()
 	}
-	if !state.AWSSTSRegionalEndpoints.IsNull() {
-		if r := gjson.Get(response, "aws_sts_regional_endpoints"); r.Exists() {
-			state.AWSSTSRegionalEndpoints = types.StringValue(r.String())
-		} else {
+	// aws_sts_regional_endpoints: !IsNull() guard removed. Default-suppression prevents
+	// false drift for connections that never configured this field (CM always returns
+	// "legacy" as a server default). When state was previously configured (non-null),
+	// the live CM value is stored unconditionally so drift is visible.
+	if r := gjson.Get(response, "aws_sts_regional_endpoints"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		apiVal := r.String()
+		if apiVal == awsDefaultSTSEndpoints && state.AWSSTSRegionalEndpoints.IsNull() {
 			state.AWSSTSRegionalEndpoints = types.StringNull()
-		}
-	}
-	if !state.CloudName.IsNull() {
-		if r := gjson.Get(response, "cloud_name"); r.Exists() {
-			state.CloudName = types.StringValue(r.String())
 		} else {
-			state.CloudName = types.StringNull()
+			state.AWSSTSRegionalEndpoints = types.StringValue(apiVal)
 		}
+	} else {
+		state.AWSSTSRegionalEndpoints = types.StringNull()
+	}
+	// cloud_name: same default-suppression pattern. CM default is "aws".
+	if r := gjson.Get(response, "cloud_name"); r.Exists() && r.Type != gjson.Null && r.String() != "" {
+		apiVal := r.String()
+		if apiVal == awsDefaultCloudName && state.CloudName.IsNull() {
+			state.CloudName = types.StringNull()
+		} else {
+			state.CloudName = types.StringValue(apiVal)
+		}
+	} else {
+		state.CloudName = types.StringNull()
 	}
 
 	// is_role_anywhere: CM always returns this field (default false).
@@ -543,11 +696,13 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 			nested.Certificate = types.StringValue(gjson.Get(response, "iam_role_anywhere.certificate").String())
 			nested.ProfileARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.profile_arn").String())
 			nested.TrustAnchorARN = types.StringValue(gjson.Get(response, "iam_role_anywhere.trust_anchor_arn").String())
-			// private_key: write-only — absent from CM GET responses; preserve from prior state
+			// private_key is write-only — never stored in state, so there is nothing to
+			// hydrate or preserve here. nested.PrivateKey is always null.
+			nested.PrivateKey = types.StringNull()
+			// private_key_version is a plain stored attribute (not API-backed); this nested
+			// struct is rebuilt from scratch above, so carry it forward from prior state.
 			if state.IAMRoleAnywhere != nil {
-				nested.PrivateKey = state.IAMRoleAnywhere.PrivateKey
-			} else {
-				nested.PrivateKey = types.StringNull()
+				nested.PrivateKeyVersion = state.IAMRoleAnywhere.PrivateKeyVersion
 			}
 			state.IAMRoleAnywhere = &nested
 		} else {
@@ -604,7 +759,11 @@ func (r *resourceCCKMAWSConnection) Read(ctx context.Context, req resource.ReadR
 		}
 		state.Products = products
 	} else {
-		state.Products = nil
+		// If the user has explicitly configured products (state.Products is non-nil),
+		// preserve the configured state value (e.g., empty slice []) when the API returns null.
+		if state.Products == nil {
+			state.Products = nil
+		}
 	}
 
 	diags = resp.State.Set(ctx, state)
@@ -643,26 +802,33 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload.Description = common.TrimString(plan.Description.String())
+	if !plan.Description.IsNull() && !plan.Description.IsUnknown() {
+		payload.Description = plan.Description.ValueString()
 	}
-	if plan.AccessKeyID.ValueString() != "" && plan.AccessKeyID.ValueString() != types.StringNull().ValueString() {
-		payload.AccessKeyID = common.TrimString(plan.AccessKeyID.String())
+	if !plan.AccessKeyID.IsNull() && !plan.AccessKeyID.IsUnknown() {
+		payload.AccessKeyID = plan.AccessKeyID.ValueString()
 	}
-	if plan.AssumeRoleARN.ValueString() != "" && plan.AssumeRoleARN.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleARN = common.TrimString(plan.AssumeRoleARN.String())
+	if !plan.AssumeRoleARN.IsNull() && !plan.AssumeRoleARN.IsUnknown() {
+		payload.AssumeRoleARN = plan.AssumeRoleARN.ValueString()
 	}
-	if plan.AssumeRoleExternalID.ValueString() != "" && plan.AssumeRoleExternalID.ValueString() != types.StringNull().ValueString() {
-		payload.AssumeRoleExternalID = common.TrimString(plan.AssumeRoleExternalID.String())
+	if !plan.AssumeRoleExternalID.IsNull() && !plan.AssumeRoleExternalID.IsUnknown() {
+		payload.AssumeRoleExternalID = plan.AssumeRoleExternalID.ValueString()
 	}
-	if plan.AWSRegion.ValueString() != "" && plan.AWSRegion.ValueString() != types.StringNull().ValueString() {
-		payload.AWSRegion = common.TrimString(plan.AWSRegion.String())
+	if !plan.AWSRegion.IsNull() && !plan.AWSRegion.IsUnknown() {
+		payload.AWSRegion = plan.AWSRegion.ValueString()
 	}
-	if plan.AWSSTSRegionalEndpoints.ValueString() != "" && plan.AWSSTSRegionalEndpoints.ValueString() != types.StringNull().ValueString() {
-		payload.AWSSTSRegionalEndpoints = common.TrimString(plan.AWSSTSRegionalEndpoints.String())
+	// aws_sts_regional_endpoints: send explicit default when cleared so CM resets the field.
+	// CM treats omission and empty string as no-op; the explicit default is the only reset mechanism.
+	if !plan.AWSSTSRegionalEndpoints.IsNull() && !plan.AWSSTSRegionalEndpoints.IsUnknown() {
+		payload.AWSSTSRegionalEndpoints = plan.AWSSTSRegionalEndpoints.ValueString()
+	} else if plan.AWSSTSRegionalEndpoints.IsNull() {
+		payload.AWSSTSRegionalEndpoints = awsDefaultSTSEndpoints
 	}
-	if plan.CloudName.ValueString() != "" && plan.CloudName.ValueString() != types.StringNull().ValueString() {
-		payload.CloudName = common.TrimString(plan.CloudName.String())
+	// cloud_name: same pattern — send explicit default when cleared.
+	if !plan.CloudName.IsNull() && !plan.CloudName.IsUnknown() {
+		payload.CloudName = plan.CloudName.ValueString()
+	} else if plan.CloudName.IsNull() {
+		payload.CloudName = awsDefaultCloudName
 	}
 
 	var varIAMRoleAnywhere IAMRoleAnywhereJSON
@@ -679,8 +845,20 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 		if plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != "" && plan.IAMRoleAnywhere.TrustAnchorARN.ValueString() != types.StringNull().ValueString() {
 			varIAMRoleAnywhere.TrustAnchorARN = plan.IAMRoleAnywhere.TrustAnchorARN.ValueString()
 		}
-		if plan.IAMRoleAnywhere.PrivateKey.ValueString() != "" && plan.IAMRoleAnywhere.PrivateKey.ValueString() != types.StringNull().ValueString() {
-			varIAMRoleAnywhere.PrivateKey = plan.IAMRoleAnywhere.PrivateKey.ValueString()
+		// private_key is write-only (never stored in state), so its own value can never be
+		// diffed against a prior value — private_key_version is the explicit, state-tracked
+		// signal that the caller wants the current private_key value re-sent to CM.
+		var statePrivateKeyVersion, planPrivateKeyVersion types.Int64
+		if state.IAMRoleAnywhere != nil {
+			statePrivateKeyVersion = state.IAMRoleAnywhere.PrivateKeyVersion
+		}
+		if plan.IAMRoleAnywhere != nil {
+			planPrivateKeyVersion = plan.IAMRoleAnywhere.PrivateKeyVersion
+		}
+		if !planPrivateKeyVersion.Equal(statePrivateKeyVersion) && config.IAMRoleAnywhere != nil {
+			if v := config.IAMRoleAnywhere.PrivateKey.ValueString(); v != "" {
+				varIAMRoleAnywhere.PrivateKey = v
+			}
 		}
 		payload.IAMRoleAnywhere = &varIAMRoleAnywhere
 	}
@@ -708,7 +886,7 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	ApplyNullDeletes(metaPayload, state.Meta.Elements())
 	payload.Meta = metaPayload
 
-	var productsArr []string
+	productsArr := []string{}
 	for _, product := range plan.Products {
 		productsArr = append(productsArr, product.ValueString())
 	}
@@ -758,15 +936,63 @@ func (r *resourceCCKMAWSConnection) Update(ctx context.Context, req resource.Upd
 	plan.Service = types.StringValue(gjson.Get(readResponse, "service").String())
 	plan.Category = types.StringValue(gjson.Get(readResponse, "category").String())
 	plan.ResourceURL = types.StringValue(gjson.Get(readResponse, "resource_url").String())
-	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent
+	// Computed-only status fields — hydrate unconditionally; gjson returns zero value when absent.
+	// UseStateForUnknown() in schema ensures these remain stable in the plan.
 	plan.LastConnectionOK = types.BoolValue(gjson.Get(readResponse, "last_connection_ok").Bool())
 	plan.LastConnectionError = types.StringValue(gjson.Get(readResponse, "last_connection_error").String())
 	plan.LastConnectionAt = types.StringValue(gjson.Get(readResponse, "last_connection_at").String())
+	// aws_region: retain plan value — UseStateWhenClearingString() already handled clearing
+	// at plan time; the post-PATCH value reflects the user's intent (either new region or
+	// preserved old region). No CM read-back override needed.
+	// cloud_name: when plan was null (user cleared), we sent the default to CM. Set plan to
+	// null (matching config intent) rather than reading "aws" back from CM — avoids
+	// "Provider produced inconsistent result" since plan was null but CM returns "aws".
+	if plan.CloudName.IsNull() {
+		// already null — keep it; the default was sent to CM successfully
+	} else if r := gjson.Get(readResponse, "cloud_name"); r.Exists() && r.Type != gjson.Null {
+		plan.CloudName = types.StringValue(r.String())
+	}
+	// aws_sts_regional_endpoints: same pattern as cloud_name.
+	if plan.AWSSTSRegionalEndpoints.IsNull() {
+		// already null — keep it; the default was sent to CM successfully
+	} else if r := gjson.Get(readResponse, "aws_sts_regional_endpoints"); r.Exists() && r.Type != gjson.Null {
+		plan.AWSSTSRegionalEndpoints = types.StringValue(r.String())
+	}
+
+	if plan.Description.IsUnknown() {
+		if r := gjson.Get(readResponse, "description"); r.Exists() && r.Type != gjson.Null {
+			plan.Description = types.StringValue(r.String())
+		} else {
+			plan.Description = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleARN.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_arn"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleARN = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleARN = types.StringNull()
+		}
+	}
+
+	if plan.AssumeRoleExternalID.IsUnknown() {
+		if r := gjson.Get(readResponse, "assume_role_external_id"); r.Exists() && r.Type != gjson.Null {
+			plan.AssumeRoleExternalID = types.StringValue(r.String())
+		} else {
+			plan.AssumeRoleExternalID = types.StringNull()
+		}
+	}
+
 	// Optional fields retain plan values (user intent); Read() on next plan/refresh corrects API-side drift.
 
 	// secret_access_key is write-only — the framework nulls it from outgoing state/plan
 	// artifacts automatically, but null it explicitly too for clarity.
 	plan.SecretAccessKey = types.StringNull()
+
+	// iam_role_anywhere.private_key is write-only — same as above.
+	if plan.IAMRoleAnywhere != nil {
+		plan.IAMRoleAnywhere.PrivateKey = types.StringNull()
+	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Update][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
@@ -793,7 +1019,10 @@ func (r *resourceCCKMAWSConnection) Delete(ctx context.Context, req resource.Del
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_aws_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			// Resource already deleted out-of-band; treat as success.
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "AWS Connection", state.ID.ValueString()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

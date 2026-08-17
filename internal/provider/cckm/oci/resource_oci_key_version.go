@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -11,8 +12,10 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -28,7 +31,6 @@ var (
 	_ resource.Resource                = &resourceCCKMOCIVersion{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMOCIVersion{}
 	_ resource.ResourceWithImportState = &resourceCCKMOCIVersion{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMOCIVersion{}
 )
 
 func NewResourceCCKMOCIVersion() resource.Resource {
@@ -68,7 +70,14 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"cckm_key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager Key ID.",
+				Description: "(Immutable) CipherTrust Manager Key ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -76,7 +85,7 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Date/time the application was created",
+				Description: "Date/time the application was created.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -137,7 +146,7 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 					},
 					"version_id": schema.StringAttribute{
 						Computed:    true,
-						Description: "OCI version ID",
+						Description: "OCI version ID.",
 					},
 				},
 			},
@@ -148,7 +157,7 @@ func (r *resourceCCKMOCIVersion) Schema(_ context.Context, _ resource.SchemaRequ
 			"schedule_for_deletion_days": schema.Int64Attribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Updatable) Number of days to wait before permanently deleting the OCI key version " +
+				Description: "Number of days to wait before permanently deleting the OCI key version " +
 					"when this resource is destroyed. If omitted during resource creation, " +
 					"the value defaults to " + strconv.Itoa(scheduleForDeletionDays) + ". Once set, the last configured value is retained in state " +
 					"and is used during destroy unless changed explicitly.",
@@ -270,8 +279,9 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 	if readVersionState == keyStateScheduledForDeletion || readVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionReadFmt, "OCI", "key version", readVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 	setCommonKeyVersionState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -281,8 +291,8 @@ func (r *resourceCCKMOCIVersion) Read(ctx context.Context, req resource.ReadRequ
 }
 
 // Update checks the OCI key version state in CipherTrust Manager via
-// getOciKeyVersion and removes the resource from state if the version is
-// scheduled for deletion. The only schema attribute that can differ between plan and
+// getOciKeyVersion and returns an error if the version is in SCHEDULING_DELETION
+// or PENDING_DELETION state. The only schema attribute that can differ between plan and
 // state is schedule_for_deletion_days, which is stored locally and applied at destroy
 // time only; its updated value is preserved in state after the check.
 func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -312,8 +322,9 @@ func (r *resourceCCKMOCIVersion) Update(ctx context.Context, req resource.Update
 	if updateVersionState == keyStateScheduledForDeletion || updateVersionState == keyStatePendingDeletion {
 		msg := fmt.Sprintf(utils.PendingDeletionUpdateFmt, "OCI", "key version", updateVersionState, "OCI")
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID, "version_id": versionID})
-		r.client.Log.Warn(details)
-		resp.Diagnostics.AddWarning(details, "")
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddError(details, "")
+		return
 	}
 
 	var plan models.KeyVersionTFSDK
@@ -347,41 +358,6 @@ func (r *resourceCCKMOCIVersion) Delete(ctx context.Context, req resource.Delete
 	versionID := state.ID.ValueString()
 	days := state.ScheduleForDeletionDays.ValueInt64()
 	deleteKeyVersion(ctx, id, r.client, keyID, versionID, days, &resp.Diagnostics)
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceCCKMOCIVersion) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state models.KeyVersionTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.CCKMKeyID != state.CCKMKeyID {
-		changed = append(changed, "cckm_key_id")
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
-	}
 }
 
 // ImportState imports a native OCI key version using a composite import ID in the form

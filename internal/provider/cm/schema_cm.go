@@ -307,7 +307,7 @@ type CMKeyJSON struct {
 	Curveid                  string                   `json:"curveid,omitempty"`
 	DeactivationDate         string                   `json:"deactivationDate,omitempty"`
 	DefaultIV                string                   `json:"defaultIV,omitempty"`
-	Description              string                   `json:"description,omitempty"`
+	Description              *string                  `json:"description,omitempty"` // pointer: nil=omit, ptr("")=explicit clear
 	DestroyDate              string                   `json:"destroyDate,omitempty"`
 	EmptyMaterial            bool                     `json:"emptyMaterial,omitempty"`
 	Encoding                 string                   `json:"encoding,omitempty"`
@@ -328,8 +328,6 @@ type CMKeyJSON struct {
 	Password                 string                   `json:"password,omitempty"`
 	ProcessStartDate         string                   `json:"processStartDate,omitempty"`
 	ProtectStopDate          string                   `json:"protectStopDate,omitempty"`
-	RevocationReason         string                   `json:"revocationReason,omitempty"`
-	RevocationMessage        string                   `json:"revocationMessage,omitempty"`
 	RotationFrequencyDays    string                   `json:"rotationFrequencyDays,omitempty"`
 	SecretDataEncoding       string                   `json:"secretDataEncoding,omitempty"`
 	SecretDataLink           string                   `json:"secretDataLink,omitempty"`
@@ -339,7 +337,7 @@ type CMKeyJSON struct {
 	UnDeletable              *bool                    `json:"undeletable,omitempty"`
 	State                    string                   `json:"state,omitempty"`
 	TemplateID               string                   `json:"templateId,omitempty"`
-	UsageMask                int64                    `json:"usageMask,omitempty"`
+	UsageMask                *int64                   `json:"usageMask,omitempty"`
 	UUID                     string                   `json:"uuid,omitempty"`
 	WrapKeyIDType            string                   `json:"wrapKeyIDType,omitempty"`
 	WrapKeyName              string                   `json:"wrapKeyName,omitempty"`
@@ -356,6 +354,14 @@ type CMKeyJSON struct {
 	RSAAESWrap               *WrapRSAAESJSON          `json:"wrapRSAAES,omitempty"`
 	AllVersions              bool                     `json:"allVersions,omitempty"`
 	Labels                   map[string]interface{}   `json:"labels,omitempty"`
+}
+
+// CMKeyRevokeJSON is the request body for the dedicated key revoke endpoint
+// (POST /vault/keys2/{id}/revoke), which uses different field names than the
+// general key payload's revocationReason/revocationMessage.
+type CMKeyRevokeJSON struct {
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type CMRegTokensListTFSDK struct {
@@ -538,10 +544,11 @@ type CMInterfacTrustedCAsTFSDK struct {
 }
 
 type CMInterfacCertificateTFSDK struct {
-	CertChain types.String `tfsdk:"certificate_chain"`
-	Generate  types.Bool   `tfsdk:"generate"`
-	Format    types.String `tfsdk:"format"`
-	Password  types.String `tfsdk:"password"`
+	CertChain       types.String `tfsdk:"certificate_chain"`
+	Generate        types.Bool   `tfsdk:"generate"`
+	Format          types.String `tfsdk:"format"`
+	Password        types.String `tfsdk:"password"`
+	PasswordVersion types.Int64  `tfsdk:"password_version"`
 }
 
 type NamesParamsTFSDK struct {
@@ -586,6 +593,7 @@ type CMInterfaceTFSDK struct {
 	Name                    types.String                      `tfsdk:"name"`
 	NetworkInterface        types.String                      `tfsdk:"network_interface"`
 	RegToken                types.String                      `tfsdk:"registration_token"`
+	RegTokenVersion         types.Int64                       `tfsdk:"registration_token_version"`
 	TrustedCAs              *CMInterfacTrustedCAsTFSDK        `tfsdk:"trusted_cas"`
 	Certificate             *CMInterfacCertificateTFSDK       `tfsdk:"certificate"`
 	LocalAutogenAttributes  *CMInterfaceLocalAutogenAttrTFSDK `tfsdk:"local_auto_gen_attributes"`
@@ -639,7 +647,7 @@ type TLSCiphersJSON struct {
 // CMInterfaceJSON is the JSON payload for CM interface create/update API calls.
 // Meta, TrustedCAs, LocalAutogenAttributes, and Certificate are pointer types so that
 // encoding/json omitempty correctly suppresses them when nil — non-pointer structs are
-// never omitted by omitempty even when zero-valued (TFIN-429).
+// never omitted by omitempty even when zero-valued.
 type CMInterfaceJSON struct {
 	ID                      string                           `json:"id,omitempty"`
 	Port                    int64                            `json:"port"`
@@ -697,10 +705,11 @@ type CMLicenseJSON struct {
 }
 
 type CMNTPTFSDK struct {
-	ID      types.String `tfsdk:"id"`
-	Host    types.String `tfsdk:"host"`
-	Key     types.String `tfsdk:"key"`
-	KeyType types.String `tfsdk:"key_type"`
+	ID         types.String `tfsdk:"id"`
+	Host       types.String `tfsdk:"host"`
+	Key        types.String `tfsdk:"key"`
+	KeyVersion types.Int64  `tfsdk:"key_version"`
+	KeyType    types.String `tfsdk:"key_type"`
 }
 
 type CMNTPJSON struct {
@@ -1088,7 +1097,7 @@ type CMSyslogJSON struct {
 	Transport     string  `json:"transport"`
 	CACert        *string `json:"caCert,omitempty"`
 	MessageFormat *string `json:"messageFormat,omitempty"`
-	Port          int64   `json:"port,omitempty"`
+	Port          *int64  `json:"port,omitempty"` // pointer so nil omits the field; 514 sends explicit default
 	Account       string  `json:"account"`
 	CreatedAt     string  `json:"createdAt"`
 	UpdatedAt     string  `json:"updatedAt"`
@@ -1202,7 +1211,7 @@ type CMLogForwardersSyslogParamsJSON struct {
 }
 
 type CMLogForwardersSyslogJSON struct {
-	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"syslog_params"`
+	SyslogParams *CMLogForwardersSyslogParamsJSON `json:"forward_logs"`
 }
 
 type CMLogForwardersJSON struct {

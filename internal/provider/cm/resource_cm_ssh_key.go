@@ -299,9 +299,9 @@ func (r *resourceCMSSHKey) Read(ctx context.Context, req resource.ReadRequest, r
 	response, err := r.client.GetByIdBootstrap(ctx, id, state.ID.ValueString(), common.URL_SSH_KEY)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"SSH Key Not Found — State Preserved",
-				"The SSH Key resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "SSH Key"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "SSH Key", state.ID.ValueString()),
 			)
 			return
 		}

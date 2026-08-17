@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"strings"
 )
 
@@ -28,6 +27,8 @@ type dataSourceCTEClientGroupDesignatedPrimarySet struct {
 
 type CTEClientGroupDesignatedPrimarySetDataSourceModel struct {
 	ClientGroupName  types.String                                  `tfsdk:"client_group_name"`
+	Limit            types.Int64                                   `tfsdk:"limit"`
+	Skip             types.Int64                                   `tfsdk:"skip"`
 	ClientGroupDpSet []CTEClientGroupDesignatedPrimarySetListTFSDK `tfsdk:"client_group_dp_set"`
 }
 
@@ -41,6 +42,14 @@ func (d *dataSourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context,
 			"client_group_name": schema.StringAttribute{
 				Description: "Name of the client group",
 				Required:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of designated primary set entries to return. If unset, all entries are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of designated primary set entries to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"client_group_dp_set": schema.ListNestedAttribute{
 				Description: "List of client group dp sets",
@@ -106,22 +115,24 @@ func (d *dataSourceCTEClientGroupDesignatedPrimarySet) Schema(_ context.Context,
 
 func (d *dataSourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_clientgroupdpset.go -> Read][" + id + "]")
 	var state CTEClientGroupDesignatedPrimarySetDataSourceModel
 	req.Config.Get(ctx, &state)
-	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_CTE_CLIENT_GROUP+"/"+state.ClientGroupName.ValueString()+"/dps")
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(ctx, id, common.URL_CTE_CLIENT_GROUP+"/"+state.ClientGroupName.ValueString()+"/dps", skipVal, limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_clientgroupdpset.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE client group designated primary set entries", total, limitVal)
 	client_group_dps := []CTEClientGroupDesignatedPrimarySetListJSON{}
 	err = json.Unmarshal([]byte(jsonStr), &client_group_dps)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_clientgroupdpset.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy from CM",
 			err.Error(),
@@ -157,7 +168,7 @@ func (d *dataSourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context,
 		}
 		state.ClientGroupDpSet = append(state.ClientGroupDpSet, client_group_dp_set)
 	}
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_clientgroupdpset.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_clientgroupdpset.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {

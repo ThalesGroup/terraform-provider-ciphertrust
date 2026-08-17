@@ -1,23 +1,15 @@
-# List all AWS keys (up to default limit of 10)
-data "ciphertrust_aws_keys_list" "all_keys" {}
-
-# List AWS keys filtered by region
-data "ciphertrust_aws_keys_list" "keys_by_region" {
+# Sort keys by creation date, newest first.
+data "ciphertrust_aws_keys_list" "sorted" {
   filters = {
-    region = "ap-south-2"
+    sort = "-createdAt"
   }
 }
 
-# List AWS keys filtered by alias
-data "ciphertrust_aws_keys_list" "keys_by_alias" {
+# List enabled keys in a specific region, returning all matches.
+data "ciphertrust_aws_keys_list" "enabled_in_region" {
   filters = {
-    alias = "my-key"
-  }
-}
-
-# List all AWS keys (no limit)
-data "ciphertrust_aws_keys_list" "all_keys_no_limit" {
-  filters = {
-    limit = "-1"
+    region  = "us-east-1"
+    enabled = "true"
+    limit   = "-1"
   }
 }

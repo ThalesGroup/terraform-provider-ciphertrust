@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -42,8 +43,8 @@ resource "ciphertrust_domain" "test" {
 					},
 				),
 			},
-			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → RemoveResource.
-			// Terraform detects the resource is gone and plans a recreation.
+			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → AddError + state preserved (PR #476).
+			// Recovery requires: terraform state rm <resource> + terraform apply.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
@@ -53,8 +54,8 @@ resource "ciphertrust_domain" "test" {
 					delURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, delURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -91,8 +92,8 @@ resource "ciphertrust_policies" "test" {
 					},
 				),
 			},
-			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → RemoveResource.
-			// Terraform detects the resource is gone and plans a recreation.
+			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → AddError + state preserved (PR #476).
+			// Recovery requires: terraform state rm <resource> + terraform apply.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
@@ -102,8 +103,8 @@ resource "ciphertrust_policies" "test" {
 					endpoint := common.URL_CM_POLICIES + "/" + policyID
 					_, _ = client.DeleteByURL(context.Background(), policyID, endpoint)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -140,8 +141,8 @@ resource "ciphertrust_log_forwarder" "test" {
 					},
 				),
 			},
-			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → RemoveResource.
-			// Terraform detects the resource is gone and plans a recreation.
+			// Step 2: Delete out-of-band, then refresh. Read() gets 404 → AddError + state preserved (PR #476).
+			// Recovery requires: terraform state rm <resource> + terraform apply.
 			{
 				PreConfig: func() {
 					client, ok := createCMClient()
@@ -151,8 +152,8 @@ resource "ciphertrust_log_forwarder" "test" {
 					delURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_CM_LOG_FORWARDS, logForwarderID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", logForwarderID, delURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: false,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})

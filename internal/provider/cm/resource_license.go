@@ -57,10 +57,8 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"license": schema.StringAttribute{
 				Required:    true,
 				Sensitive:   true,
-				Description: "(Immutable) License String",
-				PlanModifiers: []planmodifier.String{
-					modifiers.ImmutableString(),
-				},
+				WriteOnly:   true,
+				Description: "(Immutable) License String. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). ciphertrust_license does not support updates — to change the license, destroy and recreate the resource.",
 			},
 			"bind_type": schema.StringAttribute{
 				Optional: true,
@@ -132,20 +130,22 @@ func (r *resourceCMLicense) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-// findLicenseIDByString retrieves all licenses and finds the ID of the license with the matching license string
-func (r *resourceCMLicense) findLicenseIDByString(ctx context.Context, id, licenseStr string) (string, error) {
+// getLicenseIDs retrieves the set of all current license IDs from CM.
+// Used to take a before/after snapshot so Create() can identify the newly
+// added license by set-difference — the POST response contains no ID, and
+// the GET list endpoint does not return the raw license string for matching.
+func (r *resourceCMLicense) getLicenseIDs(ctx context.Context, id string) (map[string]bool, error) {
 	response, err := r.client.GetAll(ctx, id, common.URL_LICENSE)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	licenses := gjson.Parse(response).Array()
-	for _, license := range licenses {
-		if license.Get("license").String() == licenseStr {
-			return license.Get("id").String(), nil
+	licenseIDs := make(map[string]bool)
+	for _, license := range gjson.Parse(response).Array() {
+		if licID := license.Get("id").String(); licID != "" {
+			licenseIDs[licID] = true
 		}
 	}
-	return "", nil
+	return licenseIDs, nil
 }
 
 // Create creates the resource and sets the initial Terraform state.
@@ -163,7 +163,18 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	payload.License = plan.License.ValueString()
+	// license is write-only: the framework nulls it out of PlannedState during
+	// PlanResourceChange, before Create() ever runs, so plan.License is always null
+	// here. req.Config is populated fresh from the HCL configuration on every RPC
+	// (not derived from the nullified plan), so it reliably carries the actual value.
+	var config CMLicenseTFSDK
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	payload.License = config.License.ValueString()
 	if plan.BindType.ValueString() != "" && plan.BindType.ValueString() != types.StringNull().ValueString() {
 		payload.BindType = plan.BindType.ValueString()
 	}
@@ -178,6 +189,22 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// Snapshot existing license IDs before POST. The CM POST /licenses endpoint
+	// returns HTTP 201 with an empty body — no resource ID is included. The GET
+	// list endpoint does not return the raw license string for matching. The only
+	// reliable way to identify the newly created license is set-difference: IDs
+	// present after POST but absent before POST is the new license.
+	existingIDs, err := r.getLicenseIDs(ctx, id)
+	if err != nil {
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
+		resp.Diagnostics.AddError(
+			"Error listing licenses before create: ",
+			"Could not list existing licenses, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	r.client.Log.Debug(fmt.Sprintf("[resource_license.go -> Create] Found %d existing licenses before POST", len(existingIDs)))
+
 	response, err := r.client.PostDataV2(ctx, id, common.URL_LICENSE, payloadJSON)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
@@ -188,15 +215,15 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// Check if the response contains an ID
+	// Check if the response contains an ID (unlikely per swagger, but handle defensively).
 	responseID := gjson.Get(response, "id").String()
 	if responseID != "" {
 		plan.ID = types.StringValue(responseID)
 	} else {
-		// ID not in response, determine it by finding matching license string
-		r.client.Log.Debug("[resource_license.go -> Create] ID not in response, determining by finding matching license string")
+		// POST returned no ID — use set-difference to find the newly added license.
+		r.client.Log.Debug("[resource_license.go -> Create] ID not in POST response; using set-difference to identify new license")
 
-		newLicenseID, err := r.findLicenseIDByString(ctx, id, plan.License.ValueString())
+		newIDs, err := r.getLicenseIDs(ctx, id)
 		if err != nil {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
 			resp.Diagnostics.AddError(
@@ -206,10 +233,18 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 
+		var newLicenseID string
+		for licID := range newIDs {
+			if !existingIDs[licID] {
+				newLicenseID = licID
+				break
+			}
+		}
+
 		if newLicenseID == "" {
 			resp.Diagnostics.AddError(
 				"Error determining license ID: ",
-				"Could not find the newly created license with the matching license string",
+				"Could not determine the ID of the newly created license",
 			)
 			return
 		}
@@ -217,7 +252,7 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 		r.client.Log.Debug("[resource_license.go -> Create] Determined new license ID: " + newLicenseID)
 		plan.ID = types.StringValue(newLicenseID)
 
-		// Fetch the license details to populate computed attributes
+		// Fetch the license details to populate computed attributes.
 		response, err = r.client.ReadDataByParam(ctx, id, newLicenseID, common.URL_LICENSE)
 		if err != nil {
 			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_license.go -> Create][" + id + "]")
@@ -247,6 +282,10 @@ func (r *resourceCMLicense) Create(ctx context.Context, req resource.CreateReque
 	}
 	// If plan.BindType already has a value from the user's config, keep it
 
+	// license is write-only — the framework nulls it from outgoing state/plan
+	// artifacts automatically, but null it explicitly too for clarity.
+	plan.License = types.StringNull()
+
 	r.client.Log.Debug("[resource_license.go -> Create Output][" + response + "]")
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Create][" + id + "]")
@@ -272,28 +311,12 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	// Capture write-only field before any mutation.
-	// CM GET /v1/licensing/licenses/{id} does not return the license string —
-	// confirmed absent from the Swagger Licenses definition (present only in
-	// PostLicense for the POST request body).
-	//
-	// Restoring the prior state value prevents ImmutableString() from seeing a
-	// spurious "" → <license> transition on every plan/refresh cycle after the
-	// initial create (TFIN-430 fix).
-	//
-	// During terraform destroy, Terraform computes the plan value for a Required
-	// attribute as the current state value (no config change is being applied).
-	// With state.License preserved as the real license string,
-	// req.StateValue == req.PlanValue in ImmutableString.PlanModifyString(), so
-	// no immutability error fires and destroy proceeds normally.
-	priorLicense := state.License
-
 	response, err := r.client.ReadDataByParam(ctx, id, state.ID.ValueString(), common.URL_LICENSE)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
-			resp.Diagnostics.AddWarning(
-				"License Not Found — State Preserved",
-				"The License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "CM License"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "CM License", state.ID.ValueString()),
 			)
 			return
 		}
@@ -307,10 +330,8 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	state.ID = types.StringValue(gjson.Get(response, "id").String())
 
-	// license is write-only: absent from the Swagger Licenses GET response schema.
-	// Restore the prior state value so ImmutableString() sees an unchanged value
-	// on every plan/refresh cycle after the initial create.
-	state.License = priorLicense
+	// license is write-only — never stored in state, so there is nothing to
+	// hydrate or preserve here. state.License is always null.
 
 	// Optional+Computed — only hydrate when user configured bind_type (state non-null).
 	// CM returns a non-empty default bind_type even when the user omitted it;
@@ -334,7 +355,7 @@ func (r *resourceCMLicense) Read(ctx context.Context, req resource.ReadRequest, 
 
 	// Note: `feature` is present in the Swagger Licenses definition but absent from
 	// CMLicenseTFSDK. CM-side changes to feature are invisible to drift detection.
-	// Pre-existing gap; out of scope for TFIN-430.
+	// Pre-existing gap; out of scope here.
 
 	// Set refreshed state.
 	diags = resp.State.Set(ctx, &state)
@@ -369,6 +390,10 @@ func (r *resourceCMLicense) Delete(ctx context.Context, req resource.DeleteReque
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_license.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "CM License", state.ID.ValueString()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError(

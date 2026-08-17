@@ -1,10 +1,12 @@
 package provider
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
@@ -143,6 +145,88 @@ resource "ciphertrust_scp_connection" "test" {
 `,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
+// Test_CM_SCPConnection_EmptyPathToRejected verifies that path_to = "" is rejected at plan
+// time, rather than being silently omitted from the PATCH body and producing a perpetual
+// diff — CM's merge-PATCH leaves an omitted/empty path_to unchanged server-side.
+func Test_CM_SCPConnection_EmptyPathToRejected(t *testing.T) {
+	RequireCM(t)
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_scp_connection" "test" {
+  name        = "tf-test-scp-pathto"
+  host        = "192.0.2.1"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDx"
+  username    = "testuser"
+  auth_method = "key"
+  path_to     = ""
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
+		},
+	})
+}
+
+// Test_CM_SCPConnection_LabelsClearRetained verifies that clearing labels to {} after they
+// were set retains the prior value (via modifiers.UseStateWhenClearingMap(), matching meta
+// on this same resource) instead of crashing with "Provider produced inconsistent result
+// after apply" — CM's merge-PATCH silently leaves an empty-object labels PATCH unchanged.
+func Test_CM_SCPConnection_LabelsClearRetained(t *testing.T) {
+	RequireCM(t)
+	name := "tf-test-scp-labels-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scp_connection" "test" {
+  name        = %q
+  host        = "192.0.2.1"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDx"
+  username    = "testuser"
+  auth_method = "key"
+  path_to     = "/tmp/"
+  labels = {
+    env = "test"
+  }
+}
+`, name),
+				Check: checkStep(t, "labels set",
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.test", "labels.env", "test"),
+				),
+			},
+			{
+				// Clear labels to {} — CM can't honour the clear; prior value retained.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scp_connection" "test" {
+  name        = %q
+  host        = "192.0.2.1"
+  public_key  = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQDx"
+  username    = "testuser"
+  auth_method = "key"
+  path_to     = "/tmp/"
+  labels      = {}
+}
+`, name),
+				Check: checkStep(t, "labels retained after clear attempt",
+					resource.TestCheckResourceAttr("ciphertrust_scp_connection.test", "labels.env", "test"),
+				),
+				// A genuine labels change (even one the modifier resolves) triggers a real
+				// Update() call; the immediate follow-up plan then shows description/meta/
+				// service/updated_at as "(known after apply)" — a separate, pre-existing
+				// instability in those Computed fields' plan modifiers under an active
+				// Update(), independent of this labels fix. Flagged for separate follow-up;
+				// not asserting a fully idempotent plan here.
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})
