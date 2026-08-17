@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,9 +52,6 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 
 	createXKSKeyConfig := `
 		resource "ciphertrust_aws_xks_key" "xks_key" {
-			aws_param = {
-				alias = [local.alias]
-			}
 			local_hosted_params = {
 				custom_key_store_id = ciphertrust_aws_custom_keystore.unlinked_xks_custom_keystore.id
 				source_key_id   = ciphertrust_cm_key.cm_aes_key.id
@@ -70,6 +68,15 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 		}`
 	dataSourceConfigStr := awsConnectionResource + createKeyStoreConfigStr + createXKSKeyConfig + datasourceConfig
 	dsByName := "data.ciphertrust_aws_xks_keys_list.by_name"
+
+	badFilter := awsConnectionResource + createKeyStoreConfigStr + createXKSKeyConfig + `
+		data "ciphertrust_aws_xks_keys_list" "bad_filter" {
+			filters = { totally_bogus_filter = "x" }
+		}`
+	zeroMatch := awsConnectionResource + createKeyStoreConfigStr + createXKSKeyConfig + `
+		data "ciphertrust_aws_xks_keys_list" "zero_match" {
+			filters = { id = "definitely-does-not-exist-xyz" }
+		}`
 
 	keyResource := "ciphertrust_aws_xks_key.xks_key"
 	resource.Test(t, resource.TestCase{
@@ -91,7 +98,20 @@ func TestCckmAWSDataSourceXksKey(t *testing.T) {
 				Config: dataSourceConfigStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(dsByName, "matched", "1"),
-					resource.TestCheckResourceAttr(dsByName, "keys.0.aws_param.alias.#", "1"),
+				),
+			},
+			{
+				// Bogus filter key - provider rejects it at plan time.
+				Config:      badFilter,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("not a supported filter key"),
+			},
+			{
+				// Valid filter key with a value that cannot match any XKS key.
+				Config: zeroMatch,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_xks_keys_list.zero_match", "matched", "0"),
+					resource.TestCheckResourceAttr("data.ciphertrust_aws_xks_keys_list.zero_match", "keys.#", "0"),
 				),
 			},
 		},

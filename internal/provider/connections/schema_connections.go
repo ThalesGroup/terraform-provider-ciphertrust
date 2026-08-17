@@ -5,11 +5,12 @@ import (
 )
 
 type IAMRoleAnywhereTFSDK struct {
-	AnywhereRoleARN types.String `tfsdk:"anywhere_role_arn"`
-	Certificate     types.String `tfsdk:"certificate"`
-	ProfileARN      types.String `tfsdk:"profile_arn"`
-	TrustAnchorARN  types.String `tfsdk:"trust_anchor_arn"`
-	PrivateKey      types.String `tfsdk:"private_key"`
+	AnywhereRoleARN   types.String `tfsdk:"anywhere_role_arn"`
+	Certificate       types.String `tfsdk:"certificate"`
+	ProfileARN        types.String `tfsdk:"profile_arn"`
+	TrustAnchorARN    types.String `tfsdk:"trust_anchor_arn"`
+	PrivateKey        types.String `tfsdk:"private_key"`
+	PrivateKeyVersion types.Int64  `tfsdk:"private_key_version"`
 }
 
 type AWSConnectionModelTFSDK struct {
@@ -138,6 +139,7 @@ type AzureConnectionTFSDK struct {
 	CertDuration             types.Int64  `tfsdk:"cert_duration"`
 	Certificate              types.String `tfsdk:"certificate"`
 	ClientSecret             types.String `tfsdk:"client_secret"`
+	ClientSecretVersion      types.Int64  `tfsdk:"client_secret_version"`
 	CloudName                types.String `tfsdk:"cloud_name"`
 	Description              types.String `tfsdk:"description"`
 	ExternalCertificateUsed  types.Bool   `tfsdk:"external_certificate_used"`

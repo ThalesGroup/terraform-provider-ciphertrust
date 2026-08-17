@@ -118,6 +118,7 @@ output "aws_connection_name" {
 for aws, default region will be "us-east-1" 
 for aws-us-gov, default region will be "us-gov-east-1" 
 for aws-cn, default region will be "cn-north-1"
+Note: once set, this field cannot be cleared back to unset via Terraform (the CM API provides no reset mechanism), but it can be updated to any valid region.
 - `aws_sts_regional_endpoints` (String) By default, AWS Security Token Service (AWS STS) is available as a global service, and all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints instead of the global endpoint to reduce latency, build in redundancy, and increase session token validity. valid values are: 
 legacy (default): Uses the global AWS STS endpoint, sts.amazonaws.com 
 regional: The SDK or tool always uses the AWS STS endpoint for the currently configured Region.
@@ -130,7 +131,7 @@ aws-cn
 - `is_role_anywhere` (Boolean) (Immutable) Set the parameter to true to create connections of type AWS IAM Anywhere with temporary credentials.
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
-- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. Any other value is rejected by CipherTrust Manager with a 422 error.
+- `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. Any other value is rejected by CipherTrust Manager with a 422 error. Note: once set, this field cannot be cleared back to unset via Terraform. The CM API silently ignores an empty products list on update; the prior value is preserved in state and a warning is emitted. To remove all products, destroy and recreate the resource.
 - `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.
 - `secret_access_key_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `secret_access_key` to CipherTrust Manager. Since `secret_access_key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `secret_access_key` value re-sent.
 
@@ -162,4 +163,5 @@ Required:
 
 Optional:
 
-- `private_key` (String, Sensitive) The private key associated with the certificate
+- `private_key` (String, Sensitive) The private key associated with the certificate. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key, change `private_key` and bump `private_key_version` in the same apply.
+- `private_key_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `private_key` to CipherTrust Manager. Since `private_key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `private_key` value re-sent.

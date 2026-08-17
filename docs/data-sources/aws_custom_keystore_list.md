@@ -3,33 +3,28 @@
 page_title: "ciphertrust_aws_custom_keystore_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of CipherTrust Manager AWS custom key stores.
-  Give a filter of 'limit=-1' to list all custom key stores that match the filter. Default is 10 matches.
+  Use this data source to retrieve a list of AWS custom key stores. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS custom key stores (such as name, region, or type). Set limit = "-1" to return all matching key stores.
 ---
 
 # ciphertrust_aws_custom_keystore_list (Data Source)
 
-Use this data source to retrieve a list of CipherTrust Manager AWS custom key stores.
-
-Give a filter of 'limit=-1' to list all custom key stores that match the filter. Default is 10 matches.
+Use this data source to retrieve a list of AWS custom key stores. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing AWS custom key stores (such as `name`, `region`, or `type`). Set `limit = "-1"` to return all matching key stores.
 
 ## Example Usage
 
 ```terraform
-# List all custom key stores (up to default limit of 10)
-data "ciphertrust_aws_custom_keystore_list" "all" {}
-
-# List custom key stores filtered by name
-data "ciphertrust_aws_custom_keystore_list" "by_name" {
+# Sort custom key stores alphabetically by name.
+data "ciphertrust_aws_custom_keystore_list" "sorted" {
   filters = {
-    name = "my-keystore"
+    sort = "name"
   }
 }
 
-# List all custom key stores (no limit)
-data "ciphertrust_aws_custom_keystore_list" "all_no_limit" {
+# List external key stores in a specific region.
+data "ciphertrust_aws_custom_keystore_list" "xks_in_region" {
   filters = {
-    limit = "-1"
+    region                = "us-east-1"
+    custom_key_store_type = "EXTERNAL_KEY_STORE"
   }
 }
 ```
@@ -39,12 +34,33 @@ data "ciphertrust_aws_custom_keystore_list" "all_no_limit" {
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing custom key stores.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS custom key stores.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter                  | type    | description |
+|-------------------------|---------|-------------|
+| skip                    | integer | Index of the first result to return (default: 0). |
+| limit                   | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort                    | string  | Fields to sort by. Valid sort fields are `name`, `updatedAt`, `createdAt`, `region`, `type`, `blocked`, `linked_state`, `source_key_tier`, and `health_check_key_id`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| id                      | string  | Filter by the internal ID of a custom key store. |
+| name                    | string  | Filter by custom key store name. |
+| kms                     | string  | Filter by KMS name. |
+| kms_id                  | string  | Filter by KMS ID. |
+| region                  | string  | Filter by AWS region. |
+| cloud_name              | string  | Filter by cloud name. |
+| type                    | string  | Filter by key store type (`LOCAL`, `REMOTE`, or `CloudHSM`). |
+| blocked                 | boolean | Filter by whether the key store is blocked (`true` or `false`). |
+| linked_state            | boolean | Filter by whether the key store is linked with AWS (`true` or `false`). |
+| xks_proxy_connectivity  | string  | Filter by XKS proxy connectivity type (`VPC_ENDPOINT_SERVICE` or `PUBLIC_ENDPOINT`). |
+| connection_state        | string  | Filter by connection state. |
+| source_key_tier         | string  | Filter by source key tier (`local` or `hsm-luna`). |
+| custom_key_store_type   | string  | Filter by custom key store type (`EXTERNAL_KEY_STORE` or `AWS_CLOUDHSM`). |
 
 ### Read-Only
 
-- `custom_key_stores` (Attributes List) (see [below for nested schema](#nestedatt--custom_key_stores))
-- `matched` (Number) The number of custom key stores which matched the filters.
+- `custom_key_stores` (Attributes List) List of AWS custom key stores matching the given filters. (see [below for nested schema](#nestedatt--custom_key_stores))
+- `matched` (Number) The total number of records matching the given filters.
 
 <a id="nestedatt--custom_key_stores"></a>
 ### Nested Schema for `custom_key_stores`

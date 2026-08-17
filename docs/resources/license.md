@@ -59,7 +59,7 @@ output "license_id" {
 
 ### Required
 
-- `license` (String, Sensitive) (Immutable) License String
+- `license` (String, Sensitive) (Immutable) License String. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). ciphertrust_license does not support updates — to change the license, destroy and recreate the resource.
 
 ### Optional
 

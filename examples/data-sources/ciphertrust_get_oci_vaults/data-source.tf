@@ -1,8 +1,6 @@
-data "ciphertrust_get_oci_vaults" "connection_vaults" {
-  # Required parameters
-  connection_id  = "oci-connection-id-or-name"
-  region         = "oci-region"
-  compartment_id = "compartment-ocid"
-  # Optional parameters
-  limit = 5
+# Retrieve OCI vaults in a compartment and region.
+data "ciphertrust_get_oci_vaults" "vaults" {
+  connection_id  = "oci-prod-connection"
+  compartment_id = "ocid1.compartment.oc1..example"
+  region         = "us-ashburn-1"
 }

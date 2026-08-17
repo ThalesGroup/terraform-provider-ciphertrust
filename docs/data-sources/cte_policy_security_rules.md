@@ -17,34 +17,34 @@ description: |-
 
 ### Required
 
-- `policy` (String)
+- `policy` (String) ID of the parent CTE Client Policy whose security rules are to be listed.
 
 ### Read-Only
 
-- `rules` (Attributes List) (see [below for nested schema](#nestedatt--rules))
+- `rules` (Attributes List) List of security rules configured on the policy. (see [below for nested schema](#nestedatt--rules))
 
 <a id="nestedatt--rules"></a>
 ### Nested Schema for `rules`
 
 Read-Only:
 
-- `account` (String)
-- `action` (String)
-- `application` (String)
-- `created_at` (String)
-- `dev_account` (String)
-- `effect` (String)
+- `account` (String) Account of the security rule.
+- `action` (String) Actions to apply the effect to, comma-separated combination of read, write, all_ops, key_op, sec_erase, mkdir, rmdir, rename and unlink.
+- `application` (String) Application associated with the security rule.
+- `created_at` (String) Date and time the security rule was created.
+- `dev_account` (String) Dev account of the security rule.
+- `effect` (String) Effect(s) of the security rule, comma-separated combination of permit, deny, audit and applykey.
 - `exclude_process_set` (Boolean) Process set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_resource_set` (Boolean) Resource set to exclude. Supported for Standard, LDT and IDT policies.
 - `exclude_user_set` (Boolean) User set to exclude. Supported for Standard, LDT and IDT policies.
-- `generation` (String)
+- `generation` (String) Generation of the security rule.
 - `id` (String) ID of the Security Rule within the parent CTE Client Policy
-- `order_number` (Number)
+- `order_number` (Number) Precedence order of the rule in the parent policy.
 - `partial_match` (Boolean) Whether to allow partial match operations. By default, it is enabled. Supported for Standard, LDT and IDT policies.
-- `policy_id` (String)
+- `policy_id` (String) ID of the parent CTE Client Policy.
 - `process_set_id` (String) ID of the process set to link to the policy.
-- `process_signed` (String)
+- `process_signed` (String) Whether the process is signed.
 - `resource_set_id` (String) ID of the resource set to link to the policy. Supported for Standard, LDT and IDT policies.
-- `updated_at` (String)
-- `uri` (String)
+- `updated_at` (String) Date and time the security rule was last updated.
+- `uri` (String) URI of the security rule.
 - `user_set_id` (String) ID of the user set to link to the policy.

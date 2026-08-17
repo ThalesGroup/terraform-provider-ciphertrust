@@ -3,23 +3,28 @@
 page_title: "ciphertrust_oci_vault_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of OCI vaults managed by CipherTrust Manager.
-  Give a filter of 'limit=-1' to list more than 10 matches.
+  Use this data source to retrieve a list of OCI vaults stored in CipherTrust Manager. Supply a filters map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI vaults (such as vault_name, vault_type, or tenancy). Set limit = "-1" to return all matching vaults.
 ---
 
 # ciphertrust_oci_vault_list (Data Source)
 
-Use this data source to retrieve a list of OCI vaults managed by CipherTrust Manager.
-
-Give a filter of 'limit=-1' to list more than 10 matches.
+Use this data source to retrieve a list of OCI vaults stored in CipherTrust Manager. Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters for listing OCI vaults (such as `vault_name`, `vault_type`, or `tenancy`). Set `limit = "-1"` to return all matching vaults.
 
 ## Example Usage
 
 ```terraform
-data "ciphertrust_oci_vault_list" "ciphertrust_vaults" {
-  # Optional parameters
+# Sort OCI vaults by display name.
+data "ciphertrust_oci_vault_list" "sorted" {
   filters = {
-    name = "vault-name"
+    sort = "display_name"
+  }
+}
+
+# List virtual private vaults in a specific region.
+data "ciphertrust_oci_vault_list" "vpv_in_region" {
+  filters = {
+    region     = "us-ashburn-1"
+    vault_type = "VIRTUAL_PRIVATE"
   }
 }
 ```
@@ -29,46 +34,70 @@ data "ciphertrust_oci_vault_list" "ciphertrust_vaults" {
 
 ### Optional
 
-- `filters` (Map of String) A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing CipherTrust Manager OCI vaults.
+- `filters` (Map of String) A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI vaults.
+
+> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. For example, use `"true"` rather than `true`, and `"-1"` rather than `-1`.
+
+| filter              | type    | description |
+|---------------------|---------|-------------|
+| skip                | integer | Index of the first result to return (default: 0). |
+| limit               | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| sort                | string  | Fields to sort by. Valid sort fields are `display_name`, `vault_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
+| id                  | string  | Filter by CipherTrust Manager internal ID. |
+| display_name        | string  | Filter by vault display name. |
+| vault_name          | string  | Filter by vault name. Valid for the `EXTERNAL` vault type only. |
+| linked_state        | boolean | Filter by whether the vault is in a linked state (`true` or `false`). |
+| issuer_id           | string  | Filter by issuer ID. |
+| state               | string  | Filter by state (for external vaults only). |
+| external_vault_type | string  | Filter by `EXTERNAL` vault type. |
+| cloud_name          | string  | Filter by cloud name. |
+| vault_id            | string  | Filter by vault OCID. |
+| vault_type          | string  | Filter by vault type. Valid values are `DEFAULT`, `EXTERNAL`, and `VIRTUAL_PRIVATE`. |
+| tenancy             | string  | Filter by OCI tenancy. |
+| compartment_name    | string  | Filter by compartment name. |
+| lifecycle_state     | string  | Filter by lifecycle state. |
+| region              | string  | Filter by region. |
+| source_key_tier     | string  | Filter by source key tier. Valid only for the `EXTERNAL` vault type. |
+| blocked             | boolean | Filter by whether the vault is blocked (`true` or `false`). |
 
 ### Read-Only
 
-- `matched` (Number) The number of vaults which matched the filters.
-- `vaults` (Attributes List) (see [below for nested schema](#nestedatt--vaults))
+- `matched` (Number) The total number of records matching the given filters.
+- `vaults` (Attributes List) The list of OCI vaults stored in CipherTrust Manager. (see [below for nested schema](#nestedatt--vaults))
 
 <a id="nestedatt--vaults"></a>
 ### Nested Schema for `vaults`
 
 Read-Only:
 
-- `account` (String) The account which owns this resource.
-- `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
+- `account` (String) The account that owns this resource.
+- `acls` (Attributes Set) ACLs associated with the vault. (see [below for nested schema](#nestedatt--vaults--acls))
 - `bucket_name` (String) Name of the OCI bucket.
 - `bucket_namespace` (String) Namespace of the OCI bucket.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_id` (String) The compartment's OCID.
-- `compartment_name` (String) Compartment name.
+- `compartment_name` (String) The compartment's name.
 - `connection_id` (String) The connection ID of this vault.
 - `connection_name` (String) The connection name of this vault.
 - `created_at` (String) Date/time the vault was created in CipherTrust Manager.
 - `defined_tags` (Attributes Set) The defined tags of the vault. (see [below for nested schema](#nestedatt--vaults--defined_tags))
 - `freeform_tags` (Map of String) The freeform tags of the vault.
 - `id` (String) The vault's CipherTrust Manager resource ID.
-- `is_primary` (Boolean) Whether the key belongs to a primary vault or a replica vault.
+- `is_primary` (Boolean) Whether the vault is a primary vault (as opposed to a replica vault).
 - `lifecycle_state` (String) The vault's current lifecycle state.
 - `management_endpoint` (String) The vault's management endpoint.
 - `name` (String) The vault's name.
 - `refreshed_at` (String) Date/time the vault was last refreshed.
 - `region` (String) The vault's region.
 - `replication_id` (String) The replication ID associated with a vault operation.
-- `restored_from_vault_id` (String) OCID of the vault this vault was restored from.
+- `restored_from_vault_id` (String) The OCID of the vault from which this vault was restored.
 - `tenancy` (String) The tenancy name.
 - `time_created` (String) The time the vault was created.
 - `updated_at` (String) Date/time the vault was last updated.
 - `uri` (String) CipherTrust Manager's unique identifier for the resource.
 - `vault_id` (String) The vault's OCID.
 - `vault_type` (String) The vault's type.
-- `wrappingkey_id` (String) Vault's wrapping key OCID.
+- `wrappingkey_id` (String) The vault's wrapping key OCID.
 
 <a id="nestedatt--vaults--acls"></a>
 ### Nested Schema for `vaults.acls`
@@ -85,5 +114,5 @@ Read-Only:
 
 Read-Only:
 
-- `tag` (String) A tag assigned to the vault.
-- `values` (Map of String) The key:value pairs to added to the tag.
+- `tag` (String) The tag's namespace.
+- `values` (Map of String) The key:value pairs associated with the tag.

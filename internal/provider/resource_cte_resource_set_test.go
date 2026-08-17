@@ -136,3 +136,107 @@ func TestCTEResourceSetResource_drift(t *testing.T) {
 		},
 	})
 }
+
+// TestCTEResourceSetResource_readNotFoundErrors verifies TFIN-623: deleting
+// the resource set out-of-band and refreshing must now fail loudly (hard
+// error) via the shared handleReadNotFound() helper, rather than the
+// previous AddWarning-only severity, while still keeping the resource in
+// Terraform state (handleReadNotFound never removes it on a 404).
+func TestCTEResourceSetResource_readNotFoundErrors(t *testing.T) {
+	name := "tf-resset-404-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteResourceSetConfig(name, "", false),
+				Check: checkStep(t, "resource_set 404: create",
+					cteCaptureID("ciphertrust_cte_resource_set.resource_set", &capturedID),
+				),
+			},
+			{
+				PreConfig: func() {
+					cteOutOfBandDelete(common.URL_CTE_RESOURCE_SET, capturedID)
+				},
+				Config:      cteResourceSetConfig(name, "", false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)CTE Resource Set .* not found`),
+			},
+		},
+	})
+}
+
+// TestCTEResourceSetResource_labelsClearing verifies that removing labels from config
+// actually clears them in CM and does not create a permanent plan loop (TFIN-506).
+func TestCTEResourceSetResource_labelsClearing(t *testing.T) {
+	name := "tf-resset-labels-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with labels
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  labels = {
+    env = "drift-test"
+  }
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				Check: checkStep(t, "resource_set labels: create with labels",
+					resource.TestCheckResourceAttr("ciphertrust_cte_resource_set.resource_set", "labels.env", "drift-test"),
+				),
+			},
+			// Remove labels from config
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				Check: checkStep(t, "resource_set labels: remove labels",
+					resource.TestCheckNoResourceAttr("ciphertrust_cte_resource_set.resource_set", "labels.env"),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-506)
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_resource_set" "resource_set" {
+  name = %q
+  type = "Directory"
+  resources = [
+    {
+      directory          = "/tmp"
+      file               = "*"
+      hdfs               = false
+      include_subfolders = false
+    }
+  ]
+}
+`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}

@@ -58,33 +58,33 @@ output "process_sets" {
 
 ### Read-Only
 
-- `process_sets` (Attributes List) (see [below for nested schema](#nestedatt--process_sets))
+- `process_sets` (Attributes List) List of process sets. (see [below for nested schema](#nestedatt--process_sets))
 
 <a id="nestedatt--process_sets"></a>
 ### Nested Schema for `process_sets`
 
 Optional:
 
-- `processes` (Attributes List) (see [below for nested schema](#nestedatt--process_sets--processes))
+- `processes` (Attributes List) List of processes belonging to the process set. (see [below for nested schema](#nestedatt--process_sets--processes))
 
 Read-Only:
 
-- `account` (String)
-- `created_at` (String)
-- `description` (String)
-- `id` (String)
-- `labels` (Map of String)
-- `name` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the process set.
+- `created_at` (String) Date and time the process set was created.
+- `description` (String) Description of the process set.
+- `id` (String) The unique identifier of the process set.
+- `labels` (Map of String) Labels applied to the process set.
+- `name` (String) Name of the process set.
+- `updated_at` (String) Date and time the process set was last updated.
+- `uri` (String) URI of the process set.
 
 <a id="nestedatt--process_sets--processes"></a>
 ### Nested Schema for `process_sets.processes`
 
 Optional:
 
-- `directory` (String)
-- `file` (String)
-- `index` (Number)
-- `resource_set_id` (String)
-- `signature` (String)
+- `directory` (String) Directory containing the process executable.
+- `file` (String) Name of the process executable file.
+- `index` (Number) Index of the process within the process set.
+- `resource_set_id` (String) ID of the resource set linked to the process.
+- `signature` (String) Signature associated with the process, used to identify the process.

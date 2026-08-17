@@ -5,20 +5,71 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 )
 
+const ociKeyVersionsFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, " +
+	"all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter     | type    | description |\n" +
+	"|------------|---------|-------------|\n" +
+	"| skip       | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit      | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort       | string  | Fields to sort by. Valid sort fields are `version_id`, `origin`, `key_id`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| version_id | string  | Filter by key version OCID. |\n" +
+	"| id         | string  | Filter by CipherTrust Manager internal ID. |\n" +
+	"| origin     | string  | Filter by OCI key version origin. |\n" +
+	"| is_primary | boolean | Filter by whether the key version belongs to a primary vault (`true` or `false`). |"
+
 var (
-	_ datasource.DataSource              = &dataSourceOCIVersions{}
-	_ datasource.DataSourceWithConfigure = &dataSourceOCIVersions{}
+	_ datasource.DataSource                     = &dataSourceOCIVersions{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceOCIVersions{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceOCIVersions{}
+
+	ociKeyVersionValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "version_id": {}, "id": {},
+		"origin": {}, "is_primary": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceOCIVersions) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{ociKeyVersionFilterValidator{}}
+}
+
+type ociKeyVersionFilterValidator struct{}
+
+func (v ociKeyVersionFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v ociKeyVersionFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v ociKeyVersionFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config KeyVersionsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := ociKeyVersionValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_oci_key_version_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceOCIVersions() datasource.DataSource {
 	return &dataSourceOCIVersions{}
@@ -56,29 +107,39 @@ func (d *dataSourceOCIVersions) Metadata(_ context.Context, req datasource.Metad
 
 func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of OCI key versions.\n\n" +
-			"Give a filter of 'limit=-1' to list more than 10 matches.",
+		Description: "Use this data source to retrieve a list of OCI key versions stored in CipherTrust Manager. " +
+			"Supply the `key_id` of the parent key and an optional `filters` map of key/value pairs matching " +
+			"the CipherTrust Manager API query parameters for listing OCI key versions " +
+			"(such as `version_id` or `origin`). " +
+			"Set `limit = \"-1\"` to return all matching key versions.",
 		Attributes: map[string]schema.Attribute{
 			"key_id": schema.StringAttribute{
 				Required:    true,
-				Description: "CipherTrust Manager key ID of the key to list versions of.",
+				Description: "CipherTrust Manager resource ID of the key whose versions to list.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing OCI key versions.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing OCI key versions." + ociKeyVersionsFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of key versions which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"versions": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "The list of OCI key versions stored in CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"account": schema.StringAttribute{
 							Computed:    true,
-							Description: "The account which owns this resource.",
+							Description: "The account that owns this resource.",
 						},
 						"created_at": schema.StringAttribute{
 							Computed:    true,
@@ -94,7 +155,7 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 						},
 						"refreshed_at": schema.StringAttribute{
 							Computed:    true,
-							Description: "Date/time the key was refreshed.",
+							Description: "Date/time the key version was refreshed.",
 						},
 						"source_key_id": schema.StringAttribute{
 							Computed:    true,
@@ -142,7 +203,7 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 								},
 								"public_key": schema.StringAttribute{
 									Computed:    true,
-									Description: "Version's public key.",
+									Description: "The key version's public key.",
 								},
 								"replication_id": schema.StringAttribute{
 									Computed:    true,
@@ -150,7 +211,7 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 								},
 								"restored_from_key_version_id": schema.StringAttribute{
 									Computed:    true,
-									Description: "Key version OCID from which this key version was restored.",
+									Description: "The OCID of the key version from which this key version was restored.",
 								},
 								"time_created": schema.StringAttribute{
 									Computed:    true,
@@ -166,13 +227,13 @@ func (d *dataSourceOCIVersions) Schema(_ context.Context, _ datasource.SchemaReq
 								},
 								"version_id": schema.StringAttribute{
 									Computed:    true,
-									Description: "Version OCID.",
+									Description: "The key version's OCID.",
 								},
 							},
 						},
 						"byok_key_version_params": schema.SingleNestedAttribute{
 							Computed:    true,
-							Description: "The attributes are related to BYOK key versions.",
+							Description: "Attributes for BYOK key versions.",
 							Attributes: map[string]schema.Attribute{
 								"oci_key_id": schema.StringAttribute{
 									Computed:    true,
@@ -241,6 +302,7 @@ func (d *dataSourceOCIVersions) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
+	state.KeyVersions = []models.DataSourceKeyVersionTFSDK{}
 	for _, version := range versions.Resources {
 
 		keyVersionTFSDK := models.DataSourceKeyVersionTFSDK{

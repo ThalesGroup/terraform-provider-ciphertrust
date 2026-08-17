@@ -13,13 +13,13 @@ import (
 )
 
 // getAwsKey fetches an AWS key from CipherTrust Manager by its CM resource UUID.
-// Returns (keyJSON, false) on success.
+// Returns the key JSON on success.
 // If the key is not found (404):
-//   - opLabel "deleting": warning added, ("", false) returned - resource will be removed from state.
-//   - any other opLabel: error added, ("", false) returned - state is preserved.
+//   - opLabel "deleting": warning added, "" returned - resource will be removed from state.
+//   - any other opLabel: error added, "" returned - state is preserved.
 //
-// A non-404 key error is always a hard error. ("", false) is returned.
-func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID string, keyID string, opLabel string, diags *diag.Diagnostics) (string, bool) {
+// A non-404 key error is always a hard error. "" is returned.
+func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID string, keyID string, opLabel string, diags *diag.Diagnostics) string {
 	keyJSON, err := client.GetById(ctx, id, keyID, common.URL_AWS_KEY)
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
@@ -55,15 +55,15 @@ func getAwsKey(ctx context.Context, id string, client *common.Client, kmsID stri
 				client.Log.Error(details)
 				diags.AddError(details, "")
 			}
-			return "", false
+			return ""
 		}
 		msg := "Error " + opLabel + " AWS key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")
-		return "", false
+		return ""
 	}
-	return keyJSON, false
+	return keyJSON
 }
 
 // findCMKeyIDByAWSKeyID looks up the CipherTrust Manager resource ID for an AWS key given its
@@ -97,7 +97,7 @@ func findCMKeyIDByAWSKeyID(ctx context.Context, id string, client *common.Client
 
 	total := gjson.Get(listJSON, "total").Int()
 	if total == 0 {
-		msg := "AWS key not found in CipherTrust Manager. Ensure the key has been registered in CM before managing its key material."
+		msg := "AWS key not found in CipherTrust Manager. Ensure the key has been registered in CipherTrust Manager before managing its key material."
 		details := utils.ApiError(msg, map[string]interface{}{"key_id": awsKeyID})
 		client.Log.Error(details)
 		diags.AddError(details, "")

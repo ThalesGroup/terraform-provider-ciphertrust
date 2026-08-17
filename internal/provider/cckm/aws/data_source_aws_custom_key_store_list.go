@@ -14,10 +14,71 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// awsCustomKeyStoreFiltersTable documents the supported query parameters for the filters map.
+// All values are supplied as strings in the Terraform filters map regardless of the
+// underlying API type shown below.
+const awsCustomKeyStoreFiltersTable = "\n\n> **Note:** Although some filters represent integers or booleans, all filter values must be specified as strings. " +
+	"For example, use `\"true\"` rather than `true`, and `\"-1\"` rather than `-1`.\n\n" +
+	"| filter                  | type    | description |\n" +
+	"|-------------------------|---------|-------------|\n" +
+	"| skip                    | integer | Index of the first result to return (default: 0). |\n" +
+	"| limit                   | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| sort                    | string  | Fields to sort by. Valid sort fields are `name`, `updatedAt`, `createdAt`, `region`, `type`, `blocked`, `linked_state`, `source_key_tier`, and `health_check_key_id`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
+	"| id                      | string  | Filter by the internal ID of a custom key store. |\n" +
+	"| name                    | string  | Filter by custom key store name. |\n" +
+	"| kms                     | string  | Filter by KMS name. |\n" +
+	"| kms_id                  | string  | Filter by KMS ID. |\n" +
+	"| region                  | string  | Filter by AWS region. |\n" +
+	"| cloud_name              | string  | Filter by cloud name. |\n" +
+	"| type                    | string  | Filter by key store type (`LOCAL`, `REMOTE`, or `CloudHSM`). |\n" +
+	"| blocked                 | boolean | Filter by whether the key store is blocked (`true` or `false`). |\n" +
+	"| linked_state            | boolean | Filter by whether the key store is linked with AWS (`true` or `false`). |\n" +
+	"| xks_proxy_connectivity  | string  | Filter by XKS proxy connectivity type (`VPC_ENDPOINT_SERVICE` or `PUBLIC_ENDPOINT`). |\n" +
+	"| connection_state        | string  | Filter by connection state. |\n" +
+	"| source_key_tier         | string  | Filter by source key tier (`local` or `hsm-luna`). |\n" +
+	"| custom_key_store_type   | string  | Filter by custom key store type (`EXTERNAL_KEY_STORE` or `AWS_CLOUDHSM`). |"
+
 var (
-	_ datasource.DataSource              = &dataSourceAWSCustomKeyStoreList{}
-	_ datasource.DataSourceWithConfigure = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSource                     = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceAWSCustomKeyStoreList{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceAWSCustomKeyStoreList{}
+
+	awsCustomKeyStoreValidFilterKeys = map[string]struct{}{
+		"skip": {}, "limit": {}, "sort": {}, "id": {}, "name": {},
+		"kms": {}, "kms_id": {}, "region": {}, "cloud_name": {}, "type": {},
+		"blocked": {}, "linked_state": {}, "xks_proxy_connectivity": {},
+		"connection_state": {}, "source_key_tier": {}, "custom_key_store_type": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceAWSCustomKeyStoreList) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{awsCustomKeyStoreFilterValidator{}}
+}
+
+type awsCustomKeyStoreFilterValidator struct{}
+
+func (v awsCustomKeyStoreFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v awsCustomKeyStoreFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v awsCustomKeyStoreFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config AWSCustomKeyStoreListDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := awsCustomKeyStoreValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_aws_custom_keystore_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceAWSCustomKeyStore() datasource.DataSource {
 	return &dataSourceAWSCustomKeyStoreList{}
@@ -48,20 +109,23 @@ func (d *dataSourceAWSCustomKeyStoreList) Metadata(_ context.Context, req dataso
 
 func (d *dataSourceAWSCustomKeyStoreList) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of CipherTrust Manager AWS custom key stores.\n\n" +
-			"Give a filter of 'limit=-1' to list all custom key stores that match the filter. Default is 10 matches.",
+		Description: "Use this data source to retrieve a list of AWS custom key stores. " +
+			"Supply a `filters` map of key/value pairs matching the CipherTrust Manager API query parameters " +
+			"for listing AWS custom key stores (such as `name`, `region`, or `type`). " +
+			"Set `limit = \"-1\"` to return all matching key stores.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "A list of key:value pairs where the 'key' is any of the filters available in CipherTrust Manager's API playground for listing custom key stores.",
+				Description: "A map of key/value pairs matching CipherTrust Manager API query parameters for listing AWS custom key stores." + awsCustomKeyStoreFiltersTable,
 			},
 			"matched": schema.Int64Attribute{
 				Computed:    true,
-				Description: "The number of custom key stores which matched the filters.",
+				Description: "The total number of records matching the given filters.",
 			},
 			"custom_key_stores": schema.ListNestedAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "List of AWS custom key stores matching the given filters.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{

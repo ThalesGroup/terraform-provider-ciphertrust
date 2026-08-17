@@ -56,10 +56,9 @@ func getOCIKeyVersionID(keyResourceName string, versionResourceName string) reso
 //   - Refresh and import (key and version).
 //   - Update lifecycle: disable/re-enable, freeform and defined tags, rename, scheduler
 //     add/change/remove.
-//   - OOB version deletion: RefreshState retains version as SCHEDULING_DELETION; Update
-//     (schedule_for_deletion_days) retains with warning.
-//   - OOB key deletion: RefreshState retains key as SCHEDULING_DELETION (drift reported);
-//     Update triggers "Provider produced inconsistent result".
+//   - OOB version deletion: RefreshState errors with SCHEDULING_DELETION; Update also errors.
+//   - OOB key deletion: RefreshState errors because Read returns an error for SCHEDULING_DELETION;
+//     Update also errors because the pre-apply refresh triggers the same Read error.
 func TestCckmOCIByokKey(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
@@ -284,7 +283,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create a valid key + versions; verify attributes and data sources.
-				Config: createResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    createResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					// Key resource
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
@@ -324,28 +324,33 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 2: ModifyPlan - source_key_id changed, expect plan-time immutability error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      modifyKeyConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				// Step 3: ModifyPlan - cckm_key_id changed on byok_v1, expect plan-time immutability error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 3") },
 				Config:      modifyVersionConfigStr,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Immutable attribute change detected"),
+				ExpectError: regexp.MustCompile("Attribute is immutable"),
 			},
 			{
 				// Step 4: re-apply createResourceStr to reset the framework's current config after
 				// the PlanOnly steps. This prevents the stale modifyVersionConfigStr from being
 				// used as the consistency plan config in the RefreshState step that follows.
-				Config: createResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 4") },
+				Config:    createResourceStr,
 			},
 			{
 				// Step 5: refresh state after create.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 5") },
 				RefreshState: true,
 			},
 			{
 				// Step 6: import the key resource.
+				PreConfig:               func() { logTestStep(t.Name(), "Step 6") },
 				ResourceName:            keyResource,
 				ImportState:             true,
 				ImportStateVerify:       true,
@@ -353,6 +358,7 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 7: import the key version resource.
+				PreConfig:         func() { logTestStep(t.Name(), "Step 7") },
 				ResourceName:      versionResource,
 				ImportState:       true,
 				ImportStateVerify: true,
@@ -367,7 +373,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			{
 				// Step 8: disable key + enable scheduler_1 rotation + update tags.
 				// schedule_for_deletion_days reduced to 7 for both key and version.
-				Config: updateResourceStr,
+				PreConfig: func() { logTestStep(t.Name(), "Step 8") },
+				Config:    updateResourceStr,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyName),
@@ -392,7 +399,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 9: re-enable key + switch rotation to scheduler_2 + update tags + rename.
-				Config: updateResourceStr2,
+				PreConfig: func() { logTestStep(t.Name(), "Step 9") },
+				Config:    updateResourceStr2,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
@@ -412,7 +420,8 @@ func TestCckmOCIByokKey(t *testing.T) {
 			{
 				// Step 10: remove schedulers, key rotation, and tags.
 				// Capture key and byok_v1 IDs for the OOB deletion steps that follow.
-				Config: updateResourceStr3,
+				PreConfig: func() { logTestStep(t.Name(), "Step 10") },
+				Config:    updateResourceStr3,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "name", keyNameUpdate),
@@ -445,74 +454,42 @@ func TestCckmOCIByokKey(t *testing.T) {
 			},
 			{
 				// Step 11: OOB version deletion - RefreshState: schedule byok_v1 for deletion out-of-band,
-				// then refresh state. Expected: byok_v1 retained with SCHEDULING_DELETION.
+				// then refresh state. Read must error for SCHEDULING_DELETION by design.
+				// Expected: refresh fails with the SCHEDULING_DELETION error.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 11")
 					scheduleOciKeyVersionDeletionOutOfBand(capturedByokKeyID, capturedByokV1ID)
 				},
 				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", versionResource)
-						}
-						if rs.Primary.ID != capturedByokV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedByokV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(versionResource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-					resource.TestCheckResourceAttr("ciphertrust_oci_byok_key_version.byok_v2", "oci_key_version_params.lifecycle_state", "ENABLED"),
-				),
+				ExpectError:  regexp.MustCompile(`OCI BYOK key version was found in SCHEDULING_DELETION state`),
 			},
 			{
-				// Step 12: OOB version deletion - Update: apply schedule_for_deletion_days = 10 on byok_v1.
-				// byok_v1 is already SCHEDULING_DELETION. Expected: warning issued, byok_v1 retained.
-				Config: updateResourceStr4,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[versionResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", versionResource)
-						}
-						if rs.Primary.ID != capturedByokV1ID {
-							return fmt.Errorf("expected v1 id %q, got %q", capturedByokV1ID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(versionResource, "oci_key_version_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				// Step 12: OOB version deletion - Update: attempt schedule_for_deletion_days = 10
+				// on byok_v1 which is already SCHEDULING_DELETION. The pre-apply refresh triggers
+				// Read which errors before Update can run.
+				// Expected: apply fails with the SCHEDULING_DELETION error.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 12") },
+				Config:      updateResourceStr4,
+				ExpectError: regexp.MustCompile(`OCI BYOK key version was found in SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 13: OOB key deletion - RefreshState: schedule the key itself for deletion out-of-band.
-				// OCI auto-disables the key, causing drift on enable_key - ExpectNonEmptyPlan captures this.
-				// Expected: key retained with lifecycle_state = SCHEDULING_DELETION.
+				// Read now returns an error for SCHEDULING_DELETION keys, so the refresh fails with
+				// the SCHEDULING_DELETION error rather than retaining the key in state.
 				PreConfig: func() {
+					logTestStep(t.Name(), "Step 13")
 					scheduleOciKeyDeletionOutOfBand(capturedByokKeyID)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
-				Check: resource.ComposeTestCheckFunc(
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources[keyResource]
-						if !ok {
-							return fmt.Errorf("resource not found: %s", keyResource)
-						}
-						if rs.Primary.ID != capturedByokKeyID {
-							return fmt.Errorf("expected key id %q, got %q", capturedByokKeyID, rs.Primary.ID)
-						}
-						return nil
-					},
-					resource.TestCheckResourceAttr(keyResource, "oci_key_params.lifecycle_state", "SCHEDULING_DELETION"),
-				),
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`SCHEDULING_DELETION state`),
 			},
 			{
 				// Step 14: OOB key deletion - Update: apply a name change on the SCHEDULING_DELETION key.
-				// OCI auto-disables the key, so enable_key in the post-apply read-back is false,
-				// but the plan used the schema default (true). The Terraform framework raises
-				// "Provider produced inconsistent result".
+				// The pre-apply refresh triggers Read which errors because the key is in
+				// SCHEDULING_DELETION state.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 14") },
 				Config:      updateResourceStr2,
-				ExpectError: regexp.MustCompile("Provider produced inconsistent result"),
+				ExpectError: regexp.MustCompile(`SCHEDULING_DELETION state`),
 			},
 		},
 	})
@@ -537,7 +514,6 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 		data "ciphertrust_get_oci_buckets" "buckets" {
 			connection_id  = ciphertrust_oci_connection.oci_connection.id
 			compartment_id = ciphertrust_oci_vault.vault.compartment_id
-			limit          = 1
 		}
 
 		resource "ciphertrust_oci_vault" "vp_vault" {
@@ -617,7 +593,8 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: create an HSM-protected BYOK key and a BYOK version on the VP vault.
-				Config: baseConfig + createConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 1") },
+				Config:    baseConfig + createConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "oci_key_params.protection_mode", "HSM"),
@@ -636,7 +613,8 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 2: set restore_from_backup_trigger to trigger a restore from backup.
 				// Verify the trigger attribute is reflected in state.
-				Config: baseConfig + restoreConfig,
+				PreConfig: func() { logTestStep(t.Name(), "Step 2") },
+				Config:    baseConfig + restoreConfig,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(keyResource, "id"),
 					resource.TestCheckResourceAttr(keyResource, "restore_from_backup_trigger", "1"),
@@ -646,6 +624,7 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 			{
 				// Step 3: refresh state to re-read version attributes from the API,
 				// then verify updated_at changed after the restore.
+				PreConfig:    func() { logTestStep(t.Name(), "Step 3") },
 				RefreshState: true,
 				Check: resource.ComposeTestCheckFunc(
 					func(s *terraform.State) error {
@@ -665,7 +644,7 @@ func TestCckmOCIByokKeyRestoreFromBackup(t *testing.T) {
 	})
 }
 
-func TestCckmOCIByokInvalidCreateConfigs(t *testing.T) {
+func TestCckmOCIByokKeyInvalidCreateConfigs(t *testing.T) {
 
 	connectionResource := initCckmOCITest(t)
 
@@ -747,15 +726,219 @@ func TestCckmOCIByokInvalidCreateConfigs(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Step 1: enable_key = false at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 1") },
 				Config:      disableAtCreateStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
 			},
 			{
 				// Step 2: enable_auto_rotation at create must be rejected at plan time.
+				PreConfig:   func() { logTestStep(t.Name(), "Step 2") },
 				Config:      schedulerAtCreateStr,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`Invalid create-time attribute`),
+			},
+		},
+	})
+}
+
+func TestCckmOCIByokKeyCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: name empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = ""
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: name whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "   "
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: source_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = ""
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: source_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "   "
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: vault empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = ""
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 6: vault whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "   "
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 7: oci_key_params.compartment_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = ""
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 8: oci_key_params.compartment_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "   "
+							protection_mode = "HSM"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 9: oci_key_params.protection_mode invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key" "test" {
+						name          = "valid-name"
+						source_key_id = "valid-source-key-id"
+						vault         = "valid-vault-id"
+						oci_key_params = {
+							compartment_id  = "valid-compartment-id"
+							protection_mode = "INVALID"
+						}
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}
+
+func TestCckmOCIByokKeyVersionCreateValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Step 1: cckm_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = ""
+						source_key_id = "valid-source-key-id"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 2: cckm_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "   "
+						source_key_id = "valid-source-key-id"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 3: source_key_id empty string
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "valid-key-id"
+						source_key_id = ""
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 4: source_key_id whitespace-only
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id   = "valid-key-id"
+						source_key_id = "   "
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("non-whitespace"),
+			},
+			// Step 5: source_key_tier invalid value
+			{
+				Config: `
+					resource "ciphertrust_oci_byok_key_version" "test" {
+						cckm_key_id     = "valid-key-id"
+						source_key_id   = "valid-source-key-id"
+						source_key_tier = "INVALID"
+					}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("value must be one of"),
 			},
 		},
 	})

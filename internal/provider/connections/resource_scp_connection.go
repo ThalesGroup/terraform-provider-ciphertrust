@@ -19,7 +19,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -131,6 +130,9 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 			"path_to": schema.StringAttribute{
 				Required:    true,
 				Description: "A path where the file to be copied via SCP/SFTP. Example '/home/ubuntu/datafolder/'",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"public_key": schema.StringAttribute{
 				Required:    true,
@@ -160,7 +162,7 @@ func (r *resourceCMScpConnection) Schema(_ context.Context, _ resource.SchemaReq
 				Computed:    true,
 				Description: labelsDescription,
 				PlanModifiers: []planmodifier.Map{
-					mapplanmodifier.UseStateForUnknown(),
+					modifiers.UseStateWhenClearingMap(),
 				},
 			},
 			"meta": schema.MapAttribute{
@@ -434,13 +436,9 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_SCP_CONNECTION)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"SCP Connection Not Found on CipherTrust Manager — State Preserved",
-				fmt.Sprintf("The managed SCP connection %q was not found during refresh.\n\n"+
-					"To prevent accidental data loss and key recreation, this connection has been kept in state.\n\n"+
-					"Please verify if this is a transient cluster issue. If the connection was permanently deleted, "+
-					"manually remove it from state: 'terraform state rm <resource-address>'",
-					state.ID.ValueString()),
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "SCP Connection"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "SCP Connection", state.ID.ValueString()),
 			)
 			return
 		}
@@ -615,6 +613,10 @@ func (r *resourceCMScpConnection) Delete(ctx context.Context, req resource.Delet
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
 			r.client.Log.Debug("SCP connection already deleted out-of-band on CM")
+			resp.Diagnostics.AddWarning(
+				common.NotFoundDeleteWarningSummary,
+				fmt.Sprintf(common.NotFoundDeleteWarningDetailFmt, "SCP Connection", state.ID.ValueString()),
+			)
 			return
 		}
 		r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")

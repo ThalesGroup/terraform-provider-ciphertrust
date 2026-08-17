@@ -114,7 +114,7 @@ output "cte_client_group_id" {
 ### Required
 
 - `cluster_type` (String) Cluster type of the ClientGroup, valid values are NON-CLUSTER and HDFS.
-- `name` (String) Name of the ClientGroup.
+- `name` (String) Name of the ClientGroup. Changing this value forces the client group to be destroyed and recreated.
 
 ### Optional
 

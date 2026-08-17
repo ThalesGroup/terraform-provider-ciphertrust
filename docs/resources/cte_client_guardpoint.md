@@ -101,7 +101,7 @@ Read-Only:
 
 Required:
 
-- `guard_point_type` (String) Type of the GuardPoint.
+- `guard_point_type` (String) Type of the GuardPoint. Changing this value forces the guard path to be destroyed and recreated, since guard_point_type is immutable once a GuardPoint is created.
 - `policy_id` (String) ID of the policy applied with this GuardPoint.
 
 Optional:

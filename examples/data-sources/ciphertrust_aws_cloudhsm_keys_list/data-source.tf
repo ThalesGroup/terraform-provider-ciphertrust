@@ -1,16 +1,14 @@
-# List all AWS CloudHSM keys (up to default limit of 10)
-data "ciphertrust_aws_cloudhsm_keys_list" "all_keys" {}
-
-# List AWS CloudHSM keys filtered by region
-data "ciphertrust_aws_cloudhsm_keys_list" "keys_by_region" {
+# Sort CloudHSM keys by creation date, newest first.
+data "ciphertrust_aws_cloudhsm_keys_list" "sorted" {
   filters = {
-    region = "ap-south-2"
+    sort = "-createdAt"
   }
 }
 
-# List all AWS CloudHSM keys (no limit)
-data "ciphertrust_aws_cloudhsm_keys_list" "all_keys_no_limit" {
+# List enabled CloudHSM keys in a specific region.
+data "ciphertrust_aws_cloudhsm_keys_list" "enabled_in_region" {
   filters = {
-    limit = "-1"
+    region  = "us-east-1"
+    enabled = "true"
   }
 }

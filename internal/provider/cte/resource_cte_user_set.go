@@ -13,12 +13,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -77,6 +77,9 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 			"name": schema.StringAttribute{
 				Description: "Name of the user set.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the user set.",
@@ -94,6 +97,18 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 			"users": schema.ListNestedAttribute{
 				Description: "List of users to be added to the user set.",
 				Optional:    true,
+				Default: listdefault.StaticValue(
+					types.ListValueMust(types.ObjectType{
+						AttrTypes: map[string]attr.Type{
+							"gid":       types.Int64Type,
+							"gname":     types.StringType,
+							"os_domain": types.StringType,
+							"uid":       types.Int64Type,
+							"uname":     types.StringType,
+						},
+					}, []attr.Value{}),
+				),
+				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"gid": schema.Int64Attribute{
@@ -128,7 +143,7 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 // Create creates the resource and sets the initial Terraform state.
 func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[resource_cm_user_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_START + "[resource_cm_user_set.go -> Create][" + id + "]")
 
 	// Retrieve values from plan
 	var plan CTEUserSetTFSDK
@@ -140,11 +155,11 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	payload["name"] = common.TrimString(plan.Name.String())
+	payload["name"] = common.TrimString(plan.Name.ValueString())
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload["description"] = common.TrimString(plan.Description.String())
+		payload["description"] = common.TrimString(plan.Description.ValueString())
 	}
-	var usersJSONArr []CTEUserJSON
+	usersJSONArr := []CTEUserJSON{}
 	for _, user := range plan.Users {
 		var userJSON CTEUserJSON
 
@@ -172,17 +187,21 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 	}
 	payload["users"] = usersJSONArr
 
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	if len(plan.Labels.Elements()) > 0 {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload["labels"] = labelsPayload
+	} else {
+		payload["labels"] = map[string]interface{}{}
 	}
-	payload["labels"] = labelsPayload
 
 	payloadJSON, _ := json.Marshal(payload)
 
 	response, err := r.client.PostDataV2(ctx, id, common.URL_CTE_USER_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_set.go -> Create]["+id+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_set.go -> Create][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Error creating CTE User Set on CipherTrust Manager: ",
 			"Could not create CTE User Set, unexpected error: "+err.Error(),
@@ -196,7 +215,7 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 	plan.DevAccount = types.StringValue(gjson.Get(response, "devAccount").String())
 	plan.Application = types.StringValue(gjson.Get(response, "application").String())
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_set.go -> Create]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user_set.go -> Create][" + id + "]")
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -209,11 +228,8 @@ func (r *resourceCTEUserSet) Read(ctx context.Context, req resource.ReadRequest,
 	var state CTEUserSetTFSDK
 	id := uuid.New().String()
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_START+
-			"[resource_cte_user_set.go -> Read]["+id+"]",
-	)
+	r.client.Log.Trace(common.MSG_METHOD_START +
+		"[resource_cte_user_set.go -> Read][" + id + "]")
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -221,9 +237,7 @@ func (r *resourceCTEUserSet) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), common.URL_CTE_USER_SET)
-
-	if response == "" {
-		resp.State.RemoveResource(ctx)
+	if handleReadNotFound(ctx, err, "CTE User Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
 
@@ -250,12 +264,9 @@ func (r *resourceCTEUserSet) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	tflog.Trace(
-		ctx,
-		common.MSG_METHOD_END+
-			"[resource_cte_user_set.go -> Read]["+id+"]",
-	)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_set.go -> Read]["+id+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END +
+		"[resource_cte_user_set.go -> Read][" + id + "]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user_set.go -> Read][" + id + "]")
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -280,9 +291,11 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
-		payload["description"] = common.TrimString(plan.Description.String())
+		payload["description"] = common.TrimString(plan.Description.ValueString())
+	} else {
+		payload["description"] = ""
 	}
-	var usersJSONArr []CTEUserJSON
+	usersJSONArr := []CTEUserJSON{}
 	for _, user := range plan.Users {
 		var userJSON CTEUserJSON
 
@@ -310,17 +323,21 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 	}
 	payload["users"] = usersJSONArr
 
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	if len(plan.Labels.Elements()) > 0 {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload["labels"] = labelsPayload
+	} else {
+		payload["labels"] = nil
 	}
-	payload["labels"] = labelsPayload
 
 	payloadJSON, _ := json.Marshal(payload)
 
 	response, err := r.client.UpdateDataV2(ctx, plan.ID.ValueString(), common.URL_CTE_USER_SET, payloadJSON)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [resource_cm_user_set.go -> Update]["+plan.ID.ValueString()+"]")
+		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cm_user_set.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(
 			"Error updating CTE User Set on CipherTrust Manager: ",
 			"Could not create CTE User Set, unexpected error: "+err.Error(),
@@ -352,8 +369,11 @@ func (r *resourceCTEUserSet) Delete(ctx context.Context, req resource.DeleteRequ
 	// Delete existing order
 	url := fmt.Sprintf("%s/%s/%s", r.client.CipherTrustURL, common.URL_CTE_USER_SET, state.ID.ValueString())
 	output, err := r.client.DeleteByID(ctx, "DELETE", state.ID.ValueString(), url, nil)
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[resource_cm_user_set.go -> Delete]["+state.ID.ValueString()+"]["+output+"]")
+	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_cm_user_set.go -> Delete][" + state.ID.ValueString() + "][" + output + "]")
 	if err != nil {
+		if handleDeleteNotFound(err, "CTE User Set "+state.ID.ValueString(), &resp.Diagnostics) {
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error Deleting CTE User Set",
 			"Could not delete CTE User Set, unexpected error: "+err.Error(),
@@ -413,7 +433,7 @@ func setCTEUserSetState(
 	state.Labels = labelsValue
 
 	// Users
-	var users []CTEUserTFSDK
+	users := []CTEUserTFSDK{}
 	for _, user := range apiResp.Users {
 		userObj := CTEUserTFSDK{
 			OSDomain: types.StringValue(user.OSDomain),
@@ -447,7 +467,7 @@ func setCTEUserSetState(
 
 func (r *resourceCTEUserSet) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
-	tflog.Debug(ctx, common.MSG_METHOD_START+"[resource_cte_user_set.go -> ImportState]["+id+"]")
-	defer tflog.Debug(ctx, common.MSG_METHOD_END+"[resource_cte_user_set.go -> ImportState]["+id+"]")
+	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_user_set.go -> ImportState][" + id + "]")
+	defer r.client.Log.Debug(common.MSG_METHOD_END + "[resource_cte_user_set.go -> ImportState][" + id + "]")
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

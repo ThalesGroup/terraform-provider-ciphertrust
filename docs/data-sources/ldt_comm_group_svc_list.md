@@ -17,24 +17,24 @@ description: |-
 
 ### Optional
 
-- `group_name` (String)
+- `group_name` (String) Name of the LDT communication group to filter by. If omitted, all LDT communication groups are returned.
 
 ### Read-Only
 
-- `ldt_comm_groups` (Attributes List) (see [below for nested schema](#nestedatt--ldt_comm_groups))
+- `ldt_comm_groups` (Attributes List) List of LDT (Live Data Transformation) communication groups matching the given filter. (see [below for nested schema](#nestedatt--ldt_comm_groups))
 
 <a id="nestedatt--ldt_comm_groups"></a>
 ### Nested Schema for `ldt_comm_groups`
 
 Read-Only:
 
-- `account` (String)
-- `application` (String)
-- `created_at` (String)
-- `description` (String)
-- `dev_account` (String)
-- `health_status` (String)
-- `id` (String)
-- `name` (String)
-- `updated_at` (String)
-- `uri` (String)
+- `account` (String) Account of the LDT communication group.
+- `application` (String) Application associated with the LDT communication group.
+- `created_at` (String) Date and time the LDT communication group was created.
+- `description` (String) Description of the LDT communication group.
+- `dev_account` (String) Dev account of the LDT communication group.
+- `health_status` (String) Health status of the LDT communication group.
+- `id` (String) The unique identifier of the LDT communication group.
+- `name` (String) Name of the LDT communication group.
+- `updated_at` (String) Date and time the LDT communication group was last updated.
+- `uri` (String) URI of the LDT communication group.

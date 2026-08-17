@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
@@ -11,6 +12,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/oci/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -28,7 +30,6 @@ var (
 	_ resource.Resource                = &resourceCCKMOCIVault{}
 	_ resource.ResourceWithConfigure   = &resourceCCKMOCIVault{}
 	_ resource.ResourceWithImportState = &resourceCCKMOCIVault{}
-	_ resource.ResourceWithModifyPlan  = &resourceCCKMOCIVault{}
 )
 
 func NewResourceCCKMOCIVault() resource.Resource {
@@ -90,12 +91,12 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"bucket_name": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
+				Description: "Name of the OCI bucket for creating key backups of HSM-protected keys for Virtual Private Vaults (VPVs). The bucket should be in the same region as the vault. You must have appropriate read/write permissions on this bucket. Note: If bucket_name is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 			"bucket_namespace": schema.StringAttribute{
 				Optional:    true,
 				Computed:    true,
-				Description: "(Updatable) Namespace of the OCI bucket, bucket_name. This parameter is **Required** if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
+				Description: "Namespace of the OCI bucket, bucket_name. This parameter is **Required** if bucket_name is specified. Note: If bucket_namespace is not specified, the keys cannot be backed up while syncing vaults.",
 			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
@@ -111,8 +112,13 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"connection_id": schema.StringAttribute{
 				Required:    true,
-				Description: "(Updatable) CipherTrust Manager OCI connection ID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Description: "CipherTrust Manager OCI connection ID.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
 			},
 			"connection_name": schema.StringAttribute{
 				Computed:    true,
@@ -124,17 +130,17 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"defined_tags": schema.SetNestedAttribute{
 				Computed:    true,
-				Description: "The defined tags of the vault. To remove all tags set defined_tags = [].",
+				Description: "The defined tags associated with the vault.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"tag": schema.StringAttribute{
 							Computed:    true,
-							Description: "A tag assigned to the vault.",
+							Description: "The OCI tag namespace.",
 						},
 						"values": schema.MapAttribute{
 							Computed:    true,
 							ElementType: types.StringType,
-							Description: "The key:value pairs added to the tag.",
+							Description: "The key:value pairs associated with the tag namespace.",
 						},
 					},
 				},
@@ -142,7 +148,7 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			"freeform_tags": schema.MapAttribute{
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Freeform tags for the key. Freeform tags are key:value pairs. To remove all tags set freeform_tags = {}.",
+				Description: "The freeform tags of the vault.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -171,8 +177,14 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 			},
 			"region": schema.StringAttribute{
 				Required:    true,
-				Description: "The vault's region.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Description: "(Immutable) The vault's region.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`\S`),
+						"must contain at least one non-whitespace character",
+					),
+				},
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"replication_id": schema.StringAttribute{
 				Computed:    true,
@@ -203,9 +215,9 @@ func (r *resourceCCKMOCIVault) Schema(_ context.Context, _ resource.SchemaReques
 				Description: "The vault's type.",
 			},
 			"vault_id": schema.StringAttribute{
-				Required:    true,
-				Description: "The vault's OCID.",
-				Validators:  []validator.String{stringvalidator.LengthAtLeast(1)},
+				Required:      true,
+				Description:   "(Immutable) The vault's OCID.",
+				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 			},
 			"wrappingkey_id": schema.StringAttribute{
 				Computed:    true,
@@ -453,59 +465,6 @@ func (r *resourceCCKMOCIVault) Delete(ctx context.Context, req resource.DeleteRe
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "vault_id": vaultID})
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
-	}
-}
-
-// ModifyPlan errors at plan time if any immutable attribute is changed on an existing resource,
-// preventing silent in-place updates to fields that cannot be modified after creation.
-func (r *resourceCCKMOCIVault) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip create and destroy operations.
-	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state models.VaultTFSDK
-
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	var changed []string
-
-	if plan.Region != state.Region {
-		changed = append(changed, "region")
-	}
-
-	if plan.VaultID != state.VaultID {
-		connID := state.ConnectionID.ValueString()
-		if connID != "" {
-			id := uuid.New().String()
-			_, err := r.client.GetById(ctx, id, connID, common.URL_OCI_CONNECTION)
-			if err != nil && strings.Contains(err.Error(), notFoundError) {
-				msg := "Previous OCI connection was not found, allowing vault_id update."
-				details := utils.ApiError(msg, map[string]interface{}{"connection_id": connID})
-				r.client.Log.Warn(details)
-				resp.Diagnostics.AddWarning(details, "")
-			} else {
-				changed = append(changed, "vault_id")
-			}
-		} else {
-			changed = append(changed, "vault_id")
-		}
-	}
-
-	if len(changed) > 0 {
-		resp.Diagnostics.AddError(
-			"Immutable attribute change detected",
-			fmt.Sprintf(
-				"The following attributes cannot be modified after creation: %s. "+
-					"Delete and recreate the resource to apply these changes.",
-				strings.Join(changed, ", "),
-			),
-		)
 	}
 }
 

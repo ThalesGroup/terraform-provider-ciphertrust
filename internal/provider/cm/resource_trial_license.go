@@ -248,9 +248,9 @@ func (r *resourceCMTrialLicense) Read(ctx context.Context, req resource.ReadRequ
 	err := r.readTrialLicenseFromAPI(ctx, state.ID.ValueString(), &state)
 	if err != nil {
 		if strings.Contains(err.Error(), "status: 404") {
-			resp.Diagnostics.AddWarning(
-				"Trial License Not Found — State Preserved",
-				"The Trial License resource was not found on CipherTrust Manager (HTTP 404). To prevent accidental data loss, this resource has been kept in state.",
+			resp.Diagnostics.AddError(
+				fmt.Sprintf(common.NotFoundReadErrorSummaryFmt, "Trial License"),
+				fmt.Sprintf(common.NotFoundReadErrorDetailFmt, "Trial License", state.ID.ValueString()),
 			)
 			return
 		}

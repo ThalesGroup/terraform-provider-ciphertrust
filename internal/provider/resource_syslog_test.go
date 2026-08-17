@@ -47,9 +47,10 @@ resource "ciphertrust_syslog" "syslog_1" {
 	})
 }
 
-// Test_CM_Syslog_ImmutableFields verifies that host and port are blocked at
-// plan time when changed, while transport is freely mutable.
-func Test_CM_Syslog_ImmutableFields(t *testing.T) {
+// Test_CM_Syslog_MutableFields verifies that host, port, and transport all
+// produce a non-empty in-place plan when changed (TFIN-523: ImmutableString/Int64
+// removed from host and port).
+func Test_CM_Syslog_MutableFields(t *testing.T) {
 	RequireCM(t)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -68,7 +69,7 @@ resource "ciphertrust_syslog" "test" {
 				),
 			},
 			{
-				// Changing host must be rejected at plan time by ImmutableString modifier
+				// Changing host must produce a non-empty in-place plan (no error, no replace)
 				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
     host      = "syslog2.example.com"
@@ -76,11 +77,11 @@ resource "ciphertrust_syslog" "test" {
     port      = 514
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 			{
-				// Restore original host, change port — must be rejected at plan time by ImmutableInt64 modifier
+				// Changing port must produce a non-empty in-place plan (no error, no replace)
 				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
     host      = "syslog1.example.com"
@@ -88,11 +89,11 @@ resource "ciphertrust_syslog" "test" {
     port      = 601
 }
 `,
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?i)immutable`),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 			{
-				// Restore original port, change transport — must produce a non-empty plan without error
+				// Changing transport must produce a non-empty in-place plan without error
 				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
     host      = "syslog1.example.com"
@@ -221,8 +222,8 @@ resource "ciphertrust_syslog" "test" {
 						t.Logf("OOB delete failed (may already be gone): %v", err)
 					}
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -433,4 +434,145 @@ resource "ciphertrust_syslog" %[1]q {
   host      = "example.syslog.com"
   transport = %[2]q
 }`, name, transport)
+}
+
+// Test_CM_Syslog_HostPortUpdateInPlace verifies that host and port can be changed
+// in-place after removing ImmutableString()/ImmutableInt64() (TFIN-523). Confirms
+// the resource ID is unchanged after the update (no destroy+recreate).
+func Test_CM_Syslog_HostPortUpdateInPlace(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-syslog-" + uuid.New().String()[:8]
+	var capturedID string
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host      = "syslog-a.example.com"
+  transport = "udp"
+  port      = 514
+}`, ) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-a.example.com"),
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "514"),
+					func(s *terraform.State) error {
+						capturedID = s.RootModule().Resources["ciphertrust_syslog.test"].Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host      = "syslog-b.example.com"
+  transport = "udp"
+  port      = 601
+}`, ) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "update host+port in place",
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-b.example.com"),
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "601"),
+					func(s *terraform.State) error {
+						newID := s.RootModule().Resources["ciphertrust_syslog.test"].Primary.ID
+						if newID != capturedID {
+							return fmt.Errorf("resource was recreated: old ID=%s new ID=%s", capturedID, newID)
+						}
+						return nil
+					},
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Syslog_MessageFormatUpdate verifies:
+//   - Explicitly changing message_format updates correctly on CM (TFIN-434)
+//   - Removing message_format from config leaves state unchanged (no drift)
+//     because UseStateForUnknown preserves the existing value.
+func Test_CM_Syslog_MessageFormatUpdate(t *testing.T) {
+	RequireCM(t)
+	name := "tftest-syslog-mf-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host           = "syslog.example.com"
+  transport      = "udp"
+  message_format = "cef"
+}`) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "set message_format=cef",
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "message_format", "cef"),
+				),
+			},
+			{
+				// Explicitly reset to rfc5424 — CM must accept and persist the change.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host           = "syslog.example.com"
+  transport      = "udp"
+  message_format = "rfc5424"
+}`) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "reset message_format to rfc5424",
+					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "message_format", "rfc5424"),
+				),
+			},
+			{
+				// Remove message_format from config — UseStateForUnknown preserves state value,
+				// so no update is triggered and the plan should be empty.
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host      = "syslog.example.com"
+  transport = "udp"
+}`) + fmt.Sprintf(" # %s", name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Syslog_CACertClearWarning verifies that removing ca_cert from config
+// preserves the existing certificate and emits a warning, since CM's update API
+// cannot clear ca_cert once set (TFIN-524).
+func Test_CM_Syslog_CACertClearWarning(t *testing.T) {
+	RequireCM(t)
+	caCert := os.Getenv("CM_TEST_SYSLOG_CA_CERT")
+	if caCert == "" {
+		t.Skip("CM_TEST_SYSLOG_CA_CERT not set — skipping ca_cert clear test")
+	}
+	name := "tftest-syslog-ca-" + uuid.New().String()[:8]
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + fmt.Sprintf(`
+variable "ca_cert" { sensitive = true }
+resource "ciphertrust_syslog" "test" {
+  host      = "syslog.example.com"
+  transport = "tls"
+  ca_cert   = var.ca_cert
+}`, ) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "set ca_cert",
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
+				),
+			},
+			{
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_syslog" "test" {
+  host      = "syslog.example.com"
+  transport = "tls"
+}`, ) + fmt.Sprintf(" # %s", name),
+				Check: checkStep(t, "remove ca_cert — value preserved (API cannot clear)",
+					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
 }

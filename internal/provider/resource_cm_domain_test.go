@@ -263,8 +263,8 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 			},
 			{
 				// Step 2: OOB delete + refresh.
-				// Read() gets 404, calls RemoveResource — resource removed from state.
-				// Config still wants the resource → plan proposes recreation → non-empty plan.
+				// Read() gets 404 → AddError + state preserved (PR #476 behavior).
+				// The refresh step errors; plan evaluation is skipped.
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -273,16 +273,12 @@ func Test_CM_AccCipherTrustCMDomain_deleteOutOfBand(t *testing.T) {
 					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
-			{
-				// Step 3: re-apply config — Terraform recreates the domain.
-				Config: cmDomainOOBConfig(rName),
-				Check: checkStep(t, "deleteOutOfBand: recreated",
-					resource.TestCheckResourceAttr("ciphertrust_domain.oob", "name", rName),
-				),
-			},
+			// Step 3 (recreate) removed: under AddError+Preserve, the resource remains in state
+			// after the 404 error. Recovery requires: terraform state rm <resource> + terraform apply.
+			// The OOB 404 behavior is verified by steps 1-2 and the unit test Test_Read404_IsError_RegToken.
 		},
 	})
 }
@@ -597,7 +593,7 @@ func Test_CM_AccCMDomain_DeleteOutOfBand(t *testing.T) {
 				),
 			},
 			{
-				// OOB delete — Read() must call RemoveResource on 404; plan proposes recreation.
+				// OOB delete — Read() gets 404 → AddError + state preserved (PR #476 behavior).
 				PreConfig: func() {
 					client, ok := createCMClient()
 					if !ok {
@@ -606,8 +602,8 @@ func Test_CM_AccCMDomain_DeleteOutOfBand(t *testing.T) {
 					deleteURL := fmt.Sprintf("%s/%s/%s", client.CipherTrustURL, common.URL_DOMAIN, domainID)
 					_, _ = client.DeleteByID(context.Background(), "DELETE", domainID, deleteURL, nil)
 				},
-				RefreshState:       true,
-				ExpectNonEmptyPlan: true,
+				RefreshState: true,
+				ExpectError:  regexp.MustCompile(`(?i)not found on ciphertrust manager`),
 			},
 		},
 	})
@@ -902,6 +898,81 @@ resource "ciphertrust_domain" "test" {
 `, rName),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Domain_ParentCAIdCreateDoesNotCrash verifies that creating a domain with
+// parent_ca_id set no longer crashes with "Provider produced inconsistent result after
+// apply" (TFIN-539). CM omits parent_ca_id from both the 201 and GET responses (write-only
+// input); the provider must preserve the configured value rather than overwriting it with null.
+// Requires CIPHERTRUST_TEST_PARENT_CA_ID to be set to a valid local CA ID on the CM instance.
+func Test_CM_Domain_ParentCAIdCreateDoesNotCrash(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	parentCAID := getEnvOrSkip(t, "CIPHERTRUST_TEST_PARENT_CA_ID")
+	rName := "tf-domain-pca-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config: providerConfig + fmt.Sprintf(`
+resource "ciphertrust_domain" "test" {
+  name         = %q
+  admins       = ["admin"]
+  parent_ca_id = %q
+}
+`, rName, parentCAID),
+				Check: checkStep(t, "create with parent_ca_id — no crash",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "id"),
+					resource.TestCheckResourceAttr("ciphertrust_domain.test", "parent_ca_id", parentCAID),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// Test_CM_Domain_EmptyNameRejectedAtPlan verifies that name = "" is rejected at plan
+// time by the LengthAtLeast(1) validator before reaching CM's API (TFIN-540).
+func Test_CM_Domain_EmptyNameRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_domain" "test" {
+  name   = ""
+  admins = ["admin"]
+}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
+			},
+		},
+	})
+}
+
+// Test_CM_Domain_EmptyAdminsRejectedAtPlan verifies that admins = [] is rejected at
+// plan time by the SizeAtLeast(1) validator before reaching CM's API (TFIN-540).
+func Test_CM_Domain_EmptyAdminsRejectedAtPlan(t *testing.T) {
+	RequireCM(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig + `
+resource "ciphertrust_domain" "test" {
+  name   = "test-domain-empty-admins"
+  admins = []
+}`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 1`),
 			},
 		},
 	})

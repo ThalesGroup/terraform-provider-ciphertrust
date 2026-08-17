@@ -35,11 +35,14 @@ data "ciphertrust_aws_iam_roles_list" "service_roles" {
 
 ### Optional
 
+- `marker` (String) Pagination marker from a previous response. Use this to retrieve the next page of results.
 - `max_items` (Number) Maximum number of IAM roles to return. If omitted, all roles are returned.
 - `path_prefix` (String) Path prefix for filtering IAM roles (e.g. /division_abc/).
 
 ### Read-Only
 
+- `is_truncated` (Boolean) Whether the results were truncated. If true, use next_marker to retrieve the next page.
+- `next_marker` (String) Marker to use in the next request to retrieve the next page of results.
 - `roles` (Attributes List) List of IAM roles. (see [below for nested schema](#nestedatt--roles))
 
 <a id="nestedatt--roles"></a>

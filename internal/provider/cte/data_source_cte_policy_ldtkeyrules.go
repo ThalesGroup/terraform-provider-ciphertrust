@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 var (
@@ -28,6 +27,8 @@ type dataSourceCTEPolicyLDTKeyRule struct {
 
 type CTEPolicyLDTKeyRuleDataSourceModel struct {
 	PolicyID types.String                    `tfsdk:"policy"`
+	Limit    types.Int64                     `tfsdk:"limit"`
+	Skip     types.Int64                     `tfsdk:"skip"`
 	Rules    []CTEPolicyLDTKeyRulesListTFSDK `tfsdk:"rules"`
 }
 
@@ -39,10 +40,20 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Schema(_ context.Context, _ datasource.S
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"policy": schema.StringAttribute{
-				Required: true,
+				Description: "ID of the parent CTE Client Policy whose LDT key rules are to be listed.",
+				Required:    true,
+			},
+			"limit": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Maximum number of LDT key rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).",
+			},
+			"skip": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Number of LDT key rules to skip before returning results, for pagination. Defaults to 0.",
 			},
 			"rules": schema.ListNestedAttribute{
-				Computed: true,
+				Description: "List of LDT (Live Data Transformation) key rules configured on the policy.",
+				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -90,28 +101,32 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Schema(_ context.Context, _ datasource.S
 
 func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	id := uuid.New().String()
-	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_START + "[data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 	var state CTEPolicyLDTKeyRuleDataSourceModel
 	req.Config.Get(ctx, &state)
 
-	jsonStr, err := d.client.GetAllPaged(
+	limitVal, skipVal := resolvePagedListParams(state.Limit, state.Skip)
+	jsonStr, total, err := d.client.GetAllPagedWithLimit(
 		ctx,
 		id,
-		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/ldtkeyrules")
+		common.URL_CTE_POLICY+"/"+state.PolicyID.ValueString()+"/ldtkeyrules",
+		skipVal,
+		limitVal)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy LDT Key Rules from CM",
 			err.Error(),
 		)
 		return
 	}
+	warnIfPagedResultLarge(&resp.Diagnostics, "CTE policy LDT key rules", total, limitVal)
 
 	rules := []CTEPolicyLDTKeyRulesJSON{}
 
 	err = json.Unmarshal([]byte(jsonStr), &rules)
 	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
 			"Unable to read CTE Policy LDT Key Rules from CM",
 			err.Error(),
@@ -134,7 +149,7 @@ func (d *dataSourceCTEPolicyLDTKeyRule) Read(ctx context.Context, req datasource
 		state.Rules = append(state.Rules, ldtKeyRule)
 	}
 
-	tflog.Trace(ctx, common.MSG_METHOD_END+"[data_source_cte_policy_ldtkeyrules.go -> Read]["+id+"]")
+	d.client.Log.Trace(common.MSG_METHOD_END + "[data_source_cte_policy_ldtkeyrules.go -> Read][" + id + "]")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
