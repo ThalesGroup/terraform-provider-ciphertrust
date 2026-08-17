@@ -117,7 +117,7 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 								},
 								"policy_id": schema.StringAttribute{
 									Required:    true,
-									Description: "(Immutable once a GuardPoint is created) ID of the policy applied with this GuardPoint. CM does not support changing it on an existing GuardPoint (confirmed via direct REST PATCH: returns 200 OK but silently leaves the value unchanged), so changing it for an EXISTING guard_path is blocked cleanly at plan time, with no destroy/recreate. Adding a brand-new guard_path with any policy_id does not force this check -- it is created in place by Update().",
+									Description: "(Immutable) ID of the policy applied with this GuardPoint.",
 									PlanModifiers: []planmodifier.String{
 										// TFIN-632: policy_id was originally Required with no
 										// PlanModifiers at all, so a change was planned as a normal
