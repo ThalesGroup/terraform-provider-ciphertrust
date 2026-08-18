@@ -1,3 +1,7 @@
+<a href="https://terraform.io">
+  <img src=".github/terraform_logo.svg" alt="Terraform logo" title="Terraform" align="right" height="50">
+</a>
+
 # Terraform Provider for CipherTrust Manager and CDSPaaS
 
 The CipherTrust provider configures a CipherTrust Manager (CM) instance or cluster, or a CipherTrust Data Security Platform as a Service (CDSPaaS) tenant, and manages cloud key resources protected by these platforms.
