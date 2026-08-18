@@ -80,7 +80,7 @@ output "resource_set_name" {
 
 ### Required
 
-- `name` (String) Name of the resource set.
+- `name` (String) (Immutable) Name of the resource set.
 
 ### Optional
 

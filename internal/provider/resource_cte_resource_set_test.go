@@ -88,7 +88,11 @@ func TestCTEResourceSetResource(t *testing.T) {
 	})
 }
 
-// TestCTEResourceSetResource_nameImmutable verifies a name change is rejected.
+// TestCTEResourceSetResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the resource set's id is referenced elsewhere
+// (via resource_set_id on ciphertrust_cte_policy security/key/data_tx rules)
+// and must not be reminted on rename (TFIN-504).
 func TestCTEResourceSetResource_nameImmutable(t *testing.T) {
 	name := "tf-resset-imm-" + uuid.New().String()[:8]
 
@@ -103,7 +107,8 @@ func TestCTEResourceSetResource_nameImmutable(t *testing.T) {
 			},
 			{
 				Config:      cteResourceSetConfig(name+"-renamed", "Original", false),
-				ExpectError: regexp.MustCompile(`(?i)cannot change resource set name|immutable`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
