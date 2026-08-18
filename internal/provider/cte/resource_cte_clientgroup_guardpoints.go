@@ -89,7 +89,7 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 							Attributes: map[string]schema.Attribute{
 								"guard_point_type": schema.StringAttribute{
 									Required:    true,
-									Description: "Type of the GuardPoint. guard_point_type is immutable once a GuardPoint is created: changing it for an EXISTING guard_path forces a whole-resource replace. Adding a brand-new guard_path with any guard_point_type does not force a replace -- it is created in place by Update().",
+									Description: "(Immutable) Type of the GuardPoint.",
 									Validators: []validator.String{
 										stringvalidator.OneOf([]string{
 											"directory_auto", "directory_manual",
@@ -99,20 +99,19 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 										}...),
 									},
 									PlanModifiers: []planmodifier.String{
-										// TFIN-634 (see resource_cte_client_guardpoints.go's
-										// guard_point_type): plain stringplanmodifier.RequiresReplace()
-										// cannot tell "a brand-new guard_path (map key) was added" apart
-										// from "an existing guard_path's type actually changed" -- both
-										// look like PlanValue != StateValue, since StateValue is null
-										// for a map key that never existed in prior state. That forced
-										// adding ANY new guard point to replace the whole resource,
-										// destroying every existing (unrelated, untouched) guard point
-										// too. RequiresReplaceUnlessNewMapEntry only requires replace
-										// for a genuine change to an EXISTING entry; a brand-new
-										// guard_path is created in place by Update() instead. This
-										// mirrors policy_id right below, which already uses the correct
-										// modifier for the same reason.
-										modifiers.RequiresReplaceUnlessNewMapEntry(),
+										// TFIN-521: guard_point_type carries the immutable-unless-
+										// new-map-entry modifier, not plain RequiresReplace() or
+										// RequiresReplaceUnlessNewMapEntry(): CM's PATCH returns
+										// 200 OK but silently leaves guard_point_type unchanged, so
+										// a destroy+recreate needlessly tears down and rebuilds the
+										// guardpoint (briefly unguarding the path) for a change CM
+										// never actually supports at all. ImmutableStringUnlessNewMapEntry
+										// hard-blocks the change at plan time instead (no destroy, no
+										// unguarding), while still allowing a brand-new guard_path to
+										// be created in place with any guard_point_type. Same class
+										// as TFIN-632 (policy_id on this same resource) and TFIN-642
+										// (policy_type on ciphertrust_cte_policy).
+										modifiers.ImmutableStringUnlessNewMapEntry(),
 									},
 								},
 								"policy_id": schema.StringAttribute{
