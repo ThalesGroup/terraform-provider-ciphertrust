@@ -265,10 +265,9 @@ Cloud key management (CCKM) resources are available for:
 
 - Amazon Web Services: KMS keys, BYOK, XKS and CloudHSM custom key stores, key policies, rotation.
 - Oracle Cloud Infrastructure: vaults, keys, BYOK keys and versions.
-
-Azure and Google Cloud are supported for **connection management only**
-(`ciphertrust_azure_connection`, `ciphertrust_gcp_connection`); this provider does not yet expose
-Azure or GCP key resources.
+- Azure and Google Cloud are supported for **connection management only**
+  (`ciphertrust_azure_connection`, `ciphertrust_gcp_connection`); this provider does not yet expose
+  Azure or GCP key resources.
 
 Keys for the above clouds can be sourced from CipherTrust Manager.
 
