@@ -28,7 +28,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.0-pre11"
     }
   }
 }
@@ -45,14 +45,18 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-# Define an OCI connection
+# Define an OCI connection. CipherTrust Manager validates 'region' and the
+# 'ocid1.<type>.<realm>..<unique-id>' shape of the OCID fields, even when the
+# credentials themselves are not real. Set skip_connection_params_test to
+# true to bypass the live credential connectivity test against OCI itself.
 resource "ciphertrust_oci_connection" "oci_connection" {
-  key_file            = "path-to-or-contents-of-oci-key-file"
-  name                = "connection-name"
-  pub_key_fingerprint = "public-key-fingerprint"
-  region              = "oci-region"
-  tenancy_ocid        = "tenancy-ocid"
-  user_ocid           = "user-ocid"
+  key_file                    = "path-to-or-contents-of-oci-key-file"
+  name                        = "connection-name"
+  pub_key_fingerprint         = "public-key-fingerprint"
+  region                      = "us-ashburn-1"
+  tenancy_ocid                = "ocid1.tenancy.oc1..aaaaaaaaexampletenancyocid"
+  user_ocid                   = "ocid1.user.oc1..aaaaaaaaexampleuserocid"
+  skip_connection_params_test = true
 }
 ```
 

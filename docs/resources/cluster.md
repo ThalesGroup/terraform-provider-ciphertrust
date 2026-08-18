@@ -23,7 +23,7 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/CipherTrust"
-      version = "1.0.0-pre3"
+      version = "1.0.0-pre11"
     }
   }
 }
@@ -125,8 +125,11 @@ resource "ciphertrust_cluster_node" "nodes" {
   member_host = "10.10.10.11"
   member_port = 5432
 
-  # Credentials for the new node
+  # Credentials for the new node. 'address' is the endpoint Terraform uses to
+  # connect to the joining node itself (can differ from 'host', which is what
+  # gets sent to CM as the node's address in cluster API payloads).
   credentials = {
+    address  = each.value.host
     username = "admin"
     password = each.value.password
   }

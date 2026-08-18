@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.0-pre11"
     }
   }
 }
@@ -42,7 +42,12 @@ provider "ciphertrust" {
   # Password for authenticating with the CipherTrust appliance
   password = "ChangeMe101!"
 
-  bootstrap = "yes"
+  # bootstrap = "yes" is only valid against a CipherTrust Manager appliance
+  # that has never been bootstrapped (fresh out-of-the-box). Against any
+  # already-configured/running instance, CM rejects it with "System is
+  # already bootstrapped" — use standard credentials-based mode instead
+  # (the default, "no"; shown here explicitly for clarity).
+  bootstrap = "no"
 }
 
 # Add a resource of type CM SSH Key with a sample key
