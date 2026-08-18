@@ -318,7 +318,7 @@ To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
