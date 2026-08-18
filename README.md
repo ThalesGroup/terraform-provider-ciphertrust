@@ -174,11 +174,12 @@ available there. Using them against a CDSPaaS tenant fails at plan time:
 <table>
 <thead><tr><th colspan="3">Resource</th></tr></thead>
 <tbody>
-<tr><td><code>ciphertrust_cluster</code></td><td><code>ciphertrust_cm_prometheus</code></td><td><code>ciphertrust_domain</code></td></tr>
-<tr><td><code>ciphertrust_hsm_root_of_trust_setup</code></td><td><code>ciphertrust_interface</code></td><td><code>ciphertrust_license</code></td></tr>
-<tr><td><code>ciphertrust_ntp</code></td><td><code>ciphertrust_password_policy</code></td><td><code>ciphertrust_policies</code></td></tr>
-<tr><td><code>ciphertrust_policy_attachments</code></td><td><code>ciphertrust_property</code></td><td><code>ciphertrust_proxy</code></td></tr>
-<tr><td><code>ciphertrust_scp_connection</code></td><td><code>ciphertrust_syslog</code></td><td><code>ciphertrust_trial_license</code></td></tr>
+<tr><td><code>ciphertrust_aws_key_material</code></td><td><code>ciphertrust_cluster</code></td><td><code>ciphertrust_cm_prometheus</code></td></tr>
+<tr><td><code>ciphertrust_domain</code></td><td><code>ciphertrust_hsm_root_of_trust_setup</code></td><td><code>ciphertrust_interface</code></td></tr>
+<tr><td><code>ciphertrust_interface_certificate_renewal</code></td><td><code>ciphertrust_license</code></td><td><code>ciphertrust_ntp</code></td></tr>
+<tr><td><code>ciphertrust_password_policy</code></td><td><code>ciphertrust_policies</code></td><td><code>ciphertrust_policy_attachments</code></td></tr>
+<tr><td><code>ciphertrust_property</code></td><td><code>ciphertrust_proxy</code></td><td><code>ciphertrust_scp_connection</code></td></tr>
+<tr><td><code>ciphertrust_syslog</code></td><td><code>ciphertrust_trial_license</code></td><td></td></tr>
 </tbody>
 </table>
 
