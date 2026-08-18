@@ -66,9 +66,11 @@ for details on launching an EC2 instance with the aws provider.
 
 ### Oracle Cloud Infrastructure
 
-Refer to the CipherTrust Manager online documentation to create a CipherTrust Manager instance in
-OCI. Consult the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
-for details on launching a Compute instance with the oci provider.
+1. Refer to the CipherTrust Manager online documentation to create a CipherTrust Manager instance
+   in OCI.
+
+2. Consult the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
+   for details on launching a Compute instance with the oci provider.
 
 ## Provider configuration
 
