@@ -3,12 +3,12 @@
 page_title: "ciphertrust_hsm_root_of_trust_setup Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (luna), Luna PCIe (lunapci), Luna T-Series (lunatct), ProtectServer HSM (protectserver), AWS CloudHSM (aws), DPoD (dpod), Entrust nShield Connect (nshield), and IBM HPCS (ibmhpcs). Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data. Only available on CipherTrust Manager — not supported on CDSPaaS.
+  Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (luna), Luna PCIe (lunapci), Luna T-Series (lunatct), ProtectServer HSM (protectserver), AWS CloudHSM (aws), DPoD (dpod), Entrust nShield Connect (nshield), and IBM HPCS (ibmhpcs). Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data. Destroy warning: terraform destroy on this resource always sends reset=true and delay=5 to the CM API, triggering a full appliance wipe regardless of the reset and delay values configured during creation. This reflects the current provider implementation; if the CM API later supports configurable teardown semantics, the provider behavior may be revised. Only available on CipherTrust Manager — not supported on CDSPaaS.
 ---
 
 # ciphertrust_hsm_root_of_trust_setup (Resource)
 
-Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (`luna`), Luna PCIe (`lunapci`), Luna T-Series (`lunatct`), ProtectServer HSM (`protectserver`), AWS CloudHSM (`aws`), DPoD (`dpod`), Entrust nShield Connect (`nshield`), and IBM HPCS (`ibmhpcs`). **Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data.** **Only available on CipherTrust Manager — not supported on CDSPaaS.**
+Performs the initial HSM root-of-trust setup for the CipherTrust Manager appliance. Supported HSM types: Luna Network HSM (`luna`), Luna PCIe (`lunapci`), Luna T-Series (`lunatct`), ProtectServer HSM (`protectserver`), AWS CloudHSM (`aws`), DPoD (`dpod`), Entrust nShield Connect (`nshield`), and IBM HPCS (`ibmhpcs`). **Warning: this operation resets the appliance and wipes all existing CipherTrust Manager data.** **Destroy warning: `terraform destroy` on this resource always sends `reset=true` and `delay=5` to the CM API, triggering a full appliance wipe regardless of the `reset` and `delay` values configured during creation. This reflects the current provider implementation; if the CM API later supports configurable teardown semantics, the provider behavior may be revised.** **Only available on CipherTrust Manager — not supported on CDSPaaS.**
 
 ## Example Usage
 
@@ -109,7 +109,7 @@ Luna Network/PCIe HSM (including TCT) example:
 
 ### Optional
 
-- `delay` (Number) (Immutable) Delay in seconds before reset, defaults to 5 seconds.
+- `delay` (Number) (Immutable) Delay in seconds before the post-setup reset, defaults to 5 seconds. Note: this attribute affects setup behavior only. Current provider behavior: `terraform destroy` always sends delay=5 regardless of this setting. If the CM API later supports configurable teardown semantics, the provider behavior may be revised.
 - `initial_config` (Map of String, Sensitive) (Immutable) A map of key-value pairs representing the initial configuration for the HSM setup. The expected content of this parameter depends on the specific HSM type used.
 
 For Luna Network HSM (including TCT) the required attributes are:
@@ -149,7 +149,7 @@ Luna Network HSM (including TCT) example:
     }
 
 Note: JSON does not allow line-breaks, it needs to be replaced with \n. Use "sed -z 's/\n/\\n/g' cert-file.pem" command to format the certificate.
-- `reset` (Boolean) (Immutable) If true CipherTrust Manager will perform a reset operation after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data.
+- `reset` (Boolean) (Immutable) If true, CipherTrust Manager performs a reset after the initial HSM setup. WARNING: destructive — wipes all CipherTrust Manager data. Note: this attribute affects setup behavior only. Current provider behavior: `terraform destroy` always sends reset=true regardless of this setting. If the CM API later supports configurable teardown semantics, the provider behavior may be revised.
 
 ### Read-Only
 

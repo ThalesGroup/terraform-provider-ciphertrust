@@ -72,7 +72,7 @@ output "reg_token_value" {
 
 ### Optional
 
-- `ca_id` (String) (Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.
+- `ca_id` (String) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.
 - `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. The value cannot be negative. If 0 is provided then the value will be ignored. It is not recommended to use this parameter. Please use the one supported in client profile.
 - `client_management_profile_id` (String) ID of the client management profile
 - `label` (Map of String) (Immutable) Map of key/value pairs sent verbatim to CipherTrust Manager as the token's label metadata. In practice, CM expects a single fixed key here depending on the client type being registered with this token: use key "KmipClientProfile" for KMIP client registration, or "ClientProfile" for ProtectApp (PA) client registration; the corresponding value is the name of the KMIP/ProtectApp client profile to associate with the token. The provider does not enforce or validate these key names — they are a CipherTrust Manager convention, not a schema constraint.

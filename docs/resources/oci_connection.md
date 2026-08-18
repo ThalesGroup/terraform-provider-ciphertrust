@@ -70,7 +70,7 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 
 ### Optional
 
-- `description` (String) Description about the connection. Once set, 'description' can be changed but not removed.
+- `description` (String) Description about the connection. Once set, this field cannot be cleared back to empty — CM does not support clearing it via PATCH. Removing this attribute from config preserves the existing value.
 - `key_file_pass_phrase` (String, Sensitive) Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.
 - `key_file_version` (Number) Arbitrary version number used to trigger re-sending `key_file`/`key_file_pass_phrase` to CipherTrust Manager. Since both are write-only, Terraform cannot detect a change in their values on its own; increment this on every apply where you want the current values re-sent.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
