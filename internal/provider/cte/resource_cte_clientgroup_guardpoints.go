@@ -117,18 +117,26 @@ func (r *resourceCTEClientGroupGP) Schema(_ context.Context, _ resource.SchemaRe
 								},
 								"policy_id": schema.StringAttribute{
 									Required:    true,
-									Description: "ID of the policy applied with this GuardPoint. policy_id is immutable once a GuardPoint is created: changing it for an EXISTING guard_path forces a whole-resource replace. Adding a brand-new guard_path with any policy_id does not force a replace -- it is created in place by Update().",
+									Description: "(Immutable) ID of the policy applied with this GuardPoint.",
 									PlanModifiers: []planmodifier.String{
-										// TFIN-632: policy_id was Required with no PlanModifiers at
-										// all, so a change was planned as a normal in-place update
-										// and only rejected at apply time by Update()'s manual
-										// AddError check. RequiresReplaceUnlessNewMapEntry (not plain
-										// RequiresReplace(), which would reintroduce TFIN-634's
-										// destructive-replace-on-add bug) surfaces the immutability
-										// at plan time via -/+ replace for a genuine change to an
-										// EXISTING entry, while a brand-new guard_path is still
-										// created in place.
-										modifiers.RequiresReplaceUnlessNewMapEntry(),
+										// TFIN-632: policy_id was originally Required with no
+										// PlanModifiers at all, so a change was planned as a normal
+										// in-place update and only rejected at apply time by
+										// Update()'s manual AddError check. A first fix used
+										// RequiresReplaceUnlessNewMapEntry(), surfacing the
+										// immutability at plan time via -/+ replace -- but PR review
+										// (2026-08-17 re-verification) correctly flagged that as still
+										// wrong: apply then succeeded via destroy+recreate, minting a
+										// new GuardPoint id even though CM itself never actually
+										// changed policy_id on the old one. Per the platform-wide
+										// convention for this kind of field (TFIN-461, TFIN-503),
+										// silently churning the id via an unrequested replace is worse
+										// than a clean plan-time block. ImmutableStringUnlessNewMapEntry
+										// hard-blocks the change at plan time instead (no destroy, no
+										// id churn), while still allowing a brand-new guard_path to be
+										// created in place with any policy_id, exactly like
+										// RequiresReplaceUnlessNewMapEntry did for that case.
+										modifiers.ImmutableStringUnlessNewMapEntry(),
 									},
 								},
 								"automount_enabled": schema.BoolAttribute{
