@@ -93,6 +93,12 @@ A few callouts for issues that come up occasionally:
   request/response log correlation, not once at struct-init.
 - **Adding a field to an existing schema:** update the plan/state model *and* the JSON model, and
   populate it in `Create`, `Read` and `Update`.
+- **Avoid `RequiresReplace()` for immutable fields:** CM resources are treated as critical
+  infrastructure, and `RequiresReplace()` destroys and recreates the resource on a changed value.
+  Prefer `modifiers.Immutable*()` (`ImmutableString`, `ImmutableInt64`, `ImmutableBool`, etc.), which
+  block the change with a plan-time error instead, so no destroy+recreate ever happens. Reserve
+  `RequiresReplace()` for genuine trigger/action attributes where replacement is the intended
+  mechanism (e.g. `ciphertrust_aws_key_rotation`, `ciphertrust_interface_certificate_renewal`).
 - **Focused unit tests:** one scenario per test function. Add new cases to the existing test file
   for that resource rather than creating a new file.
 - **Inline test configuration:** acceptance tests inline the Terraform config directly in the test
