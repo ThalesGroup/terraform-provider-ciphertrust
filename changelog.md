@@ -1,8 +1,6 @@
-# Unreleased
-
 # 1.0.1
 
-## Security: Secure-by-default TLS (breaking)
+## Security: Secure-by-default TLS
     TLS certificate verification is now ENABLED by default. The `no_ssl_verify`
     provider attribute now defaults to `false` (previously `true`); the HTTP
     client enforces a minimum TLS version of 1.2 and rejects TLS 1.0/1.1.
