@@ -38,7 +38,9 @@ resource "ciphertrust_cm_key" "example" {
 ### AWS
 
 To deploy a Virtual CipherTrust Manager from AWS, you must supply the Amazon Machine Image (AMI),
-available on the AWS Marketplace or through the Thales Cloud Provisioning System.
+available on the AWS Marketplace or through the Thales Cloud Provisioning System. Consult the
+[AWS provider documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+for details on launching an EC2 instance with the aws provider.
 
 ### Azure
 
@@ -64,7 +66,9 @@ available on the AWS Marketplace or through the Thales Cloud Provisioning System
 
 ### Oracle Cloud Infrastructure
 
-Refer to the CipherTrust Manager online documentation to create a CipherTrust Manager instance in OCI.
+Refer to the CipherTrust Manager online documentation to create a CipherTrust Manager instance in
+OCI. Consult the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
+for details on launching a Compute instance with the oci provider.
 
 ## Provider configuration
 
@@ -161,11 +165,13 @@ both produces a warning at plan time.
 The following resources manage infrastructure that CDSPaaS operates on your behalf and are not
 available there. Using them against a CDSPaaS tenant fails at plan time:
 
-`ciphertrust_cluster`, `ciphertrust_cm_prometheus`, `ciphertrust_domain`,
-`ciphertrust_hsm_root_of_trust_setup`, `ciphertrust_interface`, `ciphertrust_license`,
-`ciphertrust_ntp`, `ciphertrust_password_policy`, `ciphertrust_policies`,
-`ciphertrust_policy_attachments`, `ciphertrust_property`, `ciphertrust_proxy`,
-`ciphertrust_scp_connection`, `ciphertrust_syslog`, `ciphertrust_trial_license`.
+| | | |
+|:--|:--|:--|
+| `ciphertrust_cluster` | `ciphertrust_cm_prometheus` | `ciphertrust_domain` |
+| `ciphertrust_hsm_root_of_trust_setup` | `ciphertrust_interface` | `ciphertrust_license` |
+| `ciphertrust_ntp` | `ciphertrust_password_policy` | `ciphertrust_policies` |
+| `ciphertrust_policy_attachments` | `ciphertrust_property` | `ciphertrust_proxy` |
+| `ciphertrust_scp_connection` | `ciphertrust_syslog` | `ciphertrust_trial_license` |
 
 `ciphertrust_cm_ssh_key` requires bootstrap mode, which CDSPaaS does not expose, so it is
 unavailable as well.
@@ -255,11 +261,7 @@ The log file is created with mode `0600`, since `debug` level records API reques
 Cloud key management (CCKM) resources are available for:
 
 - Amazon Web Services: KMS keys, BYOK, XKS and CloudHSM custom key stores, key policies, rotation.
-  See the [AWS provider documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-  for managing the AWS side of these resources.
 - Oracle Cloud Infrastructure: vaults, keys, BYOK keys and versions.
-  See the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
-  for managing the OCI side of these resources.
 
 Azure and Google Cloud are supported for **connection management only**
 (`ciphertrust_azure_connection`, `ciphertrust_gcp_connection`); this provider does not yet expose
