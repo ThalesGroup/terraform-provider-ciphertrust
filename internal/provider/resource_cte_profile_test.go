@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteProfileConfig renders a ciphertrust_cte_profile. When updated is true the
@@ -114,17 +114,9 @@ func TestCTEProfileResource_nameImmutable(t *testing.T) {
 				),
 			},
 			{
-				Config: cteProfileConfig(name+"-renamed", false),
-        PlanOnly:    true,
+				Config:      cteProfileConfig(name+"-renamed", false),
+				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`(?i)immutable`),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "profile immutable: rename",
-					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
-				),
 			},
 		},
 	})
