@@ -11,8 +11,8 @@ credentials.
 
 ## Supported versions
 
-This provider does not currently maintain multiple parallel release lines. Only the most recently
-published release on the [Terraform Registry](https://registry.terraform.io/providers/ThalesGroup/CipherTrust/latest)
+This provider does not currently maintain multiple parallel release lines. Only the most recent
+state of the [`1.0.1` branch](https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/1.0.1)
 receives security fixes. Upgrade to the latest release before reporting a suspected vulnerability,
 in case it has already been fixed.
 
@@ -31,8 +31,7 @@ validate the issue before any details are made public.
 ## Disclosure policy
 
 We ask that you give us a reasonable opportunity to investigate and release a fix before any public
-disclosure of the vulnerability or its details. We will credit reporters who wish to be credited
-once a fix is released, unless you ask to remain anonymous.
+disclosure of the vulnerability or its details.
 
 ## Security-related configuration
 
