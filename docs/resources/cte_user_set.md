@@ -77,7 +77,7 @@ output "user_set_name" {
 
 ### Required
 
-- `name` (String) Name of the user set.
+- `name` (String) (Immutable) Name of the user set.
 
 ### Optional
 

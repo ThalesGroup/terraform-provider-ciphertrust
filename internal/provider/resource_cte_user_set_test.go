@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -92,8 +93,11 @@ func TestCTEUserSetResource(t *testing.T) {
 	})
 }
 
-// TestCTEUserSetResource_nameImmutable verifies that changing the name forces
-// a resource replacement (destroy + create) because name is immutable in CM.
+// TestCTEUserSetResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the user set's id is referenced elsewhere (via
+// user_set_id on ciphertrust_cte_policy security rules) and must not be
+// reminted on rename (TFIN-509).
 func TestCTEUserSetResource_nameImmutable(t *testing.T) {
 	name := "tf-userset-imm-" + uuid.New().String()[:8]
 
@@ -107,10 +111,9 @@ func TestCTEUserSetResource_nameImmutable(t *testing.T) {
 				),
 			},
 			{
-				Config: cteUserSetConfig(name+"-renamed", "Original", false),
-				Check: checkStep(t, "user_set immutable: replace",
-					resource.TestCheckResourceAttr("ciphertrust_cte_user_set.user_set", "name", name+"-renamed"),
-				),
+				Config:      cteUserSetConfig(name+"-renamed", "Original", false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
