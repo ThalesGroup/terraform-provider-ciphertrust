@@ -61,7 +61,7 @@ output "lgs_id" {
 
 ### Required
 
-- `name` (String) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Must start with an alphanumeric character and contain only alphanumeric, period (.), underscore (_), pipe (|), or hyphen (-) characters. Changing this value forces the LDT group communication service to be destroyed and recreated.
+- `name` (String) (Immutable) Name to uniquely identify the LDT group communication service. This name will be visible on the CipherTrust Manager. Must start with an alphanumeric character and contain only alphanumeric, period (.), underscore (_), pipe (|), or hyphen (-) characters.
 
 ### Optional
 
