@@ -1,3 +1,33 @@
+# Terraform Configuration for CipherTrust Provider
+
+# This configuration demonstrates the creation of CipherTrust scheduler
+# resources for the different supported scheduled job operations.
+
+terraform {
+  # Define the required providers for the configuration
+  required_providers {
+    # CipherTrust provider for managing CipherTrust resources
+    ciphertrust = {
+      # The source of the provider
+      source = "ThalesGroup/CipherTrust"
+      # Version of the provider to use
+      version = "1.0.1"
+    }
+  }
+}
+
+# Configure the CipherTrust provider for authentication
+provider "ciphertrust" {
+  # The address of the CipherTrust appliance (replace with the actual address)
+  address = "https://10.10.10.10"
+
+  # Username for authenticating with the CipherTrust appliance
+  username = "admin"
+
+  # Password for authenticating with the CipherTrust appliance
+  password = "ChangeMe101!"
+}
+
 # Define an SCP connection resource with CipherTrust
 resource "ciphertrust_scp_connection" "scp_connection" {
   name = "scp-connection"
@@ -31,7 +61,7 @@ resource "ciphertrust_scheduler" "scheduler" {
   run_at      = "*/15 * * * *"
 
   database_backup_params = {
-    backup_key  = "d370535b-a035-4251-9780-e608f713be77"
+    # backup_key defaults to CM's default backup key if omitted
     connection  = ciphertrust_scp_connection.scp_connection.id
     description = "sample description"
     do_scp      = true

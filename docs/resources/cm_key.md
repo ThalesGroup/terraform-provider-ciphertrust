@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -125,7 +125,7 @@ output "key_name" {
 - `curveid` (String) (Immutable) Cryptographic curve id for elliptic key. Key algorithm must be 'EC'.
 - `deactivation_date` (String) Date/time the object becomes inactive
 - `default_iv` (String) (Immutable) Deprecated. This field was introduced to support specific legacy integrations and applications. New applications are strongly recommended to use a unique IV for each encryption request. Refer to Crypto encrypt endpoint for more details. Must be a 16 byte hex encoded string (32 characters long). If specified, this will be set as the default IV for this key.
-- `description` (String) It store information about key. Once set, this field cannot be cleared back to empty by omitting it from config — CM does not honour empty-string PATCH requests for this field.
+- `description` (String) Information about the key. Can be cleared by removing from config — CM accepts an empty-string PATCH to clear this field.
 - `destroy_date` (String) Date/time the object was destroyed.
 - `empty_material` (Boolean) (Immutable) If set to true, the key material is not created and left empty.
 - `encoding` (String) (Immutable) Specifies the encoding used for the 'material' field.
@@ -145,7 +145,7 @@ When returning the key material, this parameter specifies the format of the retu
 - `mac_sign_key_identifier` (String) (Immutable) This parameter specifies the identifier of the key to be used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the MAC/signature(macSignBytes) of the key material(material). For verifying the MAC, the key has to be a HMAC key. For verifying the signature, the key has to be an RSA private or public key.
 - `mac_sign_key_identifier_type` (String) (Immutable) This parameter specifies the identifier of the key(macSignKeyIdentifier) used for generating MAC or signature of the key material. The wrappingMethod should be mac/sign to verify the mac/signature(macSignBytes) of the key material(material).
 - `material` (String, Sensitive) If set, the value will be imported as the key's material. If not set, new key material will be generated on the server (certificate objects must always specify the material). The format of this value depends on the algorithm. If the algorithm is 'aes', 'tdes', 'hmac-*', 'seed' or 'aria', the value should be the hex-encoded bytes of the key material. If the algorithm is 'rsa', and the format is 'pkcs12', it should be the base64 encoded PFX file. If the algorithm is 'rsa' or 'ec', and format is not 'pkcs12', the value should be a PEM-encoded private or public key using PKCS1 or PKCS8 format. For a X.509 DER encoded certificate, certType equals 'x509-der' and the material should equal the hex encoded certificate. The material for a X.509 PEM encoded certificate (certType = 'x509-pem') should equal the certificate itself. When placing the PEM encoded certificate inside a JSON object (as in the playground), be sure to change all new line characters in the certificate to the string '\n'. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). There is no supported way to change a key's material after creation — destroy and recreate the resource to import different material.
-- `meta` (Attributes) Optional end-user or service data stored with the key. Fields can be added or changed in place; a field already set cannot be cleared by omitting it (PATCH merges JSON objects — removing a field from config does NOT clear it on the server). On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id. (see [below for nested schema](#nestedatt--meta))
+- `meta` (Attributes) Optional end-user or service data stored with the key. Fields can be added or changed in place. Removing the whole meta block from config clears it. Removing a single sub-field while keeping meta present does NOT clear that sub-field (PATCH merges JSON objects, so an individual omitted key is left unchanged on the server). On CDSPaaS, non-admin users must supply owner_id; Restricted Key Users may only supply owner_id. (see [below for nested schema](#nestedatt--meta))
 - `muid` (String) Additional identifier of the key. This is optional and applicable for import key only. If set, the value is imported as the key's muid.
 - `name` (String) (Immutable) Optional friendly name, The key name should not contain special characters such as angular brackets (<,>) and backslash (\).
 - `object_type` (String) (Immutable) This specifies the type of object that is being created. Valid values are 'Symmetric Key', 'Public Key', 'Private Key', 'Secret Data', 'Opaque Object', or 'Certificate'. The object type is inferred for many objects, but must be supplied for the certificate object.

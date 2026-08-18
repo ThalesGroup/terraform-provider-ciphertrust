@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -46,8 +46,10 @@ provider "ciphertrust" {
 # Fetch the CA ID for the default CA "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
 data "ciphertrust_cm_local_ca_list" "groups_local_cas" {
   filters = {
-    # URL encoded CA's subject "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
-    subject = "%2FC%3DUS%2FST%3DTX%2FL%3DAustin%2FO%3DThales%2FCN%3DCipherTrust%20Root%20CA"
+    # The provider URL-encodes filter values itself before sending them to
+    # CipherTrust Manager, so this must be the raw subject string, not a
+    # pre-encoded one (a pre-encoded value here would be double-encoded).
+    subject = "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
   }
 }
 
@@ -61,9 +63,11 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
   ca_id = tolist(data.ciphertrust_cm_local_ca_list.groups_local_cas.cas)[0].id
 }
 
-# Output the created registration token
+# Output the created registration token. Marked sensitive because 'token' is
+# a sensitive field.
 output "reg_token_value" {
-  value = ciphertrust_cm_reg_token.reg_token.token
+  value     = ciphertrust_cm_reg_token.reg_token.token
+  sensitive = true
 }
 ```
 
@@ -72,7 +76,7 @@ output "reg_token_value" {
 
 ### Optional
 
-- `ca_id` (String) (Immutable) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process. Modifying this field triggers resource replacement.
+- `ca_id` (String) DEPRECATED: the field is deprecated. Use the ca_id in the client profile instead. ca_id is the ID of the trusted Certificate Authority that will be used to sign client certificate during registration process.
 - `cert_duration` (Number) Duration in days for which the CipherTrust Manager client certificate is valid. The value cannot be negative. If 0 is provided then the value will be ignored. It is not recommended to use this parameter. Please use the one supported in client profile.
 - `client_management_profile_id` (String) ID of the client management profile
 - `label` (Map of String) (Immutable) Map of key/value pairs sent verbatim to CipherTrust Manager as the token's label metadata. In practice, CM expects a single fixed key here depending on the client type being registered with this token: use key "KmipClientProfile" for KMIP client registration, or "ClientProfile" for ProtectApp (PA) client registration; the corresponding value is the name of the KMIP/ProtectApp client profile to associate with the token. The provider does not enforce or validate these key names — they are a CipherTrust Manager convention, not a schema constraint.
