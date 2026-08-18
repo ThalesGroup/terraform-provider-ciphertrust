@@ -95,7 +95,7 @@ output "profile_id" {
 
 ### Required
 
-- `name` (String) Name of the CTE profile. Changing this value forces the profile to be destroyed and recreated.
+- `name` (String) (Immutable) Name of the CTE profile.
 
 ### Optional
 
