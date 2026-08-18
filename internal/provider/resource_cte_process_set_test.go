@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteProcessSetConfig renders a ciphertrust_cte_process_set. When secondProcess
@@ -100,15 +100,9 @@ func TestCTEProcessSetResource_nameImmutable(t *testing.T) {
 				),
 			},
 			{
-				Config: cteProcessSetConfig(name+"-renamed", "Original", false),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "process_set requires replace: rename",
-					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
-				),
+				Config:      cteProcessSetConfig(name+"-renamed", "Original", false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
