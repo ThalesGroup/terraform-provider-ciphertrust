@@ -98,7 +98,7 @@ A few callouts for issues that come up occasionally:
   step rather than returning it from a separate function, except for large or heavily reused
   configurations. This keeps the config next to the assertions it's checked against.
 - **`make generate` and license headers:** `.copywrite.hcl` enforces HashiCorp SPDX headers, and
-  `make generate` can re-add them repo-wide (~400 files) along with unrelated documentation drift.
+  `make generate` can re-add them repo-wide along with unrelated documentation drift.
   Diff the output and prune anything unrelated to your change before committing.
 
 ## Documentation
