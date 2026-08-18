@@ -3,11 +3,13 @@
 #
 # Most resources behave the same as on-prem CipherTrust Manager. The
 # following are platform-managed in CDSPaaS and will fail at plan time:
+#   - ciphertrust_aws_key_material
 #   - ciphertrust_cluster
 #   - ciphertrust_cm_prometheus
 #   - ciphertrust_domain
 #   - ciphertrust_hsm_root_of_trust_setup
 #   - ciphertrust_interface
+#   - ciphertrust_interface_certificate_renewal
 #   - ciphertrust_license
 #   - ciphertrust_ntp
 #   - ciphertrust_password_policy
