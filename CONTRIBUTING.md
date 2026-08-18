@@ -2,6 +2,7 @@
 
 Thanks for your interest in contributing! We generally accept any change that adds or updates a
 Terraform resource or data source in line with the CipherTrust Manager (CM) and CDSPaaS REST APIs.
+
 For anything beyond a small fix, it's best to open an issue first to discuss the approach.
 
 ## Getting started
