@@ -283,12 +283,10 @@ invalid values, destroy will fail before the resource can be removed.
 - Run `terraform destroy` → validation fails
 - Must revert config to a valid value, then destroy will succeed
 
-**Workaround:** before destroying, ensure all attributes in your configuration have valid values,
-even if they differ from the actual resource state. This is common across Terraform providers that
-define attribute validators, so it is worth keeping in mind generally. Note that
-`terraform destroy -refresh=false` does not help here: attribute validators run against your
-configuration during the validate/plan phase regardless of the `-refresh` flag, since they check
-the values you wrote, not the refreshed remote state.
+**Workaround:** run `terraform destroy -refresh=false`, or ensure all attributes in your
+configuration have valid values before destroying, even if they differ from the actual resource
+state. This is common across Terraform providers that define attribute validators, so it is worth
+keeping in mind generally.
 
 ## Developing the provider
 
