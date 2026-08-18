@@ -1,8 +1,6 @@
 # Terraform Provider for Thales CipherTrust
 
-The CipherTrust provider configures a CipherTrust Manager (CM) instance or cluster, or a
-CipherTrust Data Security Platform as a Service (CDSPaaS) tenant, and manages the cloud key
-resources those platforms protect.
+The CipherTrust provider configures a CipherTrust Manager (CM) instance or cluster, or a CipherTrust Data Security Platform as a Service (CDSPaaS) tenant, and manages cloud key resources protected by these platforms.
 
 - **Registry documentation:** https://registry.terraform.io/providers/ThalesGroup/CipherTrust/latest/docs
 - **Resource and data source reference:** [`docs/`](docs/) — [resources](docs/resources/), [data sources](docs/data-sources/)
@@ -13,7 +11,6 @@ resources those platforms protect.
 
 | | |
 |:--|:--|
-| Terraform | >= 1.0 (provider protocol 6.0) |
 | Go | 1.25.8 (only to build from source) |
 
 ## Using the provider
@@ -166,8 +163,8 @@ provider "ciphertrust" {
 the CDSPaaS path derives `auth_domain_path` from `tenant`, which supersedes it. Configuring both
 produces a warning at plan time.
 
-Some resources manage infrastructure that CDSPaaS operates on your behalf and are unavailable there.
-Using them against a CDSPaaS tenant fails at plan time:
+The following resources manage infrastructure that CDSPaaS operates on your behalf and are not
+available there. Using them against a CDSPaaS tenant fails at plan time:
 
 `ciphertrust_cluster`, `ciphertrust_cm_prometheus`, `ciphertrust_domain`,
 `ciphertrust_hsm_root_of_trust_setup`, `ciphertrust_interface`, `ciphertrust_license`,
@@ -284,11 +281,14 @@ invalid values, destroy will fail before the resource can be removed.
 - Created resource with `max_connections = 100`
 - Edited config to `max_connections = "invalid"`
 - Run `terraform destroy` → validation fails
-- Must revert config to a valid value, then destroy works
+- Must revert config to a valid value, then destroy will succeed
 
 **Workaround:** before destroying, ensure all attributes in your configuration have valid values,
 even if they differ from the actual resource state. This is common across Terraform providers that
-define attribute validators, so it is worth keeping in mind generally.
+define attribute validators, so it is worth keeping in mind generally. Note that
+`terraform destroy -refresh=false` does not help here: attribute validators run against your
+configuration during the validate/plan phase regardless of the `-refresh` flag, since they check
+the values you wrote, not the refreshed remote state.
 
 ## Developing the provider
 
@@ -296,7 +296,6 @@ define attribute validators, so it is worth keeping in mind generally.
 make build      # compile ./terraform-provider-ciphertrust
 make install    # go install ./...
 make fmt        # gofmt -s -w
-make lint       # golangci-lint run
 make test       # unit tests
 make testacc    # acceptance tests — needs a live CipherTrust Manager
 make docs       # regenerate docs/ with tfplugindocs
@@ -309,9 +308,6 @@ read the target from the same `CIPHERTRUST_*` environment variables listed above
 To try a locally built provider, point Terraform at the binary with a
 [development override](https://developer.hashicorp.com/terraform/cli/config/config-file#development-overrides-for-provider-developers)
 in your `.terraformrc`.
-
-Documentation under `docs/` is generated from the provider schema plus the files in `examples/` and
-`imp_templates/` — edit those and run `make docs`; do not edit `docs/` by hand.
 
 ## Security
 
