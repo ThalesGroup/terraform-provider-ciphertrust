@@ -2,7 +2,7 @@
 
 The CipherTrust provider configures a CipherTrust Manager (CM) instance or cluster, or a CipherTrust Data Security Platform as a Service (CDSPaaS) tenant, and manages cloud key resources protected by these platforms.
 
-- **Registry documentation:** https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/1.0.1/docs
+- **Provider documentation:** https://github.com/ThalesGroup/terraform-provider-ciphertrust/tree/1.0.1/docs
 - **Resource and data source reference:** [`docs/`](docs/), covering [resources](docs/resources/) and [data sources](docs/data-sources/)
 - **Runnable examples:** [`examples/`](examples/) and [`sample-scripts/`](sample-scripts/)
 - **Release notes:** [`changelog.md`](changelog.md)
