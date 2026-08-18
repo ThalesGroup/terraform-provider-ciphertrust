@@ -96,22 +96,6 @@ func TestCTELDTGroupCommResource_nameFormatValidator(t *testing.T) {
 	})
 }
 
-// TestCTELDTGroupCommResource_nameFormatValidator verifies a name with
-// characters the CipherTrust Manager rejects is caught at plan time by the
-// schema validator instead of failing later at apply (TFIN-493).
-func TestCTELDTGroupCommResource_nameFormatValidator(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config:      cteLDTGroupCommsConfig("invalid name!", "Invalid name format"),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Value Match.*must start with an alphanumeric`),
-			},
-		},
-	})
-}
-
 // TestCTELDTGroupCommResource_drift mutates the description out-of-band and
 // asserts the next plan is non-empty.
 func TestCTELDTGroupCommResource_drift(t *testing.T) {
