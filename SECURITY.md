@@ -1,45 +1,55 @@
-Describe here all the security policies in place on this repository to help your contributors to handle security issues efficiently.
-
-## Goods practices to follow
-
-:warning:**You must never store credentials information into source code or config file in a GitHub repository** 
-- Block sensitive data being pushed to GitHub by git-secrets or its likes as a git pre-commit hook
-- Audit for slipped secrets with dedicated tools
-- Use environment variables for secrets in CI/CD (e.g. GitHub Secrets) and secret managers in production
-
 # Security Policy
 
-## Supported Versions
+## Good practices to follow
 
-Use this section to tell people about which versions of your project are currently being supported with security updates.
+**Never commit credentials to source control.** Do not put a CipherTrust username, password, API
+token, or CA private key in a `.tf` file, the `~/.ciphertrust/config` file, or anywhere else that
+gets checked in. Use environment variables (`CIPHERTRUST_USERNAME`, `CIPHERTRUST_PASSWORD`, etc.),
+Terraform variables marked `sensitive = true`, or a secrets manager instead. See
+[README: Provider configuration](README.md#provider-configuration) for the supported ways to supply
+credentials.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Supported versions
 
-## Reporting a Vulnerability
+This provider does not currently maintain multiple parallel release lines. Only the most recently
+published release on the [Terraform Registry](https://registry.terraform.io/providers/ThalesGroup/CipherTrust/latest)
+receives security fixes. Upgrade to the latest release before reporting a suspected vulnerability,
+in case it has already been fixed.
 
-Use this section to tell people how to report a vulnerability.
-Tell them where to go, how often they can expect to get an update on a reported vulnerability, what to expect if the vulnerability is accepted or declined, etc.
+## Reporting a vulnerability
 
-You can ask for support by contacting security@opensource.thalesgroup.com
+Do not open a public GitHub issue for a suspected security vulnerability. Instead, email
+**security@opensource.thalesgroup.com** with:
+
+- A description of the vulnerability and its potential impact
+- Steps to reproduce it, including provider version, Terraform version, and relevant configuration
+- Any proof-of-concept code or logs, with credentials and other sensitive values redacted
+
+You should receive an acknowledgement of your report. We will work with you to understand and
+validate the issue before any details are made public.
 
 ## Disclosure policy
 
-Define the procedure for what a reporter who finds a security issue needs to do in order to fully disclose the problem safely, including who to contact and how.
+We ask that you give us a reasonable opportunity to investigate and release a fix before any public
+disclosure of the vulnerability or its details. We will credit reporters who wish to be credited
+once a fix is released, unless you ask to remain anonymous.
 
-## Security Update policy
+## Security-related configuration
 
-Define how you intend to update users about new security vulnerabilities as they are found.
+A few provider settings directly affect the security posture of a deployment:
 
-## Security related configuration.
+- **TLS verification** is enabled by default (`no_ssl_verify = false`), with a minimum negotiated
+  TLS version of 1.2. Set `no_ssl_verify = true` only for local development or testing; it disables
+  certificate chain and hostname validation and exposes connections to man-in-the-middle attacks.
+  For a private PKI or internally-issued certificate, supply `ca_cert` instead. See
+  [README: TLS verification](README.md#tls-verification).
+- **`~/.ciphertrust/config`** may hold credentials in plain text. The provider refuses to read this
+  file if it is a symbolic link or if it is readable, writable, or executable by group or other —
+  restrict it with `chmod 600 ~/.ciphertrust/config`.
+- **Provider logs** (`log_file`, default `ctp.log`) are written with mode `0600`, since `debug`
+  level records API request detail.
 
-Settings users should consider that would impact the security posture of deploying this project, such as HTTPS, authorization and many others.
+## Known security gaps
 
-## Known security gaps & future enhancements.
-
-Security improvements you haven’t gotten to yet.
-Inform users those security controls aren’t in place, and perhaps suggest they contribute an implementation
+There are no known unresolved security gaps at this time. If you find one, please report it as
+described above rather than opening a public issue.
