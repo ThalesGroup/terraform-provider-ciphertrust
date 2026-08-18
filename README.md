@@ -1,17 +1,11 @@
-# Terraform Provider for Thales CipherTrust
+# Terraform Provider for CipherTrust Manager and CDSPaaS
 
 The CipherTrust provider configures a CipherTrust Manager (CM) instance or cluster, or a CipherTrust Data Security Platform as a Service (CDSPaaS) tenant, and manages cloud key resources protected by these platforms.
 
 - **Registry documentation:** https://registry.terraform.io/providers/ThalesGroup/CipherTrust/latest/docs
-- **Resource and data source reference:** [`docs/`](docs/) — [resources](docs/resources/), [data sources](docs/data-sources/)
+- **Resource and data source reference:** [`docs/`](docs/), covering [resources](docs/resources/) and [data sources](docs/data-sources/)
 - **Runnable examples:** [`examples/`](examples/) and [`sample-scripts/`](sample-scripts/)
 - **Release notes:** [`changelog.md`](changelog.md)
-
-## Requirements
-
-| | |
-|:--|:--|
-| Go | 1.25.8 (only to build from source) |
 
 ## Using the provider
 
@@ -26,9 +20,10 @@ terraform {
 }
 
 provider "ciphertrust" {
-  address  = "https://cm.example.com"
-  username = "cm-username"
-  password = "cm-password"
+  address       = "https://cm.example.com"
+  username      = "cm-username"
+  password      = "cm-password"
+  no_ssl_verify = true
 }
 
 resource "ciphertrust_cm_key" "example" {
@@ -79,7 +74,7 @@ Every provider parameter can be supplied in three places:
 2. An environment variable
 3. The configuration file `~/.ciphertrust/config`
 
-They are listed in order of precedence — a value in the provider block wins over an environment
+They are listed in order of precedence: a value in the provider block wins over an environment
 variable, which in turn wins over the configuration file.
 
 All parameters are optional in the provider schema. Requirements are enforced at runtime:
@@ -145,7 +140,7 @@ provider "ciphertrust" {
 
 ### CipherTrust Data Security Platform as a Service (CDSPaaS)
 
-Use `tenant` — not `auth_domain` — to select the CDSPaaS tenant. Setting it routes authentication
+Use `tenant`, not `auth_domain`, to select the CDSPaaS tenant. Setting it routes authentication
 through the CDSPaaS multi-tenant path.
 
 ```terraform
@@ -159,9 +154,9 @@ provider "ciphertrust" {
 
 `tenant` accepts a tenant name (`"acme"`) or a tenant path (`"acme/eng/team"`).
 
-`auth_domain` is still accepted for on-prem domain routing, but it is ignored when `tenant` is set —
-the CDSPaaS path derives `auth_domain_path` from `tenant`, which supersedes it. Configuring both
-produces a warning at plan time.
+`auth_domain` is still accepted for on-prem domain routing, but it is ignored when `tenant` is set,
+since the CDSPaaS path derives `auth_domain_path` from `tenant`, which supersedes it. Configuring
+both produces a warning at plan time.
 
 The following resources manage infrastructure that CDSPaaS operates on your behalf and are not
 available there. Using them against a CDSPaaS tenant fails at plan time:
@@ -207,8 +202,8 @@ password = cm-password
 Because the file may hold credentials, the provider refuses to use one that is not adequately
 protected and fails with an error when:
 
-- the path is a **symbolic link** — this is rejected to prevent symlink redirect attacks; or
-- the file is **readable, writable or executable by group or other** — the permissions must be
+- the path is a **symbolic link**, which is rejected to prevent symlink redirect attacks; or
+- the file is **readable, writable or executable by group or other**, since the permissions must be
   user-only, for example `0600` or `0400`.
 
 ```bash
@@ -227,8 +222,8 @@ TLS certificate chain and hostname verification is **enabled by default** (`no_s
 and the client negotiates a minimum of TLS 1.2. This became the default in v1.0.1; earlier versions
 did not verify certificates.
 
-If the CipherTrust Manager presents a certificate that is not in the system trust store — private
-PKI, an internally-issued certificate, or an air-gapped environment — supply the CA bundle:
+If the CipherTrust Manager presents a certificate that is not in the system trust store, for example
+a private PKI, an internally-issued certificate, or an air-gapped environment, supply the CA bundle:
 
 ```terraform
 provider "ciphertrust" {
@@ -259,8 +254,12 @@ The log file is created with mode `0600`, since `debug` level records API reques
 
 Cloud key management (CCKM) resources are available for:
 
-- Amazon Web Services — KMS keys, BYOK, XKS and CloudHSM custom key stores, key policies, rotation
-- Oracle Cloud Infrastructure — vaults, keys, BYOK keys and versions
+- Amazon Web Services: KMS keys, BYOK, XKS and CloudHSM custom key stores, key policies, rotation.
+  See the [AWS provider documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+  for managing the AWS side of these resources.
+- Oracle Cloud Infrastructure: vaults, keys, BYOK keys and versions.
+  See the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
+  for managing the OCI side of these resources.
 
 Azure and Google Cloud are supported for **connection management only**
 (`ciphertrust_azure_connection`, `ciphertrust_gcp_connection`); this provider does not yet expose
@@ -288,14 +287,14 @@ configuration have valid values before destroying, even if they differ from the 
 state. This is common across Terraform providers that define attribute validators, so it is worth
 keeping in mind generally.
 
-## Developing the provider
+## Contributing to the provider
 
 ```bash
 make build      # compile ./terraform-provider-ciphertrust
 make install    # go install ./...
 make fmt        # gofmt -s -w
 make test       # unit tests
-make testacc    # acceptance tests — needs a live CipherTrust Manager
+make testacc    # acceptance tests, needs a live CipherTrust Manager
 make docs       # regenerate docs/ with tfplugindocs
 make generate   # run code generators under tools/
 ```
@@ -313,4 +312,8 @@ To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE) © Thales Group
+[MIT](LICENSE)
+
+---
+
+© 2026 Thales Group. All rights reserved.
