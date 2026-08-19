@@ -83,9 +83,9 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"Standard", "LDT", "IDT", "Cloud_Object_Storage", "CSI"}...),
 				},
-				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI. Changing this value forces the policy to be destroyed and recreated.",
+				Description: "(Immutable) Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"data_transform_rules": schema.ListNestedAttribute{

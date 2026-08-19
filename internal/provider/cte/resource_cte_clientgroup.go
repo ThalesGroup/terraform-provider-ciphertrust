@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -67,9 +68,9 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 			"name": schema.StringAttribute{
 				Required: true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
-				Description: "Name of the ClientGroup. Changing this value forces the client group to be destroyed and recreated.",
+				Description: "(Immutable) Name of the ClientGroup.",
 			},
 			"communication_enabled": schema.BoolAttribute{
 				Optional:    true,

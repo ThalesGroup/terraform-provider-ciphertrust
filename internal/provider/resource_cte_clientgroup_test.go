@@ -8,7 +8,6 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/tidwall/gjson"
 )
@@ -186,9 +185,13 @@ resource "ciphertrust_cte_client_group" "cg" {
 	})
 }
 
-// TestCTEClientGroupResource_nameRequiresReplace verifies a name change is
-// planned as a destroy+create rather than an in-place update (TFIN-489).
-func TestCTEClientGroupResource_nameRequiresReplace(t *testing.T) {
+// TestCTEClientGroupResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the client group's id is referenced elsewhere
+// via client_group_id on ciphertrust_cte_clientgroup_designatedprimaryset and
+// ciphertrust_cte_clientgroup_guardpoint, and must not be reminted on rename
+// (TFIN-642 Scenario 2).
+func TestCTEClientGroupResource_nameImmutable(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	cgName := "tf-cg-imm-" + suffix
 	const rn = "ciphertrust_cte_client_group.cg"
@@ -215,20 +218,14 @@ resource "ciphertrust_cte_client_group" "cg" {
   description  = "Initial create"
 }
 `, cgName),
-				Check: checkStep(t, "client_group requires replace: create",
+				Check: checkStep(t, "client_group immutable name: create",
 					resource.TestCheckResourceAttr(rn, "name", cgName),
 				),
 			},
 			{
-				Config: renamed(cgName + "-renamed"),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "client_group requires replace: rename",
-					resource.TestCheckResourceAttr(rn, "name", cgName+"-renamed"),
-				),
+				Config:      renamed(cgName + "-renamed"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
