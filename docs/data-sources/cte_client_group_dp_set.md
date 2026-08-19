@@ -62,6 +62,11 @@ output "client_group_dp_set" {
 
 - `client_group_name` (String) Name of the client group
 
+### Optional
+
+- `limit` (Number) Maximum number of designated primary set entries to return. If unset, all entries are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of designated primary set entries to skip before returning results, for pagination. Defaults to 0.
+
 ### Read-Only
 
 - `client_group_dp_set` (Attributes List) List of client group dp sets (see [below for nested schema](#nestedatt--client_group_dp_set))

@@ -101,7 +101,7 @@ Read-Only:
 
 Required:
 
-- `guard_point_type` (String) Type of the GuardPoint. Changing this value forces the guard path to be destroyed and recreated, since guard_point_type is immutable once a GuardPoint is created.
+- `guard_point_type` (String) Type of the GuardPoint. guard_point_type is immutable once a GuardPoint is created: changing it for an EXISTING guard_path is rejected with a plan-time error by Update() (see "Cannot change guard_point_type for an existing GuardPoint"), since CM does not support changing it via PATCH. Adding a brand-new guard_path with any guard_point_type does not force a replace -- it is created in place by Update().
 - `policy_id` (String) ID of the policy applied with this GuardPoint.
 
 Optional:
@@ -112,10 +112,10 @@ Optional:
 - `data_lineage_enabled` (Boolean) Whether data lineage is enabled.
 - `disk_name` (String) Name of the disk for Oracle ASM disk group.
 - `diskgroup_name` (String) Name of the disk group for Oracle ASM.
-- `early_access` (Boolean) Whether secure start is turned on.
-- `guard_enabled` (Boolean) Whether the GuardPoint is enabled.
+- `early_access` (Boolean) Whether secure start is turned on. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.
+- `guard_enabled` (Boolean) Whether the GuardPoint is enabled. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.
 - `intelligent_protection` (Boolean) Flag to enable intelligent protection.
 - `is_idt_capable_device` (Boolean) Whether the device is IDT capable.
 - `mfa_enabled` (Boolean) Whether MFA is enabled.
 - `network_share_credentials_id` (String) ID of the credentials for network share.
-- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions.
+- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions. CM has a dedicated endpoint that turns this off in place for an EXISTING guard_path (true -> false does not force a replace), but once turned off it can never be turned back on for that same GuardPoint via any API call -- changing it from false to true for an EXISTING guard_path forces a whole-resource replace.

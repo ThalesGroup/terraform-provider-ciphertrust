@@ -64,6 +64,8 @@ output "cte_list" {
 ### Optional
 
 - `filters` (Map of String) A map of key:value pairs matching CipherTrust Manager API query parameters for filtering the clients list, e.g. "name". Values containing commas are split and applied as repeated filters.
+- `limit` (Number) Maximum number of CTE clients to return. If unset, all matching clients are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of CTE clients to skip before returning results, for pagination. Defaults to 0.
 
 ### Read-Only
 

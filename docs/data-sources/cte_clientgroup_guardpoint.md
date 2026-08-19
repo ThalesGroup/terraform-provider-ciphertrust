@@ -19,6 +19,11 @@ description: |-
 
 - `clientgroup_name` (String) Name of the CTE client group whose GuardPoints are to be listed.
 
+### Optional
+
+- `limit` (Number) Maximum number of client group guardpoints to return. If unset, all guardpoints are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of client group guardpoints to skip before returning results, for pagination. Defaults to 0.
+
 ### Read-Only
 
 - `clientgroup_guardpoint` (Attributes List) List of GuardPoints configured on the client group. (see [below for nested schema](#nestedatt--clientgroup_guardpoint))
