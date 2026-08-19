@@ -28,9 +28,9 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-# Add a resource of type CipherTrust Manager property with the name ENABLE_RECORDS_DB_STORE
+# Add a resource of type CipherTrust Manager property with the name ENABLE_REST_CRYPTO_RECORDS
 resource "ciphertrust_property" "property_1" {
-  name  = "ENABLE_RECORDS_DB_STORE"
+  name  = "ENABLE_REST_CRYPTO_RECORDS"
   value = "false"
 }
 

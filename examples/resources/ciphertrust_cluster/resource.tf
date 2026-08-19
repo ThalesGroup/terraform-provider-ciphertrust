@@ -110,8 +110,11 @@ resource "ciphertrust_cluster_node" "nodes" {
   member_host = "10.10.10.11"
   member_port = 5432
 
-  # Credentials for the new node
+  # Credentials for the new node. address is the endpoint Terraform uses to
+  # connect to the joining node; it can differ from host when host holds a
+  # private/internal address used only in the CM API payload.
   credentials = {
+    address  = each.value.host
     username = "admin"
     password = each.value.password
   }

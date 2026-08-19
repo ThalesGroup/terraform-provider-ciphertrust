@@ -18,7 +18,7 @@ Determine whether Prometheus metrics collection is enabled, and also get the API
 ### Read-Only
 
 - `enabled` (Boolean)
-- `token` (String)
+- `token` (String, Sensitive)
 
 
 ## Run the Example
