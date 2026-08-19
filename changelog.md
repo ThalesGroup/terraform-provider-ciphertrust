@@ -1,3 +1,8 @@
+# 0.11.4-beta
+## Bug Fixes
+    Azure key is restored to the vault specified in the configuration.
+    EKM endpoint state is not removed if not found during Refresh and Update, an error returned.
+
 # 0.11.3-beta
 ## Background Refresh of CipherTrust Manager Authentication Token
     Middleware was added to the REST client to automatically handle authentication token renewal, preventing tokens from expiring. 
@@ -8,7 +13,6 @@
     replication_delay_ms
         In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. 
         replication_delay_ms can be set in the provider block, via the CM_REPLICATION_DELAY environment variable or in ~/.ciphertrust/config. The default is 100 milliseconds.
-
 
 ## Updated Resources
     ciphertrust_aws_custom_keystore
