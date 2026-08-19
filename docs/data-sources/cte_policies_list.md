@@ -60,7 +60,9 @@ output "cte_policies" {
 
 ### Optional
 
+- `limit` (Number) Maximum number of CTE policies to return. If unset, all matching policies are returned (a warning is emitted if the result set is large).
 - `policy_name` (String) Name of the CTE policy to filter by. If omitted, all CTE policies are returned.
+- `skip` (Number) Number of CTE policies to skip before returning results, for pagination. Defaults to 0.
 
 ### Read-Only
 

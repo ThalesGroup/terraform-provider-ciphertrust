@@ -19,6 +19,11 @@ description: |-
 
 - `group_name` (String) Name of the LDT communication group whose clients are to be listed.
 
+### Optional
+
+- `limit` (Number) Maximum number of clients to return. If unset, all clients in the LDT communication group are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of clients to skip before returning results, for pagination. Defaults to 0.
+
 ### Read-Only
 
 - `clients` (Attributes List) List of clients belonging to the LDT communication group. (see [below for nested schema](#nestedatt--clients))

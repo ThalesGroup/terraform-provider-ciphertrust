@@ -19,6 +19,11 @@ description: |-
 
 - `policy` (String) ID of the parent CTE Client Policy whose data transformation rules are to be listed.
 
+### Optional
+
+- `limit` (Number) Maximum number of data transformation rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of data transformation rules to skip before returning results, for pagination. Defaults to 0.
+
 ### Read-Only
 
 - `rules` (Attributes List) List of data transformation rules configured on the policy. (see [below for nested schema](#nestedatt--rules))

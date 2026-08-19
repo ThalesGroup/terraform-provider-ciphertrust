@@ -19,6 +19,11 @@ description: |-
 
 - `policy` (String) ID of the parent CTE Client Policy whose key rules are to be listed.
 
+### Optional
+
+- `limit` (Number) Maximum number of key rules to return. If unset, all rules are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of key rules to skip before returning results, for pagination. Defaults to 0.
+
 ### Read-Only
 
 - `rules` (Attributes List) List of key rules configured on the policy. (see [below for nested schema](#nestedatt--rules))

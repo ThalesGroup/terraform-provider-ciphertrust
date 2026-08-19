@@ -18,6 +18,8 @@ description: |-
 ### Optional
 
 - `group_name` (String) Name of the LDT communication group to filter by. If omitted, all LDT communication groups are returned.
+- `limit` (Number) Maximum number of LDT communication groups to return. If unset, all matching groups are returned (a warning is emitted if the result set is large).
+- `skip` (Number) Number of LDT communication groups to skip before returning results, for pagination. Defaults to 0.
 
 ### Read-Only
 

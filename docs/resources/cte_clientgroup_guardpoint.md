@@ -104,21 +104,21 @@ Read-Only:
 
 Required:
 
-- `guard_point_type` (String) Type of the GuardPoint. Changing this value forces the GuardPoint to be destroyed and recreated.
-- `policy_id` (String) ID of the policy applied with this GuardPoint.
+- `guard_point_type` (String) (Immutable) Type of the GuardPoint.
+- `policy_id` (String) (Immutable) ID of the policy applied with this GuardPoint.
 
 Optional:
 
-- `automount_enabled` (Boolean) Whether automount is enabled with the GuardPoint.
-- `cifs_enabled` (Boolean) Whether to enable CIFS.
-- `data_classification_enabled` (Boolean) Whether data classification is enabled.
-- `data_lineage_enabled` (Boolean) Whether data lineage is enabled.
-- `disk_name` (String) Name of the disk for Oracle ASM disk group.
-- `diskgroup_name` (String) Name of the disk group for Oracle ASM.
-- `early_access` (Boolean) Whether secure start is turned on.
-- `guard_enabled` (Boolean) Whether the GuardPoint is enabled.
-- `intelligent_protection` (Boolean) Flag to enable intelligent protection.
-- `is_idt_capable_device` (Boolean) Whether the device is IDT capable.
+- `automount_enabled` (Boolean) Whether automount is enabled with the GuardPoint. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `cifs_enabled` (Boolean) Whether to enable CIFS. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `data_classification_enabled` (Boolean) Whether data classification is enabled. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `data_lineage_enabled` (Boolean) Whether data lineage is enabled. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `disk_name` (String) Name of the disk for Oracle ASM disk group. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `diskgroup_name` (String) Name of the disk group for Oracle ASM. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `early_access` (Boolean) Whether secure start is turned on. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.
+- `guard_enabled` (Boolean) Whether the GuardPoint is enabled. Changing this value for an EXISTING guard_path is applied in place via a dedicated CM endpoint -- it does not force a replace.
+- `intelligent_protection` (Boolean) Flag to enable intelligent protection. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
+- `is_idt_capable_device` (Boolean) Whether the device is IDT capable. Changing this value for an EXISTING guard_path forces the whole resource to be replaced, since CM silently no-ops an update to this field via PATCH.
 - `mfa_enabled` (Boolean) Whether MFA is enabled.
 - `network_share_credentials_id` (String) ID of the credentials for network share.
-- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions.
+- `preserve_sparse_regions` (Boolean) Whether to preserve sparse file regions. CM has a dedicated endpoint that turns this off in place for an EXISTING guard_path (true -> false does not force a replace), but once turned off it can never be turned back on for that same GuardPoint via any API call -- changing it from false to true for an EXISTING guard_path forces a whole-resource replace.

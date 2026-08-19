@@ -71,10 +71,10 @@ resource "ciphertrust_cte_clientgroup_designatedprimaryset" "dps1" {
 
 ### Required
 
-- `client_group_id` (String) The ID of the CTE Client Group to which this Designated Primary Set belongs.
+- `client_group_id` (String) (Immutable) The ID of the CTE Client Group to which this Designated Primary Set belongs.
 - `client_list` (String) Comma-separated list of clients to be included in the Designated Primary Set.
-- `ldt_comm_group_service_id` (String) Identifier of the LDT communication group service to be associated with this Designated Primary Set.
-- `name` (String) Name to uniquely identify the Designated Primary Set within the client group.
+- `ldt_comm_group_service_id` (String) (Immutable) Identifier of the LDT communication group service to be associated with this Designated Primary Set.
+- `name` (String) (Immutable) Name to uniquely identify the Designated Primary Set within the client group.
 
 ### Read-Only
 
