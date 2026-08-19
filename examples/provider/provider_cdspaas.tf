@@ -1,13 +1,16 @@
 # CDSPaaS (multi-tenant SaaS) provider configuration.
 # Set `tenant` to the tenant name shown in the CDSPaaS web console.
 #
-# Most resources behave the same as on-prem CipherTrust Manager. The
-# following are platform-managed in CDSPaaS and will fail at plan time:
+# Most resources behave the same as on an on-prem CipherTrust Manager. The
+# following manage CipherTrust Manager infrastructure that CDSPaaS operates
+# on your behalf, so they are platform-managed and will fail at plan time:
+#   - ciphertrust_aws_key_material
 #   - ciphertrust_cluster
 #   - ciphertrust_cm_prometheus
 #   - ciphertrust_domain
 #   - ciphertrust_hsm_root_of_trust_setup
 #   - ciphertrust_interface
+#   - ciphertrust_interface_certificate_renewal
 #   - ciphertrust_license
 #   - ciphertrust_ntp
 #   - ciphertrust_password_policy
@@ -19,8 +22,8 @@
 #   - ciphertrust_syslog
 #   - ciphertrust_trial_license
 #
-# ciphertrust_cm_ssh_key is bootstrap-mode-only and CDSPaaS does not expose
-# bootstrap, so it is implicitly unavailable as well.
+# ciphertrust_cm_ssh_key requires bootstrap mode, which CDSPaaS does not
+# expose, so it is unavailable as well.
 
 variable "ciphertrust_password" {
   description = "CDSPaaS tenant user password. Set via TF_VAR_ciphertrust_password or omit and use the CIPHERTRUST_PASSWORD environment variable."

@@ -23,5 +23,6 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 }
 
 output "oci_connection" {
-  value = ciphertrust_oci_connection.oci_connection
+  value     = ciphertrust_oci_connection.oci_connection
+  sensitive = true
 }

@@ -53,7 +53,7 @@ resource "ciphertrust_user" "user" {
 # Create an ACL that will be added to the vault for the user
 resource "ciphertrust_oci_acl" "user_acl" {
   vault_id = ciphertrust_oci_vault.vault.id
-  user_id  = ciphertrust_user.user
+  user_id  = ciphertrust_user.user.user_id
   actions  = ["view", "keycreate"]
 }
 
@@ -65,13 +65,13 @@ resource "ciphertrust_groups" "group" {
 # Create an ACL that will be added to the vault for the group
 resource "ciphertrust_oci_acl" "group_acl" {
   vault_id = ciphertrust_oci_vault.vault.id
-  group    = ciphertrust_groups.group
+  group    = ciphertrust_groups.group.name
   actions  = ["view", "keyupdate"]
 }
 
 # List vaults after creating the acl resources
 data "ciphertrust_oci_vault_list" "vaults" {
-  depends_on = [ciphertrust_oci_acl.user_acl,ciphertrust_oci_acl,group_acl ]
+  depends_on = [ciphertrust_oci_acl.user_acl, ciphertrust_oci_acl.group_acl]
 }
 output "vaults" {
   value = data.ciphertrust_oci_vault_list.vaults

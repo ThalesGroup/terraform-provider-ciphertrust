@@ -28,7 +28,7 @@ Edit the Registration Token resource configuration in main.tf with actual values
 ```bash
 data "ciphertrust_cm_local_ca_list" "groups_local_cas" {
   filters = {
-    subject = "%2FC%3DUS%2FST%3DTX%2FL%3DAustin%2FO%3DThales%2FCN%3DCipherTrust%20Root%20CA"
+    subject = "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
   }
 }
 

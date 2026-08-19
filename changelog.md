@@ -1,15 +1,6 @@
-# Unreleased
-
-## Breaking Changes
-- **Scheduler Data Source Flattening**: Flattened `cckm_key_rotation_params.aws_params` nested block under `ciphertrust_scheduler_list` data source into top-level parent attributes `aws_retain_alias` and `rotate_material` to align with the resource configuration.
-
-## Bug Fixes
-- **Scheduler (TFIN-422)**: Fixed a bug in `ciphertrust_scheduler` where setting `start_date = ""` or `end_date = ""` would raise validation regex errors instead of properly clearing the dates in CipherTrust Manager. Modified validation schema and request payloads to support explicit empty string values and pointer-based JSON omitempty serialization.
-- **Scheduler (TFIN-424)**: Fixed date rendering issues in `ciphertrust_scheduler_list` data source where absent dates were hydrated as zero-value time `"0001-01-01T00:00:00Z"` instead of standard `null`.
-
 # 1.0.1
 
-## Security: Secure-by-default TLS (breaking)
+## Security: Secure-by-default TLS
     TLS certificate verification is now ENABLED by default. The `no_ssl_verify`
     provider attribute now defaults to `false` (previously `true`); the HTTP
     client enforces a minimum TLS version of 1.2 and rejects TLS 1.0/1.1.

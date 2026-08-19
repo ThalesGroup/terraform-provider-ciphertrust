@@ -27,7 +27,7 @@ provider "ciphertrust" {
 Edit the property resource configuration in main.tf with actual values
 ```bash
 resource "ciphertrust_property" "property_1" {
-    name = "ENABLE_RECORDS_DB_STORE"
+    name = "ENABLE_REST_CRYPTO_RECORDS"
     value = "false"
 }
 ```

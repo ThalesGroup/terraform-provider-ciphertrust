@@ -1,89 +1,77 @@
-# Create a new cluster or join existing cluster on CipherTrust Manager
+# Create a new cluster and join additional nodes on CipherTrust Manager
 
 This example shows how to:
-- Create a new cluster
-- Join existing CiphereTrust Manager Nodes to the above cluster
+- Initialize a single-node cluster with `ciphertrust_cluster`
+- Join additional nodes to that cluster with `ciphertrust_cluster_node`
 
 These steps explain how to:
-- Configure CipherTrust Manager Provider parameters for primary as well as the joining nodes required to run the examples
-- Enable trial license if needed
-- Configure parameters required to create new cluster and join other nodes to it
-- Run the example
-
+- Configure the CipherTrust Manager provider block for the initial node
+- Configure the cluster resource for the initial node
+- Configure the additional nodes to join
 
 ## Configure CipherTrust Manager
 
-### Edit the cluster's primary CipherTrust Manager node provider block in main.tf
+### Edit the provider block in main.tf
+
+The provider always points at the initial cluster node.
 
 ```bash
 provider "ciphertrust" {
   address  = "https://cm-address"
   username = "cm-username"
   password = "cm-password"
-  domain   = "cm-domain"
-  bootstrap = "no"
-  alias = "primary"
 }
 ```
 
-### Edit a new cluster joining CipherTrust Manager node provider block in main.tf
+## Initialize the cluster on the initial node
 
-```bash
-provider "ciphertrust" {
-  address  = "https://cm-address"
-  username = "cm-username"
-  password = "cm-password"
-  domain   = "cm-domain"
-  bootstrap = "no"
-  alias = "secondary"
-}
-```
+Edit the cluster resource configuration in main.tf with actual values.
 
-## Enable trial license on primary node in cluster
-
-```bash
-resource "ciphertrust_trial_license" "trial_license_primary" {
-	provider = ciphertrust.primary
-}
-```
-
-## Enable trial license on joining node in cluster
-
-```bash
-resource "ciphertrust_trial_license" "trial_license_secondary" {
-	provider = ciphertrust.secondary
-}
-```
-
-## Create new cluster using node with original as true and join other nodes to the said cluster
-Edit the cluster resource configuration in main.tf with actual values
 ```bash
 resource "ciphertrust_cluster" "cluster_info" {
-	provider = ciphertrust.primary
-	nodes = [
-		{
-			host = "https://primary-cm-address"
-			port = 5432
-			original = true
-			public_address = "https://primary-cm-address"
-			credentials = {
-				username = "cm-username"
-				password = "cm-password"
-			}
-		},
-		{
-			host = "https://joining-node1-cm-address"
-			port = 5432
-			original = false
-			public_address = "https://joining-node1-cm-address"
-			credentials = {
-				username = "cm-username"
-				password = "cm-password"
-			}
-		}
-	]
+  local_node_host = "primary-cm-address"
+  local_node_port = 5432
+  public_address  = "primary-cm-address"
 }
 ```
+
+## Join additional nodes to the cluster
+
+Edit the `additional_nodes` map and the `ciphertrust_cluster_node` resource with actual values.
+
+```bash
+locals {
+  additional_nodes = {
+    "node2" = {
+      host           = "joining-node1-cm-address"
+      public_address = "joining-node1-cm-address"
+      password       = "node1-cm-password"
+    }
+  }
+}
+
+resource "ciphertrust_cluster_node" "nodes" {
+  for_each   = local.additional_nodes
+  depends_on = [ciphertrust_cluster.cluster_info]
+
+  host           = each.value.host
+  port           = 5432
+  public_address = each.value.public_address
+
+  member_host = "primary-cm-address"
+  member_port = 5432
+
+  credentials = {
+    address  = each.value.host
+    username = "cm-username"
+    password = each.value.password
+  }
+}
+```
+
+`credentials.address` is required: it is the endpoint Terraform uses to connect to the joining
+node, and can differ from `host` when `host` holds a private/internal address used only in the CM
+API payload.
 
 ## Run the Example
 
