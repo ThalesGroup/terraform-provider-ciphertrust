@@ -28,7 +28,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -45,14 +45,18 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-# Define an OCI connection
+# Define an OCI connection. CipherTrust Manager validates 'region' and the
+# 'ocid1.<type>.<realm>..<unique-id>' shape of the OCID fields, even when the
+# credentials themselves are not real. Set skip_connection_params_test to
+# true to bypass the live credential connectivity test against OCI itself.
 resource "ciphertrust_oci_connection" "oci_connection" {
-  key_file            = "path-to-or-contents-of-oci-key-file"
-  name                = "connection-name"
-  pub_key_fingerprint = "public-key-fingerprint"
-  region              = "oci-region"
-  tenancy_ocid        = "tenancy-ocid"
-  user_ocid           = "user-ocid"
+  key_file                    = "path-to-or-contents-of-oci-key-file"
+  name                        = "connection-name"
+  pub_key_fingerprint         = "public-key-fingerprint"
+  region                      = "us-ashburn-1"
+  tenancy_ocid                = "ocid1.tenancy.oc1..aaaaaaaaexampletenancyocid"
+  user_ocid                   = "ocid1.user.oc1..aaaaaaaaexampleuserocid"
+  skip_connection_params_test = true
 }
 ```
 
@@ -70,7 +74,7 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 
 ### Optional
 
-- `description` (String) Description about the connection. Once set, 'description' can be changed but not removed.
+- `description` (String) Description about the connection. Once set, this field cannot be cleared back to empty — CM does not support clearing it via PATCH. Removing this attribute from config preserves the existing value.
 - `key_file_pass_phrase` (String, Sensitive) Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.
 - `key_file_version` (Number) Arbitrary version number used to trigger re-sending `key_file`/`key_file_pass_phrase` to CipherTrust Manager. Since both are write-only, Terraform cannot detect a change in their values on its own; increment this on every apply where you want the current values re-sent.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.

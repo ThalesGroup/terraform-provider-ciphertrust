@@ -33,7 +33,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -64,8 +64,15 @@ resource "ciphertrust_aws_connection" "aws_connection" {
   # Key ID of the AWS user.
   access_key_id = "ACCESS_KEY_ID"
 
-  # Secret associated with the access key ID of the AWS user.
+  # Secret associated with the access key ID of the AWS user. Write-only:
+  # never stored in Terraform state or plan artifacts (requires Terraform 1.11+).
   secret_access_key = "SECRET_ACCESS_KEY"
+
+  # secret_access_key has no state to diff against, so Terraform cannot detect
+  # a change in its value on its own. Increment secret_access_key_version
+  # whenever you want the current secret_access_key value re-sent to
+  # CipherTrust Manager (e.g. to rotate it).
+  secret_access_key_version = 1
 
   # Name of the cloud.
   cloud_name = "aws"

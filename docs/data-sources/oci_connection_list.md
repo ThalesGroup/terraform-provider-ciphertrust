@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -50,10 +50,10 @@ data "ciphertrust_oci_connection_list" "example_oci_connection" {
     # The unique ID of the Oracle OCI connection to fetch
     id = "88a90d8f-05b5-419f-bbe9-2dc3aa8ec216"
   }
-  # Similarly can provide 'name', 'labels' etc to fetch the existing Oracle OCI connection
-  # example for fetching an existing oci connection with labels
+  # Similarly can provide 'name', 'products', 'meta_contains' etc to fetch the existing Oracle OCI connection
+  # example for fetching an existing oci connection by name
   # filters = {
-  #   labels = "key=value"
+  #   name = "oci-connection"
   # }
 }
 

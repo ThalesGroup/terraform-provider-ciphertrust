@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -57,9 +58,9 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the policy. Changing this value forces the policy to be destroyed and recreated.",
+				Description: "(Immutable) Name of the policy.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"description": schema.StringAttribute{
@@ -82,9 +83,9 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Validators: []validator.String{
 					stringvalidator.OneOf([]string{"Standard", "LDT", "IDT", "Cloud_Object_Storage", "CSI"}...),
 				},
-				Description: "Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI. Changing this value forces the policy to be destroyed and recreated.",
+				Description: "(Immutable) Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI.",
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					modifiers.ImmutableString(),
 				},
 			},
 			"data_transform_rules": schema.ListNestedAttribute{

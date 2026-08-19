@@ -11,7 +11,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -31,8 +31,10 @@ provider "ciphertrust" {
 # Fetch the CA ID for the default CA "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
 data "ciphertrust_cm_local_ca_list" "groups_local_cas" {
   filters = {
-    # URL encoded CA's subject "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
-    subject = "%2FC%3DUS%2FST%3DTX%2FL%3DAustin%2FO%3DThales%2FCN%3DCipherTrust%20Root%20CA"
+    # The provider URL-encodes filter values itself before sending them to
+    # CipherTrust Manager, so this must be the raw subject string, not a
+    # pre-encoded one (a pre-encoded value here would be double-encoded).
+    subject = "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
   }
 }
 
@@ -46,7 +48,9 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
   ca_id = tolist(data.ciphertrust_cm_local_ca_list.groups_local_cas.cas)[0].id
 }
 
-# Output the created registration token
+# Output the created registration token. Marked sensitive because 'token' is
+# a sensitive field.
 output "reg_token_value" {
-  value = ciphertrust_cm_reg_token.reg_token.token
+  value     = ciphertrust_cm_reg_token.reg_token.token
+  sensitive = true
 }

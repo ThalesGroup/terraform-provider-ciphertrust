@@ -11,7 +11,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -28,9 +28,12 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-# Add a resource of type CipherTrust Manager property with the name ENABLE_REST_CRYPTO_RECORDS
+# Add a resource of type CipherTrust Manager property. Supported property
+# names vary by CipherTrust Manager version — GET /api/v1/configs/properties
+# on your target instance for the full list. HIDE_COMPOSITE_KEY is a
+# GUI-only display setting, present on most versions, and safe to toggle.
 resource "ciphertrust_property" "property_1" {
-  name  = "ENABLE_REST_CRYPTO_RECORDS"
+  name  = "HIDE_COMPOSITE_KEY"
   value = "false"
 }
 

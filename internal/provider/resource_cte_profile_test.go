@@ -2,12 +2,12 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 // cteProfileConfig renders a ciphertrust_cte_profile. When updated is true the
@@ -95,9 +95,12 @@ func TestCTEProfileResource(t *testing.T) {
 	})
 }
 
-// TestCTEProfileResource_nameRequiresReplace verifies a name change is planned
-// as a destroy+create rather than an in-place update (TFIN-499).
-func TestCTEProfileResource_nameRequiresReplace(t *testing.T) {
+// TestCTEProfileResource_nameImmutable verifies that changing name after
+// creation produces a plan-time immutable error from ImmutableString rather
+// than a destroy+create, since the profile's id is referenced elsewhere
+// (via profile_id on ciphertrust_cte_client/ciphertrust_cte_client_group)
+// and must not be reminted on rename (TFIN-499).
+func TestCTEProfileResource_nameImmutable(t *testing.T) {
 	name := "tf-profile-imm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
 
@@ -106,20 +109,14 @@ func TestCTEProfileResource_nameRequiresReplace(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: cteProfileConfig(name, false),
-				Check: checkStep(t, "profile requires replace: create",
+				Check: checkStep(t, "profile immutable name: create",
 					resource.TestCheckResourceAttr(rn, "name", name),
 				),
 			},
 			{
-				Config: cteProfileConfig(name+"-renamed", false),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "profile requires replace: rename",
-					resource.TestCheckResourceAttr(rn, "name", name+"-renamed"),
-				),
+				Config:      cteProfileConfig(name+"-renamed", false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})

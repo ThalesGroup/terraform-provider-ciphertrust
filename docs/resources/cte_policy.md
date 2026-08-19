@@ -174,8 +174,8 @@ output "policy_id" {
 
 ### Required
 
-- `name` (String) Name of the policy. Changing this value forces the policy to be destroyed and recreated.
-- `policy_type` (String) Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI
+- `name` (String) (Immutable) Name of the policy.
+- `policy_type` (String) (Immutable) Type of the policy. Valid values are - Standard, LDT, IDT, Cloud_Object_Storage, CSI.
 
 ### Optional
 

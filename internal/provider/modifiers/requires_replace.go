@@ -11,6 +11,7 @@ package modifiers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -226,4 +227,76 @@ func (m boolRequiresReplaceOnFalseToTrueUnlessNewMapEntryModifier) PlanModifyBoo
 	if !req.StateValue.ValueBool() && req.PlanValue.ValueBool() {
 		resp.RequiresReplace = true
 	}
+}
+
+// ImmutableStringUnlessNewMapEntry is the map-nested-attribute counterpart of
+// modifiers.ImmutableString(): it hard-blocks a genuine change to an existing
+// map entry's value at plan time (no destroy, no replace, no id churn), but
+// -- unlike plain ImmutableString(), which cannot tell the two cases apart
+// inside a MapNestedAttribute -- still allows any value on a brand-new map
+// entry, letting the resource's own Update() logic create it in place.
+//
+// Use this instead of RequiresReplaceUnlessNewMapEntry() when the underlying
+// API genuinely cannot change the field on an existing element by ANY means,
+// not even destroy+recreate-with-a-new-id being an acceptable outcome --
+// typically because the element's id is referenced elsewhere by other
+// resources and minting a new one via replace would silently break that
+// reference (e.g. TFIN-632: an existing GuardPoint's policy_id).
+func ImmutableStringUnlessNewMapEntry() planmodifier.String {
+	return immutableStringUnlessNewMapEntryModifier{}
+}
+
+type immutableStringUnlessNewMapEntryModifier struct{}
+
+func (m immutableStringUnlessNewMapEntryModifier) Description(_ context.Context) string {
+	return "This value cannot be changed for a map entry that already existed -- no destroy/recreate, the plan fails cleanly. Adding a brand-new map entry (with any value) does not force this check."
+}
+
+func (m immutableStringUnlessNewMapEntryModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m immutableStringUnlessNewMapEntryModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Do not block on resource creation (no prior resource state at all).
+	if req.State.Raw.IsNull() {
+		return
+	}
+
+	// Do not block on resource destroy.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// Guard against null or unknown PlanValue.
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+
+	// No change -- allow.
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+
+	// A brand-new map entry (the guard_path key did not exist in prior
+	// state) is created in place by the resource's own Update() logic --
+	// any value is allowed, regardless of what the containing entry's other
+	// fields look like.
+	if isNewMapEntry(ctx, req.Path, req.State) {
+		return
+	}
+
+	// The element already existed in prior state and this field genuinely
+	// changed -- block cleanly at plan time rather than destroying and
+	// recreating the element (which would mint a new id and could break
+	// other resources that reference it).
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		fmt.Sprintf(
+			"This attribute cannot be changed for an existing map entry (old: %q, new: %q). "+
+				"To change this value, remove this map entry and re-add it with the new value.",
+			req.StateValue.ValueString(),
+			req.PlanValue.ValueString(),
+		),
+	)
+	resp.PlanValue = req.StateValue
 }

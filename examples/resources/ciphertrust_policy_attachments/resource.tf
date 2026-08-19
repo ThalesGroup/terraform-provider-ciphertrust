@@ -11,7 +11,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -28,10 +28,24 @@ provider "ciphertrust" {
   password = "ChangeMe101!"
 }
 
-# Add a resource of type CM policy attachment for the policy named mypolicy
+# A policy must exist before it can be attached
+resource "ciphertrust_policies" "policy" {
+  name    = "my_policy"
+  actions = ["ReadKey"]
+  allow   = true
+  effect  = "allow"
+
+  conditions = [{
+    path   = "context.resource.alg"
+    op     = "equals"
+    values = ["aes", "rsa"]
+  }]
+}
+
+# Add a resource of type CM policy attachment for the policy above
 resource "ciphertrust_policy_attachments" "policy_attachment" {
   # The ID for the policy to be attached.
-  policy = "mypolicy"
+  policy = ciphertrust_policies.policy.id
 
   # Selects which principals to apply the policy to
   principal_selector = {

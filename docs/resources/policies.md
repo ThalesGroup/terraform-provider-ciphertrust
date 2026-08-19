@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -78,11 +78,11 @@ output "cm_policy_id" {
 
 - `actions` (List of String) (Immutable) Action attribute of an operation is a string, in the form of VerbResource e.g. CreateKey, or VerbWithResource e.g. EncryptWithKey. Changing this value forces the resource to be destroyed and recreated.
 - `allow` (Boolean) (Immutable) Allow is the effect of the policy, either to allow the actions or to deny the actions. Changing this value forces the resource to be destroyed and recreated.
-- `conditions` (Attributes List) Conditions are rules for matching the other attributes of the operation (see [below for nested schema](#nestedatt--conditions))
+- `conditions` (Attributes List) (Immutable) Conditions are rules for matching the other attributes of the operation. Changing this value forces the resource to be destroyed and recreated. (see [below for nested schema](#nestedatt--conditions))
 - `effect` (String) (Immutable) Specifies the effect of the policy. Valid values: allow, deny, obligate_on_allow, obligate_on_deny. Default is 'deny'. Changing this value forces the resource to be destroyed and recreated.
 - `include_descendant_accounts` (Boolean) (Immutable) If true, this policy will also apply to accounts that are descendants of this account. Changing this value forces the resource to be destroyed and recreated.
 - `name` (String) (Immutable) This is the name of the policy.
-- `resources` (List of String) Resources is a list of URI strings, which must be in URI format.
+- `resources` (List of String) (Immutable) Resources is a list of URI strings, which must be in URI format. Changing this value forces the resource to be destroyed and recreated.
 
 ### Read-Only
 

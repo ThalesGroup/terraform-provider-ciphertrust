@@ -26,7 +26,7 @@ terraform {
       # The source of the provider
       source = "ThalesGroup/CipherTrust"
       # Version of the provider to use
-      version = "1.0.0-pre3"
+      version = "1.0.1"
     }
   }
 }
@@ -45,8 +45,8 @@ provider "ciphertrust" {
 
 # Add a resource of type proxy
 resource "ciphertrust_proxy" "proxie" {
-  http_proxy  = "user01:test12345@10.171.18.190:8080"
-  https_proxy = "user02:Test12345@10.171.18.190:8081"
+  http_proxy  = "http://user01:test12345@10.171.18.190:8080"
+  https_proxy = "https://user02:Test12345@10.171.18.190:8081"
   no_proxy    = ["127.0.0.1", "localhost"]
 }
 
@@ -62,8 +62,8 @@ output "proxie_id" {
 ### Optional
 
 - `certificate` (String) CA certificate to trust for proxy.
-- `http_proxy` (String, Sensitive) HTTP proxy URL for proxy configurations. Include the scheme (e.g. `http://username:password@proxy.example.com:8080`). If the proxy server's password contains any special character replace it with percent-encoded values. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change (same scheme, host, port, and username; different password only) is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
-- `https_proxy` (String, Sensitive) HTTPS proxy URL for proxy configurations. Include the scheme (e.g. `https://username:password@proxy.example.com:8080`). If the proxy server's password contains any special character replace it with percent-encoded values. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change (same scheme, host, port, and username; different password only) is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
+- `http_proxy` (String, Sensitive) HTTP proxy address. Accepts a full URL (e.g. `http://username:password@proxy.example.com:8080`), a schemeless address (e.g. `username:password@host:port` or `host:port`), or a bare hostname. If the proxy password contains special characters, percent-encode them. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
+- `https_proxy` (String, Sensitive) HTTPS proxy address. Accepts a full URL (e.g. `https://username:password@proxy.example.com:8080`), a schemeless address (e.g. `username:password@host:port` or `host:port`), or a bare hostname. If the proxy password contains special characters, percent-encode them. **Known limitation**: CipherTrust Manager always returns this value with the password masked (replaced with `xxxxxx`) in GET responses. After `terraform apply`, Terraform state holds the cleartext value from your configuration. A password-only out-of-band change is undetectable by `terraform plan -refresh-only` because the masked URL is structurally identical before and after. Changes to scheme, host, port, or username are fully detectable and will surface as drift.
 - `no_proxy` (List of String) List of hosts for a proxy exception.
 
 ### Read-Only
