@@ -15,7 +15,7 @@ provider "ciphertrust" {
 
 data "ciphertrust_cm_local_ca_list" "groups_local_cas" {
   filters = {
-    subject = "%2FC%3DUS%2FST%3DTX%2FL%3DAustin%2FO%3DThales%2FCN%3DCipherTrust%20Root%20CA"
+    subject = "/C=US/ST=TX/L=Austin/O=Thales/CN=CipherTrust Root CA"
   }
 }
 
@@ -28,5 +28,6 @@ resource "ciphertrust_cm_reg_token" "reg_token" {
 }
 
 output "reg_token_value" {
-	value = ciphertrust_cm_reg_token.reg_token.token
+	value     = ciphertrust_cm_reg_token.reg_token.token
+	sensitive = true
 }

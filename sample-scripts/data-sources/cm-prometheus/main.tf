@@ -22,5 +22,6 @@ data "ciphertrust_cm_prometheus_status" "status" {
 }
 
 output "prometheus_status" {
-  value = data.ciphertrust_cm_prometheus_status.status
+  value     = data.ciphertrust_cm_prometheus_status.status
+  sensitive = true
 }

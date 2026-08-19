@@ -22,10 +22,11 @@ data "ciphertrust_cm_users_list" "users_list" {
 resource "ciphertrust_cm_key" "test_key" {
   name="test_key"
   algorithm="aes"
-  size=256
+  key_size=256
   usage_mask=76
   undeletable=false
   unexportable=false
+  xts=false
   meta={
     owner_id=tolist(data.ciphertrust_cm_users_list.users_list.users)[0].user_id
     permissions={
@@ -44,7 +45,6 @@ resource "ciphertrust_cm_key" "test_key" {
       encryption_mode="CBC"
       cte_versioned=false
     }
-    xts=false
   }
 }
 
