@@ -47,7 +47,6 @@ resource "ciphertrust_oci_key" "key" {
 
 # After creation, enable auto-rotation by updating the resource.
 # Create a key rotation scheduler and attach it to the key:
-/*
 resource "ciphertrust_scheduler" "scheduled_rotation" {
   cckm_key_rotation_params = {
     cloud_name = "oci"
@@ -74,4 +73,3 @@ resource "ciphertrust_oci_key" "key" {
   }
   enable_key = false
 }
-*/

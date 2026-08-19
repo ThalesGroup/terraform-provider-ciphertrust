@@ -51,7 +51,7 @@ resource "ciphertrust_aws_key" "rsa_min_params" {
 
 # Maximum input parameters for an RSA key
 resource "ciphertrust_aws_key" "rsa_max_params" {
-  enable_key                 = false
+  # enable_key               = false  # update only
   kms_id                     = ciphertrust_aws_kms.kms.id
   region                     = ciphertrust_aws_kms.kms.regions[0]
   schedule_for_deletion_days = 8

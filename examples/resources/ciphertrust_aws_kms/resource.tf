@@ -20,7 +20,6 @@ resource "ciphertrust_aws_kms" "kms" {
 }
 
 # Archive an existing KMS by setting archive = true via update.
-/*
 resource "ciphertrust_aws_kms" "kms" {
   account_id    = data.ciphertrust_aws_account_details.account_details.account_id
   connection_id = ciphertrust_aws_connection.aws_connection.id
@@ -28,4 +27,3 @@ resource "ciphertrust_aws_kms" "kms" {
   regions       = [data.ciphertrust_aws_account_details.account_details.regions[0]]
   archive       = true
 }
-*/
