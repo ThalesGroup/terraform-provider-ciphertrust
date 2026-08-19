@@ -58,6 +58,45 @@ provider "ciphertrust" {
 }
 ```
 
+## Deploying CipherTrust Manager
+
+### AWS
+
+To deploy a Virtual CipherTrust Manager from AWS, you must supply the Amazon Machine Image (AMI),
+available on the AWS Marketplace or through the Thales Cloud Provisioning System. Consult the
+[AWS provider documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+for details on launching an EC2 instance with the aws provider.
+
+### Azure
+
+1. List the available versions with
+   `Get-AzVMImage -location eastus2 -PublisherName thalesdiscplusainc1596561677238 -Offer cm_k170v -sku ciphertrust_manager`.
+
+2. Obtain image information for a particular version with
+   `az vm image show --location eastus2 --urn thalesdiscplusainc1596561677238:cm_k170v:ciphertrust_manager:<desired-version>`.
+   Under `plan`, obtain the required values for `name`, `product` and `publisher`.
+
+3. Consult the [azurerm provider documentation](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_virtual_machine)
+   for details on creating a plan to launch a Linux Virtual Machine with the azurerm provider.
+
+### Google Cloud
+
+1. List the available CipherTrust Manager versions with
+   `gcloud compute images list --no-standard-images --project=thales-cpl-public`. CipherTrust
+   Manager image names start with the prefix `k170v`. Copy the `NAME` of the image you would like
+   to deploy.
+
+2. Consult the [Google Cloud Platform provider documentation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance)
+   for details on launching a Virtual Machine image with the GCP provider.
+
+### Oracle Cloud Infrastructure
+
+1. Refer to the CipherTrust Manager online documentation to create a CipherTrust Manager instance
+   in OCI.
+
+2. Consult the [OCI provider documentation](https://registry.terraform.io/providers/oracle/oci/latest/docs)
+   for details on launching a Compute instance with the oci provider.
+
 ## Configuration precedence
 
 Every provider parameter can be supplied in three places, listed highest precedence first:
@@ -85,6 +124,24 @@ protected. It fails with an error when the path is a symbolic link, which is rej
 symlink redirect attacks, or when the file is readable, writable or executable by group or other.
 Restrict it with `chmod 600 ~/.ciphertrust/config`.
 
+## Environment variables
+
+```bash
+export CIPHERTRUST_ADDRESS=https://cm.example.com
+export CIPHERTRUST_USERNAME=cm-username
+export CIPHERTRUST_PASSWORD=cm-password
+export CIPHERTRUST_AUTH_DOMAIN=cm-auth-domain
+export CIPHERTRUST_DOMAIN=cm-domain
+export CIPHERTRUST_TENANT=acme                  # CDSPaaS only
+export CIPHERTRUST_CA_CERT=/etc/ssl/certs/my-internal-ca.pem
+```
+
+With the authentication values in the environment, the provider block can be empty:
+
+```terraform
+provider "ciphertrust" {}
+```
+
 ## TLS verification
 
 Certificate chain and hostname verification is enabled by default (`no_ssl_verify = false`), and the
@@ -106,6 +163,18 @@ The provider writes its own log, independently of Terraform's `TF_LOG` output, t
 `log_file` (default `ctp.log` in the working directory) at the level given by `log_level` (default
 `info`). Set `log_level = "off"` to disable the file entirely. The log file is created with mode
 `0600`, since `debug` level records API request detail.
+
+## Supported clouds
+
+Cloud key management (CCKM) resources are available for:
+
+- Amazon Web Services: KMS keys, BYOK, XKS and CloudHSM custom key stores, key policies, rotation.
+- Oracle Cloud Infrastructure: vaults, keys, BYOK keys and versions.
+- Azure and Google Cloud are supported for **connection management only**
+  (`ciphertrust_azure_connection`, `ciphertrust_gcp_connection`); this provider does not yet expose
+  Azure or GCP key resources.
+
+Keys for the above clouds can be sourced from CipherTrust Manager.
 
 ## CDSPaaS
 
@@ -131,6 +200,26 @@ CDSPaaS tenant fails at plan time:
 
 `ciphertrust_cm_ssh_key` requires bootstrap mode, which CDSPaaS does not expose, so it is
 unavailable as well.
+
+## Important limitations
+
+### Validators can block destroy operations
+
+Terraform validates the values in your `.tf` configuration on every run, including
+`terraform destroy`, before that configuration is passed along. If your configuration contains
+invalid values, destroy will fail before the resource can be removed.
+
+**Example:**
+
+- Created resource with `max_connections = 100`
+- Edited config to `max_connections = "invalid"`
+- Run `terraform destroy` → validation fails
+- Must revert config to a valid value, then destroy will succeed
+
+**Workaround:** run `terraform destroy -refresh=false`, or ensure all attributes in your
+configuration have valid values before destroying, even if they differ from the actual resource
+state. This is common across Terraform providers that define attribute validators, so it is worth
+keeping in mind generally.
 
 <!-- schema generated by tfplugindocs -->
 ## Schema
