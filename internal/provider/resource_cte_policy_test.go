@@ -157,9 +157,12 @@ resource "ciphertrust_cte_policy" "cte_policy" {
 `, name, policyType)
 }
 
-// TestCTEPolicyResource_typeImmutable verifies a change to the (immutable)
-// policy_type is planned as a destroy+create replacement rather than a
-// misleading in-place update that then fails at apply (TFIN-546).
+// TestCTEPolicyResource_typeImmutable verifies that changing policy_type
+// after creation produces a plan-time immutable error from ImmutableString
+// rather than a destroy+create, since the policy's id is referenced
+// elsewhere via policy_id on ciphertrust_cte_client_guardpoint/
+// ciphertrust_cte_clientgroup_guardpoint and must not be reminted on change
+// (TFIN-642 Scenario 1).
 func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 	name := "tf-policy-typeimm-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_policy.cte_policy"
@@ -177,15 +180,9 @@ func TestCTEPolicyResource_typeImmutable(t *testing.T) {
 				// CSI, like Standard, only requires security_rules; other
 				// non-Standard types (e.g. LDT) require additional
 				// mandatory nested rule blocks tied to real key material.
-				Config: ctePolicyTypedConfig(name, "CSI"),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectResourceAction(rn, plancheck.ResourceActionDestroyBeforeCreate),
-					},
-				},
-				Check: checkStep(t, "policy type immutable: replace",
-					resource.TestCheckResourceAttr(rn, "policy_type", "CSI"),
-				),
+				Config:      ctePolicyTypedConfig(name, "CSI"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)immutable`),
 			},
 		},
 	})
