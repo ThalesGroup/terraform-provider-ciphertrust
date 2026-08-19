@@ -45,14 +45,15 @@ resource "ciphertrust_scheduler" "rotation_job" {
   run_on    = "any"
 }
 
-# Create an AES AWS key and schedule it for rotation, the new key will be sourced from AWS
+# Create an AES AWS key and enable it for rotation on re-apply
 resource "ciphertrust_aws_key" "aws_key" {
   kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
   aws_param = {
     alias = [local.key_name]
   }
-  enable_rotation = {
-    job_config_id = ciphertrust_scheduler.rotation_job.id
-  }
+  # Step 2: uncomment and re-apply to enable rotation
+  # enable_rotation = {
+  #   job_config_id = ciphertrust_scheduler.rotation_job.id
+  # }
 }

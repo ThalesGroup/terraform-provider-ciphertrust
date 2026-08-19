@@ -48,7 +48,7 @@ resource "ciphertrust_aws_key" "aes_min_params" {
 
 # Maximum input parameters for a symmetric key
 resource "ciphertrust_aws_key" "aes_key_max_params" {
-  auto_rotate                = true
+  # auto_rotate              = true  # update only
   enable_key                 = true
   kms_id                     = ciphertrust_aws_kms.kms.id
   region                     = ciphertrust_aws_kms.kms.regions[0]
