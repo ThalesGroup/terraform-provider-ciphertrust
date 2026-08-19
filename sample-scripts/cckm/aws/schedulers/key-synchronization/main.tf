@@ -25,19 +25,19 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 }
 
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
 }
 
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = local.kms_name
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = local.kms_name
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Synchronization can also be scheduled for all KMS resources
 resource "ciphertrust_scheduler" "sync_all" {
-  cckm_synchronization_params {
+  cckm_synchronization_params = {
     cloud_name      = "aws"
     synchronize_all = true
   }
@@ -49,7 +49,7 @@ resource "ciphertrust_scheduler" "sync_all" {
 
 # Schedule synchronization of specific KMSes
 resource "ciphertrust_scheduler" "sync_kms" {
-  cckm_synchronization_params {
+  cckm_synchronization_params = {
     cloud_name = "aws"
     kms        = [ciphertrust_aws_kms.kms.id]
   }

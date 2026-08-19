@@ -24,7 +24,7 @@ output "aws_connection_id" {
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
 }
 
 # Define a kms
@@ -32,10 +32,10 @@ resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
   ]
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "name"
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
+  name          = "name"
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Define a native AWS symmetric key

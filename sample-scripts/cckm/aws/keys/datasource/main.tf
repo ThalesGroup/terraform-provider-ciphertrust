@@ -28,14 +28,14 @@ resource "ciphertrust_aws_connection" "connection" {
 
 # Read the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.connection.id
+  connection_id = ciphertrust_aws_connection.connection.id
 }
 
 # Create a kms
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.connection.id
-  name           = local.kms_name
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.connection.id
+  name          = local.kms_name
   regions = [
     data.ciphertrust_aws_account_details.account_details.regions[0],
     data.ciphertrust_aws_account_details.account_details.regions[1],
@@ -44,21 +44,24 @@ resource "ciphertrust_aws_kms" "kms" {
 
 # Create a multi-region AWS key
 resource "ciphertrust_aws_key" "aws_key" {
-  alias                    = [local.key_name]
-  customer_master_key_spec = "RSA_2048"
-  kms                      = ciphertrust_aws_kms.kms.id
-  key_usage                = "ENCRYPT_DECRYPT"
-  multi_region             = true
-  region                   = data.ciphertrust_aws_account_details.account_details.regions[0]
+  kms_id = ciphertrust_aws_kms.kms.id
+  region = data.ciphertrust_aws_account_details.account_details.regions[0]
+  aws_param = {
+    alias                    = [local.key_name]
+    customer_master_key_spec = "RSA_2048"
+    key_usage                = "ENCRYPT_DECRYPT"
+    multi_region             = true
+  }
 }
 
 # Replicate key to another region
 resource "ciphertrust_aws_key" "replicated_key" {
-  alias  = [local.key_name]
-  origin = "AWS_KMS"
   region = data.ciphertrust_aws_account_details.account_details.regions[1]
-  replicate_key {
+  replicate_key = {
     key_id = ciphertrust_aws_key.aws_key.key_id
+  }
+  aws_param = {
+    alias = [local.key_name]
   }
 }
 

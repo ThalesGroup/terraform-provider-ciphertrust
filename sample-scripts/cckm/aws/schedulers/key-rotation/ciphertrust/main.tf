@@ -23,19 +23,19 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 }
 
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
 }
 
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = local.kms_name
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = local.kms_name
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Create scheduled rotation job to run every Saturday at 9 am
 resource "ciphertrust_scheduler" "rotation_job" {
-  cckm_key_rotation_params {
+  cckm_key_rotation_params = {
     cloud_name = "aws"
   }
   name      = local.rotation_scheduler_name
@@ -46,12 +46,13 @@ resource "ciphertrust_scheduler" "rotation_job" {
 
 # Create an AES AWS key and schedule it for rotation, the new key will be sourced from CipherTrust Manager
 resource "ciphertrust_aws_key" "aws_key" {
-  alias = [local.key_name]
-  enable_rotation {
+  kms_id = ciphertrust_aws_kms.kms.id
+  region = ciphertrust_aws_kms.kms.regions[0]
+  aws_param = {
+    alias = [local.key_name]
+  }
+  enable_rotation = {
     job_config_id = ciphertrust_scheduler.rotation_job.id
     key_source    = "ciphertrust"
   }
-  kms    = ciphertrust_aws_kms.kms.id
-  origin = "AWS_KMS"
-  region = ciphertrust_aws_kms.kms.regions[0]
 }

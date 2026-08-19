@@ -33,21 +33,21 @@ resource "ciphertrust_aws_connection" "aws-connection" {
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
 }
 
 # Create a kms
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = local.kms_name
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
+  name          = local.kms_name
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Create a policy template using key users and roles
 resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
   name             = local.template_with_users_and_roles_name
-  kms              = ciphertrust_aws_kms.kms.id
+  kms_id           = ciphertrust_aws_kms.kms.id
   key_admins       = [local.admin]
   key_admins_roles = [local.admin_role]
   key_users        = [local.user]
@@ -56,18 +56,20 @@ resource "ciphertrust_aws_policy_template" "template_with_users_and_roles" {
 
 # Create an AWS key and assign a policy template to it
 resource "ciphertrust_aws_key" "aws_key_with_users_and_roles" {
-  alias  = [local.key_with_users_and_roles_name]
-  kms    = ciphertrust_aws_kms.kms.id
+  kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
-  key_policy {
+  aws_param = {
+    alias = [local.key_with_users_and_roles_name]
+  }
+  key_policy = {
     policy_template = ciphertrust_aws_policy_template.template_with_users_and_roles.id
   }
 }
 
 # Create a policy template using a policy json
 resource "ciphertrust_aws_policy_template" "template_with_policy" {
-  name = local.template_with_policy_name
-  kms  = ciphertrust_aws_kms.kms.id
+  name   = local.template_with_policy_name
+  kms_id = ciphertrust_aws_kms.kms.id
   policy = jsonencode(
     {
       "Version" : "2012-10-17",
@@ -87,10 +89,12 @@ resource "ciphertrust_aws_policy_template" "template_with_policy" {
 
 # Create an AWS key and assign a policy template to it
 resource "ciphertrust_aws_key" "aws_key_with_policy" {
-  alias  = [local.key_with_policy_name]
-  kms    = ciphertrust_aws_kms.kms.id
+  kms_id = ciphertrust_aws_kms.kms.id
   region = ciphertrust_aws_kms.kms.regions[0]
-  key_policy {
+  aws_param = {
+    alias = [local.key_with_policy_name]
+  }
+  key_policy = {
     policy_template = ciphertrust_aws_policy_template.template_with_policy.id
   }
 }

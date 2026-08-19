@@ -4,17 +4,17 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 }
 
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
 }
 
 resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws_connection,
   ]
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = "kms-name"
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Create an EXTERNAL key in PendingImport state (no source_key_identifier).

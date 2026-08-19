@@ -31,15 +31,15 @@ resource "ciphertrust_aws_connection" "aws-connection" {
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
 }
 
 # Create a kms
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = local.kms_name
-  regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.aws-connection.id
+  name          = local.kms_name
+  regions       = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 }
 
 # Create an AES CipherTrust Manager key
@@ -55,16 +55,16 @@ resource "ciphertrust_cm_key" "aes_key" {
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
   name                        = local.cks_name
   region                      = data.ciphertrust_aws_account_details.account_details.regions[0]
-  kms                         = ciphertrust_aws_kms.kms.id
+  kms_id                      = ciphertrust_aws_kms.kms.id
   linked_state                = true
   connect_disconnect_keystore = "CONNECT_KEYSTORE"
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     health_check_key_id = ciphertrust_cm_key.aes_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
-  aws_param {
+  aws_param = {
     xks_proxy_uri_endpoint = local.endpoint
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
     custom_key_store_type  = "EXTERNAL_KEY_STORE"
@@ -73,14 +73,16 @@ resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
 
 # Create an XKS key
 resource "ciphertrust_aws_xks_key" "xks_key" {
-  alias       = [local.key_name]
-  description = "desc for xks_key"
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     custom_key_store_id = ciphertrust_aws_custom_keystore.custom_keystore.id
     linked              = true
     source_key_id       = ciphertrust_cm_key.aes_key.id
     source_key_tier     = "local"
+  }
+  aws_param = {
+    alias       = [local.key_name]
+    description = "desc for xks_key"
   }
 }
 

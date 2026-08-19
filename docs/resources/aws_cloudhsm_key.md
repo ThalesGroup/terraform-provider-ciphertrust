@@ -23,10 +23,10 @@ resource "ciphertrust_aws_kms" "kms" {
   depends_on = [
     ciphertrust_aws_connection.aws-connection,
   ]
-  account_id     = "account-id"
-  aws_connection = ciphertrust_aws_connection.aws-connection.id
-  name           = "name"
-  regions        = ["region"]
+  account_id    = "account-id"
+  connection_id = ciphertrust_aws_connection.aws-connection.id
+  name          = "name"
+  regions       = ["region"]
 }
 
 # Define a CloudHSM custom keystore
