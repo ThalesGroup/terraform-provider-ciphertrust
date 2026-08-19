@@ -24,5 +24,5 @@ resource "ciphertrust_aws_connection" "connection" {
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.connection.id
+  connection_id = ciphertrust_aws_connection.connection.id
 }

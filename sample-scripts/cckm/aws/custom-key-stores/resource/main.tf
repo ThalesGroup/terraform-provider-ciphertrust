@@ -32,15 +32,15 @@ resource "ciphertrust_aws_connection" "connection" {
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.connection.id
+  connection_id = ciphertrust_aws_connection.connection.id
 }
 
 # Create a kms
 resource "ciphertrust_aws_kms" "kms" {
-  name           = local.kms_name
-  account_id     = data.ciphertrust_aws_account_details.account_details.account_id
-  aws_connection = ciphertrust_aws_connection.connection.id
-  regions        = [data.ciphertrust_aws_account_details.account_details.regions[0]]
+  name          = local.kms_name
+  account_id    = data.ciphertrust_aws_account_details.account_details.account_id
+  connection_id = ciphertrust_aws_connection.connection.id
+  regions       = [data.ciphertrust_aws_account_details.account_details.regions[0]]
 }
 
 # Create an AES CipherTrust Manager key
@@ -68,21 +68,21 @@ resource "ciphertrust_scheduler" "rotation" {
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
   name                        = local.cks_name
   region                      = data.ciphertrust_aws_account_details.account_details.regions[0]
-  kms                         = ciphertrust_aws_kms.kms.id
+  kms_id                      = ciphertrust_aws_kms.kms.id
   linked_state                = true
   connect_disconnect_keystore = "CONNECT_KEYSTORE"
-  local_hosted_params {
+  local_hosted_params = {
     blocked             = false
     health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
     max_credentials     = 8
     source_key_tier     = "local"
   }
-  aws_param {
+  aws_param = {
     xks_proxy_uri_endpoint = local.endpoint
     xks_proxy_connectivity = "PUBLIC_ENDPOINT"
     custom_key_store_type  = "EXTERNAL_KEY_STORE"
   }
-  enable_credential_rotation {
+  enable_credential_rotation = {
     job_config_id = ciphertrust_scheduler.rotation.id
   }
 }

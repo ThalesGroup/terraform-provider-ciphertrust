@@ -4,15 +4,15 @@ resource "ciphertrust_aws_connection" "aws_connection" {
 }
 
 data "ciphertrust_aws_account_details" "account_details" {
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
+  connection_id = ciphertrust_aws_connection.aws_connection.id
 }
 
 # Assign a ciphertrust_aws_kms resource to the connection
 resource "ciphertrust_aws_kms" "kms" {
-  account_id     = "account-id"
-  aws_connection = ciphertrust_aws_connection.aws_connection.id
-  name           = "kms-name"
-  regions        = data.ciphertrust_aws_account_details.account_details.regions
+  account_id    = "account-id"
+  connection_id = ciphertrust_aws_connection.aws_connection.id
+  name          = "kms-name"
+  regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
 # Define a policy template using key_admins and key_users
