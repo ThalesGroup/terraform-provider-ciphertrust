@@ -118,8 +118,6 @@ output "aws_connection_name" {
 
 ### Optional
 
-> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
-
 - `access_key_id` (String, Sensitive) Key ID of the AWS user
 - `assume_role_arn` (String) AWS IAM role ARN
 - `assume_role_external_id` (String) Specify AWS Role external ID
@@ -141,7 +139,7 @@ aws-cn
 - `labels` (Map of String) Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products associated with the connection. Valid values are: cckm, ddc, cte, data discovery, backup/restore, logger, hsm_anchored_domain, csm. Any other value is rejected by CipherTrust Manager with a 422 error. Note: once set, this field cannot be cleared back to unset via Terraform. The CM API silently ignores an empty products list on update; the prior value is preserved in state and a warning is emitted. To remove all products, destroy and recreate the resource.
-- `secret_access_key` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.
+- `secret_access_key` (String, Sensitive) Secret associated with the access key ID of the AWS user. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). CipherTrust Manager never returns this value on GET, so Terraform cannot detect out-of-band rotation on its own; to resend a rotated secret, change `secret_access_key` and bump `secret_access_key_version` in the same apply.
 - `secret_access_key_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `secret_access_key` to CipherTrust Manager. Since `secret_access_key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `secret_access_key` value re-sent.
 
 ### Read-Only
@@ -172,5 +170,5 @@ Required:
 
 Optional:
 
-- `private_key` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) The private key associated with the certificate. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key, change `private_key` and bump `private_key_version` in the same apply.
+- `private_key` (String, Sensitive) The private key associated with the certificate. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key, change `private_key` and bump `private_key_version` in the same apply.
 - `private_key_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `private_key` to CipherTrust Manager. Since `private_key` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `private_key` value re-sent.
