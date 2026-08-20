@@ -36,11 +36,6 @@ resource "ciphertrust_oci_connection" "oci_connection" {
   user_ocid           = local.user_ocid
 }
 
-# Get compartments for this connection
-data "ciphertrust_get_oci_compartments" "compartments" {
-  connection_id = ciphertrust_oci_connection.oci_connection.id
-}
-
 # Define an OCI vault
 resource "ciphertrust_oci_vault" "vault" {
   connection_id = ciphertrust_oci_connection.oci_connection.id
@@ -60,7 +55,7 @@ resource "ciphertrust_cm_key" "cm_rsa_key" {
 resource "ciphertrust_oci_byok_key" "byok_key" {
   name = local.oci_key_name
   oci_key_params = {
-    compartment_id  = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
+    compartment_id  = ciphertrust_oci_vault.vault.compartment_id
     protection_mode = "SOFTWARE"
   }
   source_key_id   = ciphertrust_cm_key.cm_rsa_key.id

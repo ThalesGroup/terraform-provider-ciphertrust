@@ -36,11 +36,6 @@ resource "ciphertrust_oci_connection" "oci_connection" {
   user_ocid           = local.user_ocid
 }
 
-# Get compartments for this connection
-data "ciphertrust_get_oci_compartments" "compartments" {
-  connection_id = ciphertrust_oci_connection.oci_connection.id
-}
-
 # Define an OCI vault
 resource "ciphertrust_oci_vault" "vault" {
   connection_id = ciphertrust_oci_connection.oci_connection.id
@@ -62,7 +57,7 @@ resource "ciphertrust_oci_key" "native_key" {
   vault = ciphertrust_oci_vault.vault.id
   oci_key_params = {
     algorithm       = "AES"
-    compartment_id  = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
+    compartment_id  = ciphertrust_oci_vault.vault.compartment_id
     length          = 32
     protection_mode = "SOFTWARE"
   }
