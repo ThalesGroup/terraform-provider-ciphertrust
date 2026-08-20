@@ -50,7 +50,7 @@ resource "ciphertrust_cm_key" "material_v2" {
 # rotate-material so the new entry becomes CURRENT and the previous entry moves to
 # PREVIOUS state. Remove an entry to delete that material version from the key.
 resource "ciphertrust_aws_key_material" "km" {
-  aws_key_id = ciphertrust_aws_byok_key.ext_key.kms_id
+  aws_key_id = ciphertrust_aws_byok_key.ext_key.aws_param.key_id
 
   # Initial material - applied first to enable the key
   key_material {
