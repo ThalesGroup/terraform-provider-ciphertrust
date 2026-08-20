@@ -30,16 +30,16 @@ resource "ciphertrust_aws_byok_key" "ext_key" {
 
 # CipherTrust AES key used as the initial key material
 resource "ciphertrust_cm_key" "material_v1" {
-  name      = "external-key-material-v1"
-  algorithm = "AES"
-  size      = 256
+  name       = "external-key-material-v1"
+  algorithm  = "AES"
+  key_size   = 256
 }
 
 # CipherTrust AES key used as the rotated (replacement) key material
 resource "ciphertrust_cm_key" "material_v2" {
-  name      = "external-key-material-v2"
-  algorithm = "AES"
-  size      = 256
+  name       = "external-key-material-v2"
+  algorithm  = "AES"
+  key_size   = 256
 }
 
 # Import initial key material to enable the EXTERNAL key.
@@ -50,7 +50,7 @@ resource "ciphertrust_cm_key" "material_v2" {
 # rotate-material so the new entry becomes CURRENT and the previous entry moves to
 # PREVIOUS state. Remove an entry to delete that material version from the key.
 resource "ciphertrust_aws_key_material" "km" {
-  aws_key_id = ciphertrust_aws_byok_key.ext_key.key_id
+  aws_key_id = ciphertrust_aws_byok_key.ext_key.kms_id
 
   # Initial material - applied first to enable the key
   key_material {
