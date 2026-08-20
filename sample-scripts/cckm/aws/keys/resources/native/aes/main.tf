@@ -23,9 +23,6 @@ locals {
 resource "ciphertrust_aws_connection" "aws-connection" {
   name = local.connection_name
 }
-output "aws_connection_id" {
-  value = ciphertrust_aws_connection.aws-connection.id
-}
 
 # Get the AWS account details
 data "ciphertrust_aws_account_details" "account_details" {

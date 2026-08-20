@@ -21,7 +21,6 @@ locals {
   kms_name        = "tf-xks-ds-${lower(random_id.random.hex)}"
   key_name        = "tf-xks-ds-${lower(random_id.random.hex)}"
   cks_name        = "tf-xks-ds-${lower(random_id.random.hex)}"
-  endpoint        = "https://endpoint.com"
 }
 
 # Create an AWS connection
@@ -53,21 +52,13 @@ resource "ciphertrust_cm_key" "aes_key" {
 }
 
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
-  name                        = local.cks_name
-  region                      = data.ciphertrust_aws_account_details.account_details.regions[0]
-  kms_id                      = ciphertrust_aws_kms.kms.id
-  linked_state                = true
-  connect_disconnect_keystore = "CONNECT_KEYSTORE"
+  name   = local.cks_name
+  region = data.ciphertrust_aws_account_details.account_details.regions[0]
+  kms_id = ciphertrust_aws_kms.kms.id
   local_hosted_params = {
-    blocked             = false
     health_check_key_id = ciphertrust_cm_key.aes_key.id
-    max_credentials     = 8
+    max_credentials     = 4
     source_key_tier     = "local"
-  }
-  aws_param = {
-    xks_proxy_uri_endpoint = local.endpoint
-    xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-    custom_key_store_type  = "EXTERNAL_KEY_STORE"
   }
 }
 
@@ -76,7 +67,7 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
   local_hosted_params = {
     blocked             = false
     custom_key_store_id = ciphertrust_aws_custom_keystore.custom_keystore.id
-    linked              = true
+    linked              = false
     source_key_id       = ciphertrust_cm_key.aes_key.id
     source_key_tier     = "local"
   }
@@ -86,10 +77,9 @@ resource "ciphertrust_aws_xks_key" "xks_key" {
   }
 }
 
-data "ciphertrust_aws_xks_key" "xks_key" {
+data "ciphertrust_aws_xks_keys_list" "xks_key" {
   depends_on = [
     ciphertrust_aws_xks_key.xks_key,
   ]
-  arn = ciphertrust_aws_xks_key.xks_key.arn
-  #  arn = "arn:aws:kms:us-west-1:556782317223:key/8209471b-20bd-4751-a7c2-8d0f3c21ee18"
+  filters = { "id" = ciphertrust_aws_xks_key.xks_key.id }
 }

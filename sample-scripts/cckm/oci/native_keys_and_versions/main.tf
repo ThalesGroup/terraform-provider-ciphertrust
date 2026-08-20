@@ -14,13 +14,12 @@ resource "random_id" "random" {
 }
 
 locals {
-  oci_key_file        = "keyfile.pem"
-  pubkey_fingerprint  = "c6:eb:b9:b1:22:8b:39:79:80:60:16:33:9b:e3:c9:ec"
-  region              = "us-ashburn-1"
-  tenancy_ocid        = "ocid1.tenancy.oc1.."
-  user_ocid           = "ocid1.user.oc1.."
-  vault_ocid          = "ocid1.vault.oc1.."
-  compartment_ocid    = "ocid1.compartment.oc1.."
+  oci_key_file        = var.oci_key_file
+  pubkey_fingerprint  = var.oci_pub_key_fingerprint
+  region              = var.oci_region
+  tenancy_ocid        = var.oci_tenancy_ocid
+  user_ocid           = var.oci_user_ocid
+  vault_ocid          = var.oci_vault_ocid
   connection_name     = "tf-${lower(random_id.random.hex)}"
   cm_key_name         = "tf-${lower(random_id.random.hex)}"
   oci_key_name        = "tf-${lower(random_id.random.hex)}"
@@ -35,7 +34,11 @@ resource "ciphertrust_oci_connection" "oci_connection" {
   region              = local.region
   tenancy_ocid        = local.tenancy_ocid
   user_ocid           = local.user_ocid
+}
 
+# Get compartments for this connection
+data "ciphertrust_get_oci_compartments" "compartments" {
+  connection_id = ciphertrust_oci_connection.oci_connection.id
 }
 
 # Define an OCI vault
@@ -53,13 +56,13 @@ resource "ciphertrust_cm_key" "cm_rsa_key" {
   key_size   = 2048
 }
 
-# Define an OCI byok key
+# Define an OCI native key
 resource "ciphertrust_oci_key" "native_key" {
   name  = local.oci_key_name
   vault = ciphertrust_oci_vault.vault.id
   oci_key_params = {
     algorithm       = "AES"
-    compartment_id  = local.compartment_ocid
+    compartment_id  = tolist(data.ciphertrust_get_oci_compartments.compartments.compartments)[0].id
     length          = 32
     protection_mode = "SOFTWARE"
   }
@@ -78,16 +81,10 @@ resource "ciphertrust_oci_byok_key_version" "byok_version" {
   cckm_key_id   = ciphertrust_oci_key.native_key.id
   source_key_id = ciphertrust_cm_key.cm_rsa_version.id
 }
-output "byok_version" {
-  value = ciphertrust_oci_byok_key_version.byok_version
-}
 
 # Add a native version to the key
 resource "ciphertrust_oci_key_version" "native_version" {
   cckm_key_id = ciphertrust_oci_key.native_key.id
-}
-output "native_version" {
-  value = ciphertrust_oci_key_version.native_version
 }
 
 # List all OCI key versions of the key
