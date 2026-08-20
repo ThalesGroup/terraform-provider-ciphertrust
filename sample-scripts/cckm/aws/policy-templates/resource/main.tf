@@ -20,10 +20,10 @@ locals {
   key_with_users_and_roles_name      = "tf-pt-users-and-roles-${lower(random_id.random.hex)}"
   template_with_policy_name          = "tf-pt-policy-${lower(random_id.random.hex)}"
   template_with_users_and_roles_name = "tf-pt-users-and-roles-${lower(random_id.random.hex)}"
-  user                               = "aws-iam-user"
-  admin                              = "aws-iam-admin"
-  user_role                          = "aws-iam-user-role"
-  admin_role                         = "aws-iam-admin-role"
+  user                               = var.aws_key_user
+  admin                              = var.aws_key_admin
+  user_role                          = var.aws_key_user_role
+  admin_role                         = var.aws_key_admin_role
 }
 
 # Create an AWS connection

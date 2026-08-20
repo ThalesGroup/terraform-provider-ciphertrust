@@ -1,6 +1,6 @@
-# AWS Resources and Data Sources 
+# OCI Resources and Data Sources
 
-These steps explain how configure CipherTrust Manager Provider parameters required to run the examples
+These steps explain how to configure CipherTrust Manager Provider parameters required to run the examples.
 
 ## Configure CipherTrust Manager
 
@@ -40,36 +40,26 @@ provider "ciphertrust" {
 }
 ```
 
-## Configure AWS Credentials
+## Configure OCI Credentials
 
-### Use environment variables
-
-```bash
-export AWS_ACCESS_KEY_ID=access-key-id
-export AWS_SECRET_ACCESS_KEY=secret-access_key
-```
-
-### Edit the connection resource in the script
+OCI connection credentials are supplied via Terraform variables. Set the following
+environment variables before running a script:
 
 ```bash
-resource "ciphertrust_aws_connection" "aws-connection" {
-  name              = "aws-connection"
-  access_key_id     = "access-key-id"
-  secret_access_key = "secret-access_key"
-}
+export TF_VAR_oci_key_file=$CCKM_OCI_KEY_FILE
+export TF_VAR_oci_pub_key_fingerprint=$CCKM_OCI_FINGERPRINT
+export TF_VAR_oci_region=$CCKM_OCI_REGION
+export TF_VAR_oci_tenancy_ocid=$CCKM_OCI_CONN_TENANCY
+export TF_VAR_oci_user_ocid=$CCKM_OCI_USER
+# Required for byok_keys_and_versions and native_keys_and_versions only:
+export TF_VAR_oci_vault_ocid=$CCKM_OCI_VAULT
 ```
+
 ## Run Examples
 
 If a `variables.tf` file exists in the script directory, the declared variables must be supplied
 before running the script. Use `TF_VAR_` environment variables to provide values without
-hard-coding them in source files. For example:
-
-```bash
-export TF_VAR_aws_key_user=my-iam-user
-export TF_VAR_aws_key_role=my-iam-role
-```
-
-Then run the script:
+hard-coding them in source files (see Configure OCI Credentials above).
 
 ```bash
 terraform init
@@ -78,7 +68,7 @@ terraform apply
 
 ## Destroy Resources
 
-To avoid conflicts with existing resources run terraform destroy before running another script destroy the existing resources.
+To avoid conflicts with existing resources run terraform destroy before running another script.
 
 ```bash
 terraform destroy
