@@ -267,7 +267,10 @@ func TestDoRefresh_RefreshTokenGrant_UsedFirst(t *testing.T) {
 
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+			return
+		}
 		if gt, ok := body["grant_type"].(string); ok {
 			grantTypeUsed = gt
 		}
