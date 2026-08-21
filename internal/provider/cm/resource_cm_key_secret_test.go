@@ -91,10 +91,7 @@ func Test_CMKeySchema_MaterialPasswordSaltWriteOnly(t *testing.T) {
 // resourceCMKey's Schema(), defaulting every attribute to null and applying the given
 // overrides.
 func newCMKeyRawValue(ctx context.Context, schemaResp resource.SchemaResponse, overrides map[string]tftypes.Value) tftypes.Value {
-	objType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
-	if !ok {
-		panic("expected schema type to be tftypes.Object")
-	}
+	objType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
 	values := make(map[string]tftypes.Value, len(objType.AttributeTypes))
 	for name, attrType := range objType.AttributeTypes {
 		if v, ok := overrides[name]; ok {
@@ -144,18 +141,8 @@ func Test_CMKeyCreate_MaterialPasswordSaltReadFromConfigNotPlan(t *testing.T) {
 		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
 	}
 
-	objType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
-	if !ok {
-		t.Fatalf("expected schema type to be tftypes.Object")
-	}
-	hkdfCreateType, ok := objType.AttributeTypes["hkdf_create_parameters"].(tftypes.Object)
-	if !ok {
-		t.Fatalf("expected hkdf_create_parameters to be tftypes.Object")
-	}
-	wrapHKDFType, ok := objType.AttributeTypes["wrap_hkdf"].(tftypes.Object)
-	if !ok {
-		t.Fatalf("expected wrap_hkdf to be tftypes.Object")
-	}
+	hkdfCreateType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object).AttributeTypes["hkdf_create_parameters"].(tftypes.Object)
+	wrapHKDFType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object).AttributeTypes["wrap_hkdf"].(tftypes.Object)
 
 	buildHKDFCreate := func(salt interface{}) tftypes.Value {
 		return tftypes.NewValue(hkdfCreateType, map[string]tftypes.Value{
