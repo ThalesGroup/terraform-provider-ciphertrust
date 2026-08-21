@@ -203,7 +203,15 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
 		gcpLabelsPayload := make(map[string]interface{})
 		for k, v := range plan.Labels.Elements() {
-			gcpLabelsPayload[k] = v.(types.String).ValueString()
+			strVal, ok := v.(types.String)
+			if !ok || strVal.IsNull() || strVal.IsUnknown() {
+				resp.Diagnostics.AddError(
+					"Invalid labels input",
+					fmt.Sprintf("Key %q in labels has an invalid or unconfigured string value", k),
+				)
+				return
+			}
+			gcpLabelsPayload[k] = strVal.ValueString()
 		}
 		payload.Labels = gcpLabelsPayload
 	}
@@ -211,7 +219,15 @@ func (r *resourceGCPConnection) Create(ctx context.Context, req resource.CreateR
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 		gcpMetadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
-			gcpMetadataPayload[k] = v.(types.String).ValueString()
+			strVal, ok := v.(types.String)
+			if !ok || strVal.IsNull() || strVal.IsUnknown() {
+				resp.Diagnostics.AddError(
+					"Invalid meta input",
+					fmt.Sprintf("Key %q in meta has an invalid or unconfigured string value", k),
+				)
+				return
+			}
+			gcpMetadataPayload[k] = strVal.ValueString()
 		}
 		payload.Meta = gcpMetadataPayload
 	}
@@ -361,7 +377,15 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
 		gcpLabelsPayload := make(map[string]interface{})
 		for k, v := range plan.Labels.Elements() {
-			gcpLabelsPayload[k] = v.(types.String).ValueString()
+			strVal, ok := v.(types.String)
+			if !ok || strVal.IsNull() || strVal.IsUnknown() {
+				resp.Diagnostics.AddError(
+					"Invalid labels input",
+					fmt.Sprintf("Key %q in labels has an invalid or unconfigured string value", k),
+				)
+				return
+			}
+			gcpLabelsPayload[k] = strVal.ValueString()
 		}
 		payload.Labels = gcpLabelsPayload
 	}
@@ -369,7 +393,15 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 		gcpMetadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
-			gcpMetadataPayload[k] = v.(types.String).ValueString()
+			strVal, ok := v.(types.String)
+			if !ok || strVal.IsNull() || strVal.IsUnknown() {
+				resp.Diagnostics.AddError(
+					"Invalid meta input",
+					fmt.Sprintf("Key %q in meta has an invalid or unconfigured string value", k),
+				)
+				return
+			}
+			gcpMetadataPayload[k] = strVal.ValueString()
 		}
 		payload.Meta = gcpMetadataPayload
 	}
