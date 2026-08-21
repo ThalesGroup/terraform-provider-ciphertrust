@@ -1787,7 +1787,9 @@ resource "ciphertrust_cm_key" "test" {
 					}
 					ctx := context.Background()
 					payload, _ := json.Marshal(map[string]interface{}{"description": "drift-test"})
-					client.UpdateData(ctx, capturedID, common.URL_KEY_MANAGEMENT, payload, "updatedAt")
+					if _, err := client.UpdateData(ctx, capturedID, common.URL_KEY_MANAGEMENT, payload, "updatedAt"); err != nil {
+						t.Logf("out-of-band update failed: %v", err)
+					}
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,
