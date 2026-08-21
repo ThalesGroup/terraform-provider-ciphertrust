@@ -281,11 +281,11 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		if key["id"] != nil {
 			keyState.ID = types.StringValue(key["id"].(string))
 		}
-		if v, ok := key["uri"].(string); ok {
-			keyState.URI = types.StringValue(v)
+		if key["uri"] != nil {
+			keyState.URI = types.StringValue(key["uri"].(string))
 		}
-		if v, ok := key["account"].(string); ok {
-			keyState.Account = types.StringValue(v)
+		if key["account"] != nil {
+			keyState.Account = types.StringValue(key["account"].(string))
 		}
 		if key["application"] != nil {
 			keyState.Application = types.StringValue(key["application"].(string))
