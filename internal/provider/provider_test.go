@@ -247,8 +247,10 @@ func testCheckListContainsName(resourceName string, listAttr string, subAttr str
 		if !ok {
 			return fmt.Errorf("error: %s.%s.# not found in state", resourceName, listAttr)
 		}
-		count := 0
-		fmt.Sscanf(countStr, "%d", &count)
+		count, err := strconv.Atoi(countStr)
+		if err != nil {
+			return fmt.Errorf("error: %s.%s.# is not a valid count: %v", resourceName, listAttr, err)
+		}
 		for i := 0; i < count; i++ {
 			key := fmt.Sprintf("%s.%d.%s", listAttr, i, subAttr)
 			if rs.Primary.Attributes[key] == expectedValue {
