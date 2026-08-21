@@ -140,13 +140,13 @@ type CTEClientJSON struct {
 	Labels                 map[string]interface{} `json:"labels"`
 }
 
-// CTE client delete payload struct
+// CTE client delete payload struct.
 type DelClientJSON struct {
 	DelClient      bool `json:"del_client"`
 	ForceDelClient bool `json:"force_del_client"`
 }
 
-// CTE Policy related structs
+// CTE Policy related structs.
 type DataTxRuleJSON struct {
 	ID            string `json:"id,omitempty"`
 	OrderNumber   *int64 `json:"order_number,omitempty"`
@@ -1603,7 +1603,7 @@ type CTEClientGroupDesignatedPrimarySetTFSDK struct {
 	LDTCommGroupServiceID types.String `tfsdk:"ldt_comm_group_service_id"`
 }
 
-// JSON struct for Create request body (POST)
+// JSON struct for Create request body (POST).
 type CTEClientGroupDesignatedPrimarySetJSON struct {
 	Name                  string `json:"name"`
 	ClientList            string `json:"client_list"`
