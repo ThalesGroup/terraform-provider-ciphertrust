@@ -38,7 +38,10 @@ func Test_CM_OCIConnectionList_EmptyResponseSucceeds(t *testing.T) {
 	var schemaResp datasource.SchemaResponse
 	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
 
-	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	dsType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	if !ok {
+		t.Fatalf("expected schema type to be tftypes.Object")
+	}
 	dsVals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
 	for name, attrType := range dsType.AttributeTypes {
 		dsVals[name] = tftypes.NewValue(attrType, nil)
@@ -78,7 +81,10 @@ func Test_CM_OCIConnectionList_UnrecognizedFilterRejectedAtConfig(t *testing.T) 
 
 	var schemaResp datasource.SchemaResponse
 	d.Schema(ctx, datasource.SchemaRequest{}, &schemaResp)
-	dsType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	dsType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	if !ok {
+		t.Fatalf("expected schema type to be tftypes.Object")
+	}
 
 	vals := make(map[string]tftypes.Value, len(dsType.AttributeTypes))
 	for name, attrType := range dsType.AttributeTypes {
