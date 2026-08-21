@@ -45,10 +45,7 @@ func Test_ScpConnectionListDataSource_SchemaMatchesModel(t *testing.T) {
 		t.Fatalf("unexpected diagnostics building schema: %v", schemaResp.Diagnostics)
 	}
 
-	configType, ok := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
-	if !ok {
-		t.Fatalf("expected schema type to be tftypes.Object")
-	}
+	configType := schemaResp.Schema.Type().TerraformType(ctx).(tftypes.Object)
 	configValue := tftypes.NewValue(configType, map[string]tftypes.Value{
 		"filters": tftypes.NewValue(configType.AttributeTypes["filters"], nil),
 		"scp":     tftypes.NewValue(configType.AttributeTypes["scp"], nil),
