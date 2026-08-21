@@ -17,7 +17,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// Default CipherTrust Manager URL
+// Default CipherTrust Manager URL.
 const CipherTrustURL string = "https://10.10.10.10"
 
 // TLSOptions carries the user-supplied TLS configuration for the HTTP client.
@@ -78,7 +78,7 @@ type CCKMProviderConfig struct {
 	OCIOperationTimeout int64
 }
 
-// Client
+// Client.
 type Client struct {
 	CipherTrustURL   string
 	HTTPClient       *http.Client
@@ -106,7 +106,7 @@ type Client struct {
 	Log hclog.Logger
 }
 
-// Bootstrap Client for CipherTrust Manager
+// Bootstrap Client for CipherTrust Manager.
 type CMClientBootstrap struct {
 	CipherTrustURL   string
 	HTTPClient       *http.Client
@@ -139,7 +139,7 @@ func (c *CMClientBootstrap) GetLog() hclog.Logger {
 	return c.Log
 }
 
-// AuthStruct
+// AuthStruct.
 type AuthStruct struct {
 	Username          string `json:"username"`
 	Password          string `json:"password"`
@@ -151,14 +151,14 @@ type AuthStruct struct {
 	RenewRefreshToken bool   `json:"renew_refresh_token,omitempty"`
 }
 
-// AuthResponse
+// AuthResponse.
 type AuthResponse struct {
 	Token        string `json:"jwt"`
 	RefreshToken string `json:"refresh_token"`
 }
 
 // Create new client for CM with auth details
-// Usable for som bootstrap API calls
+// Usable for som bootstrap API calls.
 func NewCMClientBoot(ctx context.Context, uuid string, address *string, tlsOpts TLSOptions, timeout int64) (*CMClientBootstrap, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[client.go -> NewCMClientBoot]["+uuid+"]")
 	tlsCfg, err := BuildTLSConfig(tlsOpts)
