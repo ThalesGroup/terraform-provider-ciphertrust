@@ -232,7 +232,15 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	userFilters := url.Values{}
 	for k, v := range state.Filters.Elements() {
-		userFilters.Set(k, v.(types.String).ValueString())
+		strVal, ok := v.(types.String)
+		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid filters input",
+				fmt.Sprintf("Key %q in filters has an invalid or unconfigured string value", k),
+			)
+			return
+		}
+		userFilters.Set(k, strVal.ValueString())
 	}
 
 	// Branch on skip/limit: single-page when the caller controls pagination,
