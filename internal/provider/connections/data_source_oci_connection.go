@@ -163,15 +163,7 @@ func (d *dataSourceOCIConnection) Read(ctx context.Context, req datasource.ReadR
 	var kvs []string
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
 		for k, v := range state.Filters.Elements() {
-			strVal, ok := v.(types.String)
-			if !ok || strVal.IsNull() || strVal.IsUnknown() {
-				resp.Diagnostics.AddError(
-					"Invalid filters input",
-					fmt.Sprintf("Key %q in filters has an invalid or unconfigured string value", k),
-				)
-				return
-			}
-			kv := fmt.Sprintf("%s=%s&", k, strVal.ValueString())
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
 			kvs = append(kvs, kv)
 		}
 	}
