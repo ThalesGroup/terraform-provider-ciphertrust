@@ -211,7 +211,15 @@ func (d *dataSourceAzureConnection) Read(ctx context.Context, req datasource.Rea
 	var kvs []string
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
 		for k, v := range state.Filters.Elements() {
-			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
+			strVal, ok := v.(types.String)
+			if !ok || strVal.IsNull() || strVal.IsUnknown() {
+				resp.Diagnostics.AddError(
+					"Invalid filters input",
+					fmt.Sprintf("Key %q in filters has an invalid or unconfigured string value", k),
+				)
+				return
+			}
+			kv := fmt.Sprintf("%s=%s&", k, strVal.ValueString())
 			kvs = append(kvs, kv)
 		}
 	}
