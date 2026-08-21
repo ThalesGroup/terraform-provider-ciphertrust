@@ -419,7 +419,15 @@ func (r *resourceCCKMAWSConnection) Create(ctx context.Context, req resource.Cre
 	// Add labels to payload
 	labelsPayload := make(map[string]interface{})
 	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+		strVal, ok := v.(types.String)
+		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid labels input",
+				fmt.Sprintf("Key %q in labels has an invalid or unconfigured string value", k),
+			)
+			return
+		}
+		labelsPayload[k] = strVal.ValueString()
 	}
 	payload.Labels = labelsPayload
 
