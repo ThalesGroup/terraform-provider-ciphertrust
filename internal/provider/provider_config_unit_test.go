@@ -38,10 +38,11 @@ import (
 // Shared test helpers
 // ---------------------------------------------------------------------------
 
-// startMockCM starts a local TLS server that handles the two CM endpoints
+// startMockCM starts a local TLS server that handles the CM endpoints
 // called during provider initialisation:
-//   - POST /api/v1/auth/tokens  -- returns a minimal fake JWT response
-//   - GET  /api/v1/cluster      -- returns nodeCount=1 (not clustered)
+//   - POST /api/v1/auth/tokens   -- returns a minimal fake JWT response
+//   - GET  /api/v1/system/info   -- returns a fake CM version (needed by fetchCMVersion)
+//   - GET  /api/v1/cluster       -- returns nodeCount=1 (not clustered)
 //
 // The server is registered for automatic closure via t.Cleanup. Returns the
 // server base URL (e.g. "https://127.0.0.1:PORT").
@@ -55,6 +56,10 @@ func startMockCM(t *testing.T) string {
 				"jwt":           "unit-test-fake-token",
 				"refresh_token": "unit-test-fake-refresh",
 			})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "system/info"):
+			// fetchCMVersion calls GET /api/v1/system/info to detect the CM version.
+			// Return a minimal valid response so Configure() succeeds in unit tests.
+			_ = json.NewEncoder(w).Encode(map[string]string{"version": "2.16.0"})
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "cluster"):
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"nodeCount": 1})
 		default:
@@ -514,6 +519,8 @@ func TestUnit_Provider_Cluster_IsClusteredTrue(t *testing.T) {
 				"jwt":           "unit-test-fake-token",
 				"refresh_token": "unit-test-fake-refresh",
 			})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "system/info"):
+			_ = json.NewEncoder(w).Encode(map[string]string{"version": "2.16.0"})
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "cluster"):
 			// nodeCount = 2 means the instance IS part of a multi-node cluster.
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"nodeCount": 2})
