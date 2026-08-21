@@ -206,15 +206,7 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 				)
 				return
 			}
-			strVal, ok := v.(types.String)
-			if !ok || strVal.IsNull() || strVal.IsUnknown() {
-				resp.Diagnostics.AddError(
-					"Invalid filters input",
-					fmt.Sprintf("Key %q in filters has an invalid or unconfigured string value", k),
-				)
-				return
-			}
-			kv := fmt.Sprintf("%s=%s&", k, strVal.ValueString())
+			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
 			kvs = append(kvs, kv)
 		}
 	}
@@ -315,20 +307,18 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 		if aws.Meta != nil {
 			// Create the map to store attr.Value for Meta
 			metaMap := make(map[string]attr.Value)
-			if m, ok := aws.Meta.(map[string]interface{}); ok {
-				for key, value := range m {
-					// Convert each value in meta to the corresponding attr.Value
-					switch v := value.(type) {
-					case string:
-						metaMap[key] = types.StringValue(v)
-					case int64:
-						metaMap[key] = types.Int64Value(v)
-					case bool:
-						metaMap[key] = types.BoolValue(v)
-					default:
-						// For unknown types, convert them to a string representation
-						metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
-					}
+			for key, value := range aws.Meta.(map[string]interface{}) {
+				// Convert each value in meta to the corresponding attr.Value
+				switch v := value.(type) {
+				case string:
+					metaMap[key] = types.StringValue(v)
+				case int64:
+					metaMap[key] = types.Int64Value(v)
+				case bool:
+					metaMap[key] = types.BoolValue(v)
+				default:
+					// For unknown types, convert them to a string representation
+					metaMap[key] = types.StringValue(fmt.Sprintf("%v", v))
 				}
 			}
 			awsConn.Meta, _ = types.MapValue(types.StringType, metaMap)
