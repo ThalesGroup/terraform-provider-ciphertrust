@@ -271,7 +271,9 @@ func TestDoRefresh_RefreshTokenGrant_UsedFirst(t *testing.T) {
 		if gt, ok := body["grant_type"].(string); ok {
 			grantTypeUsed = gt
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
