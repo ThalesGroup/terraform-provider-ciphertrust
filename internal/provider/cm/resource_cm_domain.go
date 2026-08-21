@@ -202,15 +202,7 @@ func (r *resourceCMDomain) Create(ctx context.Context, req resource.CreateReques
 	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 		metadataPayload := make(map[string]interface{})
 		for k, v := range plan.Meta.Elements() {
-			strVal, ok := v.(types.String)
-			if !ok || strVal.IsNull() || strVal.IsUnknown() {
-				resp.Diagnostics.AddError(
-					"Invalid meta input",
-					fmt.Sprintf("Key %q in meta has an invalid or unconfigured string value", k),
-				)
-				return
-			}
-			metadataPayload[k] = strVal.ValueString()
+			metadataPayload[k] = v.(types.String).ValueString()
 		}
 		payload.Meta = metadataPayload
 	}
@@ -472,15 +464,7 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 		// Add/update keys present in the new plan value.
 		if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 			for k, v := range plan.Meta.Elements() {
-				strVal, ok := v.(types.String)
-				if !ok || strVal.IsNull() || strVal.IsUnknown() {
-					resp.Diagnostics.AddError(
-						"Invalid meta input",
-						fmt.Sprintf("Key %q in meta has an invalid or unconfigured string value", k),
-					)
-					return
-				}
-				metadataPayload[k] = strVal.ValueString()
+				metadataPayload[k] = v.(types.String).ValueString()
 			}
 		}
 
