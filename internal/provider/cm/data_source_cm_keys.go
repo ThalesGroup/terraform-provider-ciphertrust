@@ -314,8 +314,8 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		if v, ok := key["size"].(float64); ok {
 			keyState.Size = types.Int64Value(int64(v))
 		}
-		if v, ok := key["format"].(string); ok {
-			keyState.Format = types.StringValue(v)
+		if key["format"] != nil {
+			keyState.Format = types.StringValue(key["format"].(string))
 		}
 		if key["unexportable"] != nil {
 			keyState.Unexportable = types.BoolValue(bool(key["unexportable"].(bool)))
@@ -323,32 +323,32 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		if key["undeletable"] != nil {
 			keyState.Undeletable = types.BoolValue(bool(key["undeletable"].(bool)))
 		}
-		if v, ok := key["objectType"].(string); ok {
-			keyState.ObjectType = types.StringValue(v)
+		if key["objectType"] != nil {
+			keyState.ObjectType = types.StringValue(key["objectType"].(string))
 		}
-		if v, ok := key["activationDate"].(string); ok {
-			keyState.ActivationDate = types.StringValue(v)
+		if key["activationDate"] != nil {
+			keyState.ActivationDate = types.StringValue(key["activationDate"].(string))
 		}
-		if v, ok := key["deactivationDate"].(string); ok {
-			keyState.DeactivationDate = types.StringValue(v)
+		if key["deactivationDate"] != nil {
+			keyState.DeactivationDate = types.StringValue(key["deactivationDate"].(string))
 		}
-		if v, ok := key["archiveDate"].(string); ok {
-			keyState.ArchiveDate = types.StringValue(v)
+		if key["archiveDate"] != nil {
+			keyState.ArchiveDate = types.StringValue(key["archiveDate"].(string))
 		}
-		if v, ok := key["destroyDate"].(string); ok {
-			keyState.DestroyDate = types.StringValue(v)
+		if key["destroyDate"] != nil {
+			keyState.DestroyDate = types.StringValue(key["destroyDate"].(string))
 		}
-		if v, ok := key["revocationReason"].(string); ok {
-			keyState.RevocationReason = types.StringValue(v)
+		if key["revocationReason"] != nil {
+			keyState.RevocationReason = types.StringValue(key["revocationReason"].(string))
 		}
-		if v, ok := key["state"].(string); ok {
-			keyState.State = types.StringValue(v)
+		if key["state"] != nil {
+			keyState.State = types.StringValue(key["state"].(string))
 		}
-		if v, ok := key["uuid"].(string); ok {
-			keyState.UUID = types.StringValue(v)
+		if key["uuid"] != nil {
+			keyState.UUID = types.StringValue(key["uuid"].(string))
 		}
-		if v, ok := key["description"].(string); ok {
-			keyState.Description = types.StringValue(v)
+		if key["description"] != nil {
+			keyState.Description = types.StringValue(key["description"].(string))
 		}
 		state.Keys = append(state.Keys, keyState)
 	}
