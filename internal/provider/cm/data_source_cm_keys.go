@@ -317,11 +317,11 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		if v, ok := key["format"].(string); ok {
 			keyState.Format = types.StringValue(v)
 		}
-		if key["unexportable"] != nil {
-			keyState.Unexportable = types.BoolValue(bool(key["unexportable"].(bool)))
+		if v, ok := key["unexportable"].(bool); ok {
+			keyState.Unexportable = types.BoolValue(v)
 		}
-		if key["undeletable"] != nil {
-			keyState.Undeletable = types.BoolValue(bool(key["undeletable"].(bool)))
+		if v, ok := key["undeletable"].(bool); ok {
+			keyState.Undeletable = types.BoolValue(v)
 		}
 		if v, ok := key["objectType"].(string); ok {
 			keyState.ObjectType = types.StringValue(v)
