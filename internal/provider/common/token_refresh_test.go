@@ -236,7 +236,9 @@ func TestDoRefresh_PasswordFallback_WhenNoRefreshToken(t *testing.T) {
 			http.Error(w, "expected password grant", 400)
 			return
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
