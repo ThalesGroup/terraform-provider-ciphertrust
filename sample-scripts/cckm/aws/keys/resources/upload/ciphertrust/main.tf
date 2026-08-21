@@ -52,13 +52,14 @@ resource "ciphertrust_aws_byok_key" "aes" {
   aws_param = {
     alias                    = ["aws-aes-key-upload-${lower(random_id.random.hex)}"]
     customer_master_key_spec = "SYMMETRIC_DEFAULT"
+    key_usage                = "ENCRYPT_DECRYPT"
   }
 }
 
 resource "ciphertrust_cm_key" "hmac_sha256" {
   name      = local.hmac_key_name
   algorithm = "hmac-sha256"
-  key_size  = "256"
+  key_size  = 256
 }
 
 resource "ciphertrust_aws_byok_key" "hmac_256" {
@@ -69,6 +70,7 @@ resource "ciphertrust_aws_byok_key" "hmac_256" {
   aws_param = {
     alias                    = [local.hmac_key_name]
     customer_master_key_spec = "HMAC_256"
+    key_usage                = "GENERATE_VERIFY_MAC"
   }
 }
 
@@ -86,6 +88,7 @@ resource "ciphertrust_aws_byok_key" "rsa" {
   aws_param = {
     alias                    = [local.rsa_key_name]
     customer_master_key_spec = "RSA_2048"
+    key_usage                = "ENCRYPT_DECRYPT"
   }
 }
 
@@ -103,6 +106,7 @@ resource "ciphertrust_aws_byok_key" "ecc_secg_p256k1" {
   aws_param = {
     alias                    = [local.ecc_secg_p256k1_key_name]
     customer_master_key_spec = "ECC_SECG_P256K1"
+    key_usage                = "SIGN_VERIFY"
   }
 }
 
@@ -120,6 +124,7 @@ resource "ciphertrust_aws_byok_key" "ecc_nist_p384" {
   aws_param = {
     alias                    = ["aws-ECC_NIST_P384-upload-${lower(random_id.random.hex)}"]
     customer_master_key_spec = "ECC_NIST_P384"
+    key_usage                = "SIGN_VERIFY"
   }
 }
 
@@ -137,5 +142,6 @@ resource "ciphertrust_aws_byok_key" "ecc_nist_p521" {
   aws_param = {
     alias                    = [local.ecc_nist_p521_key_name]
     customer_master_key_spec = "ECC_NIST_P521"
+    key_usage                = "SIGN_VERIFY"
   }
 }

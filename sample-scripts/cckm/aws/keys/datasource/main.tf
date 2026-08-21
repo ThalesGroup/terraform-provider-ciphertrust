@@ -58,69 +58,69 @@ resource "ciphertrust_aws_key" "aws_key" {
 resource "ciphertrust_aws_key" "replicated_key" {
   region = data.ciphertrust_aws_account_details.account_details.regions[1]
   replicate_key = {
-    key_id = ciphertrust_aws_key.aws_key.key_id
+    key_id = ciphertrust_aws_key.aws_key.id
   }
   aws_param = {
     alias = [local.key_name]
   }
 }
 
-# Read the key using the Terraform resource ID
-data "ciphertrust_aws_key" "using_terraform_id" {
-  id = ciphertrust_aws_key.aws_key.id
+# Read the key using the CipherTrust Manager resource ID filter
+data "ciphertrust_aws_keys_list" "using_id" {
+  filters = { "id" = ciphertrust_aws_key.aws_key.id }
 }
 output "using_id" {
-  value = data.ciphertrust_aws_key.using_terraform_id.id
+  value = data.ciphertrust_aws_keys_list.using_id.keys[0].key_id
 }
 
-# Read the key using the CipherTrust Manager key resource ID
-data "ciphertrust_aws_key" "using_key_id" {
-  key_id = ciphertrust_aws_key.aws_key.key_id
-}
-output "using_key_id" {
-  value = data.ciphertrust_aws_key.using_key_id.id
-}
-
-# Read the key using the alias and region
-data "ciphertrust_aws_key" "using_alias_and_region" {
-  alias  = [local.key_name]
-  region = ciphertrust_aws_key.aws_key.region
+# Read the key using the alias filter
+data "ciphertrust_aws_keys_list" "using_alias" {
+  filters = {
+    "alias"  = local.key_name
+    "region" = ciphertrust_aws_key.aws_key.region
+  }
 }
 output "using_alias_and_region" {
-  value = data.ciphertrust_aws_key.using_alias_and_region.id
+  value = data.ciphertrust_aws_keys_list.using_alias.keys[0].key_id
 }
 
-# Read the replicated key using the alias and region
-data "ciphertrust_aws_key" "replicated_using_alias" {
-  alias  = [local.key_name]
-  region = ciphertrust_aws_key.replicated_key.region
+# Read the replicated key using alias and region
+data "ciphertrust_aws_keys_list" "replicated_using_alias" {
+  filters = {
+    "alias"  = local.key_name
+    "region" = ciphertrust_aws_key.replicated_key.region
+  }
 }
-output "replicated_using_alias_and_region_1" {
-  value = data.ciphertrust_aws_key.replicated_using_alias.id
+output "replicated_using_alias_and_region" {
+  value = data.ciphertrust_aws_keys_list.replicated_using_alias.keys[0].key_id
 }
 
-# Read the key using the ARN
-data "ciphertrust_aws_key" "using_arn" {
-  arn = ciphertrust_aws_key.aws_key.arn
+# Read the key using the ARN filter
+data "ciphertrust_aws_keys_list" "using_arn" {
+  filters = { "arn" = ciphertrust_aws_key.aws_key.aws_param.arn }
 }
 output "using_arn" {
-  value = data.ciphertrust_aws_key.using_arn.id
+  value = data.ciphertrust_aws_keys_list.using_arn.keys[0].key_id
 }
 
-# Read the key using the AWS key ID and region
-data "ciphertrust_aws_key" "using_aws_key_id" {
-  aws_key_id = ciphertrust_aws_key.aws_key.aws_key_id
-  region     = ciphertrust_aws_key.aws_key.region
+# Read the key using the AWS key ID and region filters
+data "ciphertrust_aws_keys_list" "using_aws_key_id" {
+  filters = {
+    "keyid"  = ciphertrust_aws_key.aws_key.aws_param.key_id
+    "region" = ciphertrust_aws_key.aws_key.region
+  }
 }
 output "using_aws_key_id_and_region" {
-  value = data.ciphertrust_aws_key.using_aws_key_id.id
+  value = data.ciphertrust_aws_keys_list.using_aws_key_id.keys[0].key_id
 }
 
-# Read the replicated key using the AWS key ID and region
-data "ciphertrust_aws_key" "replicated_using_aws_key_id" {
-  aws_key_id = ciphertrust_aws_key.aws_key.aws_key_id
-  region     = ciphertrust_aws_key.replicated_key.region
+# Read the replicated key using the AWS key ID and region filters
+data "ciphertrust_aws_keys_list" "replicated_using_aws_key_id" {
+  filters = {
+    "keyid"  = ciphertrust_aws_key.aws_key.aws_param.key_id
+    "region" = ciphertrust_aws_key.replicated_key.region
+  }
 }
 output "replicated_using_aws_key_id_and_region" {
-  value = data.ciphertrust_aws_key.replicated_using_aws_key_id.id
+  value = data.ciphertrust_aws_keys_list.replicated_using_aws_key_id.keys[0].key_id
 }

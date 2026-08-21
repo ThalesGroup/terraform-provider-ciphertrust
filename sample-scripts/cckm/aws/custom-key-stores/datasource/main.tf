@@ -21,8 +21,6 @@ locals {
   kms_name            = "tf-cks-ds-${lower(random_id.random.hex)}"
   key_name            = "tf-cks-ds-${lower(random_id.random.hex)}"
   cks_name            = "tf-cks-ds-${lower(random_id.random.hex)}"
-  rotation_job_name   = "tf-cks-ds-${lower(random_id.random.hex)}"
-  endpoint            = "https://endpoint.com"
 }
 
 # Create an AWS connection
@@ -49,47 +47,24 @@ resource "ciphertrust_cm_key" "cm_aes_key" {
   algorithm                    = "AES"
   usage_mask                   = 60
   unexportable                 = true
-  undeletable                  = "true"
+  undeletable                  = true
   remove_from_state_on_destroy = true
 }
 
-resource "ciphertrust_scheduler" "rotation" {
-  end_date = "2027-03-07T14:00:00Z"
-  cckm_xks_credential_rotation_params = {
-    cloud_name = "aws"
-  }
-  name       = local.rotation_job_name
-  operation  = "cckm_xks_credential_rotation"
-  run_at     = "0 9 * * fri"
-  run_on     = "any"
-  start_date = "2025-03-07T14:00:00Z"
-}
-
 resource "ciphertrust_aws_custom_keystore" "custom_keystore" {
-  name                        = local.cks_name
-  region                      = data.ciphertrust_aws_account_details.account_details.regions[0]
-  kms_id                      = ciphertrust_aws_kms.kms.id
-  linked_state                = true
-  connect_disconnect_keystore = "CONNECT_KEYSTORE"
+  name   = local.cks_name
+  region = data.ciphertrust_aws_account_details.account_details.regions[0]
+  kms_id = ciphertrust_aws_kms.kms.id
   local_hosted_params = {
-    blocked             = false
     health_check_key_id = ciphertrust_cm_key.cm_aes_key.id
-    max_credentials     = 8
+    max_credentials     = 4
     source_key_tier     = "local"
   }
-  aws_param = {
-    xks_proxy_uri_endpoint = local.endpoint
-    xks_proxy_connectivity = "PUBLIC_ENDPOINT"
-    custom_key_store_type  = "EXTERNAL_KEY_STORE"
-  }
-  enable_credential_rotation = {
-    job_config_id = ciphertrust_scheduler.rotation.id
-  }
 }
 
-data "ciphertrust_aws_custom_keystore" "custom_keystore" {
-  id = ciphertrust_aws_custom_keystore.custom_keystore.id
+data "ciphertrust_aws_custom_keystore_list" "custom_keystore" {
+  filters = { "id" = ciphertrust_aws_custom_keystore.custom_keystore.id }
 }
 output "custom_keystore" {
-  value = data.ciphertrust_aws_custom_keystore.custom_keystore
+  value = data.ciphertrust_aws_custom_keystore_list.custom_keystore
 }
