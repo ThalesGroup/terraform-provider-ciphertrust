@@ -328,7 +328,12 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			req := makeRequest(expiringSoon)
-			tr.RoundTrip(req)
+			resp, err := tr.RoundTrip(req)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			resp.Body.Close()
 		}()
 	}
 	wg.Wait()
