@@ -89,7 +89,15 @@ func (d *dataSourceGroups) Read(ctx context.Context, req datasource.ReadRequest,
 
 	filters := url.Values{}
 	for k, v := range state.Filters.Elements() {
-		filters.Set(k, v.(types.String).ValueString())
+		strVal, ok := v.(types.String)
+		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+			resp.Diagnostics.AddError(
+				"Invalid filters input",
+				fmt.Sprintf("Key %q in filters has an invalid or unconfigured string value", k),
+			)
+			return
+		}
+		filters.Set(k, strVal.ValueString())
 	}
 
 	var groups []CMGroupJSON
