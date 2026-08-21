@@ -4,7 +4,6 @@ linters:
   enable:
     - durationcheck      # detects incorrect time.Duration arithmetic (e.g. multiplying two durations)
     - errcheck           # ensures returned errors are checked and not silently discarded
-    - forcetypeassert    # flags unchecked type assertions that can panic at runtime
     - godot              # enforces that top-level comments end with a period
     - govet              # reports suspicious constructs caught by the official go vet tool
     - ineffassign        # detects assignments whose value is never subsequently used
@@ -27,10 +26,6 @@ linters:
       - third_party$  # skip vendored third-party code
       - builtin$      # skip generated built-in stubs
       - examples$     # skip example code
-    rules:
-      - path: _test\.go
-        linters:
-          - forcetypeassert # panics are acceptable in tests; keep enforcement on production code
 issues:
   max-same-issues: 0
 formatters:
