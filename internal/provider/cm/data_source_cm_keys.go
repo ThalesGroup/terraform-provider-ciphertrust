@@ -278,8 +278,8 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 	state.Keys = []CMKeysListTFSDK{}
 	for _, key := range data {
 		keyState := CMKeysListTFSDK{}
-		if key["id"] != nil {
-			keyState.ID = types.StringValue(key["id"].(string))
+		if v, ok := key["id"].(string); ok {
+			keyState.ID = types.StringValue(v)
 		}
 		if v, ok := key["uri"].(string); ok {
 			keyState.URI = types.StringValue(v)
@@ -287,32 +287,32 @@ func (d *dataSourceKeys) Read(ctx context.Context, req datasource.ReadRequest, r
 		if v, ok := key["account"].(string); ok {
 			keyState.Account = types.StringValue(v)
 		}
-		if key["application"] != nil {
-			keyState.Application = types.StringValue(key["application"].(string))
+		if v, ok := key["application"].(string); ok {
+			keyState.Application = types.StringValue(v)
 		}
-		if key["devAccount"] != nil {
-			keyState.DevAccount = types.StringValue(key["devAccount"].(string))
+		if v, ok := key["devAccount"].(string); ok {
+			keyState.DevAccount = types.StringValue(v)
 		}
-		if key["createdAt"] != nil {
-			keyState.CreatedAt = types.StringValue(key["createdAt"].(string))
+		if v, ok := key["createdAt"].(string); ok {
+			keyState.CreatedAt = types.StringValue(v)
 		}
-		if key["name"] != nil {
-			keyState.Name = types.StringValue(key["name"].(string))
+		if v, ok := key["name"].(string); ok {
+			keyState.Name = types.StringValue(v)
 		}
-		if key["updatedAt"] != nil {
-			keyState.UpdatedAt = types.StringValue(key["updatedAt"].(string))
+		if v, ok := key["updatedAt"].(string); ok {
+			keyState.UpdatedAt = types.StringValue(v)
 		}
-		if key["usageMask"] != nil {
-			keyState.UsageMask = types.Int64Value(int64(key["usageMask"].(float64)))
+		if v, ok := key["usageMask"].(float64); ok {
+			keyState.UsageMask = types.Int64Value(int64(v))
 		}
-		if key["version"] != nil {
-			keyState.Version = types.Int64Value(int64(key["version"].(float64)))
+		if v, ok := key["version"].(float64); ok {
+			keyState.Version = types.Int64Value(int64(v))
 		}
-		if key["algorithm"] != nil {
-			keyState.Algorithm = types.StringValue(key["algorithm"].(string))
+		if v, ok := key["algorithm"].(string); ok {
+			keyState.Algorithm = types.StringValue(v)
 		}
-		if key["size"] != nil {
-			keyState.Size = types.Int64Value(int64(key["size"].(float64)))
+		if v, ok := key["size"].(float64); ok {
+			keyState.Size = types.Int64Value(int64(v))
 		}
 		if key["format"] != nil {
 			keyState.Format = types.StringValue(key["format"].(string))
