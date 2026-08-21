@@ -231,7 +231,10 @@ func TestDoRefresh_PasswordFallback_WhenNoRefreshToken(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify it's a password grant
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+			return
+		}
 		if body["grant_type"] != nil && body["grant_type"] != "password" {
 			http.Error(w, "expected password grant", 400)
 			return
