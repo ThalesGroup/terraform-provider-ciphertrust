@@ -174,7 +174,9 @@ func TestMaybeRefresh_ExpiringToken_TriggersRefresh(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate CM returning a new token
 		resp := AuthResponse{Token: newJWT}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -319,7 +321,9 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
