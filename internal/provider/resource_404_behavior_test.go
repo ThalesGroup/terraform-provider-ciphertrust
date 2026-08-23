@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
-	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	cm "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cm"
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	connections "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/connections"
 	"github.com/hashicorp/go-hclog"
 	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"

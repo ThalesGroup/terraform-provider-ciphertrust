@@ -781,4 +781,3 @@ resource "ciphertrust_cm_reg_token" "test" {
 		},
 	})
 }
-

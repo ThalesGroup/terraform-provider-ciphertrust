@@ -22,10 +22,10 @@ var nonNullResourceRaw = tftypes.NewValue(
 	map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
 )
 
-func nullState() tfsdk.State   { return tfsdk.State{Raw: nullResourceRaw} }
-func liveState() tfsdk.State   { return tfsdk.State{Raw: nonNullResourceRaw} }
-func destroyPlan() tfsdk.Plan  { return tfsdk.Plan{Raw: nullResourceRaw} }
-func updatePlan() tfsdk.Plan   { return tfsdk.Plan{Raw: nonNullResourceRaw} }
+func nullState() tfsdk.State  { return tfsdk.State{Raw: nullResourceRaw} }
+func liveState() tfsdk.State  { return tfsdk.State{Raw: nonNullResourceRaw} }
+func destroyPlan() tfsdk.Plan { return tfsdk.Plan{Raw: nullResourceRaw} }
+func updatePlan() tfsdk.Plan  { return tfsdk.Plan{Raw: nonNullResourceRaw} }
 
 // TestImmutableString verifies ImmutableString lifecycle semantics.
 func TestImmutableString(t *testing.T) {
@@ -44,27 +44,27 @@ func TestImmutableString(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name: "create (null state) — allow any value",
+			name:  "create (null state) — allow any value",
 			state: nullState(), plan: updatePlan(),
 			stateVal: types.StringNull(), planVal: changed, wantError: false,
 		},
 		{
-			name: "destroy with matching config — allow",
+			name:  "destroy with matching config — allow",
 			state: liveState(), plan: destroyPlan(),
 			stateVal: old, planVal: old, wantError: false,
 		},
 		{
-			name: "destroy with drifted config — allow (TFIN-552 regression)",
+			name:  "destroy with drifted config — allow (TFIN-552 regression)",
 			state: liveState(), plan: destroyPlan(),
 			stateVal: old, planVal: changed, wantError: false,
 		},
 		{
-			name: "update no-change — allow",
+			name:  "update no-change — allow",
 			state: liveState(), plan: updatePlan(),
 			stateVal: old, planVal: old, wantError: false,
 		},
 		{
-			name: "update changed — block",
+			name:  "update changed — block",
 			state: liveState(), plan: updatePlan(),
 			stateVal: old, planVal: changed, wantError: true,
 		},

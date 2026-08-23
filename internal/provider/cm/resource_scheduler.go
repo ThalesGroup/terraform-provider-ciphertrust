@@ -84,10 +84,18 @@ func (r *resourceScheduler) ValidateConfig(ctx context.Context, req resource.Val
 	}
 
 	var names []string
-	if config.DatabaseBackupParams != nil           { names = append(names, "database_backup_params") }
-	if config.CCKMKeyRotationParams != nil          { names = append(names, "cckm_key_rotation_params") }
-	if config.CCKMSynchronizationParams != nil      { names = append(names, "cckm_synchronization_params") }
-	if config.CCKMXksRotateCredentialsParams != nil { names = append(names, "cckm_xks_credential_rotation_params") }
+	if config.DatabaseBackupParams != nil {
+		names = append(names, "database_backup_params")
+	}
+	if config.CCKMKeyRotationParams != nil {
+		names = append(names, "cckm_key_rotation_params")
+	}
+	if config.CCKMSynchronizationParams != nil {
+		names = append(names, "cckm_synchronization_params")
+	}
+	if config.CCKMXksRotateCredentialsParams != nil {
+		names = append(names, "cckm_xks_credential_rotation_params")
+	}
 
 	if len(names) > 1 {
 		resp.Diagnostics.AddError(

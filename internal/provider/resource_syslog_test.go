@@ -453,7 +453,7 @@ resource "ciphertrust_syslog" "test" {
   host      = "syslog-a.example.com"
   transport = "udp"
   port      = 514
-}`, ) + fmt.Sprintf(" # %s", name),
+}`) + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-a.example.com"),
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "514"),
@@ -469,7 +469,7 @@ resource "ciphertrust_syslog" "test" {
   host      = "syslog-b.example.com"
   transport = "udp"
   port      = 601
-}`, ) + fmt.Sprintf(" # %s", name),
+}`) + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "update host+port in place",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-b.example.com"),
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "601"),
@@ -557,7 +557,7 @@ resource "ciphertrust_syslog" "test" {
   host      = "syslog.example.com"
   transport = "tls"
   ca_cert   = var.ca_cert
-}`, ) + fmt.Sprintf(" # %s", name),
+}`) + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "set ca_cert",
 					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
 				),
@@ -567,7 +567,7 @@ resource "ciphertrust_syslog" "test" {
 resource "ciphertrust_syslog" "test" {
   host      = "syslog.example.com"
   transport = "tls"
-}`, ) + fmt.Sprintf(" # %s", name),
+}`) + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "remove ca_cert — value preserved (API cannot clear)",
 					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
 				),

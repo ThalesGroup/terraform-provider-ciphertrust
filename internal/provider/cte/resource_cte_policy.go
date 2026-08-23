@@ -118,8 +118,8 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Description: "Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id. Note: For decryption, where a clear key is to be supplied, use the string \"clear_key\" only. Do not specify any other identifier.",
 						},
 						"key_type": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
+							Optional: true,
+							Computed: true,
 							// TFIN-583: no Default -- see the top-level
 							// description attribute for why Default and
 							// UseStateForUnknown() don't mix (Default
