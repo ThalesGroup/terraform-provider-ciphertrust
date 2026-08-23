@@ -1878,7 +1878,7 @@ func TestCckmAWSKeyMaterialMRPendingImportFirstMaterial(t *testing.T) {
 // TestCckmAWSKeyMaterialPlanValidation
 // No set values on create
 // Adding more than one new key_material
-// Set values that duplicate source_key_id
+// Set values that duplicate source_key_id.
 func TestCckmAWSKeyMaterialPlanValidation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")

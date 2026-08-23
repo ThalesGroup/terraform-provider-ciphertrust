@@ -832,7 +832,7 @@ func getResourceAttr(resourceName, attrName string) resource.ImportStateIdFunc {
 	}
 }
 
-// TestCckmAWSKeyMultiRegionNative creates a key and a replica and makes the replica primary
+// TestCckmAWSKeyMultiRegionNative creates a key and a replica and makes the replica primary.
 func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1009,7 +1009,7 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 }
 
 // TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses primary_region to change replica key to the primary key
-// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses the primary_key to make change the replica to the primary
+// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses the primary_key to make change the replica to the primary.
 func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {

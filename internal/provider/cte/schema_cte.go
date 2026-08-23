@@ -1610,7 +1610,7 @@ type CTEClientGroupDesignatedPrimarySetJSON struct {
 	LDTCommGroupServiceID string `json:"ldt_comm_group_service_id"`
 }
 
-// JSON struct for Update request body (PATCH) — only client_list is updatable
+// JSON struct for Update request body (PATCH) — only client_list is updatable.
 type CTEClientGroupDesignatedPrimarySetUpdateJSON struct {
 	ClientList string `json:"client_list"`
 }
