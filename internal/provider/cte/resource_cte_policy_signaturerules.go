@@ -509,12 +509,6 @@ func parseconfig(response string) []string {
 	}
 	return ids
 }
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 func (r *resourceCTEPolicySignatureRule) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Import ID format: "policy_id:signature_rule_id"
 	parts := strings.Split(req.ID, ":")
