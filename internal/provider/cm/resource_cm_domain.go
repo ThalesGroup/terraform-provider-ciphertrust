@@ -564,10 +564,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 			admins = append(admins, types.StringValue(a))
 		}
 		plan.Admins = admins
-	} else {
-		// Required field — CM should always return it.
-		// If omitted, preserve prior state to avoid false drift.
 	}
+	// else: required field — CM should always return it. If omitted, preserve
+	// prior state to avoid false drift.
 
 	// Post-PATCH meta_data read-back.
 	if plan.Meta.IsNull() {
