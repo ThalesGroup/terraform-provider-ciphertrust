@@ -684,13 +684,6 @@ func Test_CM_AccCMKey_templateId(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	keyName := "tf-acc-key-tmpl-" + suffix
 
-	// CDSPaaS restricted-user flow: only owner_id may be supplied in meta alongside template_id.
-	// On plain CM this is still valid; extra meta fields are just merged normally.
-	ownerSelf := os.Getenv("CIPHERTRUST_USERNAME")
-	if ownerSelf == "" {
-		ownerSelf = "admin"
-	}
-
 	// We don't know which fields the template will populate, so we only assert
 	// that the key was created (has an id). Checking algorithm/size would require
 	// knowing the template contents, which differ across environments.
