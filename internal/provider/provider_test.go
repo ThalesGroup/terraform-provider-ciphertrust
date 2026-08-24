@@ -307,6 +307,8 @@ func testAccListResourceAttributes(step string, resourceName string) resource.Te
 // resource in the current Terraform state. It is not called by any test but is kept
 // here because it is very useful when writing or diagnosing new tests.
 // NOTE: calls to this function must not be left in committed source code.
+//
+//nolint:unused // intentionally kept as an ad hoc debugging helper for future test authoring.
 func testAccListResources() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		for rn, rs := range s.RootModule().Resources {
