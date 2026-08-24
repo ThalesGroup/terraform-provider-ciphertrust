@@ -897,17 +897,6 @@ func (d *resourceCTEClientGP) Configure(_ context.Context, req resource.Configur
 	d.client = client
 }
 
-func parseConfig(response string) string {
-	var ids []string
-	guardpointSize := int((gjson.Get(string(response), "guardpoints.#")).Int())
-	k := 0
-	for k < guardpointSize {
-		ids = append(ids, gjson.Get(string(response), fmt.Sprintf("guardpoints.%d.guardpoint.id", k)).String())
-		k++
-	}
-	return strings.Join(ids, ",")
-}
-
 func (r *resourceCTEClientGP) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_client_gp.go -> ImportState][" + id + "]")

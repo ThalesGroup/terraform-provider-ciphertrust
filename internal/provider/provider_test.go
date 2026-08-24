@@ -278,6 +278,8 @@ func testVerifyResourceDeleted(resourceName string) resource.TestCheckFunc {
 // for a resource to stdout. It is not called by any test but is kept here because
 // it is very useful when writing or diagnosing new tests.
 // NOTE: calls to this function must not be left in committed source code.
+//
+//nolint:unused // intentionally kept as an ad hoc debugging helper for future test authoring.
 func testAccListResourceAttributes(step string, resourceName string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		fmt.Printf("\n************ %s %s attributes\n", step, resourceName)

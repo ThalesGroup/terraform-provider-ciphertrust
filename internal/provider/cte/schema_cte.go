@@ -388,13 +388,6 @@ type CTEPolicyLDTKeyRulesListTFSDK struct {
 	ISExclusionRule       types.Bool   `tfsdk:"is_exclusion_rule"`
 }
 
-type tfsdkCTEPolicyIDTKeyRulesListModel struct {
-	ID                types.String `tfsdk:"id"`
-	PolicyID          types.String `tfsdk:"policy_id"`
-	CurrentKey        types.String `tfsdk:"current_key"`
-	TransformationKey types.String `tfsdk:"transformation_key"`
-}
-
 type CTEPolicySecurityRulesListTFSDK struct {
 	ID                 types.String `tfsdk:"id"`
 	URI                types.String `tfsdk:"uri"`

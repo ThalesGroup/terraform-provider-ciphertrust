@@ -978,11 +978,6 @@ type DatabaseBackupParamsTFSDK struct {
 	Connection     types.String `tfsdk:"connection"`
 }
 
-var backupFilterAttrTypes = map[string]attr.Type{
-	"resource_type":  types.StringType,
-	"resource_query": types.StringType,
-}
-
 type CreateJobConfigParamsListJSON struct {
 	ID              string          `json:"id"`
 	URI             string          `json:"uri"`
