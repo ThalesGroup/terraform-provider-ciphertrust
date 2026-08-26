@@ -28,6 +28,25 @@ jobs:
             echo "Run 'make fmt' and commit the result."
             exit 1
           fi
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Plan-only resource.UnitTest cases drive the real terraform CLI against
+      # the in-process provider, so a binary must be on PATH.
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Run unit tests
+        run: make unit
   lint:
     name: Lint
     runs-on: ubuntu-latest
