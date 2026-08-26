@@ -14,6 +14,24 @@ linters:
     - staticcheck        # comprehensive suite of static analysis checks (replaces gosimple)
     - unconvert          # removes redundant explicit type conversions
     - unused             # reports unexported identifiers (types, funcs, vars) that are never used
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # QF* are staticcheck's "quickfix" family: editor-oriented refactor hints
+        # (tagged switches, De Morgan rewrites, merged declarations) rather than
+        # correctness checks. They are disabled as a CI gate because the suggested
+        # rewrites are cosmetic and some span hundreds of lines of re-indentation.
+        - -QF1003        # "could use tagged switch": would re-indent the ~670-line opType chain in resource_cte_clientgroup.go
+        - -QF1007        # "could merge conditional assignment into declaration": breaks up parallel, commented check blocks
+        # Defaults carried over from golangci-lint; re-listed because setting
+        # `checks` replaces the default list rather than extending it.
+        - -ST1000        # missing package comment
+        - -ST1003        # naming conventions (conflicts with API-mirroring field names like ResourceSetId)
+        - -ST1016        # inconsistent receiver names
+        - -ST1020        # comment on exported function
+        - -ST1021        # comment on exported type
+        - -ST1022        # comment on exported variable
   exclusions:
     generated: lax       # apply a relaxed standard to generated files rather than skipping them entirely
     presets:
