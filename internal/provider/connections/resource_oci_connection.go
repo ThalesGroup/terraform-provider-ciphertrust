@@ -418,7 +418,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	// If meta not specified in config/plan, do not manage it.
 	// Use meta = {} to remove all keys.
-	if !(plan.Meta.IsNull() || plan.Meta.IsUnknown()) {
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 
 		// Desired meta from plan (strings)
 		planMetadata := map[string]interface{}{}

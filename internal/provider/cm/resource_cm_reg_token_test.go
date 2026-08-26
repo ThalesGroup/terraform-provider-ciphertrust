@@ -17,7 +17,7 @@ import (
 // This is the key signal CM needs to remove all labels from the resource.
 func Test_CM_RegToken_buildLabelsPatch_ClearPath(t *testing.T) {
 	// State: labels were previously set
-	stateLabels, _ := types.MapValueFrom(nil, types.StringType, map[string]string{"env": "test"})
+	stateLabels, _ := types.MapValueFrom(context.Background(), types.StringType, map[string]string{"env": "test"})
 	state := CMRegTokenTFSDK{Labels: stateLabels}
 
 	// Plan: labels removed from config (null)
@@ -47,7 +47,7 @@ func Test_CM_RegToken_buildLabelsPatch_ClearPath(t *testing.T) {
 // Test_CM_RegToken_buildLabelsPatch_SetPath verifies that buildLabelsPatch
 // returns a populated map when labels are configured in the plan.
 func Test_CM_RegToken_buildLabelsPatch_SetPath(t *testing.T) {
-	planLabels, _ := types.MapValueFrom(nil, types.StringType, map[string]string{"k": "v"})
+	planLabels, _ := types.MapValueFrom(context.Background(), types.StringType, map[string]string{"k": "v"})
 	plan := CMRegTokenTFSDK{Labels: planLabels}
 	state := CMRegTokenTFSDK{Labels: types.MapNull(types.StringType)}
 

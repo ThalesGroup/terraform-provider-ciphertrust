@@ -108,13 +108,13 @@ func (r *resourceCTEPolicyDataTXRule) Create(ctx context.Context, req resource.C
 	}
 
 	if plan.DataTXRule.KeyID.ValueString() != "" && plan.DataTXRule.KeyID.ValueString() != types.StringNull().ValueString() {
-		payload.KeyID = string(plan.DataTXRule.KeyID.ValueString())
+		payload.KeyID = plan.DataTXRule.KeyID.ValueString()
 	}
 	if plan.DataTXRule.KeyType.ValueString() != "" && plan.DataTXRule.KeyType.ValueString() != types.StringNull().ValueString() {
-		payload.KeyType = string(plan.DataTXRule.KeyType.ValueString())
+		payload.KeyType = plan.DataTXRule.KeyType.ValueString()
 	}
 	if plan.DataTXRule.ResourceSetID.ValueString() != "" && plan.DataTXRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ResourceSetID = string(plan.DataTXRule.ResourceSetID.ValueString())
+		payload.ResourceSetID = plan.DataTXRule.ResourceSetID.ValueString()
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -273,10 +273,10 @@ func (r *resourceCTEPolicyDataTXRule) Update(ctx context.Context, req resource.U
 	}
 
 	if plan.DataTXRule.KeyID.ValueString() != "" && plan.DataTXRule.KeyID.ValueString() != types.StringNull().ValueString() {
-		payload.KeyID = string(plan.DataTXRule.KeyID.ValueString())
+		payload.KeyID = plan.DataTXRule.KeyID.ValueString()
 	}
 	if plan.DataTXRule.KeyType.ValueString() != "" && plan.DataTXRule.KeyType.ValueString() != types.StringNull().ValueString() {
-		payload.KeyType = string(plan.DataTXRule.KeyType.ValueString())
+		payload.KeyType = plan.DataTXRule.KeyType.ValueString()
 	}
 	// TFIN-610: only send order_number when it is actually changing. order_number
 	// now carries UseStateForUnknown (added above to counteract ModifyPlan's side

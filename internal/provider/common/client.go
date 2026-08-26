@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -343,7 +343,7 @@ func (c *Client) doRequest(ctx context.Context, uuid string, req *http.Request, 
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequest]["+uuid+"]")
 		c.Log.Error("Failed to read response body", "method", req.Method, "url", req.URL.String(), "error", err.Error())
@@ -378,7 +378,7 @@ func (c *CMClientBootstrap) doRequestBootstrap(ctx context.Context, uuid string,
 	}
 	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [client.go -> doRequestBootstrap]["+uuid+"]")
 		return nil, err

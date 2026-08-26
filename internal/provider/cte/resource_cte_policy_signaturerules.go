@@ -504,7 +504,7 @@ func parseconfig(response string) []string {
 
 	k := 0
 	for k < SuccessSize {
-		ids = append(ids, gjson.Get(string(response), fmt.Sprintf("success_signature_rules.%d.signature_rule.id", k)).String())
+		ids = append(ids, gjson.Get(response, fmt.Sprintf("success_signature_rules.%d.signature_rule.id", k)).String())
 		k++
 	}
 	return ids

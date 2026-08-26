@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -318,7 +317,6 @@ func (r *resourceGCPConnection) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_gcp_connection.go -> Read][" + id + "]")
-	return
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -494,7 +492,7 @@ func getGcpKeyFile(ctx context.Context, file string, logger hclog.Logger) string
 	file = strings.TrimSpace(file)
 	_, err := os.Stat(file)
 	if err == nil {
-		data, err := ioutil.ReadFile(file)
+		data, err := os.ReadFile(file)
 		if err != nil {
 			logger.Error("error reading google cloud key file file : " + err.Error())
 			return ""

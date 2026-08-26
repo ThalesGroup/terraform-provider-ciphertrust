@@ -466,7 +466,6 @@ func (r *resourceCMScpConnection) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_scp_connection.go -> Read][" + id + "]")
-	return
 }
 
 func (r *resourceCMScpConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
