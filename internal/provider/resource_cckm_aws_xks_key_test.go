@@ -55,7 +55,7 @@ var importStateVerifyIgnoreAwsXksKey = []string{
 	"schedule_for_deletion_days",
 }
 
-// TestCckmAWSXksUnlinkedKey valid create and update of an unlinked key and an invalid update
+// TestCckmAWSXksUnlinkedKey valid create and update of an unlinked key and an invalid update.
 func TestCckmAWSXksUnlinkedKey(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {

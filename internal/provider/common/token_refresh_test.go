@@ -174,7 +174,9 @@ func TestMaybeRefresh_ExpiringToken_TriggersRefresh(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate CM returning a new token
 		resp := AuthResponse{Token: newJWT}
-		json.NewEncoder(w).Encode(resp)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -231,12 +233,17 @@ func TestDoRefresh_PasswordFallback_WhenNoRefreshToken(t *testing.T) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify it's a password grant
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+			return
+		}
 		if body["grant_type"] != nil && body["grant_type"] != "password" {
 			http.Error(w, "expected password grant", 400)
 			return
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -267,11 +274,16 @@ func TestDoRefresh_RefreshTokenGrant_UsedFirst(t *testing.T) {
 
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+			return
+		}
 		if gt, ok := body["grant_type"].(string); ok {
 			grantTypeUsed = gt
 		}
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -309,7 +321,9 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
-		json.NewEncoder(w).Encode(AuthResponse{Token: newJWT})
+		if err := json.NewEncoder(w).Encode(AuthResponse{Token: newJWT}); err != nil {
+			t.Errorf("failed to encode auth response: %v", err)
+		}
 	}))
 	defer ts.Close()
 
@@ -328,7 +342,12 @@ func TestRoundTrip_ConcurrentRequests_NoRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			req := makeRequest(expiringSoon)
-			tr.RoundTrip(req)
+			resp, err := tr.RoundTrip(req)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			resp.Body.Close()
 		}()
 	}
 	wg.Wait()

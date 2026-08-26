@@ -134,19 +134,19 @@ func cmGroupWithUsersConfig(groupName string, usernames []string, userIDsExpr st
 	var b strings.Builder
 	b.WriteString(providerConfig)
 	for _, u := range usernames {
-		b.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&b, `
 resource "ciphertrust_user" "%s" {
   username = %q
   password = "CHAnge012!@#"
 }
-`, sanitizeTFName(u), u))
+`, sanitizeTFName(u), u)
 	}
-	b.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&b, `
 resource "ciphertrust_groups" "testGroup" {
   name = %q
-`, groupName))
+`, groupName)
 	if userIDsExpr != "" {
-		b.WriteString(fmt.Sprintf("  user_ids = %s\n", userIDsExpr))
+		fmt.Fprintf(&b, "  user_ids = %s\n", userIDsExpr)
 	}
 	b.WriteString("}\n")
 	return b.String()

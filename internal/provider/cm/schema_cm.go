@@ -912,14 +912,14 @@ type UpdateJobConfigParamsJSON struct {
 	CCKMSynchronizationParams *CCKMSynchronizationParamsJSON `json:"cckm_synchronization_params"`
 }
 type DatabaseBackupParamsJSON struct {
-	TiedToHSM      bool                `json:"tiedToHSM,"`
-	Description    string              `json:"description,"`
-	BackupKey      string              `json:"backupKey,"`
-	Scope          string              `json:"scope,"`
-	Filters        *[]BackupFilterJSON `json:"filters,"`
-	RetentionCount int64               `json:"retentionCount,"`
-	DoSCP          bool                `json:"do_scp,"`
-	Connection     string              `json:"connection,"`
+	TiedToHSM      bool                `json:"tiedToHSM"`
+	Description    string              `json:"description"`
+	BackupKey      string              `json:"backupKey"`
+	Scope          string              `json:"scope"`
+	Filters        *[]BackupFilterJSON `json:"filters"`
+	RetentionCount int64               `json:"retentionCount"`
+	DoSCP          bool                `json:"do_scp"`
+	Connection     string              `json:"connection"`
 }
 
 type BackupFilterJSON struct {
@@ -976,11 +976,6 @@ type DatabaseBackupParamsTFSDK struct {
 	RetentionCount types.Int64  `tfsdk:"retention_count"`
 	DoSCP          types.Bool   `tfsdk:"do_scp"`
 	Connection     types.String `tfsdk:"connection"`
-}
-
-var backupFilterAttrTypes = map[string]attr.Type{
-	"resource_type":  types.StringType,
-	"resource_query": types.StringType,
 }
 
 type CreateJobConfigParamsListJSON struct {

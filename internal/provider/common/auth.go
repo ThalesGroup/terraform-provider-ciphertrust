@@ -12,7 +12,7 @@ import (
 
 /*
 SignIn - Get a new token for user.
-This will take username and password as arguments and send them to CipherTrust Manager to acquire token
+This will take username and password as arguments and send them to CipherTrust Manager to acquire token.
 */
 func (c *Client) SignIn(ctx context.Context, uuid string) (*AuthResponse, error) {
 	tflog.Trace(ctx, MSG_METHOD_START+"[auth.go -> SignIn]["+uuid+"]")

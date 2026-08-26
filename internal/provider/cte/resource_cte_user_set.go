@@ -175,13 +175,13 @@ func (r *resourceCTEUserSet) Create(ctx context.Context, req resource.CreateRequ
 		}
 
 		if user.OSDomain.ValueString() != "" && user.OSDomain.ValueString() != types.StringNull().ValueString() {
-			userJSON.OSDomain = string(user.OSDomain.ValueString())
+			userJSON.OSDomain = user.OSDomain.ValueString()
 		}
 		if user.UName.ValueString() != "" && user.UName.ValueString() != types.StringNull().ValueString() {
-			userJSON.UName = string(user.UName.ValueString())
+			userJSON.UName = user.UName.ValueString()
 		}
 		if user.GName.ValueString() != "" && user.GName.ValueString() != types.StringNull().ValueString() {
-			userJSON.GName = string(user.GName.ValueString())
+			userJSON.GName = user.GName.ValueString()
 		}
 
 		usersJSONArr = append(usersJSONArr, userJSON)
@@ -311,13 +311,13 @@ func (r *resourceCTEUserSet) Update(ctx context.Context, req resource.UpdateRequ
 		}
 
 		if user.OSDomain.ValueString() != "" && user.OSDomain.ValueString() != types.StringNull().ValueString() {
-			userJSON.OSDomain = string(user.OSDomain.ValueString())
+			userJSON.OSDomain = user.OSDomain.ValueString()
 		}
 		if user.UName.ValueString() != "" && user.UName.ValueString() != types.StringNull().ValueString() {
-			userJSON.UName = string(user.UName.ValueString())
+			userJSON.UName = user.UName.ValueString()
 		}
 		if user.GName.ValueString() != "" && user.GName.ValueString() != types.StringNull().ValueString() {
-			userJSON.GName = string(user.GName.ValueString())
+			userJSON.GName = user.GName.ValueString()
 		}
 
 		usersJSONArr = append(usersJSONArr, userJSON)

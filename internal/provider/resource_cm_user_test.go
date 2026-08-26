@@ -277,16 +277,6 @@ data "ciphertrust_cm_users_list" "test" {
 }`, username, email, username)
 }
 
-// cmUsersListConfigDataSourceOnly returns HCL for just the data source (no user
-// resource). Used in stale-data tests so the data source is not deferred during
-// planning due to a depends_on on a resource being created.
-func cmUsersListConfigDataSourceOnly(username string) string {
-	return providerConfig + fmt.Sprintf(`
-data "ciphertrust_cm_users_list" "test" {
-  filters = { username = %q }
-}`, username)
-}
-
 // Test_CM_User_Idempotency verifies no spurious drift (null→"" for email,
 // null→{} for user_metadata) when user_metadata is not configured.
 func Test_CM_User_Idempotency(t *testing.T) {

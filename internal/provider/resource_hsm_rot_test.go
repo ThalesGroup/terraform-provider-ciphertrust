@@ -146,11 +146,6 @@ resource "ciphertrust_hsm_root_of_trust_setup" "test" {
 `, hsmType, connInfoPartitionName, connInfoPartitionPassword, reset, delay)
 }
 
-// hsmRotConfigWithType returns an HCL config with the given type (all other fields fixed).
-func hsmRotConfigWithType(hsmType string) string {
-	return hsmRotConfig(hsmType, "test-partition", "test-password", true, 5)
-}
-
 // hsmRotConfigWithConnInfo returns an HCL config with the given conn_info partition_name (type fixed).
 func hsmRotConfigWithConnInfo(partitionName string) string {
 	return hsmRotConfig("lunapci", partitionName, "test-password", true, 5)

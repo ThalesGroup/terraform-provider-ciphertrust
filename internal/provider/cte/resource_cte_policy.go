@@ -118,8 +118,8 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Description: "Identifier of the key to link with the rule. Supported fields are name, id, slug, alias, uri, uuid, muid, and key_id. Note: For decryption, where a clear key is to be supplied, use the string \"clear_key\" only. Do not specify any other identifier.",
 						},
 						"key_type": schema.StringAttribute{
-							Optional:    true,
-							Computed:    true,
+							Optional: true,
+							Computed: true,
 							// TFIN-583: no Default -- see the top-level
 							// description attribute for why Default and
 							// UseStateForUnknown() don't mix (Default
@@ -466,7 +466,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 
 	// Add never_deny to the payload if set
 	if plan.NeverDeny.ValueBool() != types.BoolNull().ValueBool() {
-		payload.NeverDeny = bool(plan.NeverDeny.ValueBool())
+		payload.NeverDeny = plan.NeverDeny.ValueBool()
 	}
 
 	// Add Data Transformation Rules to the payload if set
@@ -474,13 +474,13 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	for _, txRule := range plan.DataTransformRules {
 		var txRuleJSON DataTxRuleJSON
 		if txRule.KeyID.ValueString() != "" && txRule.KeyID.ValueString() != types.StringNull().ValueString() {
-			txRuleJSON.KeyID = string(txRule.KeyID.ValueString())
+			txRuleJSON.KeyID = txRule.KeyID.ValueString()
 		}
 		if txRule.KeyType.ValueString() != "" && txRule.KeyType.ValueString() != types.StringNull().ValueString() {
-			txRuleJSON.KeyType = string(txRule.KeyType.ValueString())
+			txRuleJSON.KeyType = txRule.KeyType.ValueString()
 		}
 		if txRule.ResourceSetID.ValueString() != "" && txRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-			txRuleJSON.ResourceSetID = string(txRule.ResourceSetID.ValueString())
+			txRuleJSON.ResourceSetID = txRule.ResourceSetID.ValueString()
 		}
 		txRules = append(txRules, txRuleJSON)
 	}
@@ -491,16 +491,16 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	for _, IDTKeyRule := range plan.IDTKeyRules {
 		var IDTKeyRuleJSON IDTRuleJSON
 		if IDTKeyRule.CurrentKey.ValueString() != "" && IDTKeyRule.CurrentKey.ValueString() != types.StringNull().ValueString() {
-			IDTKeyRuleJSON.CurrentKey = string(IDTKeyRule.CurrentKey.ValueString())
+			IDTKeyRuleJSON.CurrentKey = IDTKeyRule.CurrentKey.ValueString()
 		}
 		if IDTKeyRule.CurrentKeyType.ValueString() != "" && IDTKeyRule.CurrentKeyType.ValueString() != types.StringNull().ValueString() {
-			IDTKeyRuleJSON.CurrentKeyType = string(IDTKeyRule.CurrentKeyType.ValueString())
+			IDTKeyRuleJSON.CurrentKeyType = IDTKeyRule.CurrentKeyType.ValueString()
 		}
 		if IDTKeyRule.TransformationKey.ValueString() != "" && IDTKeyRule.TransformationKey.ValueString() != types.StringNull().ValueString() {
-			IDTKeyRuleJSON.TransformationKey = string(IDTKeyRule.TransformationKey.ValueString())
+			IDTKeyRuleJSON.TransformationKey = IDTKeyRule.TransformationKey.ValueString()
 		}
 		if IDTKeyRule.TransformationKeyType.ValueString() != "" && IDTKeyRule.TransformationKeyType.ValueString() != types.StringNull().ValueString() {
-			IDTKeyRuleJSON.TransformationKeyType = string(IDTKeyRule.TransformationKeyType.ValueString())
+			IDTKeyRuleJSON.TransformationKeyType = IDTKeyRule.TransformationKeyType.ValueString()
 		}
 		IDTKeyRules = append(IDTKeyRules, IDTKeyRuleJSON)
 	}
@@ -511,13 +511,13 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	for _, keyRule := range plan.KeyRules {
 		var keyRuleJSON KeyRuleJSON
 		if keyRule.KeyID.ValueString() != "" && keyRule.KeyID.ValueString() != types.StringNull().ValueString() {
-			keyRuleJSON.KeyID = string(keyRule.KeyID.ValueString())
+			keyRuleJSON.KeyID = keyRule.KeyID.ValueString()
 		}
 		if keyRule.KeyType.ValueString() != "" && keyRule.KeyType.ValueString() != types.StringNull().ValueString() {
-			keyRuleJSON.KeyType = string(keyRule.KeyType.ValueString())
+			keyRuleJSON.KeyType = keyRule.KeyType.ValueString()
 		}
 		if keyRule.ResourceSetID.ValueString() != "" && keyRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-			keyRuleJSON.ResourceSetID = string(keyRule.ResourceSetID.ValueString())
+			keyRuleJSON.ResourceSetID = keyRule.ResourceSetID.ValueString()
 		}
 		keyRules = append(keyRules, keyRuleJSON)
 	}
@@ -527,7 +527,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	if !reflect.DeepEqual((*CTEPolicyMetadataTFSDK)(nil), plan.Metadata) {
 		r.client.Log.Debug("Metadata should not be empty at this point")
 		if plan.Metadata.RestrictUpdate.ValueBool() != types.BoolNull().ValueBool() {
-			metadata.RestrictUpdate = bool(plan.Metadata.RestrictUpdate.ValueBool())
+			metadata.RestrictUpdate = plan.Metadata.RestrictUpdate.ValueBool()
 		}
 		payload.Metadata = metadata
 	}
@@ -539,26 +539,26 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 		var ldtKeyRuleCurrentKey CurrentKeyJSON
 		var ldtKeyRuleTransformationKey TransformationKeyJSON
 		if ldtKeyRule.ResourceSetID.ValueString() != "" && ldtKeyRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-			ldtKeyRuleJSON.ResourceSetID = string(ldtKeyRule.ResourceSetID.ValueString())
+			ldtKeyRuleJSON.ResourceSetID = ldtKeyRule.ResourceSetID.ValueString()
 		}
 		if ldtKeyRule.IsExclusionRule.ValueBool() != types.BoolNull().ValueBool() {
-			ldtKeyRuleJSON.IsExclusionRule = bool(ldtKeyRule.IsExclusionRule.ValueBool())
+			ldtKeyRuleJSON.IsExclusionRule = ldtKeyRule.IsExclusionRule.ValueBool()
 		}
 		if ldtKeyRule.CurrentKey != nil {
 			if ldtKeyRule.CurrentKey.KeyID.ValueString() != "" && ldtKeyRule.CurrentKey.KeyID.ValueString() != types.StringNull().ValueString() {
-				ldtKeyRuleCurrentKey.KeyID = string(ldtKeyRule.CurrentKey.KeyID.ValueString())
+				ldtKeyRuleCurrentKey.KeyID = ldtKeyRule.CurrentKey.KeyID.ValueString()
 			}
 			if ldtKeyRule.CurrentKey.KeyType.ValueString() != "" && ldtKeyRule.CurrentKey.KeyType.ValueString() != types.StringNull().ValueString() {
-				ldtKeyRuleCurrentKey.KeyType = string(ldtKeyRule.CurrentKey.KeyType.ValueString())
+				ldtKeyRuleCurrentKey.KeyType = ldtKeyRule.CurrentKey.KeyType.ValueString()
 			}
 			ldtKeyRuleJSON.CurrentKey = ldtKeyRuleCurrentKey
 		}
 		if ldtKeyRule.TransformationKey != nil {
 			if ldtKeyRule.TransformationKey.KeyID.ValueString() != "" && ldtKeyRule.TransformationKey.KeyID.ValueString() != types.StringNull().ValueString() {
-				ldtKeyRuleTransformationKey.KeyID = string(ldtKeyRule.TransformationKey.KeyID.ValueString())
+				ldtKeyRuleTransformationKey.KeyID = ldtKeyRule.TransformationKey.KeyID.ValueString()
 			}
 			if ldtKeyRule.TransformationKey.KeyType.ValueString() != "" && ldtKeyRule.TransformationKey.KeyType.ValueString() != types.StringNull().ValueString() {
-				ldtKeyRuleTransformationKey.KeyType = string(ldtKeyRule.TransformationKey.KeyType.ValueString())
+				ldtKeyRuleTransformationKey.KeyType = ldtKeyRule.TransformationKey.KeyType.ValueString()
 			}
 			ldtKeyRuleJSON.TransformationKey = &ldtKeyRuleTransformationKey
 		}
@@ -571,31 +571,31 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	for _, securityRule := range plan.SecurityRules {
 		var securityRuleJSON SecurityRuleJSON
 		if securityRule.Action.ValueString() != "" && securityRule.Action.ValueString() != types.StringNull().ValueString() {
-			securityRuleJSON.Action = string(securityRule.Action.ValueString())
+			securityRuleJSON.Action = securityRule.Action.ValueString()
 		}
 		if securityRule.Effect.ValueString() != "" && securityRule.Effect.ValueString() != types.StringNull().ValueString() {
-			securityRuleJSON.Effect = string(securityRule.Effect.ValueString())
+			securityRuleJSON.Effect = securityRule.Effect.ValueString()
 		}
 		if securityRule.ExcludeProcessSet.ValueBool() != types.BoolNull().ValueBool() {
-			securityRuleJSON.ExcludeProcessSet = bool(securityRule.ExcludeProcessSet.ValueBool())
+			securityRuleJSON.ExcludeProcessSet = securityRule.ExcludeProcessSet.ValueBool()
 		}
 		if securityRule.ExcludeUserSet.ValueBool() != types.BoolNull().ValueBool() {
-			securityRuleJSON.ExcludeUserSet = bool(securityRule.ExcludeUserSet.ValueBool())
+			securityRuleJSON.ExcludeUserSet = securityRule.ExcludeUserSet.ValueBool()
 		}
 		if securityRule.ExcludeResourceSet.ValueBool() != types.BoolNull().ValueBool() {
-			securityRuleJSON.ExcludeResourceSet = bool(securityRule.ExcludeResourceSet.ValueBool())
+			securityRuleJSON.ExcludeResourceSet = securityRule.ExcludeResourceSet.ValueBool()
 		}
 		if securityRule.PartialMatch.ValueBool() != types.BoolNull().ValueBool() {
-			securityRuleJSON.PartialMatch = bool(securityRule.PartialMatch.ValueBool())
+			securityRuleJSON.PartialMatch = securityRule.PartialMatch.ValueBool()
 		}
 		if securityRule.ProcessSetID.ValueString() != "" && securityRule.ProcessSetID.ValueString() != types.StringNull().ValueString() {
-			securityRuleJSON.ProcessSetID = string(securityRule.ProcessSetID.ValueString())
+			securityRuleJSON.ProcessSetID = securityRule.ProcessSetID.ValueString()
 		}
 		if securityRule.ResourceSetID.ValueString() != "" && securityRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-			securityRuleJSON.ResourceSetID = string(securityRule.ResourceSetID.ValueString())
+			securityRuleJSON.ResourceSetID = securityRule.ResourceSetID.ValueString()
 		}
 		if securityRule.UserSetID.ValueString() != "" && securityRule.UserSetID.ValueString() != types.StringNull().ValueString() {
-			securityRuleJSON.UserSetID = string(securityRule.UserSetID.ValueString())
+			securityRuleJSON.UserSetID = securityRule.UserSetID.ValueString()
 		}
 		securityRules = append(securityRules, securityRuleJSON)
 	}
@@ -606,7 +606,7 @@ func (r *resourceCTEPolicy) Create(ctx context.Context, req resource.CreateReque
 	for _, signatureRule := range plan.SignatureRules {
 		var signatureRuleJSON SignatureRuleJSON
 		if signatureRule.SignatureSetID.ValueString() != "" && signatureRule.SignatureSetID.ValueString() != types.StringNull().ValueString() {
-			signatureRuleJSON.SignatureSetID = string(signatureRule.SignatureSetID.ValueString())
+			signatureRuleJSON.SignatureSetID = signatureRule.SignatureSetID.ValueString()
 		}
 		signatureRules = append(signatureRules, signatureRuleJSON)
 	}
@@ -890,8 +890,7 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 		}
 
 		// Build transformation key — key_type not returned by API, keep from state
-		var transformationKey *TransformationKeyTFSDK
-		transformationKey = &TransformationKeyTFSDK{
+		transformationKey := &TransformationKeyTFSDK{
 			KeyID: types.StringValue(apiRule.TransformationKey.KeyID),
 			KeyType: func() types.String {
 				if rule.TransformationKey != nil {
@@ -970,19 +969,19 @@ func (r *resourceCTEPolicy) Update(ctx context.Context, req resource.UpdateReque
 
 	// Add never_deny to the payload if set
 	if plan.NeverDeny.ValueBool() != types.BoolNull().ValueBool() {
-		payload.NeverDeny = bool(plan.NeverDeny.ValueBool())
+		payload.NeverDeny = plan.NeverDeny.ValueBool()
 	}
 
 	// Add never_deny to the payload if set
 	if plan.ForceRestrictUpdate.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ForceRestrictUpdate = bool(plan.ForceRestrictUpdate.ValueBool())
+		payload.ForceRestrictUpdate = plan.ForceRestrictUpdate.ValueBool()
 	}
 
 	var metadata CTEPolicyMetadataJSON
 	if !reflect.DeepEqual((*CTEPolicyMetadataTFSDK)(nil), plan.Metadata) {
 		r.client.Log.Debug("Metadata should not be empty at this point")
 		if plan.Metadata.RestrictUpdate.ValueBool() != types.BoolNull().ValueBool() {
-			metadata.RestrictUpdate = bool(plan.Metadata.RestrictUpdate.ValueBool())
+			metadata.RestrictUpdate = plan.Metadata.RestrictUpdate.ValueBool()
 		}
 		payload.Metadata = metadata
 	}

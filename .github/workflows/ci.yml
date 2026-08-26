@@ -1,0 +1,89 @@
+name: Go Checks
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check gofmt
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt -s formatted:"
+            echo "$unformatted"
+            echo
+            echo "Run 'make fmt' and commit the result."
+            exit 1
+          fi
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Plan-only resource.UnitTest cases drive the real terraform CLI against
+      # the in-process provider, so a binary must be on PATH.
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Run unit tests
+        run: make unit
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # goreleaser derives the snapshot version from git describe.
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Cross-compiles every target in .goreleaser.yml (10 OS/arch pairs) so a
+      # break outside linux/amd64 surfaces on the PR instead of at release
+      # time. --snapshot skips the tag requirement; `goreleaser build` stops
+      # after the binaries, so no archives, checksums or GPG signing happen.
+      - name: Cross-compile all release targets
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: build --snapshot --clean
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run go vet
+        run: go vet ./...
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.13.0

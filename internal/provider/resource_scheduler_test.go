@@ -177,18 +177,6 @@ resource "ciphertrust_scheduler" "test_op" {
 }`, name, operation, runAt)
 }
 
-func schedulerConfigOpDB(name, operation, runAt string) string {
-	return providerConfig + fmt.Sprintf(`
-resource "ciphertrust_scheduler" "test_key_rotation" {
-  name      = %q
-  operation = %q
-  run_at    = %q
-  database_backup_params = {
-    scope = "system"
-  }
-}`, name, operation, runAt)
-}
-
 func schedulerConfigKeyRotation(name, runAt string, retainAlias bool) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_scheduler" "test_key_rotation" {

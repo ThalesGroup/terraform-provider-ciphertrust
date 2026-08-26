@@ -112,7 +112,11 @@ func TestBuildTLSConfig_ExtendsSystemRoots(t *testing.T) {
 	if err != nil || sysPool == nil {
 		t.Skip("system cert pool unavailable on this platform; skipping extension check")
 	}
-	sysSubjectCount := len(sysPool.Subjects())
+	// Subjects() is deprecated because it omits system roots for platform-store-backed
+	// pools (Windows/macOS). There is no replacement API for counting roots, and this
+	// assertion is the only way to prove extension rather than substitution. The
+	// t.Skip below covers the platform-store case, where the count comes back 0.
+	sysSubjectCount := len(sysPool.Subjects()) //nolint:staticcheck // SA1019: no replacement API; platform-store pools handled by the Skip below
 	if sysSubjectCount == 0 {
 		t.Skip("system cert pool is empty; skipping extension check")
 	}
@@ -131,7 +135,7 @@ func TestBuildTLSConfig_ExtendsSystemRoots(t *testing.T) {
 
 	// The combined pool must contain strictly more roots than the system pool
 	// alone, proving the supplied CA was appended rather than substituted.
-	combinedCount := len(cfg.RootCAs.Subjects())
+	combinedCount := len(cfg.RootCAs.Subjects()) //nolint:staticcheck // SA1019: see note above
 	if combinedCount <= sysSubjectCount {
 		t.Errorf("expected combined pool (%d) to contain more roots than system pool (%d); "+
 			"supplied CA appears to have replaced rather than extended system roots",

@@ -59,14 +59,14 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"app_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
 				Description: "Application-specific metadata associated with the group. Stored as compacted JSON string.",
 				Validators: []validator.String{
 					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)
 				},
 			},
 			"client_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
 				Description: "Client-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
 				Validators: []validator.String{
 					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)
@@ -77,7 +77,7 @@ func (r *resourceCMGroup) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Description: "Human-readable description of the group.",
 			},
 			"user_metadata": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
 				Description: "User-specific metadata associated with the group. Stored as compacted JSON string to prevent whitespace plan-time drift.",
 				Validators: []validator.String{
 					validators.JSONObject(), // rejects malformed JSON at plan time (TFIN-541)

@@ -639,7 +639,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	payload.Labels = labelsPayload
 
 	if plan.LDTQOSCapCPUAllocation.ValueBool() != types.BoolNull().ValueBool() {
-		payload.LDTQOSCapCPUAllocation = bool(plan.LDTQOSCapCPUAllocation.ValueBool())
+		payload.LDTQOSCapCPUAllocation = plan.LDTQOSCapCPUAllocation.ValueBool()
 	}
 	if plan.LDTQOSCapCPUPercent.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.LDTQOSCapCPUPercent = plan.LDTQOSCapCPUPercent.ValueInt64()
@@ -721,7 +721,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			scheduleJSON.EndTimeMin = schedule.EndTimeMin.ValueInt64()
 		}
 		if schedule.EndWeekday.ValueString() != "" && schedule.EndWeekday.ValueString() != types.StringNull().ValueString() {
-			scheduleJSON.EndWeekday = string(schedule.EndWeekday.ValueString())
+			scheduleJSON.EndWeekday = schedule.EndWeekday.ValueString()
 		}
 		if schedule.StartTimeHour.ValueInt64() != types.Int64Null().ValueInt64() {
 			scheduleJSON.StartTimeHour = schedule.StartTimeHour.ValueInt64()
@@ -730,7 +730,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 			scheduleJSON.StartTimeMin = schedule.StartTimeMin.ValueInt64()
 		}
 		if schedule.StartWeekday.ValueString() != "" && schedule.StartWeekday.ValueString() != types.StringNull().ValueString() {
-			scheduleJSON.StartWeekday = string(schedule.StartWeekday.ValueString())
+			scheduleJSON.StartWeekday = schedule.StartWeekday.ValueString()
 		}
 		qosSchedules = append(qosSchedules, scheduleJSON)
 	}
@@ -752,7 +752,7 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 	for _, setting := range plan.ServerSettings {
 		var serverSetting CTEProfileServiceSettingJSON
 		if setting.HostName.ValueString() != "" && setting.HostName.ValueString() != types.StringNull().ValueString() {
-			serverSetting.HostName = string(setting.HostName.ValueString())
+			serverSetting.HostName = setting.HostName.ValueString()
 		}
 		if setting.Priority.ValueInt64() != types.Int64Null().ValueInt64() {
 			serverSetting.Priority = setting.Priority.ValueInt64()
@@ -775,25 +775,25 @@ func (r *resourceCTEProfile) Create(ctx context.Context, req resource.CreateRequ
 		for _, item := range plan.SyslogSettings.Servers {
 			var server CTEProfileSyslogSettingServerJSON
 			if item.CACert.ValueString() != "" && item.CACert.ValueString() != types.StringNull().ValueString() {
-				server.CACert = string(item.CACert.ValueString())
+				server.CACert = item.CACert.ValueString()
 			}
 			if item.Certificate.ValueString() != "" && item.Certificate.ValueString() != types.StringNull().ValueString() {
-				server.Certificate = string(item.Certificate.ValueString())
+				server.Certificate = item.Certificate.ValueString()
 			}
 			if item.MessageFormat.ValueString() != "" && item.MessageFormat.ValueString() != types.StringNull().ValueString() {
-				server.MessageFormat = string(item.MessageFormat.ValueString())
+				server.MessageFormat = item.MessageFormat.ValueString()
 			}
 			if item.Name.ValueString() != "" && item.Name.ValueString() != types.StringNull().ValueString() {
-				server.Name = string(item.Name.ValueString())
+				server.Name = item.Name.ValueString()
 			}
 			if item.Port.ValueInt64() != types.Int64Null().ValueInt64() {
 				server.Port = item.Port.ValueInt64()
 			}
 			if item.PrivateKey.ValueString() != "" && item.PrivateKey.ValueString() != types.StringNull().ValueString() {
-				server.PrivateKey = string(item.PrivateKey.ValueString())
+				server.PrivateKey = item.PrivateKey.ValueString()
 			}
 			if item.Protocol.ValueString() != "" && item.Protocol.ValueString() != types.StringNull().ValueString() {
-				server.Protocol = string(item.Protocol.ValueString())
+				server.Protocol = item.Protocol.ValueString()
 			}
 			servers = append(servers, server)
 		}
@@ -980,7 +980,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	if plan.LDTQOSCapCPUAllocation.ValueBool() != types.BoolNull().ValueBool() {
-		payload.LDTQOSCapCPUAllocation = bool(plan.LDTQOSCapCPUAllocation.ValueBool())
+		payload.LDTQOSCapCPUAllocation = plan.LDTQOSCapCPUAllocation.ValueBool()
 	}
 	if plan.LDTQOSCapCPUPercent.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.LDTQOSCapCPUPercent = plan.LDTQOSCapCPUPercent.ValueInt64()
@@ -1062,7 +1062,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			scheduleJSON.EndTimeMin = schedule.EndTimeMin.ValueInt64()
 		}
 		if schedule.EndWeekday.ValueString() != "" && schedule.EndWeekday.ValueString() != types.StringNull().ValueString() {
-			scheduleJSON.EndWeekday = string(schedule.EndWeekday.ValueString())
+			scheduleJSON.EndWeekday = schedule.EndWeekday.ValueString()
 		}
 		if schedule.StartTimeHour.ValueInt64() != types.Int64Null().ValueInt64() {
 			scheduleJSON.StartTimeHour = schedule.StartTimeHour.ValueInt64()
@@ -1071,7 +1071,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 			scheduleJSON.StartTimeMin = schedule.StartTimeMin.ValueInt64()
 		}
 		if schedule.StartWeekday.ValueString() != "" && schedule.StartWeekday.ValueString() != types.StringNull().ValueString() {
-			scheduleJSON.StartWeekday = string(schedule.StartWeekday.ValueString())
+			scheduleJSON.StartWeekday = schedule.StartWeekday.ValueString()
 		}
 		qosSchedules = append(qosSchedules, scheduleJSON)
 	}
@@ -1093,7 +1093,7 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 	for _, setting := range plan.ServerSettings {
 		var serverSetting CTEProfileServiceSettingJSON
 		if setting.HostName.ValueString() != "" && setting.HostName.ValueString() != types.StringNull().ValueString() {
-			serverSetting.HostName = string(setting.HostName.ValueString())
+			serverSetting.HostName = setting.HostName.ValueString()
 		}
 		if setting.Priority.ValueInt64() != types.Int64Null().ValueInt64() {
 			serverSetting.Priority = setting.Priority.ValueInt64()
@@ -1116,25 +1116,25 @@ func (r *resourceCTEProfile) Update(ctx context.Context, req resource.UpdateRequ
 		for _, item := range plan.SyslogSettings.Servers {
 			var server CTEProfileSyslogSettingServerJSON
 			if item.CACert.ValueString() != "" && item.CACert.ValueString() != types.StringNull().ValueString() {
-				server.CACert = string(item.CACert.ValueString())
+				server.CACert = item.CACert.ValueString()
 			}
 			if item.Certificate.ValueString() != "" && item.Certificate.ValueString() != types.StringNull().ValueString() {
-				server.Certificate = string(item.Certificate.ValueString())
+				server.Certificate = item.Certificate.ValueString()
 			}
 			if item.MessageFormat.ValueString() != "" && item.MessageFormat.ValueString() != types.StringNull().ValueString() {
-				server.MessageFormat = string(item.MessageFormat.ValueString())
+				server.MessageFormat = item.MessageFormat.ValueString()
 			}
 			if item.Name.ValueString() != "" && item.Name.ValueString() != types.StringNull().ValueString() {
-				server.Name = string(item.Name.ValueString())
+				server.Name = item.Name.ValueString()
 			}
 			if item.Port.ValueInt64() != types.Int64Null().ValueInt64() {
 				server.Port = item.Port.ValueInt64()
 			}
 			if item.PrivateKey.ValueString() != "" && item.PrivateKey.ValueString() != types.StringNull().ValueString() {
-				server.PrivateKey = string(item.PrivateKey.ValueString())
+				server.PrivateKey = item.PrivateKey.ValueString()
 			}
 			if item.Protocol.ValueString() != "" && item.Protocol.ValueString() != types.StringNull().ValueString() {
-				server.Protocol = string(item.Protocol.ValueString())
+				server.Protocol = item.Protocol.ValueString()
 			}
 			servers = append(servers, server)
 		}

@@ -418,7 +418,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 
 	// If meta not specified in config/plan, do not manage it.
 	// Use meta = {} to remove all keys.
-	if !(plan.Meta.IsNull() || plan.Meta.IsUnknown()) {
+	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
 
 		// Desired meta from plan (strings)
 		planMetadata := map[string]interface{}{}
@@ -499,7 +499,7 @@ func (r *resourceCCKMOCIConnection) Update(ctx context.Context, req resource.Upd
 	}
 
 	connectionID := gjson.Get(response, "id").String()
-	response, err = r.client.UpdateDataV2(ctx, connectionID, common.URL_OCI_CONNECTION, payloadJSON)
+	_, err = r.client.UpdateDataV2(ctx, connectionID, common.URL_OCI_CONNECTION, payloadJSON)
 	if err != nil {
 		r.client.Log.Error(common.ERR_METHOD_END + err.Error() + " [resource_oci_connection.go -> Update][" + plan.ID.ValueString() + "]")
 		resp.Diagnostics.AddError(

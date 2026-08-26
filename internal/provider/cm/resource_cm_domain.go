@@ -342,6 +342,8 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 
 	// Read admins list
+	// admins is a required field — CM should always return it. If it is omitted,
+	// leave state.Admins untouched to preserve prior state and avoid false drift.
 	adminsResult := gjson.Get(response, "admins")
 	if adminsResult.Exists() && adminsResult.IsArray() {
 		var adminsStr []string
@@ -354,9 +356,6 @@ func (r *resourceCMDomain) Read(ctx context.Context, req resource.ReadRequest, r
 			admins = append(admins, types.StringValue(admin))
 		}
 		state.Admins = admins
-	} else {
-		// Required field — CM should always return it.
-		// If omitted, preserve prior state to avoid false drift.
 	}
 
 	// Read meta_data map — three-branch with !state.Meta.IsNull() outer guard.
@@ -564,10 +563,9 @@ func (r *resourceCMDomain) Update(ctx context.Context, req resource.UpdateReques
 			admins = append(admins, types.StringValue(a))
 		}
 		plan.Admins = admins
-	} else {
-		// Required field — CM should always return it.
-		// If omitted, preserve prior state to avoid false drift.
 	}
+	// else: required field — CM should always return it. If omitted, preserve
+	// prior state to avoid false drift.
 
 	// Post-PATCH meta_data read-back.
 	if plan.Meta.IsNull() {
