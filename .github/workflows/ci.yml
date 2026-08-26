@@ -47,6 +47,29 @@ jobs:
           terraform_wrapper: false
       - name: Run unit tests
         run: make unit
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # goreleaser derives the snapshot version from git describe.
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Cross-compiles every target in .goreleaser.yml (10 OS/arch pairs) so a
+      # break outside linux/amd64 surfaces on the PR instead of at release
+      # time. --snapshot skips the tag requirement; `goreleaser build` stops
+      # after the binaries, so no archives, checksums or GPG signing happen.
+      - name: Cross-compile all release targets
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: build --snapshot --clean
   trivy:
     name: Trivy
     runs-on: ubuntu-latest
