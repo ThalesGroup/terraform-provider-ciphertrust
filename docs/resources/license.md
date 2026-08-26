@@ -59,7 +59,9 @@ output "license_id" {
 
 ### Required
 
-- `license` (String, Sensitive) (Immutable) License String. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). ciphertrust_license does not support updates — to change the license, destroy and recreate the resource.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `license` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) (Immutable) License String. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). ciphertrust_license does not support updates — to change the license, destroy and recreate the resource.
 
 ### Optional
 

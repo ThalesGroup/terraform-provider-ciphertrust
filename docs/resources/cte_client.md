@@ -93,6 +93,8 @@ output "cte_client_id" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `client_locked` (Boolean) Whether the CTE client is locked. The default value is false. Enable this option to lock the configuration of the CTE Agent on the client. Set to true to lock the configuration, set to false to unlock. Locking the Agent configuration prevents updates to any policies on the client.
 - `client_mfa_enabled` (Boolean) Whether MFA is enabled on the client.
 - `client_type` (String) Type of CTE Client. The default value is FS. Valid values are CTE-U and FS.
@@ -107,7 +109,7 @@ output "cte_client_id" {
 - `lgcs_access_only` (Boolean) Whether the client can be added to an LDT communication group. If lgcs_access_only is set to false, the client can be added to an LDT communication group. Only available on Windows clients.
 - `max_num_cache_log` (Number) Maximum number of logs to cache.
 - `max_space_cache_log` (Number) Maximum space for the cached logs.
-- `password` (String, Sensitive) Password for the client. Required when password_creation_method is MANUAL. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Password for the client. Required when password_creation_method is MANUAL. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password, change `password` and bump `password_version` in the same apply.
 - `password_creation_method` (String) Password creation method for the client. Valid values are MANUAL and GENERATE. The default value is GENERATE.
 - `password_version` (Number) Arbitrary version number used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.
 - `profile_id` (String) ID of the profile that contains logger, logging, and QOS configuration.

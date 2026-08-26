@@ -63,8 +63,10 @@ resource "ciphertrust_cm_user_password_change" "pwd_change" {
 
 ### Required
 
-- `new_password` (String, Sensitive) (Immutable) New password to set for the user.
-- `password` (String, Sensitive) (Immutable) Current password for the user.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `new_password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) (Immutable) New password to set for the user.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) (Immutable) Current password for the user.
 - `username` (String) (Immutable) Username of the CipherTrust Manager user whose password is being changed.
 
 ### Optional

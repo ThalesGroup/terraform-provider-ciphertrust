@@ -65,7 +65,9 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 
 ### Required
 
-- `key_file` (String, Sensitive) Path to or data of the OCI private key file (PEM format). Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key (and/or its passphrase), change `key_file`/`key_file_pass_phrase` and bump `key_file_version` in the same apply.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `key_file` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Path to or data of the OCI private key file (PEM format). Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated key (and/or its passphrase), change `key_file`/`key_file_pass_phrase` and bump `key_file_version` in the same apply.
 - `name` (String) (Immutable) Unique connection name.
 - `pub_key_fingerprint` (String) Fingerprint of the public key added to the OCI user.
 - `region` (String) OCI connection region.
@@ -74,8 +76,10 @@ resource "ciphertrust_oci_connection" "oci_connection" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `description` (String) Description about the connection. Once set, this field cannot be cleared back to empty — CM does not support clearing it via PATCH. Removing this attribute from config preserves the existing value.
-- `key_file_pass_phrase` (String, Sensitive) Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.
+- `key_file_pass_phrase` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Passphrase if the OCI key file is encrypted. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). Resent together with key_file — see key_file_version.
 - `key_file_version` (Number) Arbitrary version number used to trigger re-sending `key_file`/`key_file_pass_phrase` to CipherTrust Manager. Since both are write-only, Terraform cannot detect a change in their values on its own; increment this on every apply where you want the current values re-sent.
 - `meta` (Map of String) Optional end-user or service data stored with the connection.
 - `products` (List of String) Array of the CipherTrust products to associate with the connection. Default is 'cckm'

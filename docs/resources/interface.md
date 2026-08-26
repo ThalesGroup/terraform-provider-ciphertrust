@@ -75,6 +75,8 @@ output "interface_id" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `allow_unregistered` (Boolean) If true, this flag enables interfaces to allow unregistered clients. only supported in NAE interface.
 - `auto_gen_ca_id` (String) Auto-generate a new server certificate on server startup using the identifier (URI) of a Local CA resource if the current server certificate is issued by a different Local CA. This is especially useful when a new node joins the cluster. In this case, the existing data of the joining node is overwritten by the data in the cluster. A new server certificate is generated on the joining node using the existing Local CA of the cluster. Auto-generation of the server certificate can be disabled by setting auto_gen_ca_id to an empty string ("") to allow full control over the server certificate.
 - `auto_gen_days_before_expiry` (Number) Number of days before the server certificate expiry. When specified number of days are left in the expiry of the server certificate, the server certificate gets auto-generated and is made available as Upcoming Server Certificate on the interface.
@@ -93,7 +95,7 @@ output "interface_id" {
 - `mode` (String) The interface mode can be one of the following: no-tls-pw-opt, no-tls-pw-req, unauth-tls-pw-opt, tls-cert-opt-pw-opt, tls-pw-opt, tls-pw-req, tls-cert-pw-opt, or tls-cert-and-pw. Default mode is no-tls-pw-opt. Refer to the top level discussion of the Interface section for further details.
 - `name` (String) (Immutable) The name of the interface. Not valid for interface_type nae or kmip — CM auto-assigns the name for those types.
 - `network_interface` (String) Defines what ethernet adapter the interface should listen to, use "all" for all. Defaults to all if not specified.
-- `registration_token` (String, Sensitive) Registration token in case auto registration is true. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated token, change `registration_token` and bump `registration_token_version` in the same apply.
+- `registration_token` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Registration token in case auto registration is true. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated token, change `registration_token` and bump `registration_token_version` in the same apply.
 - `registration_token_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `registration_token` to CipherTrust Manager. Since `registration_token` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `registration_token` value re-sent.
 - `tls_ciphers` (Attributes Set) The set of TLS cipher suites available for the interface's (KMIP, NAE, or Web) TLS handshake, and whether each is enabled. Ordering is not significant. CipherTrust Manager does not permit adding or removing cipher suites, so this must list every suite the interface already has; only the enabled flags can be changed. (see [below for nested schema](#nestedatt--tls_ciphers))
 - `trusted_cas` (Attributes) Collection of local and external CA IDs to trust for client authentication on this interface. (see [below for nested schema](#nestedatt--trusted_cas))
@@ -112,7 +114,7 @@ Optional:
 - `certificate_chain` (String) The certificate and key data in PEM format or base64 encoded PKCS12 format. A chain chain of certs may be included - it must be in ascending order (server to root ca).
 - `format` (String) The format of the certificate data (PEM or PKCS12).
 - `generate` (Boolean) Create a new self-signed certificate.
-- `password` (String, Sensitive) Password to the encrypted key. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password (e.g. without changing certificate_chain), change `password` and bump `password_version` in the same apply.
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Password to the encrypted key. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To resend a rotated password (e.g. without changing certificate_chain), change `password` and bump `password_version` in the same apply.
 - `password_version` (Number) Arbitrary version number stored in state and used to trigger re-sending `password` to CipherTrust Manager. Since `password` is write-only, Terraform cannot detect a change in its value on its own; increment this on every apply where you want the current `password` value re-sent.
 
 

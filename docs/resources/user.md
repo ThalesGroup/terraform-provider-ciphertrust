@@ -76,7 +76,9 @@ output "username" {
 
 ### Required
 
-- `password` (String, Sensitive) Password for the user account. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To rotate the password on an existing resource, change `password` and bump `password_version` in the same apply — `password_version` is the only signal Terraform has that the write-only value changed.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `password` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Password for the user account. Write-only: never stored in Terraform state or plan artifacts (requires Terraform 1.11+). To rotate the password on an existing resource, change `password` and bump `password_version` in the same apply — `password_version` is the only signal Terraform has that the write-only value changed.
 - `username` (String) (Immutable) Username of the user.
 
 ### Optional
