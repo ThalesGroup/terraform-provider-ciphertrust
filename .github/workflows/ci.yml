@@ -1,4 +1,4 @@
-name: Go Lint
+name: Go Checks
 on:
   push:
     branches:
@@ -7,6 +7,27 @@ on:
 permissions:
   contents: read
 jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check gofmt
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt -s formatted:"
+            echo "$unformatted"
+            echo
+            echo "Run 'make fmt' and commit the result."
+            exit 1
+          fi
   lint:
     name: Lint
     runs-on: ubuntu-latest
