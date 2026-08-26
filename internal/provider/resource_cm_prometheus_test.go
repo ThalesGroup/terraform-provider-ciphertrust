@@ -241,7 +241,9 @@ func Test_Unit_PrometheusRead_ResilientToEmptyResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{}`))
+		if _, err := w.Write([]byte(`{}`)); err != nil {
+			t.Errorf("failed to write response body: %v", err)
+		}
 	}))
 	defer server.Close()
 

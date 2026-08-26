@@ -684,13 +684,6 @@ func Test_CM_AccCMKey_templateId(t *testing.T) {
 	suffix := uuid.New().String()[:8]
 	keyName := "tf-acc-key-tmpl-" + suffix
 
-	// CDSPaaS restricted-user flow: only owner_id may be supplied in meta alongside template_id.
-	// On plain CM this is still valid; extra meta fields are just merged normally.
-	ownerSelf := os.Getenv("CIPHERTRUST_USERNAME")
-	if ownerSelf == "" {
-		ownerSelf = "admin"
-	}
-
 	// We don't know which fields the template will populate, so we only assert
 	// that the key was created (has an id). Checking algorithm/size would require
 	// knowing the template contents, which differ across environments.
@@ -1787,7 +1780,9 @@ resource "ciphertrust_cm_key" "test" {
 					}
 					ctx := context.Background()
 					payload, _ := json.Marshal(map[string]interface{}{"description": "drift-test"})
-					client.UpdateData(ctx, capturedID, common.URL_KEY_MANAGEMENT, payload, "updatedAt")
+					if _, err := client.UpdateData(ctx, capturedID, common.URL_KEY_MANAGEMENT, payload, "updatedAt"); err != nil {
+						t.Logf("out-of-band update failed: %v", err)
+					}
 				},
 				RefreshState:       true,
 				ExpectNonEmptyPlan: false,

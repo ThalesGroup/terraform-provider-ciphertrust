@@ -515,7 +515,6 @@ func (r *resourceAzureConnection) Read(ctx context.Context, req resource.ReadReq
 	}
 
 	r.client.Log.Trace(common.MSG_METHOD_END + "[resource_azure_connection.go -> Read][" + id + "]")
-	return
 }
 
 func (r *resourceAzureConnection) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {

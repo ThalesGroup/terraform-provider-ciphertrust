@@ -163,31 +163,31 @@ func (r *resourceCTEPolicySecurityRule) Create(ctx context.Context, req resource
 	}
 
 	if plan.SecurityRule.Action.ValueString() != "" && plan.SecurityRule.Action.ValueString() != types.StringNull().ValueString() {
-		payload.Action = string(plan.SecurityRule.Action.ValueString())
+		payload.Action = plan.SecurityRule.Action.ValueString()
 	}
 	if plan.SecurityRule.Effect.ValueString() != "" && plan.SecurityRule.Effect.ValueString() != types.StringNull().ValueString() {
-		payload.Effect = string(plan.SecurityRule.Effect.ValueString())
+		payload.Effect = plan.SecurityRule.Effect.ValueString()
 	}
 	if plan.SecurityRule.ExcludeProcessSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeProcessSet = bool(plan.SecurityRule.ExcludeProcessSet.ValueBool())
+		payload.ExcludeProcessSet = plan.SecurityRule.ExcludeProcessSet.ValueBool()
 	}
 	if plan.SecurityRule.ExcludeUserSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeUserSet = bool(plan.SecurityRule.ExcludeUserSet.ValueBool())
+		payload.ExcludeUserSet = plan.SecurityRule.ExcludeUserSet.ValueBool()
 	}
 	if plan.SecurityRule.ExcludeResourceSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeResourceSet = bool(plan.SecurityRule.ExcludeResourceSet.ValueBool())
+		payload.ExcludeResourceSet = plan.SecurityRule.ExcludeResourceSet.ValueBool()
 	}
 	if plan.SecurityRule.PartialMatch.ValueBool() != types.BoolNull().ValueBool() {
-		payload.PartialMatch = bool(plan.SecurityRule.PartialMatch.ValueBool())
+		payload.PartialMatch = plan.SecurityRule.PartialMatch.ValueBool()
 	}
 	if plan.SecurityRule.ProcessSetID.ValueString() != "" && plan.SecurityRule.ProcessSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ProcessSetID = string(plan.SecurityRule.ProcessSetID.ValueString())
+		payload.ProcessSetID = plan.SecurityRule.ProcessSetID.ValueString()
 	}
 	if plan.SecurityRule.ResourceSetID.ValueString() != "" && plan.SecurityRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ResourceSetID = string(plan.SecurityRule.ResourceSetID.ValueString())
+		payload.ResourceSetID = plan.SecurityRule.ResourceSetID.ValueString()
 	}
 	if plan.SecurityRule.UserSetID.ValueString() != "" && plan.SecurityRule.UserSetID.ValueString() != types.StringNull().ValueString() {
-		payload.UserSetID = string(plan.SecurityRule.UserSetID.ValueString())
+		payload.UserSetID = plan.SecurityRule.UserSetID.ValueString()
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -340,31 +340,31 @@ func (r *resourceCTEPolicySecurityRule) Update(ctx context.Context, req resource
 	}
 
 	if plan.SecurityRule.Action.ValueString() != "" && plan.SecurityRule.Action.ValueString() != types.StringNull().ValueString() {
-		payload.Action = string(plan.SecurityRule.Action.ValueString())
+		payload.Action = plan.SecurityRule.Action.ValueString()
 	}
 	if plan.SecurityRule.Effect.ValueString() != "" && plan.SecurityRule.Effect.ValueString() != types.StringNull().ValueString() {
-		payload.Effect = string(plan.SecurityRule.Effect.ValueString())
+		payload.Effect = plan.SecurityRule.Effect.ValueString()
 	}
 	if plan.SecurityRule.ExcludeProcessSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeProcessSet = bool(plan.SecurityRule.ExcludeProcessSet.ValueBool())
+		payload.ExcludeProcessSet = plan.SecurityRule.ExcludeProcessSet.ValueBool()
 	}
 	if plan.SecurityRule.ExcludeUserSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeUserSet = bool(plan.SecurityRule.ExcludeUserSet.ValueBool())
+		payload.ExcludeUserSet = plan.SecurityRule.ExcludeUserSet.ValueBool()
 	}
 	if plan.SecurityRule.ExcludeResourceSet.ValueBool() != types.BoolNull().ValueBool() {
-		payload.ExcludeResourceSet = bool(plan.SecurityRule.ExcludeResourceSet.ValueBool())
+		payload.ExcludeResourceSet = plan.SecurityRule.ExcludeResourceSet.ValueBool()
 	}
 	if plan.SecurityRule.PartialMatch.ValueBool() != types.BoolNull().ValueBool() {
-		payload.PartialMatch = bool(plan.SecurityRule.PartialMatch.ValueBool())
+		payload.PartialMatch = plan.SecurityRule.PartialMatch.ValueBool()
 	}
 	if plan.SecurityRule.ProcessSetID.ValueString() != "" && plan.SecurityRule.ProcessSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ProcessSetID = string(plan.SecurityRule.ProcessSetID.ValueString())
+		payload.ProcessSetID = plan.SecurityRule.ProcessSetID.ValueString()
 	}
 	if plan.SecurityRule.ResourceSetID.ValueString() != "" && plan.SecurityRule.ResourceSetID.ValueString() != types.StringNull().ValueString() {
-		payload.ResourceSetID = string(plan.SecurityRule.ResourceSetID.ValueString())
+		payload.ResourceSetID = plan.SecurityRule.ResourceSetID.ValueString()
 	}
 	if plan.SecurityRule.UserSetID.ValueString() != "" && plan.SecurityRule.UserSetID.ValueString() != types.StringNull().ValueString() {
-		payload.UserSetID = string(plan.SecurityRule.UserSetID.ValueString())
+		payload.UserSetID = plan.SecurityRule.UserSetID.ValueString()
 	}
 	// TFIN-610: only send order_number when it is actually changing. order_number
 	// now carries UseStateForUnknown (added above to counteract ModifyPlan's side

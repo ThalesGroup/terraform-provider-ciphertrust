@@ -100,7 +100,9 @@ func TestGetAllPagedWithLimit(t *testing.T) {
 			"total":     len(items),
 		})
 		w.WriteHeader(http.StatusOK)
-		w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			t.Errorf("failed to write response body: %v", err)
+		}
 	}))
 	defer srv.Close()
 

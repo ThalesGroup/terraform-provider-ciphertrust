@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
@@ -51,34 +50,6 @@ func cleanupCckmOCIVaults() {
 			fmt.Printf("cleanupCckmOCIVaults: deleted vault '%s'\n", vaultName)
 		}
 	}
-}
-
-// deleteOciVaultOOB removes a CipherTrust Manager OCI vault registration out-of-band
-// (i.e. without going through Terraform). It is idempotent - if the vault is already
-// gone it returns silently. Errors are logged as warnings; the function never fails
-// the test on its own because the test steps that follow will surface any real problem.
-func deleteOciVaultOOB(t *testing.T, vaultID string) {
-	t.Helper()
-	if vaultID == "" {
-		t.Log("deleteOciVaultOOB: vaultID is empty, skipping")
-		return
-	}
-	client, ok := createCMClient()
-	if !ok {
-		t.Log("deleteOciVaultOOB: could not create CM client, skipping OOB delete")
-		return
-	}
-	ctx := context.Background()
-	_, err := client.DeleteByURL(ctx, uuid.NewString(), common.URL_OCI+"/vaults/"+vaultID)
-	if err != nil {
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
-			t.Logf("deleteOciVaultOOB: vault %s already absent", vaultID)
-			return
-		}
-		t.Logf("deleteOciVaultOOB: warning - failed to delete vault %s: %s", vaultID, err.Error())
-		return
-	}
-	t.Logf("deleteOciVaultOOB: deleted vault %s out-of-band", vaultID)
 }
 
 func TestCckmOCIVault(t *testing.T) {

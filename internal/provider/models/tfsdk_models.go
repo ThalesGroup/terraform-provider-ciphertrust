@@ -58,22 +58,6 @@ type KeyRule struct {
 	ResourceSetID types.String `tfsdk:"resource_set_id"`
 }
 
-type tfsdkCTEPolicyModel struct {
-	ID                  types.String             `tfsdk:"id"`
-	Name                types.String             `tfsdk:"name"`
-	Description         types.String             `tfsdk:"description"`
-	PolicyType          types.String             `tfsdk:"policy_type"`
-	Metadata            CTEPolicyMetadata        `tfsdk:"metadata"`
-	NeverDeny           types.Bool               `tfsdk:"never_deny"`
-	DataTransformRules  []DataTransformationRule `tfsdk:"data_transform_rules"`
-	IDTKeyRules         []IDTKeyRule             `tfsdk:"idt_key_rules"`
-	KeyRules            []KeyRule                `tfsdk:"key_rules"`
-	LDTKeyRules         []LDTKeyRule             `tfsdk:"ldt_key_rules"`
-	SecurityRules       []SecurityRule           `tfsdk:"security_rules"`
-	SignatureRules      []SignatureRule          `tfsdk:"signature_rules"`
-	ForceRestrictUpdate types.Bool               `tfsdk:"force_restrict_update"`
-}
-
 type ClassificationTagAttributes struct {
 	DataType types.String `tfsdk:"data_type"`
 	Name     types.String `tfsdk:"name"`
@@ -92,13 +76,4 @@ type CTEResource struct {
 	File              types.String `tfsdk:"file"`
 	HDFS              types.Bool   `tfsdk:"hdfs"`
 	IncludeSubfolders types.Bool   `tfsdk:"include_subfolders"`
-}
-
-type tfsdkCTEResourceSetModel struct {
-	ID                 types.String        `tfsdk:"id"`
-	Name               types.String        `tfsdk:"name"`
-	Description        types.String        `tfsdk:"description"`
-	Resources          []CTEResource       `tfsdk:"resources"`
-	Type               types.String        `tfsdk:"type"`
-	ClassificationTags []ClassificationTag `tfsdk:"classification_tags"`
 }

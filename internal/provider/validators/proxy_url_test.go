@@ -14,12 +14,12 @@ func TestProxyURL(t *testing.T) {
 	v := validators.ProxyURL()
 
 	accepted := []string{
-		"http://user:pass@10.171.30.20:3300",       // full URL with credentials
-		"https://proxy.example.com:8080",            // full URL no credentials
-		"proxy-user:ssl12345@10.171.30.20:3300",    // schemeless with credentials (CM Scenario 3)
-		"cckmdev-proxy-13110.sjinternal.com:443",   // schemeless host:port
-		"10.171.30.20:3300",                         // bare host:port
-		"proxy.example.com",                         // bare hostname
+		"http://user:pass@10.171.30.20:3300",     // full URL with credentials
+		"https://proxy.example.com:8080",         // full URL no credentials
+		"proxy-user:ssl12345@10.171.30.20:3300",  // schemeless with credentials (CM Scenario 3)
+		"cckmdev-proxy-13110.sjinternal.com:443", // schemeless host:port
+		"10.171.30.20:3300",                      // bare host:port
+		"proxy.example.com",                      // bare hostname
 	}
 	for _, val := range accepted {
 		req := validator.StringRequest{ConfigValue: types.StringValue(val)}

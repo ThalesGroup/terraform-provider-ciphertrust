@@ -448,12 +448,12 @@ func Test_CM_Syslog_HostPortUpdateInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host      = "syslog-a.example.com"
   transport = "udp"
   port      = 514
-}`, ) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "create",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-a.example.com"),
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "514"),
@@ -464,12 +464,12 @@ resource "ciphertrust_syslog" "test" {
 				),
 			},
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host      = "syslog-b.example.com"
   transport = "udp"
   port      = 601
-}`, ) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "update host+port in place",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "host", "syslog-b.example.com"),
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "port", "601"),
@@ -499,24 +499,24 @@ func Test_CM_Syslog_MessageFormatUpdate(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host           = "syslog.example.com"
   transport      = "udp"
   message_format = "cef"
-}`) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "set message_format=cef",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "message_format", "cef"),
 				),
 			},
 			{
 				// Explicitly reset to rfc5424 — CM must accept and persist the change.
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host           = "syslog.example.com"
   transport      = "udp"
   message_format = "rfc5424"
-}`) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "reset message_format to rfc5424",
 					resource.TestCheckResourceAttr("ciphertrust_syslog.test", "message_format", "rfc5424"),
 				),
@@ -524,11 +524,11 @@ resource "ciphertrust_syslog" "test" {
 			{
 				// Remove message_format from config — UseStateForUnknown preserves state value,
 				// so no update is triggered and the plan should be empty.
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host      = "syslog.example.com"
   transport = "udp"
-}`) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
@@ -551,23 +551,23 @@ func Test_CM_Syslog_CACertClearWarning(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 variable "ca_cert" { sensitive = true }
 resource "ciphertrust_syslog" "test" {
   host      = "syslog.example.com"
   transport = "tls"
   ca_cert   = var.ca_cert
-}`, ) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "set ca_cert",
 					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
 				),
 			},
 			{
-				Config: providerConfig + fmt.Sprintf(`
+				Config: providerConfig + `
 resource "ciphertrust_syslog" "test" {
   host      = "syslog.example.com"
   transport = "tls"
-}`, ) + fmt.Sprintf(" # %s", name),
+}` + fmt.Sprintf(" # %s", name),
 				Check: checkStep(t, "remove ca_cert — value preserved (API cannot clear)",
 					resource.TestCheckResourceAttrSet("ciphertrust_syslog.test", "ca_cert"),
 				),

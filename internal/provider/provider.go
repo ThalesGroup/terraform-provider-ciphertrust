@@ -83,7 +83,7 @@ const (
 	providerDescNoDefaultWithEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config"
 	providerDescDefaultWithEnvVar   = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %v."
 	defaultRestAPITimeout           = "180"
-	//providerDescWithDefaultAndEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %s."
+	//providerDescWithDefaultAndEnvVar = "%s can be set in the provider block, via the %s environment variable or in ~/.ciphertrust/config. Default is %s.".
 )
 
 // Metadata returns the provider type name.

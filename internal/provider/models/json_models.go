@@ -2,22 +2,6 @@ package models
 
 // CipherTrust Manager Key Management related attributes
 
-type jsonCMRegTokensListModel struct {
-	ID                string `json:"id"`
-	URI               string `json:"uri"`
-	Account           string `json:"account"`
-	Application       string `json:"application"`
-	DevAccount        string `json:"devAccount"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
-	Token             string `json:"token"`
-	ValidUntil        string `json:"valid_until"`
-	MaxClients        int64  `json:"max_clients"`
-	ClientsRegistered int64  `json:"clients_registered"`
-	CAID              string `json:"ca_id"`
-	NamePrefix        string `json:"name_prefix"`
-}
-
 // type jsonCMKeysListModel struct {
 // 	ID               string `json:"id"`
 // 	URI              string `json:"uri"`

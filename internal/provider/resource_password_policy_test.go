@@ -683,7 +683,6 @@ resource "ciphertrust_password_policy" "zero_test" {
 	})
 }
 
-
 // Test_CM_PasswordPolicy_LockoutThresholdsLifecycle verifies the lifecycle of failed_logins_lockout_thresholds
 // across omitted, configured, and transitioned configurations as a Computed field.
 func Test_CM_PasswordPolicy_LockoutThresholdsLifecycle(t *testing.T) {

@@ -180,8 +180,8 @@ resource "ciphertrust_cte_profile" "profile" {
 			},
 			// Plan again should show no changes (fixes TFIN-500)
 			{
-				Config:          providerConfig + fmt.Sprintf(`resource "ciphertrust_cte_profile" "profile" { name = %q }`, name),
-				PlanOnly:        true,
+				Config:             providerConfig + fmt.Sprintf(`resource "ciphertrust_cte_profile" "profile" { name = %q }`, name),
+				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
 		},

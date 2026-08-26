@@ -140,13 +140,13 @@ type CTEClientJSON struct {
 	Labels                 map[string]interface{} `json:"labels"`
 }
 
-// CTE client delete payload struct
+// CTE client delete payload struct.
 type DelClientJSON struct {
 	DelClient      bool `json:"del_client"`
 	ForceDelClient bool `json:"force_del_client"`
 }
 
-// CTE Policy related structs
+// CTE Policy related structs.
 type DataTxRuleJSON struct {
 	ID            string `json:"id,omitempty"`
 	OrderNumber   *int64 `json:"order_number,omitempty"`
@@ -386,13 +386,6 @@ type CTEPolicyLDTKeyRulesListTFSDK struct {
 	TransformationKeyID   types.String `tfsdk:"transformation_key_id"`
 	TransformationKeyType types.String `tfsdk:"transformation_key_type"`
 	ISExclusionRule       types.Bool   `tfsdk:"is_exclusion_rule"`
-}
-
-type tfsdkCTEPolicyIDTKeyRulesListModel struct {
-	ID                types.String `tfsdk:"id"`
-	PolicyID          types.String `tfsdk:"policy_id"`
-	CurrentKey        types.String `tfsdk:"current_key"`
-	TransformationKey types.String `tfsdk:"transformation_key"`
 }
 
 type CTEPolicySecurityRulesListTFSDK struct {
@@ -1603,14 +1596,14 @@ type CTEClientGroupDesignatedPrimarySetTFSDK struct {
 	LDTCommGroupServiceID types.String `tfsdk:"ldt_comm_group_service_id"`
 }
 
-// JSON struct for Create request body (POST)
+// JSON struct for Create request body (POST).
 type CTEClientGroupDesignatedPrimarySetJSON struct {
 	Name                  string `json:"name"`
 	ClientList            string `json:"client_list"`
 	LDTCommGroupServiceID string `json:"ldt_comm_group_service_id"`
 }
 
-// JSON struct for Update request body (PATCH) — only client_list is updatable
+// JSON struct for Update request body (PATCH) — only client_list is updatable.
 type CTEClientGroupDesignatedPrimarySetUpdateJSON struct {
 	ClientList string `json:"client_list"`
 }

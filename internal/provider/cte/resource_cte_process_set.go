@@ -156,16 +156,16 @@ func (r *resourceCTEProcessSet) Create(ctx context.Context, req resource.CreateR
 	for _, process := range plan.Processes {
 		var processJSON CTEProcessJSON
 		if process.Directory.ValueString() != "" && process.Directory.ValueString() != types.StringNull().ValueString() {
-			processJSON.Directory = string(process.Directory.ValueString())
+			processJSON.Directory = process.Directory.ValueString()
 		}
 		if process.File.ValueString() != "" && process.File.ValueString() != types.StringNull().ValueString() {
-			processJSON.File = string(process.File.ValueString())
+			processJSON.File = process.File.ValueString()
 		}
 		if process.ResourceSetId.ValueString() != "" && process.ResourceSetId.ValueString() != types.StringNull().ValueString() {
-			processJSON.ResourceSetId = string(process.ResourceSetId.ValueString())
+			processJSON.ResourceSetId = process.ResourceSetId.ValueString()
 		}
 		if process.Signature.ValueString() != "" && process.Signature.ValueString() != types.StringNull().ValueString() {
-			processJSON.Signature = string(process.Signature.ValueString())
+			processJSON.Signature = process.Signature.ValueString()
 		}
 
 		labelsPayload := make(map[string]interface{})
@@ -303,16 +303,16 @@ func (r *resourceCTEProcessSet) Update(ctx context.Context, req resource.UpdateR
 	for _, process := range plan.Processes {
 		var processJSON CTEProcessJSON
 		if process.Directory.ValueString() != "" && process.Directory.ValueString() != types.StringNull().ValueString() {
-			processJSON.Directory = string(process.Directory.ValueString())
+			processJSON.Directory = process.Directory.ValueString()
 		}
 		if process.File.ValueString() != "" && process.File.ValueString() != types.StringNull().ValueString() {
-			processJSON.File = string(process.File.ValueString())
+			processJSON.File = process.File.ValueString()
 		}
 		if process.ResourceSetId.ValueString() != "" && process.ResourceSetId.ValueString() != types.StringNull().ValueString() {
-			processJSON.ResourceSetId = string(process.ResourceSetId.ValueString())
+			processJSON.ResourceSetId = process.ResourceSetId.ValueString()
 		}
 		if process.Signature.ValueString() != "" && process.Signature.ValueString() != types.StringNull().ValueString() {
-			processJSON.Signature = string(process.Signature.ValueString())
+			processJSON.Signature = process.Signature.ValueString()
 		}
 		processes = append(processes, processJSON)
 	}

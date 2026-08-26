@@ -167,16 +167,16 @@ func (r *resourceCTEResourceSet) Create(ctx context.Context, req resource.Create
 	for _, resource := range plan.Resources {
 		var resourceJSON CTEResourceJSON
 		if resource.Directory.ValueString() != "" && resource.Directory.ValueString() != types.StringNull().ValueString() {
-			resourceJSON.Directory = string(resource.Directory.ValueString())
+			resourceJSON.Directory = resource.Directory.ValueString()
 		}
 		if resource.File.ValueString() != "" && resource.File.ValueString() != types.StringNull().ValueString() {
-			resourceJSON.File = string(resource.File.ValueString())
+			resourceJSON.File = resource.File.ValueString()
 		}
 		if resource.HDFS.ValueBool() != types.BoolNull().ValueBool() {
-			resourceJSON.HDFS = bool(resource.HDFS.ValueBool())
+			resourceJSON.HDFS = resource.HDFS.ValueBool()
 		}
 		if resource.IncludeSubfolders.ValueBool() != types.BoolNull().ValueBool() {
-			resourceJSON.IncludeSubfolders = bool(resource.IncludeSubfolders.ValueBool())
+			resourceJSON.IncludeSubfolders = resource.IncludeSubfolders.ValueBool()
 		}
 		resources = append(resources, resourceJSON)
 	}
@@ -303,16 +303,16 @@ func (r *resourceCTEResourceSet) Update(ctx context.Context, req resource.Update
 	for _, resource := range plan.Resources {
 		var resourceJSON CTEResourceJSON
 		if resource.Directory.ValueString() != "" && resource.Directory.ValueString() != types.StringNull().ValueString() {
-			resourceJSON.Directory = string(resource.Directory.ValueString())
+			resourceJSON.Directory = resource.Directory.ValueString()
 		}
 		if resource.File.ValueString() != "" && resource.File.ValueString() != types.StringNull().ValueString() {
-			resourceJSON.File = string(resource.File.ValueString())
+			resourceJSON.File = resource.File.ValueString()
 		}
 		if resource.HDFS.ValueBool() != types.BoolNull().ValueBool() {
-			resourceJSON.HDFS = bool(resource.HDFS.ValueBool())
+			resourceJSON.HDFS = resource.HDFS.ValueBool()
 		}
 		if resource.IncludeSubfolders.ValueBool() != types.BoolNull().ValueBool() {
-			resourceJSON.IncludeSubfolders = bool(resource.IncludeSubfolders.ValueBool())
+			resourceJSON.IncludeSubfolders = resource.IncludeSubfolders.ValueBool()
 		}
 		resources = append(resources, resourceJSON)
 	}
