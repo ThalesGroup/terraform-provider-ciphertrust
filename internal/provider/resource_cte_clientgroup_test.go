@@ -418,12 +418,11 @@ resource "ciphertrust_cte_client_group" "cg" {
 
 	reSignFalseCfg := providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_client_group" "cg" {
-  name                 = %q
-  cluster_type         = "NON-CLUSTER"
-  description          = "Initial create"
-  op_type              = "auth-binaries"
-  re_sign              = false
-  enabled_capabilities = "RESIGN"
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+  op_type      = "auth-binaries"
+  re_sign      = false
 }
 `, cgName)
 
@@ -451,28 +450,22 @@ resource "ciphertrust_cte_client_group" "cg" {
 				),
 			},
 			{
-				// enabled_capabilities is Optional (not Computed) but Read()
-				// populates it from CM's derived value regardless -- a
-				// separate, pre-existing schema quirk unrelated to TFIN-640.
-				// ExpectNonEmptyPlan tolerates that drift so this step can
-				// still assert on the re_sign behavior we're actually testing.
-				Config:             reSignTrueCfg,
-				ExpectNonEmptyPlan: true,
+				// enabled_capabilities is Computed (TFIN-640) and driven entirely
+				// by CM as a side effect of re_sign under op_type=auth-binaries --
+				// it plans as unknown here (never configured) and resolves cleanly
+				// to CM's actual value with no drift.
+				Config: reSignTrueCfg,
 				Check: checkStep(t, "client_group explicit-false: re_sign=true reaches CM",
 					resource.TestCheckResourceAttr(rn, "re_sign", "true"),
+					resource.TestCheckResourceAttr(rn, "enabled_capabilities", "RESIGN"),
 					checkCMEnabledCapabilities("RESIGN"),
 				),
 			},
 			{
-				// Same pre-existing enabled_capabilities drift as the step
-				// above: config still says "RESIGN" (matching the prior
-				// state so the op_type=auth-binaries immutability guard for
-				// enabled_capabilities doesn't fire), but after this apply
-				// Read() correctly reports "" now that the fix landed.
-				Config:             reSignFalseCfg,
-				ExpectNonEmptyPlan: true,
+				Config: reSignFalseCfg,
 				Check: checkStep(t, "client_group explicit-false: re_sign=false reaches CM (TFIN-640)",
 					resource.TestCheckResourceAttr(rn, "re_sign", "false"),
+					resource.TestCheckNoResourceAttr(rn, "enabled_capabilities"),
 					checkCMEnabledCapabilities(""),
 				),
 			},
