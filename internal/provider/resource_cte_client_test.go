@@ -168,6 +168,48 @@ func TestCTEClientResource_nameImmutable(t *testing.T) {
 	})
 }
 
+// TestCTEClientResource_nameCaseNormalization is a regression test for
+// TFIN-627: CipherTrust Manager case-normalizes a client's name server-side
+// (e.g. echoes back a lowercased name for a mixed-case config value).
+// setCTEClientState previously overwrote state.Name unconditionally with
+// CM's response on every Read(), so the very next plan/refresh compared the
+// (unchanged) config value against the now-mismatched, differently-cased
+// state value and failed with a false "Attribute is immutable" error, even
+// though the user never changed their config.
+//
+// This test also confirms a genuine (case-insensitive) rename is still
+// correctly rejected, so the fix doesn't disable real immutability
+// enforcement.
+func TestCTEClientResource_nameCaseNormalization(t *testing.T) {
+	name := "TF_CTE_Client_CaseTest-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientConfig(name, false),
+				Check: checkStep(t, "client case-normalization: create",
+					resource.TestCheckResourceAttr(rn, "name", name),
+				),
+			},
+			// Refresh: CM echoes back a case-normalized name, but state must
+			// keep the original config-matching casing, so the plan is empty.
+			{
+				Config:             cteClientConfig(name, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			// A genuine rename (not just a casing difference) must still be
+			// rejected as immutable.
+			{
+				Config:      cteClientConfig(name+"-renamed", false),
+				ExpectError: regexp.MustCompile(`(?i)cannot change client name|immutable`),
+			},
+		},
+	})
+}
+
 // cteClientTypedConfig renders a client with an explicit client_type, used by the
 // client_type-immutability test.
 func cteClientTypedConfig(name, clientType string) string {
