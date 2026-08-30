@@ -247,6 +247,73 @@ func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
 	})
 }
 
+// cteClientSharedDomainListConfig renders a client whose config asks to be
+// shared into a list of domains when withList is true, and omits
+// shared_domain_list entirely when false.
+func cteClientSharedDomainListConfig(name string, withList bool) string {
+	extra := ""
+	if withList {
+		extra = `  shared_domain_list       = ["root"]
+`
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+%s}
+`, name, extra)
+}
+
+// TestCTEClientResource_sharedDomainListReadBack is a regression test for
+// TFIN-464: shared_domain_list was entirely absent from setCTEClientState(),
+// so Read() never verified the configured value against CipherTrust
+// Manager's own domain_list field. This asserts the value is genuinely
+// populated from the live API response (not just carried over from the last
+// applied config) and that a client which never configures
+// shared_domain_list at all stays null -- confirming the fix's guard against
+// introducing a permanent diff for the common (unconfigured) case, since CM
+// always returns a non-empty domain_list containing at least the client's
+// native domain.
+func TestCTEClientResource_sharedDomainListReadBack(t *testing.T) {
+	name := "tfin464-sdl-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientSharedDomainListConfig(name, true),
+				Check: checkStep(t, "client shared_domain_list: create",
+					resource.TestCheckResourceAttr(rn, "shared_domain_list.0", "root"),
+				),
+			},
+			{
+				Config:             cteClientSharedDomainListConfig(name, true),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+
+	nameUnconfigured := "tfin464-sdl-unset-" + uuid.New().String()[:8]
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteClientSharedDomainListConfig(nameUnconfigured, false),
+				Check: checkStep(t, "client shared_domain_list: unconfigured stays null",
+					resource.TestCheckNoResourceAttr(rn, "shared_domain_list.0"),
+				),
+			},
+			{
+				Config:             cteClientSharedDomainListConfig(nameUnconfigured, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
 // cteClientCacheLogConfig renders a client that explicitly configures
 // max_num_cache_log/max_space_cache_log, both of which CipherTrust Manager
 // silently ignores at the client level (TFIN-467).
