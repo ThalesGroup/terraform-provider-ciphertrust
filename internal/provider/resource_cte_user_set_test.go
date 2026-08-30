@@ -119,6 +119,72 @@ func TestCTEUserSetResource_nameImmutable(t *testing.T) {
 	})
 }
 
+// TestCTEUserSetResource_uidGidValidation verifies that negative uid/gid values
+// are rejected at plan time by the int64validator.AtLeast(0) constraint added
+// for TFIN-587, rather than being silently persisted (uid/gid are unsigned
+// POSIX identifiers; CM's own API performs no server-side range check).
+func TestCTEUserSetResource_uidGidValidation(t *testing.T) {
+	name := "tf-userset-uidgid-" + uuid.New().String()[:8]
+
+	negativeUID := func(name string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_user_set" "user_set" {
+  name = %q
+  users = [
+    {
+      uname = "user1"
+      gid   = 0
+      uid   = -1
+    }
+  ]
+}
+`, name)
+	}
+
+	negativeGID := func(name string) string {
+		return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_user_set" "user_set" {
+  name = %q
+  users = [
+    {
+      uname = "user1"
+      gid   = -1
+      uid   = 0
+    }
+  ]
+}
+`, name)
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// A negative uid must be rejected at plan time, even on a fresh
+				// resource -- no resource is created.
+				Config:      negativeUID(name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 0`),
+			},
+			{
+				// A negative gid must likewise be rejected at plan time.
+				Config:      negativeGID(name),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?i)at least 0`),
+			},
+			{
+				// A valid non-negative uid/gid still works normally through a
+				// full create/update cycle.
+				Config: cteUserSetConfig(name, "Created via TF", false),
+				Check: checkStep(t, "user_set uid/gid validation: create",
+					resource.TestCheckResourceAttr("ciphertrust_cte_user_set.user_set", "users.0.uid", "0"),
+					resource.TestCheckResourceAttr("ciphertrust_cte_user_set.user_set", "users.0.gid", "0"),
+				),
+			},
+		},
+	})
+}
+
 // TestCTEUserSetResource_drift is the drift-detection test for the "set" category:
 // it mutates the description out-of-band and asserts the next plan is non-empty.
 func TestCTEUserSetResource_drift(t *testing.T) {
