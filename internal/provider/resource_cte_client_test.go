@@ -249,7 +249,8 @@ func TestCTEClientResource_protectionModeReadBack(t *testing.T) {
 
 // cteClientCacheLogConfig renders a client that explicitly configures
 // max_num_cache_log/max_space_cache_log, both of which CipherTrust Manager
-// silently ignores at the client level (TFIN-467).
+// silently ignores at the client level for a client with no registered CTE
+// agent (TFIN-467).
 func cteClientCacheLogConfig(name string) string {
 	return providerConfig + fmt.Sprintf(`
 resource "ciphertrust_cte_client" "client" {
@@ -262,9 +263,11 @@ resource "ciphertrust_cte_client" "client" {
 }
 
 // TestCTEClientResource_cacheLogNonFunctional verifies that configuring
-// max_num_cache_log/max_space_cache_log is rejected up front with an explicit
-// error, instead of silently no-oping against CipherTrust Manager and
-// producing a perpetual, unresolvable plan diff (TFIN-467).
+// max_num_cache_log/max_space_cache_log at Create time is rejected up front
+// with an explicit error, instead of silently no-oping against CipherTrust
+// Manager and producing a perpetual, unresolvable plan diff (TFIN-467). A
+// brand-new client is guaranteed to have no registered agent yet, so this is
+// always rejected regardless of registration status.
 func TestCTEClientResource_cacheLogNonFunctional(t *testing.T) {
 	name := "tf-client-cachelog-" + uuid.New().String()[:8]
 
@@ -273,7 +276,38 @@ func TestCTEClientResource_cacheLogNonFunctional(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      cteClientCacheLogConfig(name),
-				ExpectError: regexp.MustCompile(`(?i)non-functional field for cte client`),
+				ExpectError: regexp.MustCompile(`(?i)non-functional field for unregistered cte client`),
+			},
+		},
+	})
+}
+
+// TestCTEClientResource_cacheLogNonFunctionalOnUpdate is a regression test
+// for the TFIN-467 over-block fix: the check moved from an unconditional
+// ValidateConfig-time block (which fired for every client regardless of
+// registration status) to a live registration-status check performed
+// immediately before Update() sends the write. A client created by this test
+// has never had a real CTE agent register against it, so CM reports
+// client_health_status = "UNREGISTERED" and the attempted update must still
+// be rejected with a clear error rather than silently no-op'ing.
+func TestCTEClientResource_cacheLogNonFunctionalOnUpdate(t *testing.T) {
+	name := "tf-client-cachelog-upd-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// No cache log fields set: Create() succeeds normally.
+				Config: cteClientConfig(name, false),
+				Check: checkStep(t, "client cachelog update: create",
+					resource.TestCheckResourceAttrSet(rn, "id"),
+				),
+			},
+			{
+				// Now try to set them via Update() on the still-unregistered client.
+				Config:      cteClientCacheLogConfig(name),
+				ExpectError: regexp.MustCompile(`(?i)non-functional field for unregistered cte client`),
 			},
 		},
 	})
