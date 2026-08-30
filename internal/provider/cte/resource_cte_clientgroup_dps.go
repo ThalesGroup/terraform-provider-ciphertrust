@@ -207,12 +207,12 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Update(ctx context.Context,
 	}
 
 	if plan.Name.ValueString() != state.Name.ValueString() {
-		resp.Diagnostics.AddError("Cannt change designated primary set name", "name is an immutable field")
+		resp.Diagnostics.AddError("Cannot change designated primary set name", "name is an immutable field")
 		return
 	}
 
 	if plan.LDTCommGroupServiceID.ValueString() != state.LDTCommGroupServiceID.ValueString() {
-		resp.Diagnostics.AddError("Cannt change LDT comm group service id", "LDT comm group service id is an immutable field")
+		resp.Diagnostics.AddError("Cannot change LDT comm group service id", "LDT comm group service id is an immutable field")
 		return
 	}
 
