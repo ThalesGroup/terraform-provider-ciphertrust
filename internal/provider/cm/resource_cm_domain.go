@@ -151,6 +151,9 @@ func (r *resourceCMDomain) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Date/time the resource was last updated.",
+				// No UseStateForUnknown — CM writes a new timestamp on every successful PATCH.
+				// Showing (known after apply) during a pre-update plan is accurate, not spurious.
+				// Matches the intentional pattern on ciphertrust_scp_connection and ciphertrust_interface.
 			},
 		},
 	}

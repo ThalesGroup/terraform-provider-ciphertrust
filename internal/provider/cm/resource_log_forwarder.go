@@ -219,6 +219,9 @@ func (r *resourceCMLogForwarders) Schema(_ context.Context, _ resource.SchemaReq
 			"updated_at": schema.StringAttribute{
 				Description: "Date/time the log forwarder was last updated.",
 				Computed:    true,
+				// No UseStateForUnknown — CM writes a new timestamp on every successful PATCH.
+				// Showing (known after apply) during a pre-update plan is accurate, not spurious.
+				// Matches the intentional pattern on ciphertrust_scp_connection and ciphertrust_interface.
 			},
 		},
 	}
