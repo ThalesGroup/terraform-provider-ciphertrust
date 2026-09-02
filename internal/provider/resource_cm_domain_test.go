@@ -977,3 +977,33 @@ resource "ciphertrust_domain" "test" {
 		},
 	})
 }
+
+// Test_CM_Domain_UpdatedAtBehavior verifies that updated_at is a known non-empty value
+// in state after apply, and that applying an update to an unrelated field does not
+// produce a "Provider produced inconsistent result" error.
+func Test_CM_Domain_UpdatedAtBehavior(t *testing.T) {
+	RequireCM(t)
+	requireDomainCreationLicensed(t)
+	rName := "tf-domain-uat-" + acctest.RandStringFromCharSet(8, acctest.CharSetAlphaNum)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() { domainSweep() },
+				Config:    domainConfig(rName, []string{"admin"}, false, nil),
+				Check: checkStep(t, "create — updated_at set in state",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "updated_at"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				Config: domainConfig(rName, []string{"admin"}, false, map[string]string{"k": "v"}),
+				Check: checkStep(t, "update meta_data — updated_at still known in state",
+					resource.TestCheckResourceAttrSet("ciphertrust_domain.test", "updated_at"),
+				),
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
