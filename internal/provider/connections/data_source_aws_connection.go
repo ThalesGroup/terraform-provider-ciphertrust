@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
-	"strings"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/tidwall/gjson"
 )
 
 var (
@@ -183,7 +184,7 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 	tflog.Trace(ctx, common.MSG_METHOD_START+"[data_source_aws_connection.go -> Read]["+id+"]")
 	var state AWSConnectionDataSourceModel
 	req.Config.Get(ctx, &state)
-	var kvs []string
+	userFilters := url.Values{}
 	if !state.Filters.IsNull() && !state.Filters.IsUnknown() {
 		var validKeys = map[string]bool{
 			"id":                     true,
@@ -206,32 +207,43 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 				)
 				return
 			}
-			kv := fmt.Sprintf("%s=%s&", k, v.(types.String).ValueString())
-			kvs = append(kvs, kv)
+			userFilters.Set(k, v.(types.String).ValueString())
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AWS_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
-	if err != nil {
-		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_connection.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read AWS connections from CM",
-			err.Error(),
-		)
-		return
+	var resources []map[string]any
+	if userFilters.Get("skip") != "" || userFilters.Get("limit") != "" {
+		body, err := d.client.ListWithFilters(ctx, id, common.URL_AWS_CONNECTION, userFilters)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_connection.go -> Read single-page]["+id+"]")
+			resp.Diagnostics.AddError("Unable to read AWS connections from CM", err.Error())
+			return
+		}
+		raw := gjson.Get(body, "resources").Raw
+		if raw != "" && raw != "null" {
+			if err := json.Unmarshal([]byte(raw), &resources); err != nil {
+				resp.Diagnostics.AddError("Unable to read AWS connections from CM", err.Error())
+				return
+			}
+		}
+		if resources == nil {
+			resources = []map[string]any{}
+		}
+	} else {
+		var err error
+		resources, err = fetchAllAWSConnections(ctx, d.client, id, userFilters)
+		if err != nil {
+			tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_connection.go -> Read]["+id+"]")
+			resp.Diagnostics.AddError("Unable to read AWS connections from CM", err.Error())
+			return
+		}
 	}
 
-	if jsonStr == "" {
-		jsonStr = "[]"
-	}
-	awsConnections := []AWSConnectionModelJSON{}
-	err = json.Unmarshal([]byte(jsonStr), &awsConnections)
-	if err != nil {
+	rawBytes, _ := json.Marshal(resources)
+	var awsConnections []AWSConnectionModelJSON
+	if err := json.Unmarshal(rawBytes, &awsConnections); err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_connection.go -> Read]["+id+"]")
-		resp.Diagnostics.AddError(
-			"Unable to read AWS connections from CM",
-			err.Error(),
-		)
+		resp.Diagnostics.AddError("Unable to read AWS connections from CM", err.Error())
 		return
 	}
 
