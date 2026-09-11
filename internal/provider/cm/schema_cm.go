@@ -1263,6 +1263,49 @@ type CCKMXksRotateCredentialsParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
 
+type CMTrustedCAsTFSDK struct {
+	ID                types.String `tfsdk:"id"`
+	URI               types.String `tfsdk:"uri"`
+	Account           types.String `tfsdk:"account"`
+	Application       types.String `tfsdk:"application"`
+	DevAccount        types.String `tfsdk:"dev_account"`
+	CreatedAt         types.String `tfsdk:"created_at"`
+	UpdatedAt         types.String `tfsdk:"updated_at"`
+	CAID              types.String `tfsdk:"ca_id"`
+	Service           types.String `tfsdk:"service"`
+	AutoRestart       types.Bool   `tfsdk:"auto_restart"`
+	CAType            types.String `tfsdk:"ca_type"`
+	CertList          types.String `tfsdk:"cert_list"`
+	Subject           types.String `tfsdk:"subject"`
+	Issuer            types.String `tfsdk:"issuer"`
+	SerialNumber      types.String `tfsdk:"serial_number"`
+	SHA1Fingerprint   types.String `tfsdk:"sha1_fingerprint"`
+	SHA256Fingerprint types.String `tfsdk:"sha256_fingerprint"`
+	NotBefore         types.String `tfsdk:"not_before"`
+	NotAfter          types.String `tfsdk:"not_after"`
+}
+
+type CMTrustedCAsJSON struct {
+	ID                string `json:"id,omitempty"`
+	URI               string `json:"uri,omitempty"`
+	Account           string `json:"account,omitempty"`
+	Application       string `json:"application,omitempty"`
+	DevAccount        string `json:"devAccount,omitempty"`
+	CreatedAt         string `json:"createdAt,omitempty"`
+	UpdatedAt         string `json:"updatedAt,omitempty"`
+	CAID              string `json:"ca_id,omitempty"`
+	Service           string `json:"service,omitempty"`
+	AutoRestart       bool   `json:"auto_restart,omitempty"`
+	CAType            string `json:"ca_type,omitempty"`
+	Subject           string `json:"subject,omitempty"`
+	Issuer            string `json:"issuer,omitempty"`
+	SerialNumber      string `json:"serial_number,omitempty"`
+	SHA1Fingerprint   string `json:"sha1Fingerprint,omitempty"`
+	SHA256Fingerprint string `json:"sha256Fingerprint,omitempty"`
+	NotBefore         string `json:"notBefore,omitempty"`
+	NotAfter          string `json:"notAfter,omitempty"`
+}
+
 // stringsToRawJSON converts map[string]string to map[string]json.RawMessage
 // so string values from Terraform config can be assigned to CMUserJSON.Metadata.
 func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {

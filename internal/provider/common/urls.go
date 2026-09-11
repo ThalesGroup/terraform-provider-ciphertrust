@@ -56,5 +56,7 @@ const (
 	URL_OCI_CONNECTION        = "api/v1/connectionmgmt/services/oci/connections"
 	URL_OCI_CONNECTION_TEST   = "api/v1/connectionmgmt/services/oci/connection-test"
 	URL_OCI                   = "api/v1/cckm/oci"
-	URL_SYSTEMINFO            = "api/v1/system/info"
+	URL_SYSTEMINFO              = "api/v1/system/info"
+	URL_TRUSTED_CAS             = "api/v1/trusted-cas"
+	URL_TRUSTED_CAS_CREATE_MANY = "api/v1/trusted-cas-create-many"
 )

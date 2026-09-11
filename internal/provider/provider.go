@@ -726,6 +726,7 @@ func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.R
 		cm.NewResourceCMProperty,
 		cm.NewResourceCMProxy,
 		cm.NewResourceCMSyslog,
+		cm.NewResourceTrustedCas,
 		aws.NewResourceCCKMAWSKMS,
 		aws.NewResourceAWSKey,
 		aws.NewResourceAWSByokKey,
