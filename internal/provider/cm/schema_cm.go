@@ -1263,6 +1263,30 @@ type CCKMXksRotateCredentialsParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
 
+// CMTrustedCATFSDK is the Terraform state model for ciphertrust_trusted_cas.
+type CMTrustedCATFSDK struct {
+	ID          types.String `tfsdk:"id"`
+	CAID        types.String `tfsdk:"ca_id"`
+	CAType      types.String `tfsdk:"ca_type"`
+	Service     types.String `tfsdk:"service"`
+	AutoRestart types.Bool   `tfsdk:"auto_restart"`
+	UseBulk     types.Bool   `tfsdk:"use_bulk"`
+}
+
+// CMTrustedCAJSON is the payload for POST /v1/trusted-cas/ (TrustedCAData swagger schema).
+type CMTrustedCAJSON struct {
+	CAID    string `json:"ca_id,omitempty"`
+	CAType  string `json:"ca_type,omitempty"`
+	Service string `json:"service,omitempty"`
+}
+
+// CMTrustedCABulkJSON is the payload for POST /v1/trusted-cas-create-many/ (BulkTrustedCAParams swagger schema).
+// AutoRestart uses *bool so omitempty drops it when unset and false is transmitted correctly when set.
+type CMTrustedCABulkJSON struct {
+	TrustedCAs  []CMTrustedCAJSON `json:"trusted_cas"`
+	AutoRestart *bool             `json:"auto_restart,omitempty"`
+}
+
 // stringsToRawJSON converts map[string]string to map[string]json.RawMessage
 // so string values from Terraform config can be assigned to CMUserJSON.Metadata.
 func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {
