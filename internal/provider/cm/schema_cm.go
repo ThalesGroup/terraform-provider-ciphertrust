@@ -1263,6 +1263,24 @@ type CCKMXksRotateCredentialsParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
 
+type CMMKEKInfoTFSDK struct {
+	ID         types.String `tfsdk:"id"`
+	Name       types.String `tfsdk:"name"`
+	IsDefault  types.Bool   `tfsdk:"is_default"`
+	CreatedAt  types.String `tfsdk:"created_at"`
+	SealerName types.String `tfsdk:"sealer_name"`
+	KEKName    types.String `tfsdk:"kek_name"`
+}
+
+type CMMKEKInfoJSON struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	IsDefault  bool   `json:"is_default"`
+	CreatedAt  string `json:"created_at"`
+	SealerName string `json:"sealer_name"`
+	KEKName    string `json:"kek_name"`
+}
+
 // stringsToRawJSON converts map[string]string to map[string]json.RawMessage
 // so string values from Terraform config can be assigned to CMUserJSON.Metadata.
 func stringsToRawJSON(m map[string]string) map[string]json.RawMessage {
