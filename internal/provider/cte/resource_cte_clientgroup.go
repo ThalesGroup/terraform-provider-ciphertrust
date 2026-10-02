@@ -143,8 +143,15 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 				Description: "Whether to enable domain sharing for ClientGroup.",
 			},
 			"enabled_capabilities": schema.StringAttribute{
-				Optional:    true,
-				Description: "Comma-separated agent capabilities which are enabled. Currently only RESIGN for re-signing client settings can be enabled.",
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					enabledCapabilitiesUnknownForAuthBinaries{},
+				},
+				Description: "Comma-separated agent capabilities which are enabled. Currently only RESIGN for re-signing client settings can be enabled." +
+					" This is a CM-managed field driven as a side effect of `re_sign` under op_type = \"auth-binaries\" -- it is not user-supplied." +
+					" Its plan value is left Unknown for that op_type (since re_sign is expected to genuinely change it), and carried forward from" +
+					" prior state for every other op_type, where it is never touched (TFIN-640).",
 			},
 			"shared_domain_list": schema.ListAttribute{
 				Optional:    true,
@@ -270,6 +277,13 @@ func (r *resourceCTEClientGroup) Create(ctx context.Context, req resource.Create
 	plan.ID = types.StringValue(gjson.Get(response, "id").String())
 	if plan.ProfileID.ValueString() == "" || plan.ProfileID.ValueString() == types.StringNull().ValueString() {
 		plan.ProfileID = types.StringValue(gjson.Get(response, "profile_id").String())
+	}
+	// enabled_capabilities is Computed (TFIN-640): resolve the Unknown plan
+	// value from the create response so the final state is fully known.
+	if v := gjson.Get(response, "enabled_capabilities").String(); v != "" {
+		plan.EnabledCapabilities = types.StringValue(v)
+	} else {
+		plan.EnabledCapabilities = types.StringNull()
 	}
 	// Add clients to client group
 
@@ -564,10 +578,13 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "enable_domain_sharing cannot be changed with op_type 'auth-binaries'")
 			return
 		}
-		if plan.EnabledCapabilities != state.EnabledCapabilities {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "enabled_capabilities cannot be changed with op_type 'auth-binaries'")
-			return
-		}
+		// TFIN-640: enabled_capabilities is deliberately NOT guarded here --
+		// unlike every other field in this branch, it is EXPECTED to change
+		// as a side effect of re_sign under this exact op_type. The other 5
+		// occurrences of this guard (in the update/update-password/
+		// reset-password/remove-client/add-client/ldt-pause branches) are
+		// correct and untouched: enabled_capabilities must not change under
+		// any op_type other than auth-binaries.
 		if plan.LDTDesignatedPrimarySet != state.LDTDesignatedPrimarySet {
 			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "ldt_designated_primary_set cannot be changed with op_type 'auth-binaries'")
 			return
@@ -619,6 +636,30 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 			return
 		}
 		plan.ID = types.StringValue(response)
+		// TFIN-640: enabled_capabilities is a CM-managed side effect of
+		// re_sign, not a user-supplied value -- it is Computed with
+		// UseStateForUnknown(), so plan.EnabledCapabilities was carried
+		// forward unchanged from the prior state above and never reflects
+		// what this re_sign change actually produced on CM. The
+		// auth-binaries PATCH response here doesn't return the updated
+		// clientgroup object, so re-fetch the clientgroup to pick up CM's
+		// real current value -- without this, state stays stuck at the old
+		// value (e.g. "RESIGN") forever after a re_sign=false apply, even
+		// though CM itself already cleared it.
+		refreshed, err := r.client.GetById(ctx, uuid.New().String(), plan.ID.ValueString(), common.URL_CTE_CLIENT_GROUP)
+		if err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_clientgroup.go -> auth-binaries][" + plan.ID.ValueString() + "]")
+			resp.Diagnostics.AddError(
+				"Error reading CTE Client Group on CipherTrust Manager: ",
+				"Could not verify enabled_capabilities after updating auth binaries, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		if v := gjson.Get(refreshed, "enabled_capabilities").String(); v != "" {
+			plan.EnabledCapabilities = types.StringValue(v)
+		} else {
+			plan.EnabledCapabilities = types.StringNull()
+		}
 	} else if opType == "update-password" {
 		// Add error checks for fields we cant change in op_type = update-password
 		if !stringSlicesEqual(plan.ClientList, state.ClientList) {
@@ -1267,6 +1308,70 @@ func stringSlicesEqual(a, b []types.String) bool {
 	}
 	return true
 }
+
+// enabledCapabilitiesUnknownForAuthBinaries is a plan modifier for
+// enabled_capabilities (TFIN-640). This attribute is Computed and never
+// user-supplied -- it's a CM-managed side effect of re_sign, only ever
+// touched by Update()'s op_type = "auth-binaries" branch. Terraform's
+// post-apply consistency check requires that a Computed attribute's planned
+// value be Unknown if its final value might genuinely change during apply;
+// a plain stringplanmodifier.UseStateForUnknown() always carries the prior
+// state value forward as a *concrete* planned value, so if Update() then
+// writes a genuinely different final value (as it must, when re_sign
+// actually changes CM's enabled_capabilities), the framework rejects the
+// apply with "provider produced inconsistent result" -- this was the
+// original "idempotency check failure" this ticket's re_sign scenario hit.
+//
+// This modifier only marks the plan value Unknown when op_type is
+// "auth-binaries" (the one case where a genuine change is possible), and
+// falls back to carrying forward the prior state value otherwise (matching
+// UseStateForUnknown()'s behavior for every other op_type, where this field
+// is never touched and must not spuriously plan as unknown/changed).
+type enabledCapabilitiesUnknownForAuthBinaries struct{}
+
+func (m enabledCapabilitiesUnknownForAuthBinaries) Description(_ context.Context) string {
+	return "Marks enabled_capabilities unknown when op_type is \"auth-binaries\" (the only case where re_sign can genuinely change it), otherwise carries forward the prior state value."
+}
+
+func (m enabledCapabilitiesUnknownForAuthBinaries) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m enabledCapabilitiesUnknownForAuthBinaries) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// New resource (Create path): leave unknown, Create() resolves the real
+	// value from the API response after the fact.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	// Destroy plan: nothing to resolve.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	// Config explicitly sets this (not expected in practice, but respect it
+	// if it ever happens) -- use the configured value as-is.
+	if !req.ConfigValue.IsNull() {
+		return
+	}
+
+	var opType types.String
+	diags := req.Plan.GetAttribute(ctx, path.Root("op_type"), &opType)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if opType.ValueString() == "auth-binaries" {
+		// Genuine change is possible -- leave Unknown so Update()'s
+		// post-auth-binaries refresh can resolve it to whatever CM actually
+		// reports without tripping the consistency check.
+		return
+	}
+
+	// Every other op_type never touches this field -- carry forward the
+	// prior state value so it doesn't spuriously plan as changed.
+	resp.PlanValue = req.StateValue
+}
+
 func (r *resourceCTEClientGroup) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_cte_clientgroup.go -> ImportState][" + id + "]")
