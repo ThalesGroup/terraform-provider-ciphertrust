@@ -22,7 +22,7 @@ const azureVaultListFiltersTable = "\n\n> **Note:** Although some filters repres
 	"| filter            | type    | description |\n" +
 	"|-------------------|---------|-------------|\n" +
 	"| skip              | integer | Index of the first result to return (default: 0). |\n" +
-	"| limit             | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| limit             | integer | Maximum number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
 	"| sort              | string  | Fields to sort by. Valid sort fields are `azure_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |\n" +
 	"| id                | string  | Filter by CipherTrust Manager resource ID. |\n" +
 	"| name              | string  | Filter by CipherTrust Manager resource name (`azure_name::subscription_id` format). |\n" +
@@ -105,7 +105,7 @@ func (d *dataSourceAzureVaultList) Configure(_ context.Context, req datasource.C
 
 func (d *dataSourceAzureVaultList) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this data source to retrieve a list of Azure Key Vaults registered in the " +
+		Description: "Use this data source to retrieve a list of Azure Key Vaults added to the " +
 			"CipherTrust Manager database. Supply a `filters` map to narrow results.",
 		Attributes: map[string]schema.Attribute{
 			"filters": schema.MapAttribute{
@@ -120,7 +120,7 @@ func (d *dataSourceAzureVaultList) Schema(_ context.Context, _ datasource.Schema
 			},
 			"vaults": schema.ListNestedAttribute{
 				Computed:    true,
-				Description: "List of Azure vaults registered in CipherTrust Manager.",
+				Description: "List of Azure vaults added to CipherTrust Manager.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{

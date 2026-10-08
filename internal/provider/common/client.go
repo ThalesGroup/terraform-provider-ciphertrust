@@ -73,9 +73,34 @@ func normalizeAddress(addr string) string {
 	return addr
 }
 
+// Default values for the Azure CCKM provider settings.
+const (
+	DefaultAzurePurgeKeysOnDelete          = true
+	DefaultAzureRecoverSoftDeletedKeys     = false
+	DefaultAzureRetainKeyBackupsAfterPurge = true
+)
+
+// AzureCCKMSettings holds provider level settings for Azure CCKM key resources.
+type AzureCCKMSettings struct {
+	PurgeKeysOnDelete          bool
+	RecoverSoftDeletedKeys     bool
+	RetainKeyBackupsAfterPurge bool
+}
+
+// DefaultAzureCCKMSettings returns the settings used when none are specified.
+func DefaultAzureCCKMSettings() AzureCCKMSettings {
+	return AzureCCKMSettings{
+		PurgeKeysOnDelete:          DefaultAzurePurgeKeysOnDelete,
+		RecoverSoftDeletedKeys:     DefaultAzureRecoverSoftDeletedKeys,
+		RetainKeyBackupsAfterPurge: DefaultAzureRetainKeyBackupsAfterPurge,
+	}
+}
+
 type CCKMProviderConfig struct {
-	AwsOperationTimeout int64
-	OCIOperationTimeout int64
+	AwsOperationTimeout   int64
+	OCIOperationTimeout   int64
+	AzureOperationTimeout int64
+	AzureCCKMSettings     AzureCCKMSettings
 }
 
 // Client

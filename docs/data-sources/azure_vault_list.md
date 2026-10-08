@@ -3,12 +3,12 @@
 page_title: "ciphertrust_azure_vault_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of Azure Key Vaults registered in the CipherTrust Manager database. Supply a filters map to narrow results.
+  Use this data source to retrieve a list of Azure Key Vaults added to the CipherTrust Manager database. Supply a filters map to narrow results.
 ---
 
 # ciphertrust_azure_vault_list (Data Source)
 
-Use this data source to retrieve a list of Azure Key Vaults registered in the CipherTrust Manager database. Supply a `filters` map to narrow results.
+Use this data source to retrieve a list of Azure Key Vaults added to the CipherTrust Manager database. Supply a `filters` map to narrow results.
 
 ## Example Usage
 
@@ -64,7 +64,7 @@ data "ciphertrust_azure_vault_list" "specific" {
 | filter            | type    | description |
 |-------------------|---------|-------------|
 | skip              | integer | Index of the first result to return (default: 0). |
-| limit             | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| limit             | integer | Maximum number of results to return (default: 10). Use `"-1"` to return all matches. |
 | sort              | string  | Fields to sort by. Valid sort fields are `azure_name`, `updatedAt`, and `createdAt`. Prefix with `-` for descending order (for example, `-createdAt`). |
 | id                | string  | Filter by CipherTrust Manager resource ID. |
 | name              | string  | Filter by CipherTrust Manager resource name (`azure_name::subscription_id` format). |
@@ -78,7 +78,7 @@ data "ciphertrust_azure_vault_list" "specific" {
 ### Read-Only
 
 - `matched` (Number) Total number of vaults matching the given filters.
-- `vaults` (Attributes List) List of Azure vaults registered in CipherTrust Manager. (see [below for nested schema](#nestedatt--vaults))
+- `vaults` (Attributes List) List of Azure vaults added to CipherTrust Manager. (see [below for nested schema](#nestedatt--vaults))
 
 <a id="nestedatt--vaults"></a>
 ### Nested Schema for `vaults`

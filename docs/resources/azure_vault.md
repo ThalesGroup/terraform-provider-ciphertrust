@@ -49,7 +49,7 @@ resource "ciphertrust_azure_vault" "vault" {
 
 # The cckm_vault_name computed attribute holds the "vault-name::subscription-id" string
 # used as the name filter in ciphertrust_azure_vault_list.
-data "ciphertrust_azure_vault_list" "registered" {
+data "ciphertrust_azure_vault_list" "added" {
   filters = {
     name = ciphertrust_azure_vault.vault.cckm_vault_name
   }

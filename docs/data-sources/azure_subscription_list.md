@@ -3,12 +3,12 @@
 page_title: "ciphertrust_azure_subscription_list Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve a list of Azure subscriptions stored in the CipherTrust Manager database. A subscription is added to the database when an Azure vault is registered with CipherTrust Manager and removed when its last vault is deregistered. Supply a filters map to narrow results. Use ciphertrust_azure_subscription_details to query subscriptions live from Azure.
+  Use this data source to retrieve a list of Azure subscriptions stored in the CipherTrust Manager database. A subscription is added to the database when an Azure vault is created in CipherTrust Manager and removed when its last vault is deleted. Supply a filters map to narrow results. Use ciphertrust_azure_subscription_details to query subscriptions live from Azure.
 ---
 
 # ciphertrust_azure_subscription_list (Data Source)
 
-Use this data source to retrieve a list of Azure subscriptions stored in the CipherTrust Manager database. A subscription is added to the database when an Azure vault is registered with CipherTrust Manager and removed when its last vault is deregistered. Supply a `filters` map to narrow results. Use ciphertrust_azure_subscription_details to query subscriptions live from Azure.
+Use this data source to retrieve a list of Azure subscriptions stored in the CipherTrust Manager database. A subscription is added to the database when an Azure vault is created in CipherTrust Manager and removed when its last vault is deleted. Supply a `filters` map to narrow results. Use ciphertrust_azure_subscription_details to query subscriptions live from Azure.
 
 ## Example Usage
 
@@ -56,7 +56,7 @@ data "ciphertrust_azure_subscription_list" "all_sorted" {
 | filter         | type    | description |
 |----------------|---------|-------------|
 | skip           | integer | Index of the first result to return (default: 0). |
-| limit          | integer | Max number of results to return (default: 10). Use `"-1"` to return all matches. |
+| limit          | integer | Maximum number of results to return (default: 10). Use `"-1"` to return all matches. |
 | sort           | string  | Field to sort by. Valid values are `subscription_id`, `createdAt`, and `updatedAt`. Prefix with `-` for descending order. |
 | id             | string  | Filter by CipherTrust Manager internal resource ID. |
 | subscriptionId | string  | Filter by Azure subscription ID. |
@@ -74,7 +74,7 @@ Read-Only:
 
 - `account` (String) CipherTrust Manager account that owns this resource.
 - `authorization_source` (String) The authorization source of the request.
-- `created_at` (String) Date/time the subscription was registered in CipherTrust Manager.
+- `created_at` (String) Date/time the subscription was added to CipherTrust Manager.
 - `display_name` (String) The subscription display name.
 - `id` (String) CipherTrust Manager internal resource ID.
 - `state` (String) The subscription state.

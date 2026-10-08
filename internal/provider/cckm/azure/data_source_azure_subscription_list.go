@@ -20,7 +20,7 @@ const azureSubscriptionFiltersTable = "\n\n> **Note:** Although some filters rep
 	"| filter         | type    | description |\n" +
 	"|----------------|---------|-------------|\n" +
 	"| skip           | integer | Index of the first result to return (default: 0). |\n" +
-	"| limit          | integer | Max number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
+	"| limit          | integer | Maximum number of results to return (default: 10). Use `\"-1\"` to return all matches. |\n" +
 	"| sort           | string  | Field to sort by. Valid values are `subscription_id`, `createdAt`, and `updatedAt`. Prefix with `-` for descending order. |\n" +
 	"| id             | string  | Filter by CipherTrust Manager internal resource ID. |\n" +
 	"| subscriptionId | string  | Filter by Azure subscription ID. |\n" +
@@ -99,7 +99,7 @@ func (d *dataSourceAzureSubscriptionList) Schema(_ context.Context, _ datasource
 	resp.Schema = schema.Schema{
 		Description: "Use this data source to retrieve a list of Azure subscriptions stored in the " +
 			"CipherTrust Manager database. A subscription is added to the database when an Azure vault " +
-			"is registered with CipherTrust Manager and removed when its last vault is deregistered. " +
+			"is created in CipherTrust Manager and removed when its last vault is deleted. " +
 			"Supply a `filters` map to narrow results. " +
 			"Use ciphertrust_azure_subscription_details to query subscriptions live from Azure.",
 		Attributes: map[string]schema.Attribute{
@@ -132,7 +132,7 @@ func (d *dataSourceAzureSubscriptionList) Schema(_ context.Context, _ datasource
 						},
 						"created_at": schema.StringAttribute{
 							Computed:    true,
-							Description: "Date/time the subscription was registered in CipherTrust Manager.",
+							Description: "Date/time the subscription was added to CipherTrust Manager.",
 						},
 						"updated_at": schema.StringAttribute{
 							Computed:    true,

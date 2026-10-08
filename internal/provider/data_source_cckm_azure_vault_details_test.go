@@ -15,8 +15,8 @@ import (
 // The success step chains ciphertrust_azure_subscription_details to pick the first
 // subscription returned by the connection, avoiding a separate env var for the
 // subscription ID.
-func TestCckmAzureVaultDetails(t *testing.T) {
-	initConfig, ok := initCckmAzureTest()
+func TestCckmAzureDataSourceVaultDetails(t *testing.T) {
+	initConfig, ok := initCckmAzureTestWithoutVault()
 	if !ok {
 		t.Skip("Azure environment variables not set - skipping TestCckmAzureVaultDetails")
 	}

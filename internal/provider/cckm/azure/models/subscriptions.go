@@ -62,7 +62,7 @@ type AzureSubscriptionDetailsTFSDK struct {
 
 // AzureSubscriptionDBJSON is the JSON shape of one subscription record in the
 // resources array returned by the GET /subscriptions list API.
-// Field names follow the JSON tags on navic's Subscription model.
+// Field names match the JSON fields of a CipherTrust Manager subscription.
 type AzureSubscriptionDBJSON struct {
 	ID                  string `json:"id"`
 	URI                 string `json:"uri"`

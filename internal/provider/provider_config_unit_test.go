@@ -599,3 +599,215 @@ func TestUnit_Provider_Precedence_BlockOverridesEnv(t *testing.T) {
 		hclog.LevelFromString("info"),
 	)
 }
+
+// buildProviderConfigureWithAzure is like buildProviderConfigure but also sets
+// the cloud_key_manager.azure nested attributes from the azure map. When the
+// azure map is empty cloud_key_manager is left null. Attributes of azure that
+// are not in the map are null.
+func buildProviderConfigureWithAzure(
+	t *testing.T,
+	strs map[string]string,
+	bools map[string]bool,
+	azure map[string]bool,
+) provider.ConfigureRequest {
+	t.Helper()
+	ctx := context.Background()
+	p := &ciphertrustProvider{}
+	var sr provider.SchemaResponse
+	p.Schema(ctx, provider.SchemaRequest{}, &sr)
+
+	objType := sr.Schema.Type().TerraformType(ctx).(tftypes.Object)
+	vals := make(map[string]tftypes.Value, len(objType.AttributeTypes))
+	for k, at := range objType.AttributeTypes {
+		vals[k] = tftypes.NewValue(at, nil)
+	}
+	for k, v := range strs {
+		vals[k] = tftypes.NewValue(tftypes.String, v)
+	}
+	for k, v := range bools {
+		vals[k] = tftypes.NewValue(tftypes.Bool, v)
+	}
+
+	if len(azure) > 0 {
+		ckmType := objType.AttributeTypes["cloud_key_manager"].(tftypes.Object)
+		azureType := ckmType.AttributeTypes["azure"].(tftypes.Object)
+		azureVals := make(map[string]tftypes.Value, len(azureType.AttributeTypes))
+		for k, at := range azureType.AttributeTypes {
+			azureVals[k] = tftypes.NewValue(at, nil)
+		}
+		for k, v := range azure {
+			azureVals[k] = tftypes.NewValue(tftypes.Bool, v)
+		}
+		vals["cloud_key_manager"] = tftypes.NewValue(ckmType, map[string]tftypes.Value{
+			"azure": tftypes.NewValue(azureType, azureVals),
+		})
+	}
+
+	raw := tftypes.NewValue(objType, vals)
+	return provider.ConfigureRequest{
+		Config: tfsdk.Config{Raw: raw, Schema: sr.Schema},
+	}
+}
+
+// azureTestEnv starts a mock CipherTrust Manager, points HOME at a fresh temp
+// directory and clears the environment variables that could feed the provider.
+// It returns the mock server URL and the temp home directory.
+func azureTestEnv(t *testing.T) (string, string) {
+	t.Helper()
+	cmURL := startMockCM(t)
+	dir := t.TempDir()
+	setHomeDir(t, dir)
+	clearEnvVars(t,
+		"CIPHERTRUST_ADDRESS", "CIPHERTRUST_USERNAME", "CIPHERTRUST_PASSWORD",
+		"CIPHERTRUST_DOMAIN", "CIPHERTRUST_AUTH_DOMAIN",
+		"REST_API_TIMEOUT", "CIPHERTRUST_REPLICATION_DELAY", "NO_SSL_VERIFY",
+	)
+	return cmURL, dir
+}
+
+// azureBaseStrs returns the provider block string attributes needed to connect
+// to the mock server without relying on the config file.
+func azureBaseStrs(cmURL, dir string) map[string]string {
+	return map[string]string{
+		"address":   cmURL,
+		"username":  "admin",
+		"password":  "pass",
+		"bootstrap": "no",
+		"log_file":  filepath.Join(dir, "azure-test.log"),
+		"log_level": "off",
+	}
+}
+
+// writeAzureConfigFile writes ~/.ciphertrust/config under dir with mode 0600.
+func writeAzureConfigFile(t *testing.T, dir string, lines ...string) {
+	t.Helper()
+	cfgDir := filepath.Join(dir, ".ciphertrust")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatalf("create .ciphertrust dir: %v", err)
+	}
+	cfgPath := filepath.Join(cfgDir, "config")
+	if err := os.WriteFile(cfgPath, []byte(strings.Join(lines, "\n")), 0600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+}
+
+// TestUnit_Provider_AzureSettings verifies the cloud_key_manager.azure
+// settings: defaults, provider block values, config file values, precedence
+// (block over file) and rejection of invalid config file values. There is no
+// environment variable for these settings. Subtests that use the config file
+// are skipped on Windows because the permission check uses Unix mode bits.
+func TestUnit_Provider_AzureSettings(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		cmURL, dir := azureTestEnv(t)
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true}, nil)
+		client := runProviderConfigure(t, p, req)
+
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: false, RetainKeyBackupsAfterPurge: true}
+		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
+			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
+		}
+	})
+
+	t.Run("partial block keeps defaults for unset attributes", func(t *testing.T) {
+		cmURL, dir := azureTestEnv(t)
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true},
+			map[string]bool{"recover_soft_deleted_keys": true})
+		client := runProviderConfigure(t, p, req)
+
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true}
+		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
+			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
+		}
+	})
+
+	t.Run("block sets all", func(t *testing.T) {
+		cmURL, dir := azureTestEnv(t)
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true},
+			map[string]bool{
+				"purge_keys_on_delete":           false,
+				"recover_soft_deleted_keys":      true,
+				"retain_key_backups_after_purge": false,
+			})
+		client := runProviderConfigure(t, p, req)
+
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false}
+		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
+			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
+		}
+	})
+
+	t.Run("file sets all", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("config-file permission check uses Unix mode bits -- skipping on Windows")
+		}
+		cmURL, dir := azureTestEnv(t)
+		writeAzureConfigFile(t, dir,
+			"azure_purge_keys_on_delete = false",
+			"azure_recover_soft_deleted_keys = true",
+			"azure_retain_key_backups_after_purge = false",
+		)
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true}, nil)
+		client := runProviderConfigure(t, p, req)
+
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false}
+		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
+			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
+		}
+	})
+
+	t.Run("block overrides file per attribute", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("config-file permission check uses Unix mode bits -- skipping on Windows")
+		}
+		cmURL, dir := azureTestEnv(t)
+		writeAzureConfigFile(t, dir,
+			"azure_purge_keys_on_delete = false",
+			"azure_recover_soft_deleted_keys = true",
+		)
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true},
+			map[string]bool{"purge_keys_on_delete": true})
+		client := runProviderConfigure(t, p, req)
+
+		// purge comes from the block, recover from the file, retain is the default.
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true}
+		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
+			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
+		}
+	})
+
+	t.Run("file invalid bool", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("config-file permission check uses Unix mode bits -- skipping on Windows")
+		}
+		cmURL, dir := azureTestEnv(t)
+		writeAzureConfigFile(t, dir, "azure_purge_keys_on_delete = notabool")
+
+		p := &ciphertrustProvider{}
+		req := buildProviderConfigureWithAzure(t, azureBaseStrs(cmURL, dir),
+			map[string]bool{"no_ssl_verify": true}, nil)
+		var resp provider.ConfigureResponse
+		p.Configure(context.Background(), req, &resp)
+		t.Cleanup(func() {
+			if p.logFileHandle != nil {
+				_ = p.logFileHandle.Close()
+				p.logFileHandle = nil
+			}
+		})
+		assertDiagSummaryContains(t, &resp, "Invalid provider configuration in config file")
+	})
+}

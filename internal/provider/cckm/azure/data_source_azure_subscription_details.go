@@ -56,7 +56,7 @@ func (d *dataSourceAzureSubscriptionDetails) Schema(_ context.Context, _ datasou
 		Description: "Use this data source to retrieve Azure subscription details directly from Azure " +
 			"via a CipherTrust Manager Azure connection. The subscriptions returned are fetched live " +
 			"from Azure and are not stored in the CipherTrust Manager database. " +
-			"Use ciphertrust_azure_subscription_list to query subscriptions already registered in CipherTrust Manager.",
+			"Use ciphertrust_azure_subscription_list to query subscriptions already added to CipherTrust Manager.",
 		Attributes: map[string]schema.Attribute{
 			"connection_id": schema.StringAttribute{
 				Required:    true,

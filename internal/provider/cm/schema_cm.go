@@ -873,13 +873,20 @@ type CCKMKeyRotationParamsJSON struct {
 }
 
 type CCKMSynchronizationParamsJSON struct {
-	CloudName      string   `json:"cloud_name"`
-	Kms            []string `json:"kms"`
-	OCIVaults      []string `json:"oci_vaults"`
-	SynchronizeAll *bool    `json:"synchronize_all"`
+	CloudName          string   `json:"cloud_name"`
+	Kms                []string `json:"kms"`
+	OCIVaults          []string `json:"oci_vaults"`
+	KeyVaults          []string `json:"key_vaults,omitempty"`
+	SyncItems          []string `json:"sync_item,omitempty"`
+	TakeCloudKeyBackup *bool    `json:"take_cloud_key_backup,omitempty"`
+	SynchronizeAll     *bool    `json:"synchronize_all"`
 }
 
 type CCKMXksRotateCredentialsParamsJSON struct {
+	CloudName string `json:"cloud_name"`
+}
+
+type CCKMKeyBackupParamsJSON struct {
 	CloudName string `json:"cloud_name"`
 }
 
@@ -896,6 +903,7 @@ type CreateJobConfigParamsJSON struct {
 	CCKMKeyRotationParams          *CCKMKeyRotationParamsJSON          `json:"cckm_key_rotation_params"`
 	CCKMSynchronizationParams      *CCKMSynchronizationParamsJSON      `json:"cckm_synchronization_params"`
 	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsJSON `json:"cckm_xks_credential_rotation_params"`
+	CCKMKeyBackupParams            *CCKMKeyBackupParamsJSON            `json:"cckm_key_backup_params"`
 }
 
 type UpdateJobConfigParamsJSON struct {
@@ -945,6 +953,7 @@ type CreateJobConfigParamsTFSDKCommon struct {
 	EndDate                        types.String                         `tfsdk:"end_date"`
 	DatabaseBackupParams           *DatabaseBackupParamsTFSDK           `tfsdk:"database_backup_params"`
 	CCKMXksRotateCredentialsParams *CCKMXksRotateCredentialsParamsTFSDK `tfsdk:"cckm_xks_credential_rotation_params"`
+	CCKMKeyBackupParams            *CCKMKeyBackupParamsTFSDK            `tfsdk:"cckm_key_backup_params"`
 }
 
 type CreateJobConfigParamsTFSDK struct {
@@ -1246,20 +1255,30 @@ type CCKMKeyRotationParamsDatasourceTFSDK struct {
 }
 
 type CCKMSynchronizationParamsTFSDK struct {
-	CloudName types.String `tfsdk:"cloud_name"`
-	Kms       types.Set    `tfsdk:"kms"`
-	OCIVaults types.Set    `tfsdk:"oci_vaults"`
-	SyncAll   types.Bool   `tfsdk:"synchronize_all"`
+	CloudName          types.String `tfsdk:"cloud_name"`
+	Kms                types.Set    `tfsdk:"kms"`
+	OCIVaults          types.Set    `tfsdk:"oci_vaults"`
+	KeyVaults          types.Set    `tfsdk:"key_vaults"`
+	SyncItems          types.Set    `tfsdk:"sync_items"`
+	TakeCloudKeyBackup types.Bool   `tfsdk:"take_cloud_key_backup"`
+	SyncAll            types.Bool   `tfsdk:"synchronize_all"`
 }
 
 var CCKMSynchronizationParamsAttribs = map[string]attr.Type{
-	"cloud_name":      types.StringType,
-	"synchronize_all": types.BoolType,
-	"oci_vaults":      types.SetType{ElemType: types.StringType},
-	"kms":             types.SetType{ElemType: types.StringType},
+	"cloud_name":            types.StringType,
+	"synchronize_all":       types.BoolType,
+	"oci_vaults":            types.SetType{ElemType: types.StringType},
+	"key_vaults":            types.SetType{ElemType: types.StringType},
+	"sync_items":            types.SetType{ElemType: types.StringType},
+	"take_cloud_key_backup": types.BoolType,
+	"kms":                   types.SetType{ElemType: types.StringType},
 }
 
 type CCKMXksRotateCredentialsParamsTFSDK struct {
+	CloudName types.String `tfsdk:"cloud_name"`
+}
+
+type CCKMKeyBackupParamsTFSDK struct {
 	CloudName types.String `tfsdk:"cloud_name"`
 }
 

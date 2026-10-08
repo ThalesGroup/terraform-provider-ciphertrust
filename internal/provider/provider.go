@@ -34,9 +34,10 @@ var (
 )
 
 const (
-	defaultAwsOperationTimeout = 480
-	defaultOciOperationTimeout = 480
-	defaultReplicationDelay    = 100
+	defaultAwsOperationTimeout   = 480
+	defaultOciOperationTimeout   = 480
+	defaultAzureOperationTimeout = 240
+	defaultReplicationDelay      = 100
 )
 
 // New is a helper function to simplify provider server and testing implementation.
@@ -62,21 +63,33 @@ type ciphertrustProvider struct {
 }
 
 type ciphertrustProviderModel struct {
-	Username             types.String `tfsdk:"username"`
-	Password             types.String `tfsdk:"password"`
-	Domain               types.String `tfsdk:"domain"`
-	Bootstrap            types.String `tfsdk:"bootstrap"`
-	AuthDomain           types.String `tfsdk:"auth_domain"`
-	Tenant               types.String `tfsdk:"tenant"`
-	InsecureSkipVerify   types.Bool   `tfsdk:"no_ssl_verify"`
-	CACert               types.String `tfsdk:"ca_cert"`
-	RestOperationTimeout types.Int64  `tfsdk:"rest_api_timeout"`
-	Address              types.String `tfsdk:"address"`
-	AwsOperationTimeout  types.Int64  `tfsdk:"aws_operation_timeout"`
-	OCIOperationTimeout  types.Int64  `tfsdk:"oci_operation_timeout"`
-	ReplicationDelayMS   types.Int64  `tfsdk:"replication_delay_ms"`
-	LogFile              types.String `tfsdk:"log_file"`
-	LogLevel             types.String `tfsdk:"log_level"`
+	Username              types.String          `tfsdk:"username"`
+	Password              types.String          `tfsdk:"password"`
+	Domain                types.String          `tfsdk:"domain"`
+	Bootstrap             types.String          `tfsdk:"bootstrap"`
+	AuthDomain            types.String          `tfsdk:"auth_domain"`
+	Tenant                types.String          `tfsdk:"tenant"`
+	InsecureSkipVerify    types.Bool            `tfsdk:"no_ssl_verify"`
+	CACert                types.String          `tfsdk:"ca_cert"`
+	RestOperationTimeout  types.Int64           `tfsdk:"rest_api_timeout"`
+	Address               types.String          `tfsdk:"address"`
+	AwsOperationTimeout   types.Int64           `tfsdk:"aws_operation_timeout"`
+	OCIOperationTimeout   types.Int64           `tfsdk:"oci_operation_timeout"`
+	AzureOperationTimeout types.Int64           `tfsdk:"azure_operation_timeout"`
+	ReplicationDelayMS    types.Int64           `tfsdk:"replication_delay_ms"`
+	LogFile               types.String          `tfsdk:"log_file"`
+	LogLevel              types.String          `tfsdk:"log_level"`
+	CloudKeyManager       *cloudKeyManagerModel `tfsdk:"cloud_key_manager"`
+}
+
+type cloudKeyManagerModel struct {
+	Azure *azureCCKMSettingsModel `tfsdk:"azure"`
+}
+
+type azureCCKMSettingsModel struct {
+	PurgeKeysOnDelete          types.Bool `tfsdk:"purge_keys_on_delete"`
+	RecoverSoftDeletedKeys     types.Bool `tfsdk:"recover_soft_deleted_keys"`
+	RetainKeyBackupsAfterPurge types.Bool `tfsdk:"retain_key_backups_after_purge"`
 }
 
 const (
@@ -156,6 +169,10 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Optional:    true,
 				Description: "Some OCI key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "oci_operation_timeout", defaultOciOperationTimeout),
 			},
+			"azure_operation_timeout": schema.Int64Attribute{
+				Optional:    true,
+				Description: "Some Azure key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. " + fmt.Sprintf(providerDescWithDefault, "azure_operation_timeout", defaultAzureOperationTimeout),
+			},
 			"replication_delay_ms": schema.Int64Attribute{
 				Optional:    true,
 				Description: "In the case of a CipherTrust Manager cluster behind a load balancer a small delay after creating CipherTrust Manager resources may be required to allow for replication to other cluster instances. " + fmt.Sprintf(providerDescDefaultWithEnvVar, "replication_delay_ms", "CIPHERTRUST_REPLICATION_DELAY", defaultReplicationDelay),
@@ -167,6 +184,30 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 			"log_level": schema.StringAttribute{
 				Optional:    true,
 				Description: "Logging level for the provider log file. " + fmt.Sprintf(providerDescWithDefault, "log_level", "info") + " Options: debug, info, warn, error, off.",
+			},
+			"cloud_key_manager": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "Cloud Key Manager settings.",
+				Attributes: map[string]schema.Attribute{
+					"azure": schema.SingleNestedAttribute{
+						Optional:    true,
+						Description: "Azure key settings.",
+						Attributes: map[string]schema.Attribute{
+							"purge_keys_on_delete": schema.BoolAttribute{
+								Optional:    true,
+								Description: "Should ciphertrust_azure_key resources be purged when destroyed? If false, the key will only be soft-deleted. Can be set in the provider block or in ~/.ciphertrust/config as azure_purge_keys_on_delete. Default is true.",
+							},
+							"recover_soft_deleted_keys": schema.BoolAttribute{
+								Optional:    true,
+								Description: "Should ciphertrust_azure_key resources recover soft-deleted keys if an attempt is made to create a key of the same name? If true, the key will be recovered and a new key version will be created. Can be set in the provider block or in ~/.ciphertrust/config as azure_recover_soft_deleted_keys. Default is false.",
+							},
+							"retain_key_backups_after_purge": schema.BoolAttribute{
+								Optional:    true,
+								Description: "Should CipherTrust Manager retain key backups when the key is purged? If true, a purged key will be retained by CipherTrust Manager and it can be restored from a key backup using the CipherTrust Cloud Key Manager User Interface or API. It will not be possible to create a key of the same name in CipherTrust Manager until it is restored. If false, it will not be possible to restore the key from a backup but it will be possible to create a new key with the same name. Can be set in the provider block or in ~/.ciphertrust/config as azure_retain_key_backups_after_purge. Default is true.",
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -214,9 +255,11 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 	var rest_api_timeout int64
 	var aws_operation_timeout = int64(defaultAwsOperationTimeout)
 	var oci_operation_timeout = int64(defaultOciOperationTimeout)
+	var azure_operation_timeout = int64(defaultAzureOperationTimeout)
 	var replication_delay_ms = int64(defaultReplicationDelay)
 	var log_file = "ctp.log"
 	var log_level = "info"
+	var azureSettings = common.DefaultAzureCCKMSettings()
 
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
@@ -319,12 +362,44 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
 						)
 					}
+				case "azure_operation_timeout":
+					azure_operation_timeout, parseErr = strconv.ParseInt(value, 10, 64)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
 				case "replication_delay_ms":
 					replication_delay_ms, parseErr = strconv.ParseInt(value, 10, 64)
 					if parseErr != nil {
 						resp.Diagnostics.AddError(
 							"Invalid provider configuration in config file",
 							fmt.Sprintf("Failed to parse %s=%q as integer: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "azure_purge_keys_on_delete":
+					azureSettings.PurgeKeysOnDelete, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "azure_recover_soft_deleted_keys":
+					azureSettings.RecoverSoftDeletedKeys, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "azure_retain_key_backups_after_purge":
+					azureSettings.RetainKeyBackupsAfterPurge, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
 						)
 					}
 				case "log_file":
@@ -483,22 +558,40 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		oci_operation_timeout = config.OCIOperationTimeout.ValueInt64()
 	}
 
+	if !config.AzureOperationTimeout.IsNull() {
+		azure_operation_timeout = config.AzureOperationTimeout.ValueInt64()
+	}
+
 	if !config.ReplicationDelayMS.IsNull() {
 		replication_delay_ms = config.ReplicationDelayMS.ValueInt64()
 	}
 
+	// Provider block values override the config file and the defaults
+	if config.CloudKeyManager != nil && config.CloudKeyManager.Azure != nil {
+		az := config.CloudKeyManager.Azure
+		if !az.PurgeKeysOnDelete.IsNull() && !az.PurgeKeysOnDelete.IsUnknown() {
+			azureSettings.PurgeKeysOnDelete = az.PurgeKeysOnDelete.ValueBool()
+		}
+		if !az.RecoverSoftDeletedKeys.IsNull() && !az.RecoverSoftDeletedKeys.IsUnknown() {
+			azureSettings.RecoverSoftDeletedKeys = az.RecoverSoftDeletedKeys.ValueBool()
+		}
+		if !az.RetainKeyBackupsAfterPurge.IsNull() && !az.RetainKeyBackupsAfterPurge.IsUnknown() {
+			azureSettings.RetainKeyBackupsAfterPurge = az.RetainKeyBackupsAfterPurge.ValueBool()
+		}
+	}
+
 	// Surface the insecure mode loudly — it should only be used in test
 	// environments, never in production (CWE-295).
-	if no_ssl_verify {
-		resp.Diagnostics.AddAttributeWarning(
-			path.Root("no_ssl_verify"),
-			"TLS certificate verification is disabled",
-			"`no_ssl_verify = true` disables TLS certificate chain and hostname validation for all "+
-				"CipherTrust API calls. This is intended for local development and testing only and "+
-				"must not be used in production. For private PKI or air-gapped environments supply a "+
-				"custom CA bundle via `ca_cert` instead.",
-		)
-	}
+	//if no_ssl_verify {
+	//	//resp.Diagnostics.AddAttributeWarning(
+	//	//	path.Root("no_ssl_verify"),
+	//	//	"TLS certificate verification is disabled",
+	//	//	"`no_ssl_verify = true` disables TLS certificate chain and hostname validation for all "+
+	//	//		"CipherTrust API calls. This is intended for local development and testing only and "+
+	//	//		"must not be used in production. For private PKI or air-gapped environments supply a "+
+	//	//		"custom CA bundle via `ca_cert` instead.",
+	//	//)
+	//}
 
 	tlsOpts := common.TLSOptions{
 		InsecureSkipVerify: no_ssl_verify,
@@ -593,6 +686,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
+		client.CCKMConfig.AzureOperationTimeout = azure_operation_timeout
+		client.CCKMConfig.AzureCCKMSettings = azureSettings
 		client.ReplicationDelay = replication_delay_ms
 		client.Log = providerLogger
 		resp.DataSourceData = client
@@ -615,6 +710,8 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		}
 		client.CCKMConfig.AwsOperationTimeout = aws_operation_timeout
 		client.CCKMConfig.OCIOperationTimeout = oci_operation_timeout
+		client.CCKMConfig.AzureOperationTimeout = azure_operation_timeout
+		client.CCKMConfig.AzureCCKMSettings = azureSettings
 		client.ReplicationDelay = replication_delay_ms
 		client.Log = providerLogger
 		resp.DataSourceData = client
@@ -679,6 +776,8 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		azure.NewDataSourceAzureSubscriptionList,
 		azure.NewDataSourceAzureVaultDetails,
 		azure.NewDataSourceAzureVaultList,
+		azure.NewDataSourceAzureKeyList,
+		azure.NewDataSourceAzureKeyPitBackupList,
 	}
 }
 
@@ -749,5 +848,7 @@ func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.R
 		oci.NewResourceCCKMOCIKey,
 		aws.NewResourceCCKMAWSAcl,
 		azure.NewResourceCCKMAzureVault,
+		azure.NewResourceCCKMAzureKey,
+		azure.NewResourceAzureKeyPitBackup,
 	}
 }

@@ -11,8 +11,8 @@ import (
 //
 // The invalid_filter_key sub-test runs without live Azure infrastructure.
 // The lifecycle sub-test requires the four core Azure environment variables and
-// registers a vault first so there is always at least one result to query.
-func TestCckmAzureVaultListDataSource(t *testing.T) {
+// adds a vault first so there is always at least one result to query.
+func TestCckmAzureDataSourceVaultList(t *testing.T) {
 
 	// --- Tests that do not need live Azure infrastructure ---
 
@@ -33,7 +33,7 @@ func TestCckmAzureVaultListDataSource(t *testing.T) {
 
 	// --- Tests that require live Azure infrastructure ---
 
-	initConfig, ok := initCckmAzureTest()
+	initConfig, ok := initCckmAzureTestWithoutVault()
 	if !ok {
 		t.Skip("Azure environment variables not set - skipping TestCckmAzureVaultListDataSource live tests")
 	}
@@ -54,6 +54,7 @@ func TestCckmAzureVaultListDataSource(t *testing.T) {
 
 	t.Run("valid_filters", func(t *testing.T) {
 		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				// Single step: create the vault then exercise all filter variants simultaneously.
@@ -92,13 +93,13 @@ func TestCckmAzureVaultListDataSource(t *testing.T) {
 							}
 						}
 
-						# type = "vault" - Key Vaults only; our registered vault qualifies.
+						# type = "vault" - Key Vaults only; our added vault qualifies.
 						data "ciphertrust_azure_vault_list" "by_type_vault" {
 							filters    = { type = "vault" }
 							depends_on = [ciphertrust_azure_vault.test]
 						}
 
-						# type = "managedHsm" - no managed HSMs registered, so matched = 0.
+						# type = "managedHsm" - no managed HSMs added, so matched = 0.
 						data "ciphertrust_azure_vault_list" "by_type_hsm" {
 							filters    = { type = "managedHsm" }
 							depends_on = [ciphertrust_azure_vault.test]
@@ -126,14 +127,14 @@ func TestCckmAzureVaultListDataSource(t *testing.T) {
 						// subscription_id filter: at least one vault found.
 						resource.TestCheckResourceAttrSet("data.ciphertrust_azure_vault_list.by_sub", "vaults.0.id"),
 
-						// name filter using cckm_vault_name: exactly the registered vault is returned.
+						// name filter using cckm_vault_name: exactly the added vault is returned.
 						resource.TestCheckResourceAttr("data.ciphertrust_azure_vault_list.by_name", "matched", "1"),
 						resource.TestCheckResourceAttrSet("data.ciphertrust_azure_vault_list.by_name", "vaults.0.id"),
 
 						// type = "vault": at least one vault found.
 						resource.TestCheckResourceAttrSet("data.ciphertrust_azure_vault_list.by_type_vault", "vaults.0.id"),
 
-						// type = "managedHsm": no vaults registered, matched must be 0.
+						// type = "managedHsm": no vaults added, matched must be 0.
 						resource.TestCheckResourceAttr("data.ciphertrust_azure_vault_list.by_type_hsm", "matched", "0"),
 
 						// sort: no error; at least one vault present.
