@@ -74,6 +74,10 @@ output "scheduler" {
   value = ciphertrust_scheduler.scheduler
 }
 
+# Cloud key synchronization notes
+# - Unless synchronize_all is true, the cloud container list for the cloud
+#   (kms, oci_vaults or key_vaults) must contain at least one resource ID.
+
 # AWS scheduled key rotation
 resource "ciphertrust_scheduler" "aws_scheduled_rotation_job" {
   end_date = "2030-12-07T14:24:00Z"
@@ -100,6 +104,64 @@ resource "ciphertrust_scheduler" "xks_credential_rotation" {
   run_at    = "0 9 * * fri"
 }
 
+# AWS synchronization of the keys of specific KMS resources
+resource "ciphertrust_scheduler" "aws_sync_kms" {
+  name      = "aws-sync-kms"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * fri"
+  cckm_synchronization_params = {
+    cloud_name = "aws"
+    kms        = ["kms-resource-id"]
+  }
+}
+
+# AWS synchronization of all keys
+resource "ciphertrust_scheduler" "aws_sync_all" {
+  name      = "aws-sync-all"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * sat"
+  cckm_synchronization_params = {
+    cloud_name      = "aws"
+    synchronize_all = true
+  }
+}
+
+# Azure scheduled key backup
+resource "ciphertrust_scheduler" "azure_key_backup" {
+  cckm_key_backup_params = {
+    cloud_name = "AzureCloud"
+  }
+  name      = "azure-key-backup"
+  operation = "cckm_key_backup"
+  run_at    = "0 9 * * fri"
+}
+
+# Azure synchronization of the keys of specific key vaults
+resource "ciphertrust_scheduler" "azure_sync_vaults" {
+  name      = "azure-sync-vaults"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * fri"
+  cckm_synchronization_params = {
+    cloud_name = "AzureCloud"
+    key_vaults = [ciphertrust_azure_vault.vault.id]
+    # sync_items currently accepts only "key"
+    sync_items = ["key"]
+    # Optional. Take a backup of the keys in the cloud during synchronization.
+    take_cloud_key_backup = true
+  }
+}
+
+# Azure synchronization of all keys
+resource "ciphertrust_scheduler" "azure_sync_all" {
+  name      = "azure-sync-all"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * sat"
+  cckm_synchronization_params = {
+    cloud_name      = "AzureCloud"
+    synchronize_all = true
+  }
+}
+
 # OCI scheduled key rotation
 resource "ciphertrust_scheduler" "oci" {
   cckm_key_rotation_params = {
@@ -110,4 +172,26 @@ resource "ciphertrust_scheduler" "oci" {
   name      = "oci-key-rotation"
   operation = "cckm_key_rotation"
   run_at    = "0 9 * * fri"
+}
+
+# OCI synchronization of the keys of specific vaults
+resource "ciphertrust_scheduler" "oci_sync_vaults" {
+  name      = "oci-sync-vaults"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * fri"
+  cckm_synchronization_params = {
+    cloud_name = "oci"
+    oci_vaults = ["oci-vault-resource-id"]
+  }
+}
+
+# OCI synchronization of all keys
+resource "ciphertrust_scheduler" "oci_sync_all" {
+  name      = "oci-sync-all"
+  operation = "cckm_synchronization"
+  run_at    = "0 9 * * sat"
+  cckm_synchronization_params = {
+    cloud_name      = "oci"
+    synchronize_all = true
+  }
 }

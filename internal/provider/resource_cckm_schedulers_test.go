@@ -16,10 +16,22 @@ import (
 // null != empty-object as a mismatch, so we ignore the unused params block for
 // each operation type.
 var (
-	rotationImportIgnore = []string{"cckm_synchronization_params"}
-	syncImportIgnore     = []string{"cckm_key_rotation_params"}
-	xksCredImportIgnore  = []string{"cckm_key_rotation_params", "cckm_synchronization_params"}
+	rotationImportIgnore  = []string{"cckm_synchronization_params"}
+	syncImportIgnore      = []string{"cckm_key_rotation_params"}
+	xksCredImportIgnore   = []string{"cckm_key_rotation_params", "cckm_synchronization_params"}
+	keyBackupImportIgnore = []string{"cckm_key_rotation_params", "cckm_synchronization_params"}
 )
+
+const (
+	schedulerRunAtOriginal = `run_at     = "0 9 * * fri"`
+	schedulerRunAtUpdated  = "run_at     = \"0 10 * * sat\"\n\t\t\t\tdescription = \"updated\""
+)
+
+// schedulerTopLevelUpdate returns config with every scheduler's run_at changed and a
+// description added. These top-level fields are patchable for all operations.
+func schedulerTopLevelUpdate(config string) string {
+	return strings.ReplaceAll(config, schedulerRunAtOriginal, schedulerRunAtUpdated)
+}
 
 func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
@@ -211,6 +223,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 		schedulerName := "tf-xks-cred-rotation" + uuid.New().String()[:8]
 		schedulerConfigStr := fmt.Sprintf(schedulerConfig, schedulerName)
 		schedulerResourceName := "ciphertrust_scheduler.xks_credential_rotation"
+		updateConfigStr := schedulerTopLevelUpdate(schedulerConfigStr)
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmAwsKMS() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -219,6 +232,14 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					Config: schedulerConfigStr,
 					Check: resource.ComposeTestCheckFunc(
 						resource.TestCheckResourceAttrSet(schedulerResourceName, "id"),
+						resource.TestCheckResourceAttr(schedulerResourceName, "cckm_xks_credential_rotation_params.cloud_name", "aws"),
+					),
+				},
+				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(schedulerResourceName, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(schedulerResourceName, "description", "updated"),
 						resource.TestCheckResourceAttr(schedulerResourceName, "cckm_xks_credential_rotation_params.cloud_name", "aws"),
 					),
 				},
@@ -252,6 +273,9 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 		expireIn := "22h"
 		name := "tf" + uuid.New().String()[:8]
 		createConfigStr := fmt.Sprintf(createConfig, expiration, expireIn, name)
+		expirationUpdate := "55d"
+		expireInUpdate := "33h"
+		updateConfigStr := fmt.Sprintf(createConfig, expirationUpdate, expireInUpdate, name)
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmOCIVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -266,6 +290,14 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					),
 				},
 				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.cloud_name", "oci"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expiration", expirationUpdate),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
+					),
+				},
+				{
 					RefreshState: true,
 				},
 				{
@@ -273,6 +305,125 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 					ImportState:             true,
 					ImportStateVerify:       true,
 					ImportStateVerifyIgnore: rotationImportIgnore,
+				},
+			},
+		})
+	})
+
+	t.Run("azure", func(t *testing.T) {
+		if _, ok := initCckmAzureTest(); !ok {
+			t.Skip("Skipping: Azure environment variables are not set")
+		}
+		schedulerResource := "ciphertrust_scheduler.azure"
+		createConfig := `
+			resource "ciphertrust_scheduler" "azure" {
+				cckm_key_rotation_params = {
+					cloud_name = "AzureCloud"
+					expiration = "%s"
+					expire_in  = "%s"
+				}
+				name       = "%s"
+				operation  = "cckm_key_rotation"
+				run_at     = "0 9 * * fri"
+			}`
+		expiration := "44d"
+		expireIn := "22h"
+		name := "tf" + uuid.New().String()[:8]
+		createConfigStr := fmt.Sprintf(createConfig, expiration, expireIn, name)
+		expirationUpdate := "55d"
+		expireInUpdate := "33h"
+		updateConfigStr := fmt.Sprintf(createConfig, expirationUpdate, expireInUpdate, name)
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(schedulerResource, "id"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.cloud_name", "AzureCloud"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expiration", expiration),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expire_in", expireIn),
+					),
+				},
+				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.cloud_name", "AzureCloud"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expiration", expirationUpdate),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
+					),
+				},
+				{
+					RefreshState: true,
+				},
+				{
+					ResourceName:            schedulerResource,
+					ImportState:             true,
+					ImportStateVerify:       true,
+					ImportStateVerifyIgnore: rotationImportIgnore,
+				},
+			},
+		})
+	})
+}
+
+func Test_CM_CckmSchedulersKeyBackupResource(t *testing.T) {
+	t.Run("azure", func(t *testing.T) {
+		if _, ok := initCckmAzureTest(); !ok {
+			t.Skip("Skipping: Azure environment variables are not set")
+		}
+		schedulerResource := "ciphertrust_scheduler.key_backup"
+		configTemplate := `
+			resource "ciphertrust_scheduler" "key_backup" {
+				cckm_key_backup_params = {
+					cloud_name = "%s"
+				}
+				name       = "%s"
+				operation  = "cckm_key_backup"
+				run_at     = "0 9 * * fri"
+			}`
+		name := "tf" + uuid.New().String()[:8]
+		createConfigStr := fmt.Sprintf(configTemplate, "AzureCloud", name)
+		changeCloudConfigStr := fmt.Sprintf(configTemplate, "AzureChinaCloud", name)
+		updateConfigStr := strings.ReplaceAll(schedulerTopLevelUpdate(createConfigStr),
+			`description = "updated"`, "description = \"updated\"\n\t\t\t\tdisabled   = true")
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(schedulerResource, "id"),
+						resource.TestCheckResourceAttr(schedulerResource, "operation", "cckm_key_backup"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_backup_params.cloud_name", "AzureCloud"),
+					),
+				},
+				// AzureCloud is the only supported cloud and cckm_key_backup_params is not
+				// accepted by PATCH, so it is immutable. Any other cloud_name is rejected by
+				// the validator at plan time. This step must not be last because the
+				// post-test destroy reuses the config of the last step.
+				{
+					Config:      changeCloudConfigStr,
+					PlanOnly:    true,
+					ExpectError: regexp.MustCompile(`Invalid Attribute Value Match`),
+				},
+				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(schedulerResource, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(schedulerResource, "description", "updated"),
+						resource.TestCheckResourceAttr(schedulerResource, "disabled", "true"),
+						resource.TestCheckResourceAttr(schedulerResource, "cckm_key_backup_params.cloud_name", "AzureCloud"),
+					),
+				},
+				{
+					RefreshState: true,
+				},
+				{
+					ResourceName:            schedulerResource,
+					ImportState:             true,
+					ImportStateVerify:       true,
+					ImportStateVerifyIgnore: keyBackupImportIgnore,
 				},
 			},
 		})
@@ -418,6 +569,7 @@ func Test_CM_CckmSchedulersSyncResource(t *testing.T) {
 		syncVaultName := "oci-sync-vault" + uuid.New().String()[:8]
 		syncAllName := "oci-sync-all" + uuid.New().String()[:8]
 		createConfigStr := connectionResource + fmt.Sprintf(createConfig, syncVaultName, syncAllName)
+		updateConfigStr := schedulerTopLevelUpdate(createConfigStr)
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmOCIVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -437,6 +589,17 @@ func Test_CM_CckmSchedulersSyncResource(t *testing.T) {
 					),
 				},
 				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(syncVaultResource, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(syncVaultResource, "description", "updated"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.oci_vaults.#", "1"),
+						resource.TestCheckResourceAttr(syncAllResource, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(syncAllResource, "description", "updated"),
+						resource.TestCheckResourceAttr(syncAllResource, "cckm_synchronization_params.synchronize_all", "true"),
+					),
+				},
+				{
 					RefreshState: true,
 				},
 				// Import vault-scoped scheduler and verify oci_vaults and synchronize_all round-trip.
@@ -452,6 +615,76 @@ func Test_CM_CckmSchedulersSyncResource(t *testing.T) {
 					ImportState:             true,
 					ImportStateVerify:       true,
 					ImportStateVerifyIgnore: syncImportIgnore,
+				},
+			},
+		})
+	})
+	t.Run("azure", func(t *testing.T) {
+		initConfig, ok := initCckmAzureTest()
+		if !ok {
+			t.Skip("Skipping: Azure environment variables are not set")
+		}
+		syncVaultResource := "ciphertrust_scheduler.sync_vault"
+		syncAllResource := "ciphertrust_scheduler.sync_all"
+		createConfig := `
+			resource "ciphertrust_scheduler" "sync_vault" {
+				cckm_synchronization_params = {
+					cloud_name            = "AzureCloud"
+					key_vaults            = [ciphertrust_azure_vault.standard_vault.id]
+					sync_items            = ["key"]
+					take_cloud_key_backup = true
+				}
+				name       = "%s"
+				operation  = "cckm_synchronization"
+				run_at     = "0 9 * * fri"
+			}
+			resource "ciphertrust_scheduler" "sync_all" {
+				cckm_synchronization_params = {
+					cloud_name      = "AzureCloud"
+					synchronize_all = true
+				}
+				name       = "%s"
+				operation  = "cckm_synchronization"
+				run_at     = "0 9 * * fri"
+			}`
+		syncVaultName := "azure-sync-vault" + uuid.New().String()[:8]
+		syncAllName := "azure-sync-all" + uuid.New().String()[:8]
+		createConfigStr := initConfig + fmt.Sprintf(createConfig, syncVaultName, syncAllName)
+		updateConfigStr := strings.ReplaceAll(schedulerTopLevelUpdate(createConfigStr),
+			"take_cloud_key_backup = true", "take_cloud_key_backup = false")
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: createConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(syncVaultResource, "id"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.cloud_name", "AzureCloud"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.key_vaults.#", "1"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.sync_items.#", "1"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.take_cloud_key_backup", "true"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.synchronize_all", "false"),
+
+						resource.TestCheckResourceAttrSet(syncAllResource, "id"),
+						resource.TestCheckResourceAttr(syncAllResource, "cckm_synchronization_params.cloud_name", "AzureCloud"),
+						resource.TestCheckResourceAttr(syncAllResource, "cckm_synchronization_params.key_vaults.#", "0"),
+						resource.TestCheckResourceAttr(syncAllResource, "cckm_synchronization_params.synchronize_all", "true"),
+					),
+				},
+				{
+					Config: updateConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttr(syncVaultResource, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(syncVaultResource, "description", "updated"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.key_vaults.#", "1"),
+						resource.TestCheckResourceAttr(syncVaultResource, "cckm_synchronization_params.take_cloud_key_backup", "false"),
+						resource.TestCheckResourceAttr(syncAllResource, "run_at", "0 10 * * sat"),
+						resource.TestCheckResourceAttr(syncAllResource, "description", "updated"),
+						resource.TestCheckResourceAttr(syncAllResource, "cckm_synchronization_params.synchronize_all", "true"),
+					),
+				},
+				{
+					RefreshState: true,
 				},
 			},
 		})

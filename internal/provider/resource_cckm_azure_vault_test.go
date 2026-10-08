@@ -1,14 +1,65 @@
 package provider
 
 import (
+	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"testing"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/tidwall/gjson"
 )
+
+// cleanupCckmAzureVaults removes the standard and premium Azure vaults (CCKM_TF_AZURE_STANDARD_VAULT
+// and CCKM_TF_AZURE_PREMIUM_VAULT) from CipherTrust Manager if a previous failed test run left them
+// behind. The same vault cannot be added twice, so a leftover would break the next run. Only vaults
+// whose azure_name matches one of the two env vars are removed. The vaults are removed from CM only,
+// nothing is deleted in Azure. Only runs when TF_CCKM_CLEANUP=true is set. All errors are logged as
+// warnings - the cleanup is best-effort and never fails the test.
+func cleanupCckmAzureVaults() {
+	if os.Getenv("TF_CCKM_CLEANUP") != "true" {
+		return
+	}
+	names := map[string]bool{}
+	for _, envVar := range []string{"CCKM_TF_AZURE_STANDARD_VAULT", "CCKM_TF_AZURE_PREMIUM_VAULT"} {
+		if name := os.Getenv(envVar); name != "" {
+			names[name] = true
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	client, ok := createCMClient()
+	if !ok {
+		fmt.Println("cleanupCckmAzureVaults: could not create CM client, skipping cleanup")
+		return
+	}
+	ctx := context.Background()
+	filters := url.Values{}
+	filters.Add("limit", "1000")
+	response, err := client.ListWithFilters(ctx, uuid.NewString(), common.URL_AZURE+"/vaults", filters)
+	if err != nil {
+		fmt.Printf("** cleanupCckmAzureVaults: failed to list vaults: %s\n", err.Error())
+		return
+	}
+	for _, r := range gjson.Get(response, "resources").Array() {
+		azureName := gjson.Get(r.Raw, "azure_name").String()
+		if !names[azureName] {
+			continue
+		}
+		vaultID := gjson.Get(r.Raw, "id").String()
+		_, err := client.PostNoData(ctx, uuid.NewString(), common.URL_AZURE+"/vaults/"+vaultID+"/remove-vault")
+		if err != nil {
+			fmt.Printf("** cleanupCckmAzureVaults: failed to remove vault '%s' (%s): %s\n", azureName, vaultID, err.Error())
+		} else {
+			fmt.Printf("cleanupCckmAzureVaults: removed vault '%s'\n", azureName)
+		}
+	}
+}
 
 // TestCckmAzureVaultResource exercises the ciphertrust_azure_vault resource.
 //
@@ -53,7 +104,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 							subscription_id        = "00000000-0000-0000-0000-000000000000"
 							cloud_key_backup_limit = 0
 						}`,
-				ExpectError: regexp.MustCompile(`value must be at least`),
+					ExpectError: regexp.MustCompile(`value must be at least`),
 				},
 			},
 		})
@@ -61,7 +112,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 
 	// --- Tests that require live Azure infrastructure ---
 
-	initConfig, ok := initCckmAzureTest()
+	initConfig, ok := initCckmAzureTestWithoutVault()
 	if !ok {
 		t.Skip("Azure environment variables not set - skipping TestCckmAzureVaultResource live tests")
 	}
@@ -95,6 +146,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 			}`, uid2, clientID, tenantID, clientSecret)
 
 		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				// Step 1: Create vault by name only (no vault_details).
@@ -175,9 +227,10 @@ func TestCckmAzureVaultResource(t *testing.T) {
 
 	t.Run("create_with_vault_details", func(t *testing.T) {
 		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
-			// Step 1: Create vault using vault_details from the data source.
+				// Step 1: Create vault using vault_details from the data source.
 				// The data source map is keyed by vault name so vault_details contains the
 				// full Azure vault properties without a separate Azure lookup during create.
 				// Also exercises ciphertrust_azure_subscription_list with no filter, a single

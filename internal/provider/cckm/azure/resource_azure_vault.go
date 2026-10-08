@@ -358,7 +358,7 @@ func (r *resourceCCKMAzureVault) Schema(_ context.Context, _ resource.SchemaRequ
 
 // Create adds an Azure vault to CipherTrust Manager.
 // When vault_details is provided, its contents are used directly; otherwise the vault
-// is fetched from Azure via the get-vaults endpoint. The vault is then registered via
+// is fetched from Azure via the get-vaults endpoint. The vault is then added via
 // add-vaults, and the CM vault ID is resolved by listing vaults after creation.
 func (r *resourceCCKMAzureVault) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	id := uuid.New().String()
@@ -649,7 +649,7 @@ func (r *resourceCCKMAzureVault) ModifyPlan(ctx context.Context, req resource.Mo
 		return
 	}
 
-	// vault_details identifies which Azure vault was registered. Block any change to the
+	// vault_details identifies which Azure vault was added. Block any change to the
 	// block once set. Removing vault_details entirely (setting to null) is allowed because
 	// it is an input-only attribute with no effect after creation.
 	// name and subscription_id are covered by ImmutableString plan modifiers.

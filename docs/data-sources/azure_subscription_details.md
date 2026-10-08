@@ -3,12 +3,12 @@
 page_title: "ciphertrust_azure_subscription_details Data Source - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this data source to retrieve Azure subscription details directly from Azure via a CipherTrust Manager Azure connection. The subscriptions returned are fetched live from Azure and are not stored in the CipherTrust Manager database. Use ciphertrust_azure_subscription_list to query subscriptions already registered in CipherTrust Manager.
+  Use this data source to retrieve Azure subscription details directly from Azure via a CipherTrust Manager Azure connection. The subscriptions returned are fetched live from Azure and are not stored in the CipherTrust Manager database. Use ciphertrust_azure_subscription_list to query subscriptions already added to CipherTrust Manager.
 ---
 
 # ciphertrust_azure_subscription_details (Data Source)
 
-Use this data source to retrieve Azure subscription details directly from Azure via a CipherTrust Manager Azure connection. The subscriptions returned are fetched live from Azure and are not stored in the CipherTrust Manager database. Use ciphertrust_azure_subscription_list to query subscriptions already registered in CipherTrust Manager.
+Use this data source to retrieve Azure subscription details directly from Azure via a CipherTrust Manager Azure connection. The subscriptions returned are fetched live from Azure and are not stored in the CipherTrust Manager database. Use ciphertrust_azure_subscription_list to query subscriptions already added to CipherTrust Manager.
 
 ## Example Usage
 

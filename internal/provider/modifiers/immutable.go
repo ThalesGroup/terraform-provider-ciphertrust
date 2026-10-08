@@ -11,7 +11,9 @@ package modifiers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -71,6 +73,46 @@ func (m immutableStringModifier) PlanModifyString(_ context.Context, req planmod
 		),
 	)
 	resp.PlanValue = req.StateValue
+}
+
+// ImmutableJSONString is like ImmutableString but treats two JSON strings that are
+// semantically equal (same content, any whitespace or key order) as unchanged. When
+// they are equivalent the state value is kept so no diff is shown. If either value
+// is not valid JSON the strict string comparison and error are used.
+func ImmutableJSONString() planmodifier.String {
+	return immutableJSONStringModifier{}
+}
+
+type immutableJSONStringModifier struct{}
+
+func (m immutableJSONStringModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation. Equivalent JSON is not treated as a change."
+}
+
+func (m immutableJSONStringModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m immutableJSONStringModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	if !req.StateValue.IsNull() && !req.StateValue.IsUnknown() {
+		var planJSON, stateJSON interface{}
+		if json.Unmarshal([]byte(req.PlanValue.ValueString()), &planJSON) == nil &&
+			json.Unmarshal([]byte(req.StateValue.ValueString()), &stateJSON) == nil &&
+			reflect.DeepEqual(planJSON, stateJSON) {
+			resp.PlanValue = req.StateValue
+			return
+		}
+	}
+	immutableStringModifier{}.PlanModifyString(ctx, req, resp)
 }
 
 // ImmutableInt64 returns a plan modifier that prevents an int64 attribute from
