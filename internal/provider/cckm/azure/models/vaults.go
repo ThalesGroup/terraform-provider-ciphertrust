@@ -1,6 +1,16 @@
 package models
 
-import "github.com/hashicorp/terraform-plugin-framework/types"
+import (
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+)
+
+// AzureVaultAclTFSDK is the Terraform state for the ciphertrust_azure_acl resource.
+type AzureVaultAclTFSDK struct {
+	ID      types.String `tfsdk:"id"`
+	VaultID types.String `tfsdk:"vault_id"`
+	acls.AclTFSDK
+}
 
 // AzureVaultInputJSON is the request body for the get-vaults API.
 type AzureVaultInputJSON struct {
@@ -134,6 +144,7 @@ type AzureVaultListEntryJSON struct {
 type AzureVaultListEntryTFSDK struct {
 	ID               types.String `tfsdk:"id"`
 	Name             types.String `tfsdk:"name"`
+	Acls             types.Set    `tfsdk:"acls"`
 	AzureVaultID     types.String `tfsdk:"azure_vault_id"`
 	CloudName        types.String `tfsdk:"cloud_name"`
 	Connection       types.String `tfsdk:"connection"`

@@ -848,6 +848,7 @@ func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.R
 		oci.NewResourceCCKMOCIKey,
 		aws.NewResourceCCKMAWSAcl,
 		azure.NewResourceCCKMAzureVault,
+		azure.NewResourceCCKMAzureAcl,
 		azure.NewResourceCCKMAzureKey,
 		azure.NewResourceAzureKeyPitBackup,
 	}

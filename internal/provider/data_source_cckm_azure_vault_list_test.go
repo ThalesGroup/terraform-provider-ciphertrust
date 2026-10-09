@@ -129,6 +129,8 @@ func TestCckmAzureDataSourceVaultList(t *testing.T) {
 
 						// name filter using cckm_vault_name: exactly the added vault is returned.
 						resource.TestCheckResourceAttr("data.ciphertrust_azure_vault_list.by_name", "matched", "1"),
+						// No ACLs have been added to the vault, so the acls set is empty.
+						resource.TestCheckResourceAttr("data.ciphertrust_azure_vault_list.by_name", "vaults.0.acls.#", "0"),
 						resource.TestCheckResourceAttrSet("data.ciphertrust_azure_vault_list.by_name", "vaults.0.id"),
 
 						// type = "vault": at least one vault found.
