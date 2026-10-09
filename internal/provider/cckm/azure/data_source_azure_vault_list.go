@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/acls"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/azure/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/tidwall/gjson"
 )
 
 const azureVaultListFiltersTable = "\n\n> **Note:** Although some filters represent integers, " +
@@ -159,6 +161,27 @@ func (d *dataSourceAzureVaultList) Schema(_ context.Context, _ datasource.Schema
 							Computed:    true,
 							Description: "Display name of the Azure subscription.",
 						},
+						"acls": schema.SetNestedAttribute{
+							Computed:    true,
+							Description: "List of ACLs that have been added to the vault.",
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"actions": schema.SetAttribute{
+										Computed:    true,
+										Description: "Permitted actions.",
+										ElementType: types.StringType,
+									},
+									"group": schema.StringAttribute{
+										Computed:    true,
+										Description: "CipherTrust Manager group.",
+									},
+									"user_id": schema.StringAttribute{
+										Computed:    true,
+										Description: "CipherTrust Manager user ID.",
+									},
+								},
+							},
+						},
 						"synced_at": schema.StringAttribute{
 							Computed:    true,
 							Description: "Date and time the vault was last synced.",
@@ -288,8 +311,9 @@ func (d *dataSourceAzureVaultList) Read(ctx context.Context, req datasource.Read
 	}
 
 	state.Vaults = []models.AzureVaultListEntryTFSDK{}
-	for _, v := range page.Resources {
-		entry := azureVaultListEntryToTFSDK(ctx, v, &resp.Diagnostics)
+	for i, v := range page.Resources {
+		aclsJSON := gjson.Get(jsonStr, fmt.Sprintf("resources.%d.acls", i))
+		entry := azureVaultListEntryToTFSDK(ctx, v, aclsJSON, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -301,7 +325,9 @@ func (d *dataSourceAzureVaultList) Read(ctx context.Context, req datasource.Read
 }
 
 // azureVaultListEntryToTFSDK converts one AzureVaultListEntryJSON to its TFSDK equivalent.
-func azureVaultListEntryToTFSDK(ctx context.Context, v models.AzureVaultListEntryJSON, diags *diag.Diagnostics) models.AzureVaultListEntryTFSDK {
+// aclsJSON is the raw acls array of the entry, which is read with gjson as the typed
+// entry does not carry the ACLs.
+func azureVaultListEntryToTFSDK(ctx context.Context, v models.AzureVaultListEntryJSON, aclsJSON gjson.Result, diags *diag.Diagnostics) models.AzureVaultListEntryTFSDK {
 	entry := models.AzureVaultListEntryTFSDK{
 		ID:               types.StringValue(v.ID),
 		Name:             types.StringValue(v.AzureName),
@@ -316,6 +342,11 @@ func azureVaultListEntryToTFSDK(ctx context.Context, v models.AzureVaultListEntr
 		UpdatedAt:        types.StringValue(v.UpdatedAt),
 		URI:              types.StringValue(v.URI),
 		VaultType:        types.StringValue(v.VaultType),
+	}
+
+	acls.SetAclsStateFromJSON(ctx, aclsJSON, &entry.Acls, diags)
+	if diags.HasError() {
+		return entry
 	}
 
 	// tags: null when absent or empty.

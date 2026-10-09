@@ -85,6 +85,7 @@ data "ciphertrust_azure_vault_list" "specific" {
 
 Read-Only:
 
+- `acls` (Attributes Set) List of ACLs that have been added to the vault. (see [below for nested schema](#nestedatt--vaults--acls))
 - `azure_vault_id` (String) Azure resource ID of the vault.
 - `cloud_name` (String) Cloud name as returned by CipherTrust Manager.
 - `connection` (String) Azure connection identifier as stored in CipherTrust Manager.
@@ -100,6 +101,16 @@ Read-Only:
 - `uri` (String) CipherTrust Manager unique identifier URI for the vault.
 - `vault_properties` (Attributes) Azure vault properties. (see [below for nested schema](#nestedatt--vaults--vault_properties))
 - `vault_type` (String) Azure resource type of the vault.
+
+<a id="nestedatt--vaults--acls"></a>
+### Nested Schema for `vaults.acls`
+
+Read-Only:
+
+- `actions` (Set of String) Permitted actions.
+- `group` (String) CipherTrust Manager group.
+- `user_id` (String) CipherTrust Manager user ID.
+
 
 <a id="nestedatt--vaults--vault_properties"></a>
 ### Nested Schema for `vaults.vault_properties`
