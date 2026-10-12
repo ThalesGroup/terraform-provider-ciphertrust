@@ -19,6 +19,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -138,16 +140,25 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Optional:    true,
 				Description: "Description for the job configuration.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"run_on": schema.StringAttribute{
 				Computed:    true,
 				Optional:    true,
 				Description: "Default is 'any'. For database_backup, the default will be the current node if in a cluster. This attribute is not supported in CDSPaaS.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"disabled": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Description: "By default, the job configuration starts in an active state. True disables the job configuration.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"start_date": schema.StringAttribute{
 				Computed:    true,
@@ -196,6 +207,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Computed:    true,
 						Optional:    true,
 						Description: "If true, the system backup can only be restored to instances that use the same HSM partition. Valid only with the system scoped backup.",
+						PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 					},
 					"scope": schema.StringAttribute{
 						Computed:    true,
@@ -204,31 +216,37 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Validators: []validator.String{
 							stringvalidator.OneOf("system", "domain"),
 						},
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"retention_count": schema.Int64Attribute{
 						Computed:    true,
 						Optional:    true,
 						Description: "Number of backups saved for this job config. Default is an unlimited quantity.",
+						PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
 					},
 					"do_scp": schema.BoolAttribute{
 						Computed:    true,
 						Optional:    true,
 						Description: "If true, the system backup will also be transferred to the external server via SCP.",
+						PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 					},
 					"description": schema.StringAttribute{
 						Computed:    true,
 						Optional:    true,
 						Description: "User defined description associated with the backup. This is stored along with the backup, and is returned while retrieving the backup information, or while listing backups. Users may find it useful to store various types of information here: a backup name or description, ID of the HSM the backup is tied to, etc.",
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"connection": schema.StringAttribute{
 						Computed:    true,
 						Optional:    true,
 						Description: "Name or ID of the SCP connection which stores the details for SCP server.",
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"backup_key": schema.StringAttribute{
 						Computed:    true,
 						Optional:    true,
 						Description: "ID of backup key used for encrypting the backup. The default backup key is used if this is not specified.",
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"filters": schema.ListNestedAttribute{
 						Optional: true,
@@ -250,6 +268,7 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 									Optional:    true,
 									Computed:    true,
 									Description: resourceQueryDescription,
+									PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 								},
 							},
 						},
@@ -274,12 +293,40 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 					},
 				},
 			},
-			"uri":         schema.StringAttribute{Computed: true, Description: "A human readable unique identifier of the resource."},
-			"account":     schema.StringAttribute{Computed: true, Description: "The account which owns this resource."},
-			"created_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was created."},
-			"updated_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was last updated."},
-			"application": schema.StringAttribute{Computed: true, Description: "The application this resource belongs to."},
-			"dev_account": schema.StringAttribute{Computed: true, Description: "The developer account which owns this resource's application."},
+			"uri": schema.StringAttribute{
+				Computed:    true,
+				Description: "A human readable unique identifier of the resource.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"account": schema.StringAttribute{
+				Computed:    true,
+				Description: "The account which owns this resource.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the resource was created.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the resource was last updated.",
+				// updated_at is intentionally left without UseStateForUnknown: CM always
+				// sets a new timestamp on every successful update, so the plan correctly
+				// shows (known after apply) when a change is applied. Adding
+				// UseStateForUnknown would cause a "provider produced inconsistent result"
+				// error when the plan shows the old timestamp but apply returns the new one.
+			},
+			"application": schema.StringAttribute{
+				Computed:    true,
+				Description: "The application this resource belongs to.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"dev_account": schema.StringAttribute{
+				Computed:    true,
+				Description: "The developer account which owns this resource's application.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 			"cckm_key_rotation_params": schema.SingleNestedAttribute{
 				Optional: true,
 				Computed: true,
@@ -292,14 +339,16 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Optional: true,
 						Description: "Retain the alias and timestamp on the archived key after rotation. " +
 							"Applicable only to AWS key rotation.",
-						Computed: true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 					},
 					"rotate_material": schema.BoolAttribute{
 						Optional: true,
 						Description: "If true, rotate the key material during the key rotation job. " +
 							"Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and  " +
 							"valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.",
-						Computed: true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 					},
 					"cloud_name": schema.StringAttribute{
 						Required:    true,
@@ -317,7 +366,8 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, " +
 							"set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
 							"To remove the setting, set to an empty string.",
-						Computed: true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"expire_in": schema.StringAttribute{
 						Optional: true,
@@ -327,7 +377,8 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"For example, if you want the scheduler to rotate the keys that are expiring " +
 							"within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. " +
 							"To remove the setting, set to an empty string.",
-						Computed: true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 					"rotation_after": schema.StringAttribute{
 						Optional: true,
@@ -337,7 +388,8 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 							"For example, if you set rotation_after to 6d, the first key rotation will happen after six days of key creation. " +
 							"Subsequently, the keys will be rotated after every six days. " +
 							"To remove the setting, set to an empty string.",
-						Computed: true,
+						Computed:      true,
+						PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 					},
 				},
 			},
@@ -361,12 +413,18 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Computed:    true,
 						Description: "A list of kms resource ID's for which AWS keys will be synchronized. Unless synchronizing all AWS keys, at least one kms is required.",
 						ElementType: types.StringType,
+						// UseStateForUnknown omitted: kms is user-configurable and the set
+						// elements change when the user adds/removes KMS IDs. Preserving the
+						// old set in the plan then delivering a new one causes "provider
+						// produced inconsistent result" (TFIN-582). Noise at the object level
+						// is suppressed by the parent's NewObjectUseStateForUnknown().
 					},
 					"oci_vaults": schema.SetAttribute{
 						Optional:    true,
 						Computed:    true,
 						Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
 						ElementType: types.StringType,
+						// UseStateForUnknown omitted: same reason as kms above.
 					},
 					"synchronize_all": schema.BoolAttribute{
 						Computed:    true,

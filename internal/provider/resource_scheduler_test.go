@@ -583,3 +583,74 @@ resource "ciphertrust_scheduler" "test" {
 		},
 	})
 }
+
+// Test_CM_AccScheduler_NoComputedFieldDrift verifies that changing only run_at
+// does not cause unrelated Computed fields to appear as (known after apply) in the
+// subsequent plan — the TFIN-582 regression (UseStateForUnknown() missing from 24
+// fields: 13 live-verified, 11 inferred from identical Optional+Computed patterns).
+//
+// Verified live before the fix:
+//   account, application, created_at, description, dev_account, disabled, run_on,
+//   updated_at, uri (top-level), and expiration, expire_in, rotate_material,
+//   rotation_after (inside cckm_key_rotation_params) all showed (known after apply)
+//   when only run_at changed.
+//
+// The remaining 11 fields (database_backup_params sub-fields: tied_to_hsm, scope,
+// retention_count, do_scp, description, connection, backup_key, resource_query;
+// cckm_synchronization_params: kms, oci_vaults; and aws_retain_alias) follow the
+// same Optional+Computed-with-no-PlanModifiers pattern and were fixed identically.
+func Test_CM_AccScheduler_NoComputedFieldDrift(t *testing.T) {
+	RequireCM(t)
+	name := "tf-582-drift-" + uuid.New().String()[:8]
+
+	// Step 1 config: scheduler with cckm_key_rotation_params, some sub-fields omitted.
+	step1 := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 */6 * * *"
+  cckm_key_rotation_params = {
+    cloud_name       = "aws"
+    aws_retain_alias = true
+  }
+}`, name)
+
+	// Step 2 config: only run_at changes.
+	step2 := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_scheduler" "test" {
+  name      = %q
+  operation = "cckm_key_rotation"
+  run_at    = "0 */12 * * *"
+  cckm_key_rotation_params = {
+    cloud_name       = "aws"
+    aws_retain_alias = true
+  }
+}`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: step1,
+				Check: checkStep(t, "create",
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "name", name),
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "account"),
+					resource.TestCheckResourceAttrSet("ciphertrust_scheduler.test", "uri"),
+				),
+			},
+			{
+				// Apply the run_at change — apply must succeed.
+				Config: step2,
+				Check: checkStep(t, "update run_at",
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.test", "run_at", "0 */12 * * *"),
+				),
+			},
+			{
+				// Second plan with same config — must be empty (no (known after apply) noise).
+				Config:             step2,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
