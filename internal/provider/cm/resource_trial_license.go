@@ -111,7 +111,7 @@ func (r *resourceCMTrialLicense) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	jsonStr, err := r.client.GetAll(ctx, id, common.URL_TRIAL_LICENSE)
+	jsonStr, err := r.client.GetAllPaged(ctx, id, common.URL_TRIAL_LICENSE)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_trial_license.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(

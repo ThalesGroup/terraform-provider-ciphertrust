@@ -154,7 +154,7 @@ func (c *Client) GetAllPaged(ctx context.Context, uuid string, endpoint string) 
 	skip := 0
 	for i := 0; i < pagedListMaxIterations; i++ {
 		pagedEndpoint := appendPagination(endpoint, skip, cteListPageSize)
-		req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, pagedEndpoint), nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s", c.CipherTrustURL, pagedEndpoint), nil)
 		if err != nil {
 			tflog.Debug(ctx, ERR_METHOD_END+err.Error()+" [requests.go -> GetAllPaged]["+uuid+"]")
 			return "", err

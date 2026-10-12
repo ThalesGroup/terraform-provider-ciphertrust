@@ -211,7 +211,7 @@ func (d *dataSourceAWSConnection) Read(ctx context.Context, req datasource.ReadR
 		}
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_AWS_CONNECTION+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_AWS_CONNECTION+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		tflog.Debug(ctx, common.ERR_METHOD_END+err.Error()+" [data_source_aws_connection.go -> Read]["+id+"]")
 		resp.Diagnostics.AddError(

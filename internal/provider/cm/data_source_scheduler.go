@@ -231,7 +231,7 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 		kvs = append(kvs, kv)
 	}
 
-	jsonStr, err := d.client.GetAll(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS+"/?"+strings.Join(kvs, "")+"skip=0&limit=-1")
+	jsonStr, err := d.client.GetAllPaged(ctx, id, common.URL_SCHEDULER_JOB_CONFIGS+"/?"+strings.Join(kvs, ""))
 	if err != nil {
 		d.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_scheduler.go -> Read][" + id + "]")
 		resp.Diagnostics.AddError(
