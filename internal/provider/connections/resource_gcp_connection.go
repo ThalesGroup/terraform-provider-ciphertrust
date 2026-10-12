@@ -358,21 +358,23 @@ func (r *resourceGCPConnection) Update(ctx context.Context, req resource.UpdateR
 		payload.Description = plan.Description.ValueString()
 	}
 
-	if !plan.Labels.IsNull() && !plan.Labels.IsUnknown() {
-		gcpLabelsPayload := make(map[string]interface{})
-		for k, v := range plan.Labels.Elements() {
-			gcpLabelsPayload[k] = v.(types.String).ValueString()
-		}
-		payload.Labels = gcpLabelsPayload
+	// labels: build unconditionally (not guarded by IsNull) so ApplyNullDeletes can
+	// inject null for keys removed since the last apply. Without this, CM's merge-PATCH
+	// silently preserves removed keys and the plan never converges (TFIN-602).
+	gcpLabelsPayload := make(map[string]interface{})
+	for k, v := range plan.Labels.Elements() {
+		gcpLabelsPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(gcpLabelsPayload, state.Labels.Elements())
+	payload.Labels = gcpLabelsPayload
 
-	if !plan.Meta.IsNull() && !plan.Meta.IsUnknown() {
-		gcpMetadataPayload := make(map[string]interface{})
-		for k, v := range plan.Meta.Elements() {
-			gcpMetadataPayload[k] = v.(types.String).ValueString()
-		}
-		payload.Meta = gcpMetadataPayload
+	// meta: same fix — unconditional build + null injection for removed keys.
+	gcpMetadataPayload := make(map[string]interface{})
+	for k, v := range plan.Meta.Elements() {
+		gcpMetadataPayload[k] = v.(types.String).ValueString()
 	}
+	ApplyNullDeletes(gcpMetadataPayload, state.Meta.Elements())
+	payload.Meta = gcpMetadataPayload
 
 	if !plan.Products.IsNull() && !plan.Products.IsUnknown() {
 		var gcpProducts []string
