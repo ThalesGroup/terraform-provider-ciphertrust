@@ -430,3 +430,113 @@ func TestCTEPolicyResource_idtKeyRulesRemovalRefused(t *testing.T) {
 		},
 	})
 }
+
+// cteSecurityRulesAddConfig renders a Standard ciphertrust_cte_policy with
+// ruleCount security_rules entries (0, 1, or 2). key_rules is always present
+// so CM's "at least one Security-Rule or Key-Rule" create-time constraint is
+// satisfied even when ruleCount is 0.
+func cteSecurityRulesAddConfig(name string, ruleCount int) string {
+	// ruleCount 0 omits security_rules entirely (rather than setting it to
+	// an explicit empty list) so its config-side null matches the nil slice
+	// Read()/Create() leave in state when there are no rules -- an explicit
+	// "security_rules = []" would otherwise trip a separate, pre-existing
+	// nil-vs-empty-list state divergence unrelated to TFIN-604/641.
+	rules := ""
+	switch ruleCount {
+	case 1:
+		rules = `security_rules = [
+    {
+      effect        = "permit"
+      action        = "all_ops"
+      partial_match = false
+    }
+  ]`
+	case 2:
+		rules = `security_rules = [
+    {
+      effect        = "permit"
+      action        = "all_ops"
+      partial_match = false
+    },
+    {
+      effect        = "permit"
+      action        = "read"
+      partial_match = false
+    }
+  ]`
+	}
+	return providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_policy" "cte_policy_addrule" {
+  name        = %q
+  policy_type = "Standard"
+  never_deny  = false
+
+  # order_number is set explicitly (rather than omitted) to sidestep a
+  # separate, pre-existing key_rules.order_number plan-stability gap
+  # (unrelated to TFIN-604/641, out of scope here): key_rules.order_number
+  # lacks the UseStateForUnknown() plan modifier that data_transform_rules
+  # got under TFIN-583, so leaving it computed flips it to "(known after
+  # apply)" on any unrelated update.
+  key_rules = [{
+    key_id       = "clear_key"
+    order_number = 1
+  }]
+
+  %s
+}
+`, name, rules)
+}
+
+// TestCTEPolicyResource_addSecurityRuleAfterApply verifies TFIN-641: adding a
+// security_rules entry to an already-applied ciphertrust_cte_policy
+// previously crashed terraform apply with "Provider produced inconsistent
+// result after apply" -- .security_rules[N].id: was null, but now
+// cty.StringVal(...) -- because the id plan modifier (UseStateForUnknown())
+// unconditionally copied the prior (concrete-null) state value for a
+// newly-added list entry instead of leaving it unknown. This covers both the
+// first rule added to a policy with none, and a second rule added to a
+// policy that already has one.
+func TestCTEPolicyResource_addSecurityRuleAfterApply(t *testing.T) {
+	name := "tf-policy-addrule-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_policy.cte_policy_addrule"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cteSecurityRulesAddConfig(name, 0),
+				Check: checkStep(t, "policy addrule: create with no security_rules",
+					resource.TestCheckResourceAttrSet(rn, "id"),
+					resource.TestCheckResourceAttr(rn, "security_rules.#", "0"),
+				),
+			},
+			{
+				// This Update() previously crashed (TFIN-641).
+				Config: cteSecurityRulesAddConfig(name, 1),
+				Check: checkStep(t, "policy addrule: add first security_rules entry",
+					resource.TestCheckResourceAttr(rn, "security_rules.#", "1"),
+					resource.TestCheckResourceAttrSet(rn, "security_rules.0.id"),
+				),
+			},
+			{
+				Config:             cteSecurityRulesAddConfig(name, 1),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+			{
+				// Adding a second entry to a policy that already has one
+				// reproduces identically per the ticket.
+				Config: cteSecurityRulesAddConfig(name, 2),
+				Check: checkStep(t, "policy addrule: add second security_rules entry",
+					resource.TestCheckResourceAttr(rn, "security_rules.#", "2"),
+					resource.TestCheckResourceAttrSet(rn, "security_rules.1.id"),
+				),
+			},
+			{
+				Config:             cteSecurityRulesAddConfig(name, 2),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
