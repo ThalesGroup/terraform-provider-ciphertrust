@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-// TestCckmAzureKeyPremiumVault covers every premium vault scenario with two keys in total, so the vault is
+// TestCckmAzureKeyPurgeableVault covers every premium vault scenario with two keys in total, so the vault is
 // not filled with keys. Each case is a separate test run because the provider settings apply when the key is
 // destroyed. The subtests run in order and share the captured key and backup IDs.
 //
@@ -31,12 +31,12 @@ import (
 //  6. restore_from_pit_backup: restore the key from the PIT backup. This also checks whether CipherTrust
 //     Manager allows a restore while a record with the same key name still exists.
 //
-// It needs CCKM_TF_AZURE_PREMIUM_VAULT. CCKM_TF_AZURE_RELEASE_POLICY (a JSON object string) is optional. When
+// It needs CCKM_TF_AZURE_PURGEABLE_VAULT. CCKM_TF_AZURE_RELEASE_POLICY (a JSON object string) is optional. When
 // it is not set, key 1 is created without exportable and release_policy, and those attributes are not checked.
-func TestCckmAzureKeyPremiumVault(t *testing.T) {
+func TestCckmAzureKeyPurgeableVault(t *testing.T) {
 	initConfig, ok := initCckmAzureTestPremiumVault()
 	if !ok {
-		t.Skip("Azure environment variables or CCKM_TF_AZURE_PREMIUM_VAULT not set - skipping TestCckmAzureKeyPremiumVault")
+		t.Skip("Azure environment variables or CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping TestCckmAzureKeyPurgeableVault")
 	}
 	releasePolicy := os.Getenv("CCKM_TF_AZURE_RELEASE_POLICY")
 
@@ -96,7 +96,11 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 			%s
 		}`, cmKeyName, uploadKeyName, policyAttrs)
 
+	// uploadChainFailed is set when a subtest of the uploaded key chain fails. The later subtests of the chain
+	// use the key and the backups of the earlier ones, so they are skipped. The PIT chain is independent.
+	uploadChainFailed := false
 	t.Run("upload_hsm_key", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmAzureVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -141,6 +145,10 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 	})
 
 	t.Run("restore_soft_delete_only", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping restore_soft_delete_only")
+		}
 		if uploadKeyID == "" {
 			t.Skip("key ID was not captured - skipping restore_soft_delete_only")
 		}
@@ -171,6 +179,10 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 	})
 
 	t.Run("recover_purge_delete_backups", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping recover_purge_delete_backups")
+		}
 		if uploadKeyID == "" {
 			t.Skip("key ID was not captured - skipping recover_purge_delete_backups")
 		}
@@ -205,6 +217,9 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 	})
 
 	t.Run("restore_after_backups_deleted", func(t *testing.T) {
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping restore_after_backups_deleted")
+		}
 		if uploadKeyID == "" {
 			t.Skip("key ID was not captured - skipping restore_after_backups_deleted")
 		}
@@ -263,7 +278,10 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 			depends_on = [ciphertrust_azure_key_pit_backup.backup]
 		}`, pitKeyName, backupName)
 
+	// pitBackupFailed is set when create_pit_backup fails, so that restore_from_pit_backup is skipped.
+	pitBackupFailed := false
 	t.Run("create_pit_backup", func(t *testing.T) {
+		defer func() { pitBackupFailed = t.Failed() }()
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmAzureVaults() },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -305,8 +323,11 @@ func TestCckmAzureKeyPremiumVault(t *testing.T) {
 	})
 
 	t.Run("restore_from_pit_backup", func(t *testing.T) {
+		if pitBackupFailed {
+			t.Skip("create_pit_backup failed - skipping restore_from_pit_backup")
+		}
 		if pitKeyID == "" || pitBackupID == "" {
-			t.Skip("key or backup ID was not captured - skipping restore_from_pit_backup")
+			t.Fatal("key or backup ID was not captured by create_pit_backup, which always creates a PIT backup")
 		}
 		restoreConfig := fmt.Sprintf(`
 			resource "ciphertrust_azure_key" "restored_key" {

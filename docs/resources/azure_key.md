@@ -293,7 +293,7 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 
 ### Required
 
-- `vault_id` (String) (Immutable) CipherTrust Manager resource ID of the Azure vault that contains the key. A vault name is not accepted.
+- `vault_id` (String) (Conditionally immutable) CipherTrust Manager resource ID of the Azure vault that contains the key. Can only be changed if the previously configured vault no longer exists in CipherTrust Manager. A vault name is not accepted.
 
 ### Optional
 
@@ -319,6 +319,7 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 - `key_material_origin` (String) The origin of the key material.
 - `key_soft_deleted_in_azure` (Boolean) Whether the key is soft deleted in Azure.
 - `labels` (Map of String) Key:value pairs associated with the key. When a scheduler job is enabled for the key, the labels contain entries describing the job.
+- `managed` (Boolean) True if the lifetime of the key is managed by the key vault, for example a key that backs a certificate. False if the API does not return the value.
 - `region` (String) Azure region of the vault in which the key resides.
 - `soft_delete_enabled` (Boolean) Whether soft delete is enabled for the key's vault.
 - `status` (String) Status of the key in CipherTrust Manager.

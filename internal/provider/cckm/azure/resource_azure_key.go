@@ -86,6 +86,12 @@ func (r *resourceCCKMAzureKey) Configure(_ context.Context, req resource.Configu
 	r.client = client
 }
 
+var (
+	azureKeyTypes  = []string{"EC", "EC-HSM", "RSA", "RSA-HSM"}
+	azureKeyCurves = []string{"P-256", "P-384", "P-521", "SECP256K1"}
+	azureKeyOps    = []string{"encrypt", "decrypt", "sign", "verify", "wrapKey", "unwrapKey", "import"}
+)
+
 func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, " +
@@ -95,17 +101,17 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 			// User inputs.
 			"vault_id": schema.StringAttribute{
 				Required: true,
-				Description: "(Immutable) CipherTrust Manager resource ID of the Azure vault that contains the key. " +
+				Description: "(Conditionally immutable) CipherTrust Manager resource ID of the Azure vault that contains the key. " +
+					"Can only be changed if the previously configured vault no longer exists in CipherTrust Manager. " +
 					"A vault name is not accepted.",
-				Validators:    []validator.String{azureKeyNonBlank()},
-				PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
+				Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 			},
 			"name": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
 				Description: "(Immutable) Name of the key. May contain only alphanumeric characters and hyphens. " +
 					"Required unless restore_key is set. Uploading a key with the name of an existing key adds a new version to that key.",
-				Validators: []validator.String{azureKeyNonBlank()},
+				Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 					modifiers.ImmutableString(),
@@ -253,7 +259,7 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 					"key_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource ID of the existing key to restore.",
-						Validators:  []validator.String{azureKeyNonBlank()},
+						Validators:  []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 					"backup_id": schema.StringAttribute{
 						Optional: true,
@@ -261,7 +267,7 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 							"If not set, the latest backup of the key is restored. " +
 							"The Point In Time (PIT) backup IDs of a key can be listed with the `ciphertrust_azure_key_pit_backup_list` data source. " +
 							"Point In Time backups can be created for a key using the ciphertrust_azure_pit_backup resource.",
-						Validators: []validator.String{azureKeyNonBlank()},
+						Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 				},
 			},
@@ -283,14 +289,14 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 						Optional: true,
 						Description: "Identifier of the CipherTrust Manager key to upload. " +
 							"Required unless source_key_tier is pfx, and cannot be set when it is.",
-						Validators: []validator.String{azureKeyNonBlank()},
+						Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 					"pfx": schema.StringAttribute{
 						Optional: true,
 						Description: "Path to the PFX file to upload. The file is read and sent to CipherTrust Manager " +
 							"when the key is created. Only the path is stored in state. " +
 							"Required when source_key_tier is pfx, and cannot be set otherwise.",
-						Validators: []validator.String{azureKeyNonBlank()},
+						Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 					"pfx_password": schema.StringAttribute{
 						Optional:    true,
@@ -303,7 +309,7 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 							"key material during the upload. It is not an Azure key URL. Applies only to premium and managed HSM vaults. " +
 							"The KEK must be an RSA-HSM key of 2048, 3072 or 4096 bits in the same vault, with import as its only key operation. " +
 							"If not set, a temporary KEK is created.",
-						Validators: []validator.String{azureKeyNonBlank()},
+						Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 					"hsm": schema.BoolAttribute{
 						Optional: true,
@@ -346,7 +352,7 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource ID of a key rotation scheduler.",
-						Validators:  []validator.String{azureKeyNonBlank()},
+						Validators:  []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 					"key_source": schema.StringAttribute{
 						Required: true,
@@ -392,7 +398,7 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 					"job_config_id": schema.StringAttribute{
 						Required:    true,
 						Description: "CipherTrust Manager resource ID of a cckm_key_backup scheduler.",
-						Validators:  []validator.String{azureKeyNonBlank()},
+						Validators:  []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`\S`), "must contain at least one non-whitespace character")},
 					},
 				},
 			},
@@ -453,6 +459,11 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 				ElementType: types.StringType,
 				Description: "Backup scheduler configuration of the key. When a backup job is enabled for the key, " +
 					"it contains backup_job_config_id.",
+			},
+			"managed": schema.BoolAttribute{
+				Computed: true,
+				Description: "True if the lifetime of the key is managed by the key vault, for example a key that " +
+					"backs a certificate. False if the API does not return the value.",
 			},
 			"region": schema.StringAttribute{
 				Computed:      true,
@@ -640,15 +651,48 @@ func (r *resourceCCKMAzureKey) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
+	// vault_id is conditionally immutable. When it was repointed because the old vault no longer exists,
+	// the response may still carry the old vault, so the planned value is kept.
+	plannedVaultID := plan.VaultID
 	azureKeyUpdate(ctx, id, r.client, &plan, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	plan.VaultID = plannedVaultID
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// Delete soft-deletes a key and, depending on the provider settings purge_keys_on_delete and
-// retain_key_backups_after_purge, purges it and deletes its backups. See azureKeyDelete.
+// azureKeyPurgeable is the text in the recovery level of keys in a vault that allows purging.
+const azureKeyPurgeable = "Purgeable"
+
+// azureKeyLatestVersion lists the latest version of a key. It returns the list response and
+// the ID of the latest version, which is "" when the key is not found.
+func azureKeyLatestVersion(ctx context.Context, id string, client *common.Client, vaultID string, keyName string) (string, string, error) {
+	filters := url.Values{}
+	filters.Set("key_name", keyName)
+	filters.Set("key_vault_id", vaultID)
+	filters.Set("version", "-1")
+	listJSON, err := client.ListWithFilters(ctx, id, azureKeysEndpoint, filters)
+	if err != nil {
+		return "", "", err
+	}
+	return listJSON, gjson.Get(listJSON, "resources.0.id").String(), nil
+}
+
+// Delete deletes an Azure key.
+//   - If the key is not found it is removed from state with a warning.
+//   - If the key is not the latest version of the key name, nothing is done in Azure and the
+//     resource is removed from state.
+//   - Delete is repeatable. Each call does only what is left to do, using the provider settings
+//     at the time of the call, so a destroy operation that failed part way can be run again.
+//   - If the key is not soft-deleted or purged it is soft-deleted. Failure is an error.
+//   - If the key is not purged, is purgeable and purge_keys_on_delete is true, it is purged.
+//     A purge straight after a soft-delete is expected to return 409 until Azure has finished,
+//     so the purge is retried. Failure is an error.
+//   - If the key is purged (now or by an earlier call) and retain_key_backups_after_purge is
+//     false, the key backups are deleted. This makes no Azure call, it only removes the key
+//     and its versions from the CCKM database, so it is not retried on 409. Failing to delete
+//     backups is a warning.
 func (r *resourceCCKMAzureKey) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	id := uuid.New().String()
 	r.client.Log.Debug(common.MSG_METHOD_START + "[resource_azure_key.go -> Delete][" + id + "]")
@@ -664,7 +708,88 @@ func (r *resourceCCKMAzureKey) Delete(ctx context.Context, req resource.DeleteRe
 	if resp.Diagnostics.HasError() || response == "" {
 		return
 	}
-	azureKeyDelete(ctx, id, r.client, keyID, response, &resp.Diagnostics)
+
+	vaultID := gjson.Get(response, "key_vault_id").String()
+	keyName := gjson.Get(response, "key_name").String()
+
+	mutexKey := fmt.Sprintf("azure-key-%s", vaultID)
+	mutex.CckmMutex.Lock(mutexKey)
+	defer mutex.CckmMutex.Unlock(mutexKey)
+
+	if vaultID != "" && keyName != "" {
+		_, latestID, err := azureKeyLatestVersion(ctx, id, r.client, vaultID, keyName)
+		if err != nil {
+			msg := "Error deleting Azure key, failed to list the latest version of the key."
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID, "name": keyName})
+			r.client.Log.Error(details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+		if latestID != keyID {
+			r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Key " + keyID + " is not the latest version of " + keyName + ", not deleting in Azure")
+			return
+		}
+	}
+
+	settings := r.client.CCKMConfig.AzureCCKMSettings
+	purged := gjson.Get(response, "deleted").Bool()
+	softDeleted := gjson.Get(response, "key_soft_deleted_in_azure").Bool()
+
+	if !purged && !softDeleted {
+		_, err := azurePostNoDataWithRetry(ctx, id, r.client, azureKeysEndpoint+"/"+keyID+"/soft-delete")
+		if err != nil {
+			msg := "Error soft deleting Azure key."
+			details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			r.client.Log.Error(details)
+			resp.Diagnostics.AddError(details, "")
+			return
+		}
+		r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Soft deleted Azure key " + keyName)
+	}
+
+	if !purged {
+		purgeable := strings.Contains(gjson.Get(response, "azure_param.attributes.recoveryLevel").String(), azureKeyPurgeable)
+		if !purgeable {
+			r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Not purging " + keyName + " as the key is not purgeable")
+		} else if !settings.PurgeKeysOnDelete {
+			r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Not purging " + keyName + " as purge_keys_on_delete is false")
+		} else {
+			purgeResp, err := azurePostNoDataWithRetry(ctx, id, r.client, azureKeysEndpoint+"/"+keyID+"/hard-delete")
+			if err != nil {
+				msg := "Error purging Azure key."
+				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+				r.client.Log.Error(details)
+				resp.Diagnostics.AddError(details, "")
+				return
+			}
+			r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Purged Azure key " + keyName)
+			purged = gjson.Get(purgeResp, "deleted").Bool()
+		}
+	}
+
+	if !purged {
+		r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Not deleting backups of " + keyName + " as the key is not purged")
+		return
+	}
+
+	if settings.RetainKeyBackupsAfterPurge {
+		r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Not deleting backups of " + keyName + " as retain_key_backups_after_purge is true")
+		return
+	}
+
+	// Backups are deleted only when this key is still the latest version and it is purged.
+	listJSON, latestID, err := azureKeyLatestVersion(ctx, id, r.client, vaultID, keyName)
+	if err != nil || latestID != keyID || !gjson.Get(listJSON, "resources.0.deleted").Bool() {
+		return
+	}
+	if _, err = r.client.PostNoData(ctx, id, azureKeysEndpoint+"/"+keyID+"/delete-backup"); err != nil {
+		msg := "Failed to delete the key backups of " + keyName + "."
+		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		r.client.Log.Error(details)
+		resp.Diagnostics.AddWarning(details, "")
+		return
+	}
+	r.client.Log.Info("[resource_azure_key.go -> Delete][" + id + "] Deleted backups of Azure key " + keyName)
 }
 
 // ModifyPlan validates the configuration when the resource is being created.
@@ -683,6 +808,14 @@ func (r *resourceCCKMAzureKey) ModifyPlan(ctx context.Context, req resource.Modi
 		var plan models.AzureKeyTFSDK
 		resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 		if resp.Diagnostics.HasError() {
+			return
+		}
+		var state models.AzureKeyTFSDK
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !azureVaultChangeAllowed(ctx, uuid.New().String(), r.client, state.VaultID, plan.VaultID, &resp.Diagnostics) {
 			return
 		}
 		azureKeyValidateUpdatePlan(ctx, &plan, &resp.Diagnostics)
@@ -893,17 +1026,4 @@ func restoreAzureKey(ctx context.Context, id string, client *common.Client, rest
 		return ""
 	}
 	return response
-}
-
-var (
-	azureKeyTypes  = []string{"EC", "EC-HSM", "RSA", "RSA-HSM"}
-	azureKeyCurves = []string{"P-256", "P-384", "P-521", "SECP256K1"}
-	azureKeyOps    = []string{"encrypt", "decrypt", "sign", "verify", "wrapKey", "unwrapKey", "import"}
-)
-
-func azureKeyNonBlank() validator.String {
-	return stringvalidator.RegexMatches(
-		regexp.MustCompile(`\S`),
-		"must contain at least one non-whitespace character",
-	)
 }

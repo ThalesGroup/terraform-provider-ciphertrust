@@ -90,6 +90,9 @@ type azureCCKMSettingsModel struct {
 	PurgeKeysOnDelete          types.Bool `tfsdk:"purge_keys_on_delete"`
 	RecoverSoftDeletedKeys     types.Bool `tfsdk:"recover_soft_deleted_keys"`
 	RetainKeyBackupsAfterPurge types.Bool `tfsdk:"retain_key_backups_after_purge"`
+
+	PurgeCertificatesOnDelete      types.Bool `tfsdk:"purge_certificates_on_delete"`
+	RecoverSoftDeletedCertificates types.Bool `tfsdk:"recover_soft_deleted_certificates"`
 }
 
 const (
@@ -191,7 +194,7 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 				Attributes: map[string]schema.Attribute{
 					"azure": schema.SingleNestedAttribute{
 						Optional:    true,
-						Description: "Azure key settings.",
+						Description: "Azure settings.",
 						Attributes: map[string]schema.Attribute{
 							"purge_keys_on_delete": schema.BoolAttribute{
 								Optional:    true,
@@ -204,6 +207,14 @@ func (p *ciphertrustProvider) Schema(_ context.Context, _ provider.SchemaRequest
 							"retain_key_backups_after_purge": schema.BoolAttribute{
 								Optional:    true,
 								Description: "Should CipherTrust Manager retain key backups when the key is purged? If true, a purged key will be retained by CipherTrust Manager and it can be restored from a key backup using the CipherTrust Cloud Key Manager User Interface or API. It will not be possible to create a key of the same name in CipherTrust Manager until it is restored. If false, it will not be possible to restore the key from a backup but it will be possible to create a new key with the same name. Can be set in the provider block or in ~/.ciphertrust/config as azure_retain_key_backups_after_purge. Default is true.",
+							},
+							"purge_certificates_on_delete": schema.BoolAttribute{
+								Optional:    true,
+								Description: "Should ciphertrust_azure_certificate resources be purged when destroyed, if the vault supports purge? If false, the certificate will only be soft-deleted. Can be set in the provider block or in ~/.ciphertrust/config as azure_purge_certificates_on_delete. Default is true.",
+							},
+							"recover_soft_deleted_certificates": schema.BoolAttribute{
+								Optional:    true,
+								Description: "Should ciphertrust_azure_certificate resources recover a soft-deleted certificate if an attempt is made to create or import a certificate of the same name? If true, the soft-deleted certificate will be recovered. If false, the create or import will fail. Can be set in the provider block or in ~/.ciphertrust/config as azure_recover_soft_deleted_certificates. Default is false.",
 							},
 						},
 					},
@@ -402,6 +413,22 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
 						)
 					}
+				case "azure_purge_certificates_on_delete":
+					azureSettings.PurgeCertificatesOnDelete, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
+				case "azure_recover_soft_deleted_certificates":
+					azureSettings.RecoverSoftDeletedCertificates, parseErr = strconv.ParseBool(value)
+					if parseErr != nil {
+						resp.Diagnostics.AddError(
+							"Invalid provider configuration in config file",
+							fmt.Sprintf("Failed to parse %s=%q as boolean: %s", key, value, parseErr.Error()),
+						)
+					}
 				case "log_file":
 					log_file = value
 				case "log_level":
@@ -577,6 +604,12 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 		}
 		if !az.RetainKeyBackupsAfterPurge.IsNull() && !az.RetainKeyBackupsAfterPurge.IsUnknown() {
 			azureSettings.RetainKeyBackupsAfterPurge = az.RetainKeyBackupsAfterPurge.ValueBool()
+		}
+		if !az.PurgeCertificatesOnDelete.IsNull() && !az.PurgeCertificatesOnDelete.IsUnknown() {
+			azureSettings.PurgeCertificatesOnDelete = az.PurgeCertificatesOnDelete.ValueBool()
+		}
+		if !az.RecoverSoftDeletedCertificates.IsNull() && !az.RecoverSoftDeletedCertificates.IsUnknown() {
+			azureSettings.RecoverSoftDeletedCertificates = az.RecoverSoftDeletedCertificates.ValueBool()
 		}
 	}
 
@@ -777,6 +810,7 @@ func (p *ciphertrustProvider) DataSources(_ context.Context) []func() datasource
 		azure.NewDataSourceAzureVaultDetails,
 		azure.NewDataSourceAzureVaultList,
 		azure.NewDataSourceAzureKeyList,
+		azure.NewDataSourceAzureCertificateList,
 		azure.NewDataSourceAzureKeyPitBackupList,
 	}
 }
@@ -850,6 +884,7 @@ func (p *ciphertrustProvider) Resources(ctx context.Context) []func() resource.R
 		azure.NewResourceCCKMAzureVault,
 		azure.NewResourceCCKMAzureAcl,
 		azure.NewResourceCCKMAzureKey,
+		azure.NewResourceCCKMAzureCertificate,
 		azure.NewResourceAzureKeyPitBackup,
 	}
 }

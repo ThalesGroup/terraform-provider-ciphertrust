@@ -234,8 +234,10 @@ keeping in mind generally.
 - `address` (String) HTTPS URL of the CipherTrust instance. An address need not be provided when creating a cluster of CipherTrust instances. address can be set in the provider block, via the CIPHERTRUST_ADDRESS environment variable or in ~/.ciphertrust/config
 - `auth_domain` (String) CipherTrust authentication domain of the user. This is the domain where the user was created. auth_domain can be set in the provider block, via the CIPHERTRUST_AUTH_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `aws_operation_timeout` (Number) Some AWS key operations, for example, replication, can take some time to complete. This specifies how long to wait for an operation to complete in seconds. aws_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 480.
+- `azure_operation_timeout` (Number) Some Azure key operations can take some time to complete. This specifies how long to wait for an operation to complete in seconds. azure_operation_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 240.
 - `bootstrap` (String) Is it a bootstrap operation. bootstrap can be set in the provider block, via the BOOTSTRAP environment variable or in ~/.ciphertrust/config
 - `ca_cert` (String) Path to a PEM-encoded CA certificate bundle used to validate the CipherTrust server's TLS certificate. Use this for private PKI, internally-issued certificates, or air-gapped environments where the certificate chain is not in the system trust store. The file may contain one or more concatenated PEM certificates. ca_cert can be set in the provider block, via the CIPHERTRUST_CA_CERT environment variable or in ~/.ciphertrust/config
+- `cloud_key_manager` (Attributes) Cloud Key Manager settings. (see [below for nested schema](#nestedatt--cloud_key_manager))
 - `domain` (String) CipherTrust domain to log in to. domain can be set in the provider block, via the CIPHERTRUST_DOMAIN environment variable or in ~/.ciphertrust/config. Default is the empty string (root domain).
 - `log_file` (String) Path to the provider log file. Provider logs are written separately from Terraform debug logs. log_file can be set in the provider block or in ~/.ciphertrust/config. Default is ctp.log.
 - `log_level` (String) Logging level for the provider log file. log_level can be set in the provider block or in ~/.ciphertrust/config. Default is info. Options: debug, info, warn, error, off.
@@ -246,3 +248,21 @@ keeping in mind generally.
 - `rest_api_timeout` (Number) CipherTrust rest api timeout in seconds. rest_api_timeout can be set in the provider block or in ~/.ciphertrust/config. Default is 180.
 - `tenant` (String) CDSPaaS tenant name (e.g. "acme") or tenant path (e.g. "acme/eng/team"). Setting this opts the provider into the CDSPaaS authentication path; leave unset for on-prem CipherTrust Manager. tenant can be set in the provider block, via the CIPHERTRUST_TENANT environment variable or in ~/.ciphertrust/config
 - `username` (String) Username of a CipherTrust user. username can be set in the provider block, via the CIPHERTRUST_USERNAME environment variable or in ~/.ciphertrust/config
+
+<a id="nestedatt--cloud_key_manager"></a>
+### Nested Schema for `cloud_key_manager`
+
+Optional:
+
+- `azure` (Attributes) Azure settings. (see [below for nested schema](#nestedatt--cloud_key_manager--azure))
+
+<a id="nestedatt--cloud_key_manager--azure"></a>
+### Nested Schema for `cloud_key_manager.azure`
+
+Optional:
+
+- `purge_certificates_on_delete` (Boolean) Should ciphertrust_azure_certificate resources be purged when destroyed, if the vault supports purge? If false, the certificate will only be soft-deleted. Can be set in the provider block or in ~/.ciphertrust/config as azure_purge_certificates_on_delete. Default is true.
+- `purge_keys_on_delete` (Boolean) Should ciphertrust_azure_key resources be purged when destroyed? If false, the key will only be soft-deleted. Can be set in the provider block or in ~/.ciphertrust/config as azure_purge_keys_on_delete. Default is true.
+- `recover_soft_deleted_certificates` (Boolean) Should ciphertrust_azure_certificate resources recover a soft-deleted certificate if an attempt is made to create or import a certificate of the same name? If true, the soft-deleted certificate will be recovered. If false, the create or import will fail. Can be set in the provider block or in ~/.ciphertrust/config as azure_recover_soft_deleted_certificates. Default is false.
+- `recover_soft_deleted_keys` (Boolean) Should ciphertrust_azure_key resources recover soft-deleted keys if an attempt is made to create a key of the same name? If true, the key will be recovered and a new key version will be created. Can be set in the provider block or in ~/.ciphertrust/config as azure_recover_soft_deleted_keys. Default is false.
+- `retain_key_backups_after_purge` (Boolean) Should CipherTrust Manager retain key backups when the key is purged? If true, a purged key will be retained by CipherTrust Manager and it can be restored from a key backup using the CipherTrust Cloud Key Manager User Interface or API. It will not be possible to create a key of the same name in CipherTrust Manager until it is restored. If false, it will not be possible to restore the key from a backup but it will be possible to create a new key with the same name. Can be set in the provider block or in ~/.ciphertrust/config as azure_retain_key_backups_after_purge. Default is true.

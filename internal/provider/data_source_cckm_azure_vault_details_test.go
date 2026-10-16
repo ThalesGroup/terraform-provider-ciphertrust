@@ -50,8 +50,8 @@ func TestCckmAzureDataSourceVaultDetails(t *testing.T) {
 	})
 
 	t.Run("managed_hsm", func(t *testing.T) {
-		if os.Getenv("CCKM_TF_AZURE_PREMIUM_VAULT") == "" {
-			t.Skip("CCKM_TF_AZURE_PREMIUM_VAULT not set - skipping managed_hsm sub-test")
+		if os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT") == "" {
+			t.Skip("CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping managed_hsm sub-test")
 		}
 		resource.Test(t, resource.TestCase{
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

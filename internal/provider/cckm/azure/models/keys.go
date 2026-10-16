@@ -41,6 +41,7 @@ type AzureKeyTFSDK struct {
 	KeyMaterialOrigin     types.String `tfsdk:"key_material_origin"`
 	KeySoftDeletedInAzure types.Bool   `tfsdk:"key_soft_deleted_in_azure"`
 	Labels                types.Map    `tfsdk:"labels"`
+	Managed               types.Bool   `tfsdk:"managed"`
 	Region                types.String `tfsdk:"region"`
 	SoftDeleteEnabled     types.Bool   `tfsdk:"soft_delete_enabled"`
 	Status                types.String `tfsdk:"status"`
@@ -69,34 +70,6 @@ type AzureUploadKeyTFSDK struct {
 
 	// LocalKeyName is computed. It is the name of the CipherTrust Manager key when source_key_tier is local.
 	LocalKeyName types.String `tfsdk:"local_key_name"`
-}
-
-// AzureParamsTFSDK is the azure_params block.
-type AzureParamsTFSDK struct {
-	Key        types.Object `tfsdk:"key"`
-	Attributes types.Object `tfsdk:"attributes"`
-	KeySize    types.Int64  `tfsdk:"key_size"`
-	Tags       types.Map    `tfsdk:"tags"`
-}
-
-// AzureParamsKeyTFSDK is the azure_params.key block.
-type AzureParamsKeyTFSDK struct {
-	Kty    types.String `tfsdk:"kty"`
-	Curve  types.String `tfsdk:"curve"`
-	KeyOps types.List   `tfsdk:"key_ops"`
-	Kid    types.String `tfsdk:"kid"`
-	N      types.String `tfsdk:"n"`
-	E      types.String `tfsdk:"e"`
-}
-
-// AzureParamsAttributesTFSDK is the azure_params.attributes block. Dates are UTC RFC3339 strings.
-type AzureParamsAttributesTFSDK struct {
-	Enabled        types.Bool   `tfsdk:"enabled"`
-	ExpirationDate types.String `tfsdk:"expiration_date"`
-	ActivationDate types.String `tfsdk:"activation_date"`
-	RecoveryLevel  types.String `tfsdk:"recovery_level"`
-	Created        types.Int64  `tfsdk:"created"`
-	Updated        types.Int64  `tfsdk:"updated"`
 }
 
 // AzureParamsKeyAttrTypes are the attribute types of azure_params.key.
