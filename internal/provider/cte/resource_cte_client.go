@@ -277,6 +277,34 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 		payload.RegistrationAllowed = plan.RegistrationAllowed.ValueBool()
 	}
 
+	// TFIN-467: a client being created here does not exist in CM yet, so it is
+	// guaranteed to be unregistered (no real CTE agent can have registered
+	// against an ID that doesn't exist yet). CipherTrust Manager 200-OKs a
+	// write to max_num_cache_log/max_space_cache_log for such a client but
+	// silently ignores it, so it can never persist. Failing fast here (before
+	// the API call) covers the one case where the old, now-removed
+	// ValidateConfig-time block was actually correct. See the equivalent,
+	// registration-status-gated check in Update() for existing clients, where
+	// a real agent may since have registered and CM genuinely persists the
+	// write.
+	if !config.MaxNumCacheLog.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_num_cache_log"),
+			"Non-Functional Field for Unregistered CTE Client",
+			"max_num_cache_log cannot be set when creating a CTE client; the client has no registered agent yet, so CipherTrust Manager accepts the write but silently ignores it. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead, or set this field in a follow-up update once a real agent has registered against this client.",
+		)
+	}
+	if !config.MaxSpaceCacheLog.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_space_cache_log"),
+			"Non-Functional Field for Unregistered CTE Client",
+			"max_space_cache_log cannot be set when creating a CTE client; the client has no registered agent yet, so CipherTrust Manager accepts the write but silently ignores it. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead, or set this field in a follow-up update once a real agent has registered against this client.",
+		)
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Create][" + id + "]")
@@ -453,6 +481,53 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 	if plan.LGCSAccessOnly.ValueBool() != types.BoolNull().ValueBool() {
 		payload.LGCSAccessOnly = plan.LGCSAccessOnly.ValueBool()
 	}
+	// TFIN-467: max_num_cache_log/max_space_cache_log are only functional at
+	// the client level for a client that has actually registered a real CTE
+	// agent at some point — for a dummy/never-registered client CM 200-OKs
+	// the write but silently ignores it, producing a perpetual,
+	// unresolvable plan diff. Registration status isn't knowable at
+	// ValidateConfig time (schema/config only, no state or API access), so
+	// it's checked here, immediately before sending the write, against a
+	// live GET of the client. client_health_status is populated by CM the
+	// moment a client is registered and stays a non-"UNREGISTERED" value
+	// thereafter (even if the agent later disconnects), so that's the
+	// signal used rather than requiring the agent to be currently connected.
+	maxNumCacheLogChanged := !plan.MaxNumCacheLog.Equal(state.MaxNumCacheLog)
+	maxSpaceCacheLogChanged := !plan.MaxSpaceCacheLog.Equal(state.MaxSpaceCacheLog)
+	if maxNumCacheLogChanged || maxSpaceCacheLogChanged {
+		checkID := uuid.New().String()
+		current, err := r.client.GetById(ctx, checkID, plan.ID.ValueString(), common.URL_CTE_CLIENT)
+		if err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
+			resp.Diagnostics.AddError(
+				"Error reading CTE Client on CipherTrust Manager: ",
+				"Could not verify client registration status before updating max_num_cache_log/max_space_cache_log, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		var currentClient CTEClientsListJSON
+		if err := json.Unmarshal([]byte(current), &currentClient); err != nil {
+			resp.Diagnostics.AddError("Error parsing CTE Client response", err.Error())
+			return
+		}
+		if currentClient.ClientHealthStatus == "" || currentClient.ClientHealthStatus == "UNREGISTERED" {
+			if maxNumCacheLogChanged {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("max_num_cache_log"),
+					"Non-Functional Field for Unregistered CTE Client",
+					"max_num_cache_log cannot be set on a client that has never registered a CTE agent with CipherTrust Manager; CM accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead, or set this field once a real agent has registered against this client.",
+				)
+			}
+			if maxSpaceCacheLogChanged {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("max_space_cache_log"),
+					"Non-Functional Field for Unregistered CTE Client",
+					"max_space_cache_log cannot be set on a client that has never registered a CTE agent with CipherTrust Manager; CM accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead, or set this field once a real agent has registered against this client.",
+				)
+			}
+			return
+		}
+	}
 	if plan.MaxNumCacheLog.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.MaxNumCacheLog = plan.MaxNumCacheLog.ValueInt64()
 	}
@@ -611,48 +686,8 @@ func validateCTEUClientConfig(ctx context.Context, req resource.ValidateConfigRe
 	}
 }
 
-// validateNonFunctionalCacheLogFields rejects max_num_cache_log/max_space_cache_log
-// when explicitly configured. TFIN-467: CipherTrust Manager silently ignores
-// writes to these two fields at the client level (confirmed via direct REST
-// PATCH cross-check, including values that respect the linked profile's
-// documented minimums) — every apply reports success but the value never
-// persists, producing a perpetual, unresolvable plan diff. The equivalent
-// setting is only functional on the linked ciphertrust_cte_profile resource's
-// cache_settings.max_files/max_space. Erroring here up front, rather than
-// sending a PATCH CM will 200-OK and silently no-op, matches the existing
-// in-file precedent (see validateCTEUClientConfig above) of surfacing
-// unsupported field combinations as an explicit attribute error instead of
-// letting them fail silently against CM.
-func validateNonFunctionalCacheLogFields(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var maxNumCacheLog types.Int64
-	var maxSpaceCacheLog types.Int64
-
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_num_cache_log"), &maxNumCacheLog)...)
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_space_cache_log"), &maxSpaceCacheLog)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !maxNumCacheLog.IsNull() && !maxNumCacheLog.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("max_num_cache_log"),
-			"Non-Functional Field for CTE Client",
-			"max_num_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead.",
-		)
-	}
-	if !maxSpaceCacheLog.IsNull() && !maxSpaceCacheLog.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("max_space_cache_log"),
-			"Non-Functional Field for CTE Client",
-			"max_space_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead.",
-		)
-	}
-}
-
 func (r *resourceCTEClient) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	validateCTEUClientConfig(ctx, req, resp)
-	validateNonFunctionalCacheLogFields(ctx, req, resp)
 }
 
 func setCTEClientState(
