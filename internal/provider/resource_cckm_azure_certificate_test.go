@@ -1175,9 +1175,13 @@ func azureCertCreateCMSignedCert(t *testing.T, name string) (caID string, certID
 	return caID, certID, privateKeyPem
 }
 
-// TestCckmAzureCertificateUploadCMSigned uploads a certificate signed by a CipherTrust Manager local CA. The
+// TestCckmAzureCertificateUploadLocal uploads a certificate signed by a CipherTrust Manager local CA. The
 // certificate and its key are created outside of Terraform. Only azure_params.tags can be set with an upload.
+// It is skipped on CDSPaaS, which has no certificate upload endpoint.
 func TestCckmAzureCertificateUploadLocal(t *testing.T) {
+	if os.Getenv(envCDSPaaS) == "true" {
+		t.Skip("Certificate upload is not supported in CDSPaaS - skipping TestCckmAzureCertificateUploadLocal")
+	}
 	initConfig, ok := initCckmAzureTest()
 	if !ok {
 		t.Skip("Azure environment variables not set - skipping TestCckmAzureCertificateUploadLocal")

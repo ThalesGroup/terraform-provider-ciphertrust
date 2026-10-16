@@ -142,7 +142,8 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 					"signed by a CipherTrust Manager CA, or set `certificate` to upload an external certificate " +
 					"(a PEM certificate with `private_key_pem`, or a PFX). " +
 					"`certificate` cannot be combined with `source_cert_id` or `ca_id`. " +
-					"Only `azure_params.tags` can be set with it. Cannot be combined with `azure_params.policy` or `restore_certificate`.",
+					"Only `azure_params.tags` can be set with it. Cannot be combined with `azure_params.policy` or `restore_certificate`. " +
+					"This attribute is not supported in CDSPaaS.",
 				Validators: []validator.Object{
 					objectvalidator.ConflictsWith(path.MatchRoot("azure_params").AtName("policy")),
 					objectvalidator.ConflictsWith(path.MatchRoot("restore_certificate")),
@@ -152,7 +153,8 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 						Optional: true,
 						Computed: true,
 						Description: "(Immutable) CipherTrust Manager resource ID of the certificate to upload. Requires ca_id and private_key_pem. Cannot be used with certificate. " +
-							"The value is kept as configured. It is not read back from CipherTrust Manager.",
+							"The value is kept as configured. It is not read back from CipherTrust Manager. " +
+							"This attribute is not supported in CDSPaaS.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.UseStateForUnknown(),
 							modifiers.ImmutableStringUnlessNull(),
@@ -165,7 +167,7 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 					},
 					"ca_id": schema.StringAttribute{
 						Optional:    true,
-						Description: "(Immutable) CipherTrust Manager resource ID of the CA that signed the certificate. Requires source_cert_id. Cannot be used with certificate.",
+						Description: "(Immutable) CipherTrust Manager resource ID of the CA that signed the certificate. Requires source_cert_id. Cannot be used with certificate. This attribute is not supported in CDSPaaS.",
 						PlanModifiers: []planmodifier.String{
 							modifiers.ImmutableStringUnlessNull(),
 						},
@@ -987,6 +989,16 @@ func (r *resourceCCKMAzureCertificate) ModifyPlan(ctx context.Context, req resou
 	var cfg AzureCertificateTFSDK
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	// CDSPaaS has no certificate upload endpoint.
+	if r.client != nil && r.client.IsCDSPaaS && cfg.UploadCertificate != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("upload_certificate"),
+			"'upload_certificate' is not supported on CDSPaaS",
+			"The 'upload_certificate' attribute is only supported on on-premises CipherTrust Manager. "+
+				"CDSPaaS does not support uploading a certificate; this attribute must be omitted.",
+		)
 		return
 	}
 	// Report everything that is missing and everything that is not allowed for the mode in one error.
