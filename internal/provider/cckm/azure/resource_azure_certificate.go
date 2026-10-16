@@ -206,8 +206,7 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 					},
 				},
 			},
-			// Every azure_params value is Optional and Computed. A value left out of the configuration is read
-			// back from Azure, so it never causes a diff. UseStateForUnknown keeps the value from showing as unknown.
+			// Every azure_params value is Optional and Computed.
 			"azure_params": schema.SingleNestedAttribute{
 				Optional: true,
 				Computed: true,

@@ -837,7 +837,6 @@ func (r *resourceCCKMAzureKey) ModifyPlan(ctx context.Context, req resource.Modi
 // existing key adds a new version to that key. The pfx file is read and base64 encoded. exportable and
 // release_policy are sent only when the key is exportable. kty, curve and key_size are not sent. hsm is sent as
 // azure_param.hsm.
-// On failure an error diagnostic is added and "" is returned.
 func uploadAzureKey(ctx context.Context, id string, client *common.Client, plan *models.AzureKeyTFSDK, diags *diag.Diagnostics) string {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_azure_key.go -> uploadAzureKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_azure_key.go -> uploadAzureKey][" + id + "]")
@@ -913,8 +912,6 @@ func uploadAzureKey(ctx context.Context, id string, client *common.Client, plan 
 }
 
 // createAzureKey creates a new key in a CipherTrust Manager Azure vault.
-// vaultType is the type of the vault the key is created in.
-// On failure an error diagnostic is added and "" is returned.
 func createAzureKey(ctx context.Context, id string, client *common.Client, plan *models.AzureKeyTFSDK, vaultType string, diags *diag.Diagnostics) string {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_azure_key.go -> createAzureKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_azure_key.go -> createAzureKey][" + id + "]")
@@ -1001,7 +998,6 @@ func createAzureKey(ctx context.Context, id string, client *common.Client, plan 
 // restoreID is the CipherTrust Manager ID of the key to restore.
 // backupID is the optional Azure cloud key backup ID; it is sent only when not empty.
 // It is a single restore request. A restored key that is soft-deleted is not recovered.
-// On failure an error diagnostic is added and "" is returned.
 func restoreAzureKey(ctx context.Context, id string, client *common.Client, restoreID string, backupID string, vaultID string, diags *diag.Diagnostics) string {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_azure_key.go -> restoreAzureKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_azure_key.go -> restoreAzureKey][" + id + "]")

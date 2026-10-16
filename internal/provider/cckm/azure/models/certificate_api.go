@@ -97,7 +97,6 @@ type AzureCertificateSecretPropsJSON struct {
 }
 
 // AzureCertificateListPageJSON is the list-response envelope from GET /azure/certificates.
-// Each resource is kept raw so it can be flattened with the same code as the certificate resource.
 type AzureCertificateListPageJSON struct {
 	Total     int64             `json:"total"`
 	Resources []json.RawMessage `json:"resources"`

@@ -279,7 +279,11 @@ func TestCckmAzureCertificateValidationRestore(t *testing.T) {
 }
 
 // TestCckmAzureCertificateValidationUpload checks the upload_certificate requirements.
+// It is skipped on CDSPaaS, which rejects upload_certificate at plan time.
 func TestCckmAzureCertificateValidationUpload(t *testing.T) {
+	if os.Getenv(envCDSPaaS) == "true" {
+		t.Skip("Certificate upload is not supported in CDSPaaS - skipping TestCckmAzureCertificateValidationUpload")
+	}
 	initConfig, ok := initCckmAzureCertAndPrivateKeyTest()
 	if !ok {
 		t.Skip("Azure or certificate environment variables not set - skipping TestCckmAzureCertificateValidationUpload")
@@ -427,7 +431,11 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 }
 
 // TestCckmAzureCertificateValidationUploadPfx checks the upload_certificate requirements for a PFX.
+// It is skipped on CDSPaaS, which rejects upload_certificate at plan time.
 func TestCckmAzureCertificateValidationUploadPfx(t *testing.T) {
+	if os.Getenv(envCDSPaaS) == "true" {
+		t.Skip("Certificate upload is not supported in CDSPaaS - skipping TestCckmAzureCertificateValidationUploadPfx")
+	}
 	initConfig, ok := initCckmAzureCertPfxTest()
 	if !ok {
 		t.Skip("Azure or PFX environment variables not set - skipping TestCckmAzureCertificateValidationUploadPfx")

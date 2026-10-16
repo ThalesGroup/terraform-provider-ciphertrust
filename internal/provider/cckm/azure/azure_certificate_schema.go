@@ -5,11 +5,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// This file holds the Terraform side of the certificate resource: the TFSDK structs, the attribute type
-// maps, and the functions that transpose between Terraform values and the API structs in
-// models/certificate_api.go (plan to request, response to state). The resource schema itself is in
-// resource_azure_certificate.go.
-
 // AzureCertificateTFSDK is the Terraform model for the ciphertrust_azure_certificate resource.
 // A certificate is created natively (azure_params.policy) or uploaded (upload_certificate).
 type AzureCertificateTFSDK struct {
@@ -72,10 +67,6 @@ type AzureUploadCertificateTFSDK struct {
 	PrivateKeyPem      types.String `tfsdk:"private_key_pem"`
 	PrivateKeyPassword types.String `tfsdk:"private_key_password"`
 }
-
-// The azure_params attribute is a types.Object, and so are all of its nested blocks. State and plan models
-// must not use pointer structs because the framework plans unknown values for computed blocks.
-// These attribute type maps must match the schema in resource_azure_certificate.go.
 
 var (
 	azureCertIssuerAttrTypes = map[string]attr.Type{

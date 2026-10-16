@@ -401,9 +401,6 @@ func (r *resourceCCKMAzureVault) Create(ctx context.Context, req resource.Create
 		}
 	} else {
 		// vault_details provided - extract and validate.
-		// UnhandledNullAsEmpty allows null nested objects (e.g. vault_properties omitted by
-		// the user) to become zero-value Go structs rather than causing a framework panic.
-		// Validation below will catch any missing required fields with a clear error.
 		var vd models.AzureVaultDetailTFSDK
 		resp.Diagnostics.Append(plan.VaultDetails.As(ctx, &vd, basetypes.ObjectAsOptions{UnhandledNullAsEmpty: true, UnhandledUnknownAsEmpty: true})...)
 		if resp.Diagnostics.HasError() {
@@ -681,7 +678,6 @@ func (r *resourceCCKMAzureVault) ImportState(ctx context.Context, req resource.I
 }
 
 // vaultPropertiesAttrTypes returns the attr.Type map for the vault_properties object.
-// The sku nested object type is defined inline to keep the mapping self-contained.
 func vaultPropertiesAttrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"tenant_id": types.StringType,
