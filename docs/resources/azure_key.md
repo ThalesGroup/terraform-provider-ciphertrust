@@ -309,7 +309,7 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
-- `backup` (String, Sensitive) CipherTrust Manager opaque object ID holding the automatic backup of the key. CipherTrust Manager takes this backup when the key is created, updated or uploaded. It is not a PIT backup ID and cannot be used as restore_key.backup_id.
+- `backup` (String) CipherTrust Manager opaque object ID holding the automatic backup of the key. CipherTrust Manager takes this backup when the key is created, updated or uploaded. It is not a PIT backup ID and cannot be used as restore_key.backup_id.
 - `backup_at` (String) Date and time the key was last backed up.
 - `backup_config` (Map of String) Backup scheduler configuration of the key. When a backup job is enabled for the key, it contains backup_job_config_id.
 - `cloud_name` (String) CipherTrust Manager cloud name.
