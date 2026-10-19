@@ -539,3 +539,74 @@ func clearedMergePatchFields(path string, stateVal, planVal attr.Value) []string
 	}
 	return cleared
 }
+
+// ImmutableSensitiveString is like ImmutableString for a sensitive attribute such as a private key,
+// a certificate or a password. The error names the attribute (taken from the request path) but never
+// includes the old or new value, so no secret is written to the plan output or the logs.
+// A null state value is not treated as immutable. Such a value is not returned by the API, so it is
+// null after an import, and setting it then must be allowed.
+func ImmutableSensitiveString() planmodifier.String {
+	return immutableSensitiveStringModifier{}
+}
+
+type immutableSensitiveStringModifier struct{}
+
+func (m immutableSensitiveStringModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after resource creation. Its value is not shown in errors."
+}
+
+func (m immutableSensitiveStringModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m immutableSensitiveStringModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Create or destroy.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+	// Nothing in state to compare with, for example after an import.
+	if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
+		return
+	}
+	if req.PlanValue.IsUnknown() {
+		return
+	}
+	if req.PlanValue.Equal(req.StateValue) {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(
+		req.Path,
+		"Attribute is immutable",
+		fmt.Sprintf(
+			"The sensitive attribute %s cannot be changed after creation (its value is not shown). "+
+				"To change this attribute, destroy and recreate the resource.",
+			req.Path.String(),
+		),
+	)
+	resp.PlanValue = req.StateValue
+}
+
+// ImmutableStringUnlessNull is like ImmutableString, but a value that is null in state can be set. Use it for
+// an attribute that the API does not return, so it is null after an import and must be allowed to be set then.
+// Once it has a value in state it cannot be changed.
+func ImmutableStringUnlessNull() planmodifier.String {
+	return immutableStringUnlessNullModifier{}
+}
+
+type immutableStringUnlessNullModifier struct{}
+
+func (m immutableStringUnlessNullModifier) Description(_ context.Context) string {
+	return "Attribute is immutable after it has been set. It can be set when it is null in state, for example after an import."
+}
+
+func (m immutableStringUnlessNullModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m immutableStringUnlessNullModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	// Nothing in state to compare with, for example after an import.
+	if req.StateValue.IsNull() {
+		return
+	}
+	immutableStringModifier{}.PlanModifyString(ctx, req, resp)
+}

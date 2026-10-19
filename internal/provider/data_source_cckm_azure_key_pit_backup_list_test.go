@@ -9,7 +9,7 @@ import (
 
 // TestCckmAzureDataSourceKeyPitBackupList exercises the ciphertrust_azure_key_pit_backup_list data source.
 //
-// Only validation is covered here. Listing real backups is covered by TestCckmAzureKeyPremiumVault,
+// Only validation is covered here. Listing real backups is covered by TestCckmAzureKeyPurgeableVault,
 // which creates them with the ciphertrust_azure_key_pit_backup resource.
 // These sub-tests run without live Azure infrastructure.
 func TestCckmAzureDataSourceKeyPitBackupList(t *testing.T) {

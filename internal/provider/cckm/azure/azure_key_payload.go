@@ -16,6 +16,44 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func azureParamsPath(parts ...string) path.Path {
+	p := path.Root("azure_params")
+	for _, part := range parts {
+		p = p.AtName(part)
+	}
+	return p
+}
+
+// azureParamsView is a flattened, read-only view of the azure_params object.
+// Missing or null parts are returned as null values.
+type azureParamsView struct {
+	Kty            types.String
+	Curve          types.String
+	KeyOps         types.List
+	Enabled        types.Bool
+	ExpirationDate types.String
+	ActivationDate types.String
+	KeySize        types.Int64
+	Tags           types.Map
+}
+
+// newAzureParamsView flattens the azure_params object.
+func newAzureParamsView(obj types.Object) azureParamsView {
+	params := objectAttrs(obj)
+	key := objectAttrs(params["key"])
+	attrs := objectAttrs(params["attributes"])
+	return azureParamsView{
+		Kty:            attrString(key, "kty"),
+		Curve:          attrString(key, "curve"),
+		KeyOps:         attrList(key, "key_ops"),
+		Enabled:        attrBool(attrs, "enabled"),
+		ExpirationDate: attrString(attrs, "expiration_date"),
+		ActivationDate: attrString(attrs, "activation_date"),
+		KeySize:        attrInt64(params, "key_size"),
+		Tags:           attrMap(params, "tags"),
+	}
+}
+
 // azureKeyBuildUpdatePayload builds the PATCH /azure/keys/:id request body by comparing the plan
 // with the key as it was just read from CipherTrust Manager (keyResponse), not with state.
 // Only values that differ are included, so omitted fields are left untouched by the API.

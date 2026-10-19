@@ -387,10 +387,9 @@ func (r *resourceCCKMAzureVault) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	connAccount := gjson.Get(connResp, "account").String()
-	mutexKey := fmt.Sprintf("azure-vault-%s", connAccount)
-	mutex.CckmMutex.Lock(mutexKey)
-	defer mutex.CckmMutex.Unlock(mutexKey)
+	// Serialise all Azure vault operations. CipherTrust Manager fails concurrent vault operations.
+	mutex.CckmMutex.Lock(azureVaultMutexKey)
+	defer mutex.CckmMutex.Unlock(azureVaultMutexKey)
 
 	// Determine vault data: use user-supplied vault_details if provided, otherwise look up from Azure.
 	var vaultData *models.AzureVaultDataJSON
@@ -402,9 +401,6 @@ func (r *resourceCCKMAzureVault) Create(ctx context.Context, req resource.Create
 		}
 	} else {
 		// vault_details provided - extract and validate.
-		// UnhandledNullAsEmpty allows null nested objects (e.g. vault_properties omitted by
-		// the user) to become zero-value Go structs rather than causing a framework panic.
-		// Validation below will catch any missing required fields with a clear error.
 		var vd models.AzureVaultDetailTFSDK
 		resp.Diagnostics.Append(plan.VaultDetails.As(ctx, &vd, basetypes.ObjectAsOptions{UnhandledNullAsEmpty: true, UnhandledUnknownAsEmpty: true})...)
 		if resp.Diagnostics.HasError() {
@@ -527,6 +523,9 @@ func (r *resourceCCKMAzureVault) Update(ctx context.Context, req resource.Update
 
 	vaultID := state.ID.ValueString()
 
+	mutex.CckmMutex.Lock(azureVaultMutexKey)
+	defer mutex.CckmMutex.Unlock(azureVaultMutexKey)
+
 	// Verify the vault still exists before attempting any changes.
 	currentJSON := getAzureVault(ctx, id, r.client, vaultID, "updating", &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -603,6 +602,9 @@ func (r *resourceCCKMAzureVault) Update(ctx context.Context, req resource.Update
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
+// azureVaultMutexKey serialises Create, Update and Delete of Azure vaults.
+const azureVaultMutexKey = "azure-vault"
+
 // Delete removes an Azure vault from CipherTrust Manager.
 // Uses POST /azure/vaults/:id/remove-vault. A 404 during the pre-flight GET
 // emits a warning and allows Terraform to remove the resource from state.
@@ -618,6 +620,9 @@ func (r *resourceCCKMAzureVault) Delete(ctx context.Context, req resource.Delete
 	}
 
 	vaultID := state.ID.ValueString()
+
+	mutex.CckmMutex.Lock(azureVaultMutexKey)
+	defer mutex.CckmMutex.Unlock(azureVaultMutexKey)
 
 	// Pre-flight: verify vault exists. On 404 a warning is added (resource removed from state).
 	vaultJSON := getAzureVault(ctx, id, r.client, vaultID, "deleting", &resp.Diagnostics)
@@ -673,7 +678,6 @@ func (r *resourceCCKMAzureVault) ImportState(ctx context.Context, req resource.I
 }
 
 // vaultPropertiesAttrTypes returns the attr.Type map for the vault_properties object.
-// The sku nested object type is defined inline to keep the mapping self-contained.
 func vaultPropertiesAttrTypes() map[string]attr.Type {
 	return map[string]attr.Type{
 		"tenant_id": types.StringType,

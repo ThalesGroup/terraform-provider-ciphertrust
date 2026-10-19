@@ -96,7 +96,7 @@ output "latest_key_names" {
 | key_name             | string  | Filter by Azure key name. |
 | cloud_name           | string  | Filter by cloud name (for example, `AzureCloud`). |
 | region               | string  | Filter by region. |
-| crv                  | string  | Filter by EC curve. |
+| curve                | string  | Filter by EC curve (for example, `P-256`). The value is not case-sensitive. |
 | status               | string  | Filter by key status. |
 | backup               | string  | Filter by backup. |
 | enabled              | boolean | Filter by the enabled attribute. |
@@ -104,14 +104,14 @@ output "latest_key_names" {
 | job_config_id        | string  | Filter by the ID of the scheduler configuration job. |
 | backup_job_config_id | string  | Filter by the ID of the key backup scheduler configuration job. |
 | deleted_in_azure     | boolean | Filter by whether the key has been deleted in Azure. |
-| algorithm            | string  | Filter by algorithm type. |
+| algorithm            | string  | Filter by algorithm type (for example, `RSA` or `EC`). The value is not case-sensitive. |
 | kid                  | string  | Filter by Azure key identifier. |
 | gone                 | boolean | Filter by gone. |
 | version              | string  | Filter by version. Use `"-1"` to return only the latest version of each key. |
 | rotation_job_enabled | boolean | Filter by whether a rotation job is enabled. |
 | tags                 | string  | A valid JSON value. Keys whose tags contain the JSON value are returned. |
 | key_material_origin  | string  | Filter by key material origin. |
-| managed              | boolean | Filter by whether the key is managed by Azure vaults. |
+| managed              | boolean | Filter by whether the key lifetime is managed by the key vault (true for keys that back a certificate). |
 | external_key_id      | string  | Filter by external key ID. |
 
 ### Read-Only

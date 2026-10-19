@@ -128,6 +128,7 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 	state.Deleted = types.BoolValue(gjson.Get(response, "deleted").Bool())
 	state.KeyMaterialOrigin = types.StringValue(gjson.Get(response, "key_material_origin").String())
 	state.KeySoftDeletedInAzure = types.BoolValue(gjson.Get(response, "key_soft_deleted_in_azure").Bool())
+	state.Managed = types.BoolValue(gjson.Get(response, "azure_param.managed").Bool())
 	state.Region = types.StringValue(gjson.Get(response, "region").String())
 	state.SoftDeleteEnabled = types.BoolValue(gjson.Get(response, "soft_delete_enabled").Bool())
 	state.Status = types.StringValue(gjson.Get(response, "status").String())

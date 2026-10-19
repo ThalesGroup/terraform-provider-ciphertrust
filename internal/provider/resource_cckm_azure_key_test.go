@@ -68,9 +68,9 @@ func initCckmAzureTest(timeout ...int) (string, bool) {
 
 // initCckmAzureTestPremiumVault returns the configuration from initCckmAzureTest plus the premium
 // vault resource (ciphertrust_azure_vault.premium_vault). It returns false when the Azure
-// environment variables are not set or CCKM_TF_AZURE_PREMIUM_VAULT is empty.
+// environment variables are not set or CCKM_TF_AZURE_PURGEABLE_VAULT is empty.
 func initCckmAzureTestPremiumVault(timeout ...int) (string, bool) {
-	if os.Getenv("CCKM_TF_AZURE_PREMIUM_VAULT") == "" {
+	if os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT") == "" {
 		return "", false
 	}
 	initConfig, ok := initCckmAzureTest(timeout...)
@@ -332,16 +332,17 @@ func TestCckmAzureKeyNative(t *testing.T) {
 
 	// CCKM keeps a backup of every key, so the key above can be restored after it has been deleted
 	// from the standard vault. A key can only be restored to a different vault, so the premium
-	// vault is used.
+	// vault is used. Inside the sub-test t is the sub-test's own value, so the state of this test is
+	// captured here.
+	nativeFailed := t.Failed()
 	t.Run("restore_soft_deleted_to_another_vault", func(t *testing.T) {
+		if nativeFailed {
+			t.Skip("Previous steps failed")
+		}
 		premiumConfig, ok := initCckmAzureTestPremiumVault()
 		if !ok {
-			t.Skip("CCKM_TF_AZURE_PREMIUM_VAULT not set - skipping restore_to_premium_vault sub-test")
+			t.Skip("CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping restore_to_premium_vault sub-test")
 		}
-		if nativeKeyID == "" {
-			t.Skip("native key ID was not captured - skipping restore_to_premium_vault sub-test")
-		}
-
 		restoreConfig := `
 			resource "ciphertrust_azure_key" "restored_key" {
 				vault_id   = ciphertrust_azure_vault.premium_vault.id
@@ -557,11 +558,21 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 					version      = "-1"
 				}
 				depends_on = [ciphertrust_azure_key.upload_key, ciphertrust_azure_key.upload_key_pfx]
+			}
+			data "ciphertrust_azure_key_list" "rsa_algorithm" {
+				filters = {
+					key_vault_id = ciphertrust_azure_vault.standard_vault.id
+					key_name     = "%s"
+					algorithm    = "rsa"
+					limit        = "-1"
+				}
+				depends_on = [ciphertrust_azure_key.upload_key, ciphertrust_azure_key.upload_key_pfx]
 			}`
 		allVersions := "data.ciphertrust_azure_key_list.all_versions"
 		latest := "data.ciphertrust_azure_key_list.latest"
+		rsaAlgorithm := "data.ciphertrust_azure_key_list.rsa_algorithm"
 		pfxConfigStr := resetConfigStr + fmt.Sprintf(pfxConfig, keyName, filepath.ToSlash(pfxPath), pfxPassword) +
-			fmt.Sprintf(listConfig, keyName, keyName)
+			fmt.Sprintf(listConfig, keyName, keyName, keyName)
 		pfxUploadSteps = append(pfxUploadSteps, resource.TestStep{
 			PreConfig: func() { logTestStep(t.Name(), "Step 5") },
 			Config:    pfxConfigStr,
@@ -582,6 +593,11 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				resource.TestCheckResourceAttrPair(latest, "keys.0.id", pfxResource, "id"),
 				resource.TestCheckResourceAttrPair(latest, "keys.0.kid", pfxResource, "azure_params.key.kid"),
 				resource.TestCheckResourceAttr(latest, "keys.0.name", keyName),
+
+				// The lower case algorithm matches both RSA versions.
+				resource.TestCheckResourceAttr(rsaAlgorithm, "matched", "2"),
+				resource.TestCheckResourceAttr(rsaAlgorithm, "keys.#", "2"),
+				resource.TestCheckResourceAttr(rsaAlgorithm, "keys.0.kty", "RSA"),
 				resource.TestCheckResourceAttrPair(latest, "keys.0.vault_id", vaultResource, "id"),
 			),
 		})

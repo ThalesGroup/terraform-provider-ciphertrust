@@ -14,8 +14,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// cleanupCckmAzureVaults removes the standard and premium Azure vaults (CCKM_TF_AZURE_STANDARD_VAULT
-// and CCKM_TF_AZURE_PREMIUM_VAULT) from CipherTrust Manager if a previous failed test run left them
+// cleanupCckmAzureVaults removes the standard and premium Azure vaults (CCKM_TF_AZURE_NON_PURGEABLE_VAULT
+// and CCKM_TF_AZURE_PURGEABLE_VAULT) from CipherTrust Manager if a previous failed test run left them
 // behind. The same vault cannot be added twice, so a leftover would break the next run. Only vaults
 // whose azure_name matches one of the two env vars are removed. The vaults are removed from CM only,
 // nothing is deleted in Azure. Only runs when TF_CCKM_CLEANUP=true is set. All errors are logged as
@@ -25,7 +25,7 @@ func cleanupCckmAzureVaults() {
 		return
 	}
 	names := map[string]bool{}
-	for _, envVar := range []string{"CCKM_TF_AZURE_STANDARD_VAULT", "CCKM_TF_AZURE_PREMIUM_VAULT"} {
+	for _, envVar := range []string{"CCKM_TF_AZURE_NON_PURGEABLE_VAULT", "CCKM_TF_AZURE_PURGEABLE_VAULT"} {
 		if name := os.Getenv(envVar); name != "" {
 			names[name] = true
 		}
@@ -125,7 +125,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 		}`
 
 	// vaultName is the standard vault name read from the environment at test setup time.
-	vaultName := os.Getenv("CCKM_TF_AZURE_STANDARD_VAULT")
+	vaultName := os.Getenv("CCKM_TF_AZURE_NON_PURGEABLE_VAULT")
 
 	t.Run("lifecycle", func(t *testing.T) {
 		// Generate a unique name for the second Azure connection used in the update step.

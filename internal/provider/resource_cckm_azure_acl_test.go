@@ -157,13 +157,11 @@ func azureGetSubjectActions(vaultID, subject string, expectNotFound bool) []stri
 	}
 	for _, acl := range vaultResp.Acls {
 		if acl.UserID == subject || acl.Group == subject {
-			fmt.Printf("azureGetSubjectActions: found subject %s with actions %v\n", subject, acl.Actions)
+			//fmt.Printf("azureGetSubjectActions: found subject %s with actions %v\n", subject, acl.Actions)
 			return acl.Actions
 		}
 	}
-	if expectNotFound {
-		fmt.Printf("azureGetSubjectActions: subject %s correctly not found in vault %s acls\n", subject, vaultID)
-	} else {
+	if !expectNotFound {
 		fmt.Printf("azureGetSubjectActions: subject %s unexpectedly not found in vault %s acls\n", subject, vaultID)
 	}
 	return nil
@@ -195,7 +193,7 @@ func azureAclOOBUpdate(vaultID, userID string, permit bool, actions []string) {
 		fmt.Printf("azureAclOOBUpdate: API call failed: %v\n", err)
 		return
 	}
-	fmt.Printf("azureAclOOBUpdate: updated ACL for user %s on vault %s (permit=%v, actions=%v)\n", userID, vaultID, permit, actions)
+	//fmt.Printf("azureAclOOBUpdate: updated ACL for user %s on vault %s (permit=%v, actions=%v)\n", userID, vaultID, permit, actions)
 }
 
 // TestCckmAzureAclUsersAndGroups exercises ciphertrust_azure_acl with two users and two groups on

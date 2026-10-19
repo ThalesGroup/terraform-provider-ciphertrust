@@ -13,20 +13,20 @@ import (
 // initCckmAzureTestWithoutVault builds the Terraform provider and connection configuration used as
 // shared setup by CCKM Azure tests. The four core variables
 // (CCKM_TF_AZURE_CLIENT_ID, CCKM_TF_AZURE_TENANT_ID, CCKM_TF_AZURE_CLIENT_SECRET,
-// CCKM_TF_AZURE_STANDARD_VAULT) must be set; if any are missing the function returns
+// CCKM_TF_AZURE_NON_PURGEABLE_VAULT) must be set; if any are missing the function returns
 // an empty string and false and the caller should call t.Skip().
-// CCKM_TF_AZURE_PREMIUM_VAULT is optional and is only required by tests that use a
+// CCKM_TF_AZURE_PURGEABLE_VAULT is optional and is only required by tests that use a
 // premium (HSM-backed) vault - those tests must perform their own skip check.
 // The optional timeout parameter is accepted for API consistency with initCckmAwsTest.
 func initCckmAzureTestWithoutVault(timeout ...int) (string, bool) {
 	clientID := os.Getenv("CCKM_TF_AZURE_CLIENT_ID")
 	tenantID := os.Getenv("CCKM_TF_AZURE_TENANT_ID")
 	clientSecret := os.Getenv("CCKM_TF_AZURE_CLIENT_SECRET")
-	standardVault := os.Getenv("CCKM_TF_AZURE_STANDARD_VAULT")
+	standardVault := os.Getenv("CCKM_TF_AZURE_NON_PURGEABLE_VAULT")
 	// premiumVault is optional - only required by tests that specifically need a
 	// premium (HSM-backed) vault. Those tests must call
-	// t.Skip if CCKM_TF_AZURE_PREMIUM_VAULT is empty.
-	premiumVault := os.Getenv("CCKM_TF_AZURE_PREMIUM_VAULT")
+	// t.Skip if CCKM_TF_AZURE_PURGEABLE_VAULT is empty.
+	premiumVault := os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT")
 
 	if clientID == "" || tenantID == "" || clientSecret == "" || standardVault == "" {
 		return "", false
@@ -34,9 +34,9 @@ func initCckmAzureTestWithoutVault(timeout ...int) (string, bool) {
 
 	// Honour CIPHERTRUST_CA_CERT when set; otherwise opt into skip-verify so the
 	// inline test provider block is not blocked by secure-by-default TLS behaviour.
-	tlsLine := "  no_ssl_verify = true"
+	tlsLine := "\t\tno_ssl_verify = true"
 	if caCert := os.Getenv("CIPHERTRUST_CA_CERT"); caCert != "" {
-		tlsLine = fmt.Sprintf("  ca_cert = %q", caCert)
+		tlsLine = fmt.Sprintf("\t\tca_cert = %q", caCert)
 	}
 
 	uid := "tf-" + uuid.New().String()[:8]

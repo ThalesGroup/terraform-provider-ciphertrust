@@ -29,7 +29,7 @@ const azureKeyListFiltersTable = "\n\n> **Note:** Although some filters represen
 	"| key_name             | string  | Filter by Azure key name. |\n" +
 	"| cloud_name           | string  | Filter by cloud name (for example, `AzureCloud`). |\n" +
 	"| region               | string  | Filter by region. |\n" +
-	"| crv                  | string  | Filter by EC curve. |\n" +
+	"| curve                | string  | Filter by EC curve (for example, `P-256`). The value is not case-sensitive. |\n" +
 	"| status               | string  | Filter by key status. |\n" +
 	"| backup               | string  | Filter by backup. |\n" +
 	"| enabled              | boolean | Filter by the enabled attribute. |\n" +
@@ -37,14 +37,14 @@ const azureKeyListFiltersTable = "\n\n> **Note:** Although some filters represen
 	"| job_config_id        | string  | Filter by the ID of the scheduler configuration job. |\n" +
 	"| backup_job_config_id | string  | Filter by the ID of the key backup scheduler configuration job. |\n" +
 	"| deleted_in_azure     | boolean | Filter by whether the key has been deleted in Azure. |\n" +
-	"| algorithm            | string  | Filter by algorithm type. |\n" +
+	"| algorithm            | string  | Filter by algorithm type (for example, `RSA` or `EC`). The value is not case-sensitive. |\n" +
 	"| kid                  | string  | Filter by Azure key identifier. |\n" +
 	"| gone                 | boolean | Filter by gone. |\n" +
 	"| version              | string  | Filter by version. Use `\"-1\"` to return only the latest version of each key. |\n" +
 	"| rotation_job_enabled | boolean | Filter by whether a rotation job is enabled. |\n" +
 	"| tags                 | string  | A valid JSON value. Keys whose tags contain the JSON value are returned. |\n" +
 	"| key_material_origin  | string  | Filter by key material origin. |\n" +
-	"| managed              | boolean | Filter by whether the key is managed by Azure vaults. |\n" +
+	"| managed              | boolean | Filter by whether the key lifetime is managed by the key vault (true for keys that back a certificate). |\n" +
 	"| external_key_id      | string  | Filter by external key ID. |"
 
 var (
@@ -55,7 +55,7 @@ var (
 	azureKeyListValidFilterKeys = map[string]struct{}{
 		"skip": {}, "limit": {}, "sort": {},
 		"id": {}, "key_vault": {}, "key_vault_id": {}, "key_name": {}, "cloud_name": {},
-		"region": {}, "crv": {}, "status": {}, "backup": {}, "enabled": {}, "key_size": {},
+		"region": {}, "curve": {}, "status": {}, "backup": {}, "enabled": {}, "key_size": {},
 		"job_config_id": {}, "backup_job_config_id": {}, "deleted_in_azure": {}, "algorithm": {},
 		"kid": {}, "gone": {}, "version": {}, "rotation_job_enabled": {}, "tags": {},
 		"key_material_origin": {}, "managed": {}, "external_key_id": {},
@@ -142,6 +142,19 @@ func (d *dataSourceAzureKeyList) Read(ctx context.Context, req datasource.ReadRe
 	filters := url.Values{}
 	for k, v := range state.Filters.Elements() {
 		if val, ok := v.(types.String); ok {
+			// The Terraform filter is named curve, the CCKM query parameter is crv. CCKM matches the
+			// value case-sensitively and the stored case varies, so send the upper and lower case forms.
+			if k == "curve" {
+				filters.Add("crv", strings.ToUpper(val.ValueString()))
+				filters.Add("crv", strings.ToLower(val.ValueString()))
+				continue
+			}
+			// The algorithm is matched case-sensitively too (RSA or rsa, EC or ec), so send both forms.
+			if k == "algorithm" {
+				filters.Add(k, strings.ToLower(val.ValueString()))
+				filters.Add(k, strings.ToUpper(val.ValueString()))
+				continue
+			}
 			filters.Add(k, val.ValueString())
 		}
 	}
