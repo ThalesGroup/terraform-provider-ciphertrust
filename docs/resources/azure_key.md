@@ -139,6 +139,20 @@ resource "ciphertrust_azure_key" "exportable_key" {
   }
 }
 
+# release_policy can also be the path of a file that contains the JSON policy.
+resource "ciphertrust_azure_key" "exportable_key_from_file" {
+  vault_id       = ciphertrust_azure_vault.vault.id
+  name           = "exportable-key-from-file"
+  exportable     = true
+  release_policy = "./release_policy.json"
+  azure_params = {
+    key = {
+      kty = "RSA-HSM"
+    }
+    key_size = 3072
+  }
+}
+
 # Scheduler and auto-backup / auto-rotation notes
 # - Neither enable_auto_backup nor enable_auto_rotation can be set when a key is
 #   created. Create the key first, then add the block and apply again.
@@ -217,6 +231,18 @@ resource "ciphertrust_azure_key" "scheduled_ciphertrust_rsa_key" {
     key_type      = "RSA"
     # Required when key_type is RSA or RSA-HSM
     key_size = 2048
+  }
+}
+
+# Rotate with a release policy read from a file. The release_policy of
+# enable_auto_rotation is a JSON object string or the path of a file.
+resource "ciphertrust_azure_key" "scheduled_key_with_release_policy" {
+  enable_auto_rotation = {
+    job_config_id  = ciphertrust_scheduler.scheduled_rotation.id
+    key_source     = "native"
+    key_type       = "RSA-HSM"
+    key_size       = 3072
+    release_policy = "./release_policy.json"
   }
 }
 
@@ -319,7 +345,7 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 - `enable_auto_rotation` (Attributes) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. Removing the block disables the rotation job. (see [below for nested schema](#nestedatt--enable_auto_rotation))
 - `exportable` (Boolean) (Immutable) Whether the private key can be exported from Azure. The vault must be a premium or managed HSM vault. If true, release_policy must also be set.
 - `name` (String) (Immutable) Name of the key. May contain only alphanumeric characters and hyphens. Required unless restore_key is set. Uploading a key with the name of an existing key adds a new version to that key.
-- `release_policy` (String) (Immutable) Key release policy as a JSON object string. Must be set if exportable is true.
+- `release_policy` (String) (Immutable) Key release policy as a JSON object string or the path of a file that contains a JSON object. Must be set if exportable is true.
 - `restore_key` (Attributes) (Immutable) Restores an existing key that has a backup into the vault instead of creating a new key. No other key attributes may be configured. Cannot be combined with upload_key. (see [below for nested schema](#nestedatt--restore_key))
 - `upload_key` (Attributes) (Immutable) Uploads key material to the vault instead of creating a new key. Cannot be combined with restore_key. The azure_params kty, curve and key_size cannot be set; they are reported by Azure after the upload. (see [below for nested schema](#nestedatt--upload_key))
 
@@ -412,7 +438,7 @@ Optional:
 - `ec_name` (String) Curve of the new key version. Options are P-256, P-384, P-521 and SECP256K1. Required when key_type is EC or EC-HSM.
 - `enable_key` (Boolean) Whether the new key version is enabled. Default is true.
 - `key_size` (Number) Size of the new key version. Options are 2048, 3072 and 4096. Required when key_type is RSA or RSA-HSM.
-- `release_policy` (String) Key release policy of the new key version as a JSON object string.
+- `release_policy` (String) Key release policy of the new key version as a JSON object string or the path of a file that contains a JSON object.
 
 
 <a id="nestedatt--restore_key"></a>

@@ -3,7 +3,6 @@ package cckm
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/azure/models"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
@@ -27,7 +26,15 @@ func azureKeyEnableRotation(ctx context.Context, id string, client *common.Clien
 		AutoRotateEnableKey: rot.EnableKey.ValueBool(),
 	}
 	if !rot.ReleasePolicy.IsNull() && !rot.ReleasePolicy.IsUnknown() {
-		payload.AutoRotateReleasePolicy = json.RawMessage(rot.ReleasePolicy.ValueString())
+		content, err := azureReleasePolicyContent(rot.ReleasePolicy.ValueString())
+		if err != nil {
+			details := utils.ApiError("Error enabling auto rotation for Azure key, invalid release policy.",
+				map[string]interface{}{"error": err.Error(), "key_id": keyID})
+			client.Log.Error(details)
+			diags.AddError(details, "")
+			return
+		}
+		payload.AutoRotateReleasePolicy = json.RawMessage(content)
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -102,11 +109,8 @@ func azureKeyRotationDiffers(rot *models.EnableAutoRotationTFSDK, response strin
 		return true
 	}
 	if !rot.ReleasePolicy.IsNull() && !rot.ReleasePolicy.IsUnknown() {
-		var want, got interface{}
 		policy := labels.Get("auto_rotate_release_policy")
-		if json.Unmarshal([]byte(rot.ReleasePolicy.ValueString()), &want) != nil ||
-			!policy.Exists() || json.Unmarshal([]byte(policy.Raw), &got) != nil ||
-			!reflect.DeepEqual(want, got) {
+		if !policy.Exists() || !azureReleasePolicyEquivalent(rot.ReleasePolicy.ValueString(), policy.Raw) {
 			return true
 		}
 	}

@@ -344,12 +344,12 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 			"release_policy": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
-				Description: "(Immutable) Key release policy as a JSON object string. " +
-					"Must be set if exportable is true.",
-				Validators: []validator.String{validators.JSONObject()},
+				Description: "(Immutable) Key release policy as a JSON object string or the path of a file that " +
+					"contains a JSON object. Must be set if exportable is true.",
+				Validators: []validator.String{azureReleasePolicyJSONOrFile()},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
-					modifiers.ImmutableJSONString(),
+					azureReleasePolicyImmutable(),
 				},
 			},
 			"enable_auto_rotation": schema.SingleNestedAttribute{
@@ -392,9 +392,10 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 						Default:     booldefault.StaticBool(true),
 					},
 					"release_policy": schema.StringAttribute{
-						Optional:    true,
-						Description: "Key release policy of the new key version as a JSON object string.",
-						Validators:  []validator.String{validators.JSONObject()},
+						Optional: true,
+						Description: "Key release policy of the new key version as a JSON object string or the path of a " +
+							"file that contains a JSON object.",
+						Validators: []validator.String{azureReleasePolicyJSONOrFile()},
 					},
 				},
 			},
@@ -888,10 +889,8 @@ func uploadAzureKey(ctx context.Context, id string, client *common.Client, plan 
 		exportable := true
 		payload.Exportable = &exportable
 		if !plan.ReleasePolicy.IsNull() && !plan.ReleasePolicy.IsUnknown() {
-			var policy map[string]interface{}
-			if err := json.Unmarshal([]byte(plan.ReleasePolicy.ValueString()), &policy); err != nil {
-				diags.AddAttributeError(path.Root("release_policy"), "Invalid release policy",
-					"release_policy must be a valid JSON object.")
+			policy, ok := azureReleasePolicyObject(plan.ReleasePolicy.ValueString(), path.Root("release_policy"), diags)
+			if !ok {
 				return ""
 			}
 			payload.ReleasePolicy = policy

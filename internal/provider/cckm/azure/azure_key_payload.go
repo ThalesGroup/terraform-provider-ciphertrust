@@ -1,7 +1,6 @@
 package cckm
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -234,10 +233,8 @@ func azureKeyBuildCreateNativePayload(plan *models.AzureKeyTFSDK, vaultType stri
 		payload.Exportable = &b
 	}
 	if !plan.ReleasePolicy.IsNull() && !plan.ReleasePolicy.IsUnknown() {
-		var policy map[string]interface{}
-		if err := json.Unmarshal([]byte(plan.ReleasePolicy.ValueString()), &policy); err != nil {
-			diags.AddAttributeError(path.Root("release_policy"), "Invalid release policy",
-				"release_policy must be a valid JSON object.")
+		policy, ok := azureReleasePolicyObject(plan.ReleasePolicy.ValueString(), path.Root("release_policy"), diags)
+		if !ok {
 			return payload, false
 		}
 		payload.ReleasePolicy = policy

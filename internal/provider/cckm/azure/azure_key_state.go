@@ -2,7 +2,6 @@ package cckm
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"sort"
 	"strings"
@@ -142,11 +141,9 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 	azureKeySetPolicyAndLabels(ctx, response, state, diags)
 	azureKeySetUploadKey(response, state)
 
-	// enable_auto_rotation is rebuilt from the labels only when state has none. This covers import and
-	// rotation that was enabled outside Terraform.
-	if state.EnableAutoRotation == nil {
-		state.EnableAutoRotation = azureKeyRotationFromLabels(response)
-	}
+	// enable_auto_rotation is always rebuilt from the labels so that a change made outside Terraform, or
+	// rotation that was enabled or disabled outside Terraform, is detected. This also covers import.
+	state.EnableAutoRotation = azureKeyRotationFromState(response, state.EnableAutoRotation)
 
 	// backup_config is set from the response like labels. enable_auto_backup is rebuilt from it only when
 	// state has none. This covers import and backup that was enabled outside Terraform.
@@ -154,6 +151,22 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 	if state.EnableAutoBackup == nil {
 		state.EnableAutoBackup = azureKeyBackupFromConfig(response)
 	}
+}
+
+// azureKeyRotationFromState builds enable_auto_rotation from the labels of the key. The labels hold exactly
+// what was sent when rotation was enabled, so a value that was not configured is null. It returns nil if the
+// key has no rotation job. A configured release_policy, JSON or the path of a file, is kept only when it
+// resolves to JSON equivalent to the auto_rotate_release_policy label. Otherwise the label JSON is used, or
+// null if the label is gone, so the next plan shows a change and the update re-applies the configured policy.
+func azureKeyRotationFromState(response string, prior *models.EnableAutoRotationTFSDK) *models.EnableAutoRotationTFSDK {
+	rot := azureKeyRotationFromLabels(response)
+	if rot == nil || prior == nil || prior.ReleasePolicy.IsNull() || prior.ReleasePolicy.IsUnknown() || rot.ReleasePolicy.IsNull() {
+		return rot
+	}
+	if azureReleasePolicyEquivalent(prior.ReleasePolicy.ValueString(), rot.ReleasePolicy.ValueString()) {
+		rot.ReleasePolicy = prior.ReleasePolicy
+	}
+	return rot
 }
 
 // azureKeySetUploadKey sets the computed local_key_name of upload_key from the response. It is the name of
@@ -198,7 +211,8 @@ func azureKeyTimeString(value string) types.String {
 }
 
 // azureKeySetPolicyAndLabels sets release_policy and labels from the response.
-// A configured release_policy is kept when it is JSON-equivalent to the returned one.
+// A configured release_policy, JSON or the path of a file, is kept when it resolves to JSON that is equivalent
+// to the returned one. Otherwise the returned JSON is stored so a change made outside Terraform is detected.
 func azureKeySetPolicyAndLabels(ctx context.Context, response string, state *models.AzureKeyTFSDK, diags *diag.Diagnostics) {
 	policy := gjson.Get(response, "release_policy")
 	if !policy.Exists() || policy.Type == gjson.Null || policy.Raw == "{}" || policy.Raw == "" {
@@ -206,11 +220,7 @@ func azureKeySetPolicyAndLabels(ctx context.Context, response string, state *mod
 	} else {
 		keepPolicy := false
 		if !state.ReleasePolicy.IsNull() && !state.ReleasePolicy.IsUnknown() {
-			var cur, got interface{}
-			if json.Unmarshal([]byte(state.ReleasePolicy.ValueString()), &cur) == nil &&
-				json.Unmarshal([]byte(policy.Raw), &got) == nil {
-				keepPolicy = reflect.DeepEqual(cur, got)
-			}
+			keepPolicy = azureReleasePolicyEquivalent(state.ReleasePolicy.ValueString(), policy.Raw)
 		}
 		if !keepPolicy {
 			state.ReleasePolicy = types.StringValue(policy.Raw)

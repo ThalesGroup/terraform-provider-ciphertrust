@@ -35,6 +35,19 @@ func azureReleasePolicyObject(value string, attrPath path.Path, diags *diag.Diag
 	}
 	var policy map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &policy); err != nil {
+		// The content is the value itself unless the value is the path of an existing file.
+		if content != value && strings.TrimSpace(value) != "" {
+			diags.AddAttributeError(attrPath, "Invalid release policy",
+				fmt.Sprintf("The file %q does not contain a valid JSON object.", strings.TrimSpace(value)))
+			return nil, false
+		}
+		if !strings.HasPrefix(strings.TrimSpace(content), "{") {
+			diags.AddAttributeError(attrPath, "Invalid release policy",
+				fmt.Sprintf("release_policy is not a JSON object and no file was found at the path %q. "+
+					"Check that the file exists and that the path is correct, or set release_policy to a JSON object.",
+					strings.TrimSpace(value)))
+			return nil, false
+		}
 		diags.AddAttributeError(attrPath, "Invalid release policy",
 			"release_policy must be a valid JSON object or the path of a file that contains one.")
 		return nil, false
