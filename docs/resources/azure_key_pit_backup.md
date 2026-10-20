@@ -71,7 +71,7 @@ output "backup_id" {
 ### Read-Only
 
 - `account` (String) CipherTrust Manager account of the backup.
-- `backup` (String) Opaque identifier of the backup data held by CipherTrust Manager.
+- `backup` (String) Identifier of the backup data held by CipherTrust Manager.
 - `cloud_name` (String) Azure cloud of the key vault.
 - `created_at` (String) Date and time the backup was created in CipherTrust Manager.
 - `gone` (Boolean) Whether the backed up key no longer exists in Azure.

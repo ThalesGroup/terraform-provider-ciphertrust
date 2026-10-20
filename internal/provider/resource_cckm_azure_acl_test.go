@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	azureAclVaultResourceName = "ciphertrust_azure_vault.standard_vault"
+	azureAclVaultResourceName = "ciphertrust_azure_vault.nonpurgeable_vault"
 	azureAclVaultDataSource   = "data.ciphertrust_azure_vault_list.vault_ds"
 	azureAclUser1Resource     = "ciphertrust_azure_acl.user1_acl"
 	azureAclUser2Resource     = "ciphertrust_azure_acl.user2_acl"
@@ -73,7 +73,7 @@ func azureAclTestConfig(base, user1, user2, group1, group2 string, specs []azure
 		data "ciphertrust_azure_vault_list" "vault_ds" {
 			%s
 			filters = {
-				name = ciphertrust_azure_vault.standard_vault.cckm_vault_name
+				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`, dependsOn))
 	return sb.String()
@@ -213,7 +213,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 	fakeVaultID := uuid.New().String()
 
 	// Every config below is a format string. Arguments, in order:
-	//   %[1]s base Azure config (connection, subscription data source, standard vault)
+	//   %[1]s base Azure config (connection, subscription data source, nonpurgeable vault)
 	//   %[2]s user1 name, %[3]s user2 name, %[4]s group1 name, %[5]s group2 name
 	//   %[6]s fake vault id (only used by modifyPlanConfig)
 	// Each subject gets the view action it requires plus other actions: user1 uses keys
@@ -237,22 +237,22 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 			name = "%[5]s"
 		}
 		resource "ciphertrust_azure_acl" "user1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user1.id
 			actions  = ["view", "keycreate", "keyupdate"]
 		}
 		resource "ciphertrust_azure_acl" "user2_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user2.id
 			actions  = ["secretview", "secretcreate"]
 		}
 		resource "ciphertrust_azure_acl" "group1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group1.id
 			actions  = ["certificateview", "certificatecreate"]
 		}
 		resource "ciphertrust_azure_acl" "group2_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group2.id
 			actions  = ["viewkeytemplate", "createkeytemplate"]
 		}
@@ -264,7 +264,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 				ciphertrust_azure_acl.group2_acl,
 			]
 			filters = {
-				name = ciphertrust_azure_vault.standard_vault.cckm_vault_name
+				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`
 
@@ -285,22 +285,22 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 			name = "%[5]s"
 		}
 		resource "ciphertrust_azure_acl" "user1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user1.id
 			actions  = ["view", "keycreate", "keyupdate", "keydelete"]
 		}
 		resource "ciphertrust_azure_acl" "user2_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user2.id
 			actions  = ["secretview", "secretcreate", "secretdelete"]
 		}
 		resource "ciphertrust_azure_acl" "group1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group1.id
 			actions  = ["certificateview", "certificatecreate", "certificatedelete"]
 		}
 		resource "ciphertrust_azure_acl" "group2_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group2.id
 			actions  = ["viewkeytemplate", "createkeytemplate", "updatekeytemplate"]
 		}
@@ -312,7 +312,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 				ciphertrust_azure_acl.group2_acl,
 			]
 			filters = {
-				name = ciphertrust_azure_vault.standard_vault.cckm_vault_name
+				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`
 	createConfig := fmt.Sprintf(createConfigFmt, baseConfig, user1Name, user2Name, group1Name, group2Name, fakeVaultID)
@@ -336,17 +336,17 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 			name = "%[5]s"
 		}
 		resource "ciphertrust_azure_acl" "user1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user1.id
 			actions  = ["view"]
 		}
 		resource "ciphertrust_azure_acl" "user2_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user2.id
 			actions  = ["secretview", "secretcreate", "secretdelete"]
 		}
 		resource "ciphertrust_azure_acl" "group1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group1.id
 			actions  = ["certificateview", "certificatecreate", "certificatedelete"]
 		}
@@ -357,7 +357,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 				ciphertrust_azure_acl.group1_acl,
 			]
 			filters = {
-				name = ciphertrust_azure_vault.standard_vault.cckm_vault_name
+				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`
 
@@ -369,7 +369,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 			password = "LongPassword1234++"
 		}
 		resource "ciphertrust_azure_acl" "user1_acl" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			user_id  = ciphertrust_user.user1.id
 			actions  = []
 		}`
@@ -406,7 +406,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 		}
 		data "ciphertrust_azure_vault_list" "vault_ds" {
 			filters = {
-				name = ciphertrust_azure_vault.standard_vault.cckm_vault_name
+				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`
 

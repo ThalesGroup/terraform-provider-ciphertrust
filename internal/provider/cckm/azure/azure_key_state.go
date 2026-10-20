@@ -29,14 +29,6 @@ func azureKeyOptInt64(value int64) types.Int64 {
 	return types.Int64Value(value)
 }
 
-// azureKeyDate converts Unix epoch seconds from the API to a UTC RFC3339 string. 0 is null.
-func azureKeyDate(epoch int64) types.String {
-	if epoch == 0 {
-		return types.StringNull()
-	}
-	return types.StringValue(time.Unix(epoch, 0).UTC().Format(time.RFC3339))
-}
-
 // azureKeyKeyOps returns key_ops from the response, keeping the current value
 // when the same operations are returned in any order.
 func azureKeyKeyOps(ctx context.Context, response string, current types.List, diags *diag.Diagnostics) types.List {
@@ -95,10 +87,12 @@ func azureKeySetParams(ctx context.Context, response string, state *models.Azure
 	})
 	diags.Append(d...)
 
+	// The API never returns exp or nbf for a key, so the dates are carried from the plan or prior state.
+	priorAttrs := objectAttrs(objectAttrs(state.AzureParams)["attributes"])
 	attrsObj, d := types.ObjectValue(models.AzureParamsAttributesAttrTypes, map[string]attr.Value{
 		"enabled":         types.BoolValue(gjson.Get(response, "azure_param.attributes.enabled").Bool()),
-		"expiration_date": azureKeyDate(gjson.Get(response, "azure_param.attributes.exp").Int()),
-		"activation_date": azureKeyDate(gjson.Get(response, "azure_param.attributes.nbf").Int()),
+		"expiration_date": azureSecretKeptDate(priorAttrs, "expiration_date"),
+		"activation_date": azureSecretKeptDate(priorAttrs, "activation_date"),
 		"recovery_level":  types.StringValue(gjson.Get(response, "azure_param.attributes.recoveryLevel").String()),
 		"created":         azureKeyOptInt64(gjson.Get(response, "azure_param.attributes.created").Int()),
 		"updated":         azureKeyOptInt64(gjson.Get(response, "azure_param.attributes.updated").Int()),

@@ -94,9 +94,21 @@ var (
 
 func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, " +
-			"to upload key material into a vault (upload_key), or to restore an existing key into a vault " +
-			"(restore_key). New versions of a key are created by creating another key resource with the same name.",
+		Description: "Use this resource to add a key to a CipherTrust Manager Azure vault. " +
+			"The mode is chosen by which block is set. Only one block can be set.\n\n" +
+			"- No block (default): creates a new native Azure key in the vault from name and azure_params.\n" +
+			"- upload_key: uploads key material to the vault.\n" +
+			"- restore_key: restores an existing key that has a backup into the vault nominated by vault_id.\n\n" +
+			"All inputs are immutable except `azure_params.tags`, `azure_params.key.key_ops`, and " +
+			"`azure_params.attributes.enabled`, `azure_params.attributes.activation_date` and `azure_params.attributes.expiration_date`.\n\n" +
+			"To create a new version of a key, create another key resource with the same name.\n\n" +
+			"If a soft-deleted key of the same name exists in the vault, creating the resource recovers it " +
+			"instead of creating a new key. This requires `recover_soft_deleted_keys` to be true in the " +
+			"provider settings, otherwise the create fails.\n\n" +
+			"On destroy, the key is soft-deleted and, if the vault supports purging and `purge_keys_on_delete` " +
+			"is true in the provider settings (the default), purged. If it is false, the key is only soft-deleted. " +
+			"After a purge, the key backups are deleted from CipherTrust Manager unless " +
+			"`retain_key_backups_after_purge` is true in the provider settings.",
 		Attributes: map[string]schema.Attribute{
 			// User inputs.
 			"vault_id": schema.StringAttribute{
@@ -192,23 +204,19 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 								Description:   "Whether the key is enabled in Azure. Can be updated.",
 								PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 							},
-							"expiration_date": schema.StringAttribute{
-								Optional: true,
-								Computed: true,
-								Description: "(Updateable) Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. " +
-									"Must be later than activation_date. " +
-									"A date cannot be removed once it is set: removing it from the " +
-									"configuration keeps the current value.",
-								Validators:    []validator.String{validators.RFC3339()},
-								PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-							},
 							"activation_date": schema.StringAttribute{
 								Optional: true,
 								Computed: true,
-								Description: "(Updateable) Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. " +
-									"Before this time the key cannot be used. " +
-									"A date cannot be removed once it is set: removing it from the " +
-									"configuration keeps the current value.",
+								Description: "Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. " +
+									"Before this time the key cannot be used. A date cannot be cleared once it is set",
+								Validators:    []validator.String{validators.RFC3339()},
+								PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+							},
+							"expiration_date": schema.StringAttribute{
+								Optional: true,
+								Computed: true,
+								Description: "Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. " +
+									"Must be later than activation_date. A date cannot be cleared once it is set.",
 								Validators:    []validator.String{validators.RFC3339()},
 								PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 							},
@@ -415,10 +423,8 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"backup": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
-				Description: "CipherTrust Manager opaque object ID holding the automatic backup of the key. " +
-					"CipherTrust Manager takes this backup when the key is created, updated or uploaded. " +
+				Computed: true,
+				Description: "CipherTrust Manager resource ID of the Azure key backup." +
 					"It is not a PIT backup ID and cannot be used as restore_key.backup_id.",
 			},
 			"backup_at": schema.StringAttribute{
@@ -574,7 +580,7 @@ func (r *resourceCCKMAzureKey) Create(ctx context.Context, req resource.CreateRe
 	} else {
 		response = getResp
 	}
-	r.client.Log.Debug("[resource_azure_key.go -> Create][response:" + response + "]")
+	r.client.Log.Debug("[resource_azure_key.go -> Create][response:" + redactAzureKeyResponse(response) + "]")
 	plan.VaultName = types.StringValue(vaultName)
 
 	var diags diag.Diagnostics
@@ -610,7 +616,7 @@ func (r *resourceCCKMAzureKey) Read(ctx context.Context, req resource.ReadReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	r.client.Log.Debug("[resource_azure_key.go -> Read][response:" + response + "]")
+	r.client.Log.Debug("[resource_azure_key.go -> Read][response:" + redactAzureKeyResponse(response) + "]")
 
 	azureKeySetState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
@@ -1022,4 +1028,33 @@ func restoreAzureKey(ctx context.Context, id string, client *common.Client, rest
 		return ""
 	}
 	return response
+}
+
+// redactAzureKeyResponse returns a safe-to-log version of an Azure key API response. key_vault has the form
+// <vault name>::<subscription id>, only the subscription id is redacted.
+func redactAzureKeyResponse(response string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(response), &data); err != nil {
+		return response
+	}
+	if keyVault, ok := data["key_vault"].(string); ok {
+		if name, _, found := strings.Cut(keyVault, "::"); found {
+			data["key_vault"] = name + "::redacted"
+		}
+	}
+	for _, field := range []string{"azure_vault_id", "subscription_id", "tenant"} {
+		if _, ok := data[field]; ok {
+			data[field] = "redacted"
+		}
+	}
+	if azureParam, ok := data["azure_param"].(map[string]interface{}); ok {
+		if _, ok := azureParam["tags"]; ok {
+			azureParam["tags"] = "redacted"
+		}
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return response
+	}
+	return string(b)
 }

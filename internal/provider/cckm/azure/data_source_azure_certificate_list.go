@@ -157,7 +157,7 @@ func (d *dataSourceAzureCertificateList) Schema(_ context.Context, _ datasource.
 							Computed:    true,
 							Description: "CipherTrust Manager resource ID of the vault that contains the certificate.",
 						},
-						"key_vault": schema.StringAttribute{
+						"vault_name": schema.StringAttribute{
 							Computed:    true,
 							Description: "Name of the Azure vault that contains the certificate.",
 						},
@@ -527,7 +527,7 @@ func azureCertificateListEntryToTFSDK(raw json.RawMessage) (models.AzureCertific
 		ID:                     cert.ID,
 		Name:                   cert.Name,
 		VaultID:                cert.VaultID,
-		KeyVault:               cert.KeyVault,
+		VaultName:              cert.VaultName,
 		CloudName:              cert.CloudName,
 		Region:                 cert.Region,
 		Tenant:                 cert.Tenant,

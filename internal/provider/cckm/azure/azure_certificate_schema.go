@@ -40,7 +40,7 @@ type AzureCertificateTFSDK struct {
 	CloudName         types.String `tfsdk:"cloud_name"`
 	Region            types.String `tfsdk:"region"`
 	Tenant            types.String `tfsdk:"tenant"`
-	KeyVault          types.String `tfsdk:"key_vault"`
+	VaultName         types.String `tfsdk:"vault_name"`
 	SoftDeleteEnabled types.Bool   `tfsdk:"soft_delete_enabled"`
 	AzureCreatedAt    types.String `tfsdk:"azure_created_at"`
 	AzureUpdatedAt    types.String `tfsdk:"azure_updated_at"`

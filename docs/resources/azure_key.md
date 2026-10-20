@@ -3,12 +3,29 @@
 page_title: "ciphertrust_azure_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, to upload key material into a vault (upload_key), or to restore an existing key into a vault (restore_key). New versions of a key are created by creating another key resource with the same name.
+  Use this resource to add a key to a CipherTrust Manager Azure vault. The mode is chosen by which block is set. Only one block can be set.
+  No block (default): creates a new native Azure key in the vault from name and azure_params.upload_key: uploads key material to the vault.restore_key: restores an existing key that has a backup into the vault nominated by vault_id.
+  All inputs are immutable except azure_params.tags, azure_params.key.key_ops, and azure_params.attributes.enabled, azure_params.attributes.activation_date and azure_params.attributes.expiration_date.
+  To create a new version of a key, create another key resource with the same name.
+  If a soft-deleted key of the same name exists in the vault, creating the resource recovers it instead of creating a new key. This requires recover_soft_deleted_keys to be true in the provider settings, otherwise the create fails.
+  On destroy, the key is soft-deleted and, if the vault supports purging and purge_keys_on_delete is true in the provider settings (the default), purged. If it is false, the key is only soft-deleted. After a purge, the key backups are deleted from CipherTrust Manager unless retain_key_backups_after_purge is true in the provider settings.
 ---
 
 # ciphertrust_azure_key (Resource)
 
-Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, to upload key material into a vault (upload_key), or to restore an existing key into a vault (restore_key). New versions of a key are created by creating another key resource with the same name.
+Use this resource to add a key to a CipherTrust Manager Azure vault. The mode is chosen by which block is set. Only one block can be set.
+
+- No block (default): creates a new native Azure key in the vault from name and azure_params.
+- upload_key: uploads key material to the vault.
+- restore_key: restores an existing key that has a backup into the vault nominated by vault_id.
+
+All inputs are immutable except `azure_params.tags`, `azure_params.key.key_ops`, and `azure_params.attributes.enabled`, `azure_params.attributes.activation_date` and `azure_params.attributes.expiration_date`.
+
+To create a new version of a key, create another key resource with the same name.
+
+If a soft-deleted key of the same name exists in the vault, creating the resource recovers it instead of creating a new key. This requires `recover_soft_deleted_keys` to be true in the provider settings, otherwise the create fails.
+
+On destroy, the key is soft-deleted and, if the vault supports purging and `purge_keys_on_delete` is true in the provider settings (the default), purged. If it is false, the key is only soft-deleted. After a purge, the key backups are deleted from CipherTrust Manager unless `retain_key_backups_after_purge` is true in the provider settings.
 
 ## Example Usage
 
@@ -309,7 +326,7 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
-- `backup` (String) CipherTrust Manager opaque object ID holding the automatic backup of the key. CipherTrust Manager takes this backup when the key is created, updated or uploaded. It is not a PIT backup ID and cannot be used as restore_key.backup_id.
+- `backup` (String) CipherTrust Manager resource ID of the Azure key backup.It is not a PIT backup ID and cannot be used as restore_key.backup_id.
 - `backup_at` (String) Date and time the key was last backed up.
 - `backup_config` (Map of String) Backup scheduler configuration of the key. When a backup job is enabled for the key, it contains backup_job_config_id.
 - `cloud_name` (String) CipherTrust Manager cloud name.
@@ -345,9 +362,9 @@ Optional:
 
 Optional:
 
-- `activation_date` (String) (Updateable) Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. Before this time the key cannot be used. A date cannot be removed once it is set: removing it from the configuration keeps the current value.
+- `activation_date` (String) Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. Before this time the key cannot be used. A date cannot be cleared once it is set
 - `enabled` (Boolean) Whether the key is enabled in Azure. Can be updated.
-- `expiration_date` (String) (Updateable) Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. Must be later than activation_date. A date cannot be removed once it is set: removing it from the configuration keeps the current value.
+- `expiration_date` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. Must be later than activation_date. A date cannot be cleared once it is set.
 
 Read-Only:
 

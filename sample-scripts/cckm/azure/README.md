@@ -10,6 +10,7 @@ These steps explain how to configure CipherTrust Manager Provider parameters req
 | `acls` | Creates a CipherTrust Manager user and group and gives each an ACL on the vault. |
 | `keys` | Creates a native RSA key in the vault, then creates a CipherTrust Manager RSA key and uploads it to the vault. |
 | `certificates` | Creates a native self-signed certificate in the vault. |
+| `secrets` | Creates a secret in the vault. |
 
 All scripts create their own Azure connection and add an existing Azure Key Vault to CipherTrust Manager.
 A standard Key Vault is enough. No premium or HSM-backed vault is needed.
@@ -84,6 +85,8 @@ terraform apply
   as well if the vault allows it.
 - The `certificates` script sets `purge_certificates_on_delete = false` in the provider block, so destroying it
   only soft-deletes the certificate in Azure. Certificate names are random, so there is no clash on a later run.
+- The `secrets` script sets `purge_secrets_on_delete = false` in the provider block, so destroying it
+  only soft-deletes the secret in Azure. Secret names are random, so there is no clash on a later run.
 - The script directories are separate. Each one adds the same vault to CipherTrust Manager, so destroy one script
   before running the next.
 

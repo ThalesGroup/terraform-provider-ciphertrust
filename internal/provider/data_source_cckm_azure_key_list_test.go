@@ -118,7 +118,7 @@ func TestCckmAzureDataSourceKeyList(t *testing.T) {
 	keyConfig := func(extra string) string {
 		return fmt.Sprintf(`
 		resource "ciphertrust_azure_key" "list_key" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = %q
 			azure_params = {
 				key = {

@@ -16,19 +16,19 @@ import (
 // CCKM_TF_AZURE_NON_PURGEABLE_VAULT) must be set; if any are missing the function returns
 // an empty string and false and the caller should call t.Skip().
 // CCKM_TF_AZURE_PURGEABLE_VAULT is optional and is only required by tests that use a
-// premium (HSM-backed) vault - those tests must perform their own skip check.
+// purgeable (HSM-backed) vault - those tests must perform their own skip check.
 // The optional timeout parameter is accepted for API consistency with initCckmAwsTest.
 func initCckmAzureTestWithoutVault(timeout ...int) (string, bool) {
 	clientID := os.Getenv("CCKM_TF_AZURE_CLIENT_ID")
 	tenantID := os.Getenv("CCKM_TF_AZURE_TENANT_ID")
 	clientSecret := os.Getenv("CCKM_TF_AZURE_CLIENT_SECRET")
-	standardVault := os.Getenv("CCKM_TF_AZURE_NON_PURGEABLE_VAULT")
-	// premiumVault is optional - only required by tests that specifically need a
-	// premium (HSM-backed) vault. Those tests must call
+	nonpurgeableVault := os.Getenv("CCKM_TF_AZURE_NON_PURGEABLE_VAULT")
+	// purgeableVault is optional - only required by tests that specifically need a
+	// purgeable (HSM-backed) vault. Those tests must call
 	// t.Skip if CCKM_TF_AZURE_PURGEABLE_VAULT is empty.
-	premiumVault := os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT")
+	purgeableVault := os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT")
 
-	if clientID == "" || tenantID == "" || clientSecret == "" || standardVault == "" {
+	if clientID == "" || tenantID == "" || clientSecret == "" || nonpurgeableVault == "" {
 		return "", false
 	}
 
@@ -53,10 +53,10 @@ func initCckmAzureTestWithoutVault(timeout ...int) (string, bool) {
 			products      = ["cckm"]
 		}
 		locals {
-			azure_standard_vault = "%s"
-			azure_premium_vault  = "%s"
+			azure_nonpurgeable_vault = "%s"
+			azure_purgeable_vault  = "%s"
 		}`
-	return fmt.Sprintf(config, uid, clientID, tenantID, clientSecret, standardVault, premiumVault), true
+	return fmt.Sprintf(config, uid, clientID, tenantID, clientSecret, nonpurgeableVault, purgeableVault), true
 }
 
 // TestCckmAzureSubscriptionDetails tests the ciphertrust_azure_subscription_details data source.

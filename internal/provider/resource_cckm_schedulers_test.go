@@ -630,7 +630,7 @@ func Test_CM_CckmSchedulersSyncResource(t *testing.T) {
 			resource "ciphertrust_scheduler" "sync_vault" {
 				cckm_synchronization_params = {
 					cloud_name            = "AzureCloud"
-					key_vaults            = [ciphertrust_azure_vault.standard_vault.id]
+					key_vaults            = [ciphertrust_azure_vault.nonpurgeable_vault.id]
 					sync_items            = ["key"]
 					take_cloud_key_backup = true
 				}

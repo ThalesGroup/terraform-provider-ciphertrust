@@ -47,7 +47,7 @@ func TestCckmAzureDataSourceVaultList(t *testing.T) {
 	// vaultConfig creates the vault resource that all data source steps depend on.
 	vaultConfig := subConfig + `
 		resource "ciphertrust_azure_vault" "test" {
-			name            = local.azure_standard_vault
+			name            = local.azure_nonpurgeable_vault
 			connection_id   = ciphertrust_azure_connection.azure_connection.id
 			subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 		}`

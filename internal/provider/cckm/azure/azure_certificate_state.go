@@ -53,19 +53,22 @@ func azureCertificateX509Object(prior map[string]attr.Value, param models.AzureC
 	})
 }
 
-func azureCertificateAttributesObject(param models.AzureCertificateParamResponseJSON) types.Object {
+// azureCertificateAttributesObject builds the attributes. The dates are optional inputs, so they are carried
+// over from the prior attributes (null when there are none) and the returned nbf and exp are not written.
+func azureCertificateAttributesObject(prior map[string]attr.Value, param models.AzureCertificateParamResponseJSON) types.Object {
 	attrs := param.Attributes
 	if attrs.Enabled == nil && attrs.Nbf == 0 && attrs.Exp == 0 {
 		return types.ObjectNull(azureCertAttributesAttrTypes)
 	}
-	enabled := types.BoolNull()
+	// The API omits enabled when it is false, so a missing value means false.
+	enabled := types.BoolValue(false)
 	if attrs.Enabled != nil {
 		enabled = types.BoolValue(*attrs.Enabled)
 	}
 	return types.ObjectValueMust(azureCertAttributesAttrTypes, map[string]attr.Value{
 		"enabled":         enabled,
-		"activation_date": azureKeyDate(attrs.Nbf),
-		"expiration_date": azureKeyDate(attrs.Exp),
+		"activation_date": azureSecretKeptDate(prior, "activation_date"),
+		"expiration_date": azureSecretKeptDate(prior, "expiration_date"),
 	})
 }
 
@@ -83,7 +86,7 @@ func azureCertificatePolicyObject(prior map[string]attr.Value, param models.Azur
 		"issuer":           azureCertificateIssuerObject(param),
 		"key_props":        azureCertificateKeyPropsObject(param),
 		"x509_props":       azureCertificateX509Object(objectAttrs(prior["x509_props"]), param),
-		"attributes":       azureCertificateAttributesObject(param),
+		"attributes":       azureCertificateAttributesObject(objectAttrs(prior["attributes"]), param),
 		"lifetime_actions": azureCertificateLifetimeActionsList(param.LifetimeActions),
 		"secret_props":     azureCertificateSecretPropsObject(param),
 	})
@@ -94,7 +97,7 @@ func azureCertificatePolicyObject(prior map[string]attr.Value, param models.Azur
 func azureCertificateSetParams(param models.AzureCertificateParamResponseJSON, state *AzureCertificateTFSDK) {
 	prior := objectAttrs(state.AzureParams)
 	state.AzureParams = types.ObjectValueMust(azureCertParamsAttrTypes, map[string]attr.Value{
-		"tags":   azureCertificateMapOrNull(param.Tags),
+		"tags":   azureCertificateTags(param.Tags, attrMap(prior, "tags")),
 		"policy": azureCertificatePolicyObject(objectAttrs(prior["policy"]), param),
 	})
 }
@@ -281,6 +284,15 @@ func azureCertificateInt64OrNull(value int64) types.Int64 {
 	return types.Int64Value(value)
 }
 
+// azureCertificateTags returns the tags from the response. No tags is null, unless the current value is a
+// known empty map (tags = {}), which is kept so the result matches the plan.
+func azureCertificateTags(values map[string]string, current types.Map) types.Map {
+	if len(values) == 0 && !current.IsNull() && !current.IsUnknown() && len(current.Elements()) == 0 {
+		return current
+	}
+	return azureCertificateMapOrNull(values)
+}
+
 func azureCertificateMapOrNull(values map[string]string) types.Map {
 	if len(values) == 0 {
 		return types.MapNull(types.StringType)
@@ -336,7 +348,7 @@ func azureCertificateSetState(response string, state *AzureCertificateTFSDK) err
 	state.CloudName = azureCertificateStringOrNull(cert.CloudName)
 	state.Region = azureCertificateStringOrNull(cert.Region)
 	state.Tenant = azureCertificateStringOrNull(cert.Tenant)
-	state.KeyVault = azureCertificateStringOrNull(cert.KeyVault)
+	state.VaultName = azureCertificateStringOrNull(cert.KeyVault)
 	state.SoftDeleteEnabled = types.BoolValue(cert.SoftDeleteEnabled)
 	state.AzureCreatedAt = azureCertificateStringOrNull(cert.AzureCreatedAt)
 	state.AzureUpdatedAt = azureCertificateStringOrNull(cert.AzureUpdatedAt)

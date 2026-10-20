@@ -128,9 +128,8 @@ func azureKeyBuildUpdatePayload(id string, client *common.Client, plan *models.A
 				"activation_date must be in RFC3339 format, for example 2026-07-03T14:24:00Z.")
 			return nil
 		}
-		if t.Unix() != gjson.Get(keyResponse, "azure_param.attributes.nbf").Int() {
-			attrs["nbf"] = t.Unix()
-		}
+		// The response is not compared, because its nbf is a UTC time and not necessarily epoch seconds.
+		attrs["nbf"] = t.Unix()
 	}
 	if !v.ExpirationDate.IsNull() && !v.ExpirationDate.IsUnknown() {
 		t, err := time.Parse(time.RFC3339, v.ExpirationDate.ValueString())
@@ -139,9 +138,8 @@ func azureKeyBuildUpdatePayload(id string, client *common.Client, plan *models.A
 				"expiration_date must be in RFC3339 format, for example 2030-07-03T14:24:00Z.")
 			return nil
 		}
-		if t.Unix() != gjson.Get(keyResponse, "azure_param.attributes.exp").Int() {
-			attrs["exp"] = t.Unix()
-		}
+		// The response is not compared, because its exp is a UTC time and not necessarily epoch seconds.
+		attrs["exp"] = t.Unix()
 	}
 	if len(attrs) > 0 {
 		payload["attributes"] = attrs

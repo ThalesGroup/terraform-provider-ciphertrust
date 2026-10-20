@@ -81,9 +81,12 @@ const (
 
 	DefaultAzurePurgeCertificatesOnDelete      = true
 	DefaultAzureRecoverSoftDeletedCertificates = false
+
+	DefaultAzurePurgeSecretsOnDelete      = true
+	DefaultAzureRecoverSoftDeletedSecrets = false
 )
 
-// AzureCCKMSettings holds provider level settings for Azure CCKM key and certificate resources.
+// AzureCCKMSettings holds provider level settings for Azure CCKM key, certificate and secret resources.
 type AzureCCKMSettings struct {
 	PurgeKeysOnDelete          bool
 	RecoverSoftDeletedKeys     bool
@@ -91,6 +94,9 @@ type AzureCCKMSettings struct {
 
 	PurgeCertificatesOnDelete      bool
 	RecoverSoftDeletedCertificates bool
+
+	PurgeSecretsOnDelete      bool
+	RecoverSoftDeletedSecrets bool
 }
 
 // DefaultAzureCCKMSettings returns the settings used when none are specified.
@@ -101,6 +107,8 @@ func DefaultAzureCCKMSettings() AzureCCKMSettings {
 		RetainKeyBackupsAfterPurge:     DefaultAzureRetainKeyBackupsAfterPurge,
 		PurgeCertificatesOnDelete:      DefaultAzurePurgeCertificatesOnDelete,
 		RecoverSoftDeletedCertificates: DefaultAzureRecoverSoftDeletedCertificates,
+		PurgeSecretsOnDelete:           DefaultAzurePurgeSecretsOnDelete,
+		RecoverSoftDeletedSecrets:      DefaultAzureRecoverSoftDeletedSecrets,
 	}
 }
 

@@ -45,7 +45,7 @@ func azureKeyEnableRotation(ctx context.Context, id string, client *common.Clien
 		diags.AddError(details, "")
 		return
 	}
-	client.Log.Debug("[azure_key_rotation_scheduler.go -> azureKeyEnableRotation][response:" + response + "]")
+	client.Log.Debug("[azure_key_rotation_scheduler.go -> azureKeyEnableRotation][response:" + redactAzureKeyResponse(response) + "]")
 }
 
 // azureKeyDisableRotation disables the scheduled rotation job for a key.
@@ -61,7 +61,7 @@ func azureKeyDisableRotation(ctx context.Context, id string, client *common.Clie
 		diags.AddError(details, "")
 		return
 	}
-	client.Log.Debug("[azure_key_rotation_scheduler.go -> azureKeyDisableRotation][response:" + response + "]")
+	client.Log.Debug("[azure_key_rotation_scheduler.go -> azureKeyDisableRotation][response:" + redactAzureKeyResponse(response) + "]")
 }
 
 // azureKeyApplyRotation compares enable_auto_rotation in the plan with the labels of the key and enables or

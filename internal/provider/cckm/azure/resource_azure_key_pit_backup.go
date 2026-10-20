@@ -124,7 +124,7 @@ func (r *resourceAzureKeyPitBackup) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"backup": schema.StringAttribute{
 				Computed:      true,
-				Description:   "Opaque identifier of the backup data held by CipherTrust Manager.",
+				Description:   "Identifier of the backup data held by CipherTrust Manager.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"key_name": schema.StringAttribute{

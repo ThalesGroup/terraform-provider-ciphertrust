@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -21,11 +22,14 @@ import (
 //   - restore_key, upload_key: input-only, not returned by the API.
 //   - enable_auto_rotation, enable_auto_backup: rebuilt from labels or backup_config
 //     on import, so they may not match the configured scheduler details.
+//   - activation_date, expiration_date: the API never returns nbf or exp for a key.
 var importStateVerifyIgnoreAzureKey = []string{
 	"enable_auto_rotation",
 	"enable_auto_backup",
 	"restore_key",
 	"upload_key",
+	"azure_params.attributes.activation_date",
+	"azure_params.attributes.expiration_date",
 }
 
 // testCheckAzureKeyJSONEquivalent checks that a JSON string attribute is semantically equal to
@@ -47,7 +51,7 @@ func testCheckAzureKeyJSONEquivalent(name, attr, expected string) resource.TestC
 }
 
 // initCckmAzureTest returns the shared Azure test configuration plus the subscription details
-// data source and the standard vault resource (ciphertrust_azure_vault.standard_vault).
+// data source and the nonpurgeable vault resource (ciphertrust_azure_vault.nonpurgeable_vault).
 // It returns false when the Azure environment variables are not set.
 func initCckmAzureTest(timeout ...int) (string, bool) {
 	initConfig, ok := initCckmAzureTestWithoutVault(timeout...)
@@ -58,18 +62,18 @@ func initCckmAzureTest(timeout ...int) (string, bool) {
 		data "ciphertrust_azure_subscription_details" "subs" {
 			connection_id = ciphertrust_azure_connection.azure_connection.id
 		}
-		resource "ciphertrust_azure_vault" "standard_vault" {
-			name            = local.azure_standard_vault
+		resource "ciphertrust_azure_vault" "nonpurgeable_vault" {
+			name            = local.azure_nonpurgeable_vault
 			connection_id   = ciphertrust_azure_connection.azure_connection.id
 			subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 		}`
 	return initConfig + vaultConfig, true
 }
 
-// initCckmAzureTestPremiumVault returns the configuration from initCckmAzureTest plus the premium
-// vault resource (ciphertrust_azure_vault.premium_vault). It returns false when the Azure
+// initCckmAzureTestPurgeableVault returns the configuration from initCckmAzureTest plus the purgeable
+// vault resource (ciphertrust_azure_vault.purgeable_vault). It returns false when the Azure
 // environment variables are not set or CCKM_TF_AZURE_PURGEABLE_VAULT is empty.
-func initCckmAzureTestPremiumVault(timeout ...int) (string, bool) {
+func initCckmAzureTestPurgeableVault(timeout ...int) (string, bool) {
 	if os.Getenv("CCKM_TF_AZURE_PURGEABLE_VAULT") == "" {
 		return "", false
 	}
@@ -77,27 +81,33 @@ func initCckmAzureTestPremiumVault(timeout ...int) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	premiumVaultConfig := `
-		resource "ciphertrust_azure_vault" "premium_vault" {
-			name            = local.azure_premium_vault
+	purgeableVaultConfig := `
+		resource "ciphertrust_azure_vault" "purgeable_vault" {
+			name            = local.azure_purgeable_vault
 			connection_id   = ciphertrust_azure_connection.azure_connection.id
 			subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 		}`
-	return initConfig + premiumVaultConfig, true
+	return initConfig + purgeableVaultConfig, true
 }
 
 // TestCckmAzureKeyNative exercises create, update, import and tag/scheduler removal of a native
-// ciphertrust_azure_key in the standard vault.
+// ciphertrust_azure_key in the nonpurgeable vault.
 func TestCckmAzureKeyNative(t *testing.T) {
 	initConfig, ok := initCckmAzureTest()
 	if !ok {
 		t.Skip("Azure environment variables not set - skipping TestCckmAzureKeyNative")
 	}
 
-	// createConfig args: key name, tags.
+	activationTime := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	activationDate := activationTime.Format(time.RFC3339)
+	expirationDate := activationTime.AddDate(1, 0, 0).Format(time.RFC3339)
+	newActivationDate := activationTime.AddDate(0, 1, 0).Format(time.RFC3339)
+	newExpirationDate := activationTime.AddDate(1, 1, 0).Format(time.RFC3339)
+
+	// createConfig args: key name, activation date, expiration date, tags.
 	createConfig := `
 		resource "ciphertrust_azure_key" "native_key" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "%s"
 			azure_params = {
 				key = {
@@ -107,15 +117,16 @@ func TestCckmAzureKeyNative(t *testing.T) {
 				key_size = 2048
 				attributes = {
 					enabled         = true
-					activation_date = "2026-01-01T00:00:00Z"
-					expiration_date = "2030-01-01T00:00:00Z"
+					activation_date = "%s"
+					expiration_date = "%s"
 				}
 				# Placeholder for tags.
 				%s
 			}
 		}`
 
-	// updateConfig args: backup scheduler name, rotation scheduler name, key name, tags,
+	// updateConfig args: backup scheduler name, rotation scheduler name, key name, activation date,
+	// expiration date, tags,
 	// rotation key_source, rotation key_type, rotation ec_name line, rotation key_size line.
 	updateConfig := `
 		resource "ciphertrust_scheduler" "backup_scheduler" {
@@ -139,7 +150,7 @@ func TestCckmAzureKeyNative(t *testing.T) {
 			}
 		}
 		resource "ciphertrust_azure_key" "native_key" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "%s"
 			azure_params = {
 				key = {
@@ -149,8 +160,8 @@ func TestCckmAzureKeyNative(t *testing.T) {
 				key_size = 2048
 				attributes = {
 					enabled         = false
-					activation_date = "2026-02-01T00:00:00Z"
-					expiration_date = "2031-01-01T00:00:00Z"
+					activation_date = "%s"
+					expiration_date = "%s"
 				}
 				# Placeholder for tags.
 				%s
@@ -173,7 +184,7 @@ func TestCckmAzureKeyNative(t *testing.T) {
 	backupSchedulerName := "tf-" + uuid.NewString()[:8]
 	rotationSchedulerName := "tf-" + uuid.NewString()[:8]
 	keyResource := "ciphertrust_azure_key.native_key"
-	vaultResource := "ciphertrust_azure_vault.standard_vault"
+	vaultResource := "ciphertrust_azure_vault.nonpurgeable_vault"
 	backupSchedulerResource := "ciphertrust_scheduler.backup_scheduler"
 	rotationSchedulerResource := "ciphertrust_scheduler.rotation_scheduler"
 
@@ -187,20 +198,14 @@ func TestCckmAzureKeyNative(t *testing.T) {
 				}`
 	removeTags := `tags = {}`
 
-	createConfigStr := initConfig + fmt.Sprintf(createConfig, keyName, createTags)
+	createConfigStr := initConfig + fmt.Sprintf(createConfig, keyName, activationDate, expirationDate, createTags)
 	updateConfigStr1 := initConfig + applyCDSPAAS(fmt.Sprintf(updateConfig,
-		backupSchedulerName, rotationSchedulerName, keyName, updateTags,
+		backupSchedulerName, rotationSchedulerName, keyName, newActivationDate, newExpirationDate, updateTags,
 		"native", "EC", `ec_name = "P-256"`, ""))
 	updateConfigStr2 := initConfig + applyCDSPAAS(fmt.Sprintf(updateConfig,
-		backupSchedulerName, rotationSchedulerName, keyName, updateTags,
+		backupSchedulerName, rotationSchedulerName, keyName, newActivationDate, newExpirationDate, updateTags,
 		"ciphertrust", "RSA", "", "key_size = 3072"))
-	resetConfigStr := initConfig + fmt.Sprintf(createConfig, keyName, removeTags)
-
-	// Print the configs when the test fails so that the failing step can be reproduced.
-	//fmt.Printf("createConfigStr:\n%s\n", createConfigStr)
-	//fmt.Printf("updateConfigStr1:\n%s\n", updateConfigStr1)
-	//fmt.Printf("updateConfigStr2:\n%s\n", updateConfigStr2)
-	//fmt.Printf("resetConfigStr:\n%s\n", resetConfigStr)
+	resetConfigStr := initConfig + fmt.Sprintf(createConfig, keyName, activationDate, expirationDate, removeTags)
 
 	// nativeKeyID is the CipherTrust Manager ID of the key created by the main test. It is captured
 	// in the last step and used by the restore sub-test.
@@ -240,8 +245,8 @@ func TestCckmAzureKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttrSet(keyResource, "azure_params.key.e"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key_size", "2048"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-01-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", activationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttrSet(keyResource, "azure_params.attributes.recovery_level"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey1", "TagValue1"),
@@ -261,8 +266,8 @@ func TestCckmAzureKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key_size", "2048"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "false"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-02-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2031-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", newActivationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", newExpirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 					resource.TestCheckNoResourceAttr(keyResource, "azure_params.tags.TagKey1"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey2", "TagValue2Updated"),
@@ -311,8 +316,8 @@ func TestCckmAzureKeyNative(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "name", keyName),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-01-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", activationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "0"),
 					resource.TestCheckNoResourceAttr(keyResource, "enable_auto_backup"),
 					resource.TestCheckNoResourceAttr(keyResource, "enable_auto_rotation"),
@@ -331,7 +336,7 @@ func TestCckmAzureKeyNative(t *testing.T) {
 	})
 
 	// CCKM keeps a backup of every key, so the key above can be restored after it has been deleted
-	// from the standard vault. A key can only be restored to a different vault, so the premium
+	// from the nonpurgeable vault. A key can only be restored to a different vault, so the purgeable
 	// vault is used. Inside the sub-test t is the sub-test's own value, so the state of this test is
 	// captured here.
 	nativeFailed := t.Failed()
@@ -339,21 +344,21 @@ func TestCckmAzureKeyNative(t *testing.T) {
 		if nativeFailed {
 			t.Skip("Previous steps failed")
 		}
-		premiumConfig, ok := initCckmAzureTestPremiumVault()
+		purgeableConfig, ok := initCckmAzureTestPurgeableVault()
 		if !ok {
-			t.Skip("CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping restore_to_premium_vault sub-test")
+			t.Skip("CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping restore_to_purgeable_vault sub-test")
 		}
 		restoreConfig := `
 			resource "ciphertrust_azure_key" "restored_key" {
-				vault_id   = ciphertrust_azure_vault.premium_vault.id
-				# The standard vault holds the soft-deleted key. It must be added back to CCKM before the restore.
-				depends_on = [ciphertrust_azure_vault.standard_vault]
+				vault_id   = ciphertrust_azure_vault.purgeable_vault.id
+				# The nonpurgeable vault holds the soft-deleted key. It must be added back to CCKM before the restore.
+				depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 				restore_key = {
 					key_id = "%s"
 				}
 			}`
 		restoredResource := "ciphertrust_azure_key.restored_key"
-		premiumVaultResource := "ciphertrust_azure_vault.premium_vault"
+		purgeableVaultResource := "ciphertrust_azure_vault.purgeable_vault"
 
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { cleanupCckmAzureVaults() },
@@ -361,10 +366,10 @@ func TestCckmAzureKeyNative(t *testing.T) {
 			Steps: []resource.TestStep{
 				{
 					PreConfig: func() { logTestStep(t.Name(), "Restore step") },
-					Config:    premiumConfig + fmt.Sprintf(restoreConfig, nativeKeyID),
+					Config:    purgeableConfig + fmt.Sprintf(restoreConfig, nativeKeyID),
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttrSet(restoredResource, "id"),
-						resource.TestCheckResourceAttrPair(restoredResource, "vault_id", premiumVaultResource, "id"),
+						resource.TestCheckResourceAttrPair(restoredResource, "vault_id", purgeableVaultResource, "id"),
 						resource.TestCheckResourceAttr(restoredResource, "restore_key.key_id", nativeKeyID),
 						resource.TestCheckResourceAttr(restoredResource, "name", keyName),
 						resource.TestCheckResourceAttr(restoredResource, "azure_params.key.kty", "RSA"),
@@ -376,7 +381,7 @@ func TestCckmAzureKeyNative(t *testing.T) {
 }
 
 // TestCckmAzureKeyUpload exercises upload of a CipherTrust Manager key (upload_key.source_key_tier = local) into the
-// standard vault: create, update of tags, key_ops and dates, import and tag removal.
+// nonpurgeable vault: create, update of tags, key_ops and dates, import and tag removal.
 func TestCckmAzureKeyUpload(t *testing.T) {
 	initConfig, ok := initCckmAzureTest()
 	if !ok {
@@ -391,10 +396,16 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 			key_size  = 2048
 		}`
 
-	// localCreateConfig args: cm key name, azure key name, tags.
+	activationTime := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	activationDate := activationTime.Format(time.RFC3339)
+	expirationDate := activationTime.AddDate(1, 0, 0).Format(time.RFC3339)
+	newActivationDate := activationTime.AddDate(0, 1, 0).Format(time.RFC3339)
+	newExpirationDate := activationTime.AddDate(1, 1, 0).Format(time.RFC3339)
+
+	// localCreateConfig args: cm key name, azure key name, activation date, expiration date, tags.
 	localCreateConfig := cmKeyConfig + `
 		resource "ciphertrust_azure_key" "upload_key" {
-			vault_id             = ciphertrust_azure_vault.standard_vault.id
+			vault_id             = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name                 = "%s"
 			upload_key = {
 				source_key_tier = "local"
@@ -406,18 +417,18 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				}
 				attributes = {
 					enabled         = true
-					activation_date = "2026-01-01T00:00:00Z"
-					expiration_date = "2030-01-01T00:00:00Z"
+					activation_date = "%s"
+					expiration_date = "%s"
 				}
 				# Placeholder for tags.
 				%s
 			}
 		}`
 
-	// localUpdateConfig args: cm key name, azure key name, tags.
+	// localUpdateConfig args: cm key name, azure key name, activation date, expiration date, tags.
 	localUpdateConfig := cmKeyConfig + `
 		resource "ciphertrust_azure_key" "upload_key" {
-			vault_id             = ciphertrust_azure_vault.standard_vault.id
+			vault_id             = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name                 = "%s"
 			upload_key = {
 				source_key_tier = "local"
@@ -429,8 +440,8 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				}
 				attributes = {
 					enabled         = false
-					activation_date = "2026-02-01T00:00:00Z"
-					expiration_date = "2031-01-01T00:00:00Z"
+					activation_date = "%s"
+					expiration_date = "%s"
 				}
 				# Placeholder for tags.
 				%s
@@ -443,7 +454,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 	pfxConfig := `
 		resource "ciphertrust_azure_key" "upload_key_pfx" {
 			depends_on      = [ciphertrust_azure_key.upload_key]
-			vault_id        = ciphertrust_azure_vault.standard_vault.id
+			vault_id        = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name            = "%s"
 			upload_key = {
 				source_key_tier = "pfx"
@@ -460,7 +471,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 	cmKeyName := "tf-cm-" + uuid.NewString()[:8]
 	keyName := "tf-" + uuid.NewString()[:8]
 	keyResource := "ciphertrust_azure_key.upload_key"
-	vaultResource := "ciphertrust_azure_vault.standard_vault"
+	vaultResource := "ciphertrust_azure_vault.nonpurgeable_vault"
 
 	createTags := `tags = {
 				TagKey1 = "TagValue1"
@@ -472,9 +483,9 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 			}`
 	removeTags := `tags = {}`
 
-	createConfigStr := initConfig + fmt.Sprintf(localCreateConfig, cmKeyName, keyName, createTags)
-	updateConfigStr := initConfig + fmt.Sprintf(localUpdateConfig, cmKeyName, keyName, updateTags)
-	resetConfigStr := initConfig + fmt.Sprintf(localCreateConfig, cmKeyName, keyName, removeTags)
+	createConfigStr := initConfig + fmt.Sprintf(localCreateConfig, cmKeyName, keyName, activationDate, expirationDate, createTags)
+	updateConfigStr := initConfig + fmt.Sprintf(localUpdateConfig, cmKeyName, keyName, newActivationDate, newExpirationDate, updateTags)
+	resetConfigStr := initConfig + fmt.Sprintf(localCreateConfig, cmKeyName, keyName, activationDate, expirationDate, removeTags)
 
 	// immutableConfig is the key as created in step 1 with one input changed. Args: cm key name,
 	// vault_id expression, azure key name, upload_key.source_key_tier, upload_key.source_key_id expression.
@@ -497,11 +508,11 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 	// optionalConfigStr is the key as created in step 1 with optional attributes left out. Args: the
 	// azure_params.key block (key_ops), the expiration_date line and the tags. An empty string leaves
 	// that part out of the config.
-	expirationLine := `expiration_date = "2030-01-01T00:00:00Z"`
+	expirationLine := fmt.Sprintf(`expiration_date = "%s"`, expirationDate)
 	optionalConfigStr := func(keyBlock, expiration, tags string) string {
 		return initConfig + fmt.Sprintf(cmKeyConfig, cmKeyName) + fmt.Sprintf(`
 			resource "ciphertrust_azure_key" "upload_key" {
-				vault_id             = ciphertrust_azure_vault.standard_vault.id
+				vault_id             = ciphertrust_azure_vault.nonpurgeable_vault.id
 				name                 = "%s"
 				upload_key = {
 					source_key_tier = "local"
@@ -511,12 +522,12 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 					%s
 					attributes = {
 						enabled         = true
-						activation_date = "2026-01-01T00:00:00Z"
+						activation_date = "%s"
 						%s
 					}
 					%s
 				}
-			}`, keyName, keyBlock, expiration, tags)
+			}`, keyName, keyBlock, activationDate, expiration, tags)
 	}
 
 	// Optional step 5: upload a pfx with the same key name to add a new version to the key. The pfx is
@@ -543,7 +554,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 			# Every version of the key.
 			data "ciphertrust_azure_key_list" "all_versions" {
 				filters = {
-					key_vault_id = ciphertrust_azure_vault.standard_vault.id
+					key_vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 					key_name     = "%s"
 					limit        = "-1"
 				}
@@ -553,7 +564,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 			# Only the latest version of the key.
 			data "ciphertrust_azure_key_list" "latest" {
 				filters = {
-					key_vault_id = ciphertrust_azure_vault.standard_vault.id
+					key_vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 					key_name     = "%s"
 					version      = "-1"
 				}
@@ -561,7 +572,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 			}
 			data "ciphertrust_azure_key_list" "rsa_algorithm" {
 				filters = {
-					key_vault_id = ciphertrust_azure_vault.standard_vault.id
+					key_vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 					key_name     = "%s"
 					algorithm    = "rsa"
 					limit        = "-1"
@@ -625,8 +636,8 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "deleted", "false"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-01-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", activationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey1", "TagValue1"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey2", "TagValue2"),
@@ -640,8 +651,8 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "name", keyName),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "false"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-02-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2031-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", newActivationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", newExpirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey2", "TagValue2Updated"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey3", "TagValue3"),
@@ -664,8 +675,8 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.enabled", "true"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", "2026-01-01T00:00:00Z"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.activation_date", activationDate),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "0"),
 				),
 			},
@@ -677,7 +688,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				Config:    optionalConfigStr("", expirationLine, createTags),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 				),
 			},
@@ -686,7 +697,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				Config:    optionalConfigStr("", "", createTags),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 				),
 			},
@@ -695,7 +706,7 @@ func TestCckmAzureKeyUpload(t *testing.T) {
 				Config:    optionalConfigStr("", "", ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(keyResource, "azure_params.key.key_ops.#", "6"),
-					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", "2030-01-01T00:00:00Z"),
+					resource.TestCheckResourceAttr(keyResource, "azure_params.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.%", "2"),
 					resource.TestCheckResourceAttr(keyResource, "azure_params.tags.TagKey1", "TagValue1"),
 				),
@@ -863,5 +874,350 @@ func TestCckmAzureKeyUploadValidation(t *testing.T) {
 				ExpectError: regexp.MustCompile(`upload_key\s+cannot\s+be\s+set`),
 			},
 		},
+	})
+}
+
+// TestCckmAzureKeyPurgeableVault covers every purgeable vault scenario with two keys in total, so the vault is
+// not filled with keys. Each case is a separate test run because the provider settings apply when the key is
+// destroyed. The subtests run in order and share the captured key and backup IDs.
+//
+// Key 1 (uploaded HSM key, exportable with a release policy when CCKM_TF_AZURE_RELEASE_POLICY is set):
+//
+//  1. upload_hsm_key: upload with hsm, exportable and a release policy, then import. Destroy purges the key
+//     and retains its backups.
+//  2. restore_soft_delete_only: restore the key from its backups. Destroy only soft-deletes it.
+//  3. recover_purge_delete_backups: recover the soft-deleted key with a native key of the same name. Destroy
+//     purges it and deletes its backups.
+//  4. restore_after_backups_deleted: restore fails because the backups are gone.
+//
+// Key 2 (native RSA-HSM key, ciphertrust_azure_key_pit_backup resource):
+//
+//  5. create_pit_backup: create the key and a PIT backup, and check the computed attributes and the
+//     ciphertrust_azure_key_pit_backup_list data source. Destroy purges the key and retains its backups.
+//  6. restore_from_pit_backup: restore the key from the PIT backup. This also checks whether CipherTrust
+//     Manager allows a restore while a record with the same key name still exists.
+//
+// It needs CCKM_TF_AZURE_PURGEABLE_VAULT. CCKM_TF_AZURE_RELEASE_POLICY (a JSON object string) is optional. When
+// it is not set, key 1 is created without exportable and release_policy, and those attributes are not checked.
+func TestCckmAzureKeyPurgeableVault(t *testing.T) {
+	initConfig, ok := initCckmAzureTestPurgeableVault()
+	if !ok {
+		t.Skip("Azure environment variables or CCKM_TF_AZURE_PURGEABLE_VAULT not set - skipping TestCckmAzureKeyPurgeableVault")
+	}
+	releasePolicy := os.Getenv("CCKM_TF_AZURE_RELEASE_POLICY")
+
+	// Azure only allows an exportable key with a release policy, so both are set together or not at all.
+	policyAttrs := ""
+	if releasePolicy != "" {
+		policyAttrs = fmt.Sprintf(`
+			exportable     = true
+			release_policy = %q`, releasePolicy)
+	}
+	policyCheck := func(name string) resource.TestCheckFunc {
+		if releasePolicy == "" {
+			return func(*terraform.State) error { return nil }
+		}
+		return resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(name, "exportable", "true"),
+			resource.TestCheckResourceAttr(name, "release_policy", releasePolicy),
+		)
+	}
+	// A restored key has no configured release_policy, so state holds the compact JSON returned by the server.
+	restoredPolicyCheck := func(name string) resource.TestCheckFunc {
+		if releasePolicy == "" {
+			return func(*terraform.State) error { return nil }
+		}
+		return resource.ComposeAggregateTestCheckFunc(
+			resource.TestCheckResourceAttr(name, "exportable", "true"),
+			testCheckAzureKeyJSONEquivalent(name, "release_policy", releasePolicy),
+		)
+	}
+
+	purgeableVaultResource := "ciphertrust_azure_vault.purgeable_vault"
+	uploadResource := "ciphertrust_azure_key.upload_key"
+	restoredResource := "ciphertrust_azure_key.restored_key"
+	nativeResource := "ciphertrust_azure_key.native_key"
+
+	// Key 1.
+	cmKeyName := "tf-cm-" + uuid.NewString()[:8]
+	uploadKeyName := "tf-" + uuid.NewString()[:8]
+	var uploadKeyID, uploadBackupID string
+
+	// kty, curve and key_size are not asserted for the uploaded key because Azure reports them according
+	// to the vault.
+	uploadConfig := fmt.Sprintf(`
+		resource "ciphertrust_cm_key" "cm_rsa_key" {
+			name      = %q
+			algorithm = "RSA"
+			key_size  = 2048
+		}
+		resource "ciphertrust_azure_key" "upload_key" {
+			vault_id = ciphertrust_azure_vault.purgeable_vault.id
+			name     = %q
+			upload_key = {
+				source_key_tier = "local"
+				source_key_id   = ciphertrust_cm_key.cm_rsa_key.id
+				hsm             = true
+			}
+			%s
+		}`, cmKeyName, uploadKeyName, policyAttrs)
+
+	// uploadChainFailed is set when a subtest of the uploaded key chain fails. The later subtests of the chain
+	// use the key and the backups of the earlier ones, so they are skipped. The PIT chain is independent.
+	uploadChainFailed := false
+	t.Run("upload_hsm_key", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Upload exportable HSM key, destroy with purge and retain") },
+					Config:    azureProviderSettingsConfig(initConfig+uploadConfig, true, false, true),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrSet(uploadResource, "id"),
+						resource.TestCheckResourceAttrPair(uploadResource, "vault_id", purgeableVaultResource, "id"),
+						resource.TestCheckResourceAttr(uploadResource, "name", uploadKeyName),
+						resource.TestCheckResourceAttr(uploadResource, "upload_key.source_key_tier", "local"),
+						resource.TestCheckResourceAttrPair(uploadResource, "upload_key.source_key_id", "ciphertrust_cm_key.cm_rsa_key", "id"),
+						resource.TestCheckResourceAttr(uploadResource, "upload_key.hsm", "true"),
+						resource.TestCheckResourceAttr(uploadResource, "upload_key.local_key_name", cmKeyName),
+						resource.TestCheckResourceAttr(uploadResource, "azure_params.key.kty", "RSA-HSM"),
+						policyCheck(uploadResource),
+						resource.TestCheckResourceAttrSet(uploadResource, "azure_params.key.kid"),
+						func(s *terraform.State) error {
+							rs, found := s.RootModule().Resources[uploadResource]
+							if !found {
+								return fmt.Errorf("resource %s not found in state", uploadResource)
+							}
+							uploadKeyID = rs.Primary.ID
+							uploadBackupID = rs.Primary.Attributes["backup"]
+							return nil
+						},
+					),
+				},
+				{
+					PreConfig:         func() { logTestStep(t.Name(), "Import") },
+					Config:            azureProviderSettingsConfig(initConfig+uploadConfig, true, false, true),
+					ResourceName:      uploadResource,
+					ImportState:       true,
+					ImportStateVerify: true,
+					// release_policy is ignored because the imported value is the compact JSON returned by
+					// the server, while state keeps the configured formatting. The step above checks it.
+					ImportStateVerifyIgnore: append(append([]string{}, importStateVerifyIgnoreAzureKey...), "release_policy"),
+				},
+			},
+		})
+	})
+
+	t.Run("restore_soft_delete_only", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping restore_soft_delete_only")
+		}
+		if uploadKeyID == "" {
+			t.Skip("key ID was not captured - skipping restore_soft_delete_only")
+		}
+		restoreConfig := fmt.Sprintf(`
+			resource "ciphertrust_azure_key" "restored_key" {
+				vault_id = ciphertrust_azure_vault.purgeable_vault.id
+				restore_key = {
+					key_id = %q
+				}
+			}`, uploadKeyID)
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Restore key, destroy with soft-delete only") },
+					Config:    azureProviderSettingsConfig(initConfig+restoreConfig, false, false, true),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrPair(restoredResource, "vault_id", purgeableVaultResource, "id"),
+						resource.TestCheckResourceAttr(restoredResource, "restore_key.key_id", uploadKeyID),
+						resource.TestCheckResourceAttr(restoredResource, "id", uploadKeyID),
+						resource.TestCheckResourceAttr(restoredResource, "name", uploadKeyName),
+						restoredPolicyCheck(restoredResource),
+					),
+				},
+			},
+		})
+	})
+
+	t.Run("recover_purge_delete_backups", func(t *testing.T) {
+		defer func() { uploadChainFailed = uploadChainFailed || t.Failed() }()
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping recover_purge_delete_backups")
+		}
+		if uploadKeyID == "" {
+			t.Skip("key ID was not captured - skipping recover_purge_delete_backups")
+		}
+		// A native key is used because only ciphertrust_azure_key recovers a soft-deleted key of the same name.
+		recoverConfig := fmt.Sprintf(`
+			resource "ciphertrust_azure_key" "native_key" {
+				vault_id = ciphertrust_azure_vault.purgeable_vault.id
+				name     = %q
+				%s
+				azure_params = {
+					key = {
+						kty = "RSA-HSM"
+					}
+					key_size = 2048
+				}
+			}`, uploadKeyName, policyAttrs)
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Recover soft-deleted key, destroy with purge and backup deletion") },
+					Config:    azureProviderSettingsConfig(initConfig+recoverConfig, true, true, false),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrPair(nativeResource, "vault_id", purgeableVaultResource, "id"),
+						resource.TestCheckResourceAttr(nativeResource, "name", uploadKeyName),
+						policyCheck(nativeResource),
+					),
+				},
+			},
+		})
+	})
+
+	t.Run("restore_after_backups_deleted", func(t *testing.T) {
+		if uploadChainFailed {
+			t.Skip("an earlier uploaded key subtest failed - skipping restore_after_backups_deleted")
+		}
+		if uploadKeyID == "" {
+			t.Skip("key ID was not captured - skipping restore_after_backups_deleted")
+		}
+		backupLine := ""
+		if uploadBackupID != "" {
+			backupLine = fmt.Sprintf("backup_id = %q", uploadBackupID)
+		}
+		restoreConfig := fmt.Sprintf(`
+			resource "ciphertrust_azure_key" "restored_key" {
+				vault_id = ciphertrust_azure_vault.purgeable_vault.id
+				restore_key = {
+					key_id = %q
+					%s
+				}
+			}`, uploadKeyID, backupLine)
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Restore key after its backups were deleted") },
+					Config:    azureProviderSettingsConfig(initConfig+restoreConfig, true, false, true),
+					// The error text is not asserted beyond a loose match.
+					ExpectError: regexp.MustCompile(`(?is)error|not found|fail`),
+				},
+			},
+		})
+	})
+
+	// Key 2.
+	pitKeyName := "tf-" + uuid.NewString()[:8]
+	backupName := "tf-bk-" + uuid.NewString()[:8]
+	backupResource := "ciphertrust_azure_key_pit_backup.backup"
+	listDataSource := "data.ciphertrust_azure_key_pit_backup_list.backups"
+	var pitKeyID, pitBackupID string
+
+	backupConfig := fmt.Sprintf(`
+		resource "ciphertrust_azure_key" "native_key" {
+			vault_id = ciphertrust_azure_vault.purgeable_vault.id
+			name     = %q
+			azure_params = {
+				key = {
+					kty = "RSA-HSM"
+				}
+				key_size = 2048
+			}
+		}
+		resource "ciphertrust_azure_key_pit_backup" "backup" {
+			key_id      = ciphertrust_azure_key.native_key.id
+			trigger     = "one"
+			name        = %q
+			description = "terraform acceptance test"
+		}
+		data "ciphertrust_azure_key_pit_backup_list" "backups" {
+			key_id     = ciphertrust_azure_key.native_key.id
+			depends_on = [ciphertrust_azure_key_pit_backup.backup]
+		}`, pitKeyName, backupName)
+
+	// pitBackupFailed is set when create_pit_backup fails, so that restore_from_pit_backup is skipped.
+	pitBackupFailed := false
+	t.Run("create_pit_backup", func(t *testing.T) {
+		defer func() { pitBackupFailed = t.Failed() }()
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Create key and PIT backup, destroy with purge and retain") },
+					Config:    azureProviderSettingsConfig(initConfig+backupConfig, true, false, true),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrPair(backupResource, "key_id", nativeResource, "id"),
+						resource.TestCheckResourceAttr(backupResource, "trigger", "one"),
+						resource.TestCheckResourceAttr(backupResource, "name", backupName),
+						resource.TestCheckResourceAttr(backupResource, "description", "terraform acceptance test"),
+						resource.TestCheckResourceAttr(backupResource, "key_name", pitKeyName),
+						resource.TestCheckResourceAttr(backupResource, "gone", "false"),
+						resource.TestCheckResourceAttrSet(backupResource, "id"),
+						resource.TestCheckResourceAttrSet(backupResource, "backup"),
+						resource.TestCheckResourceAttrSet(backupResource, "created_at"),
+						resource.TestCheckResourceAttrSet(backupResource, "vault_name"),
+						resource.TestCheckResourceAttrSet(backupResource, "subscription_id"),
+						resource.TestCheckResourceAttrSet(backupResource, "region"),
+						resource.TestCheckResourceAttrPair(listDataSource, "backups.0.id", backupResource, "id"),
+						func(s *terraform.State) error {
+							key, found := s.RootModule().Resources[nativeResource]
+							if !found {
+								return fmt.Errorf("resource %s not found in state", nativeResource)
+							}
+							backup, found := s.RootModule().Resources[backupResource]
+							if !found {
+								return fmt.Errorf("resource %s not found in state", backupResource)
+							}
+							pitKeyID = key.Primary.ID
+							pitBackupID = backup.Primary.ID
+							return nil
+						},
+					),
+				},
+			},
+		})
+	})
+
+	t.Run("restore_from_pit_backup", func(t *testing.T) {
+		if pitBackupFailed {
+			t.Skip("create_pit_backup failed - skipping restore_from_pit_backup")
+		}
+		if pitKeyID == "" || pitBackupID == "" {
+			t.Fatal("key or backup ID was not captured by create_pit_backup, which always creates a PIT backup")
+		}
+		restoreConfig := fmt.Sprintf(`
+			resource "ciphertrust_azure_key" "restored_key" {
+				vault_id = ciphertrust_azure_vault.purgeable_vault.id
+				restore_key = {
+					key_id    = %q
+					backup_id = %q
+				}
+			}`, pitKeyID, pitBackupID)
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { cleanupCckmAzureVaults() },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					PreConfig: func() { logTestStep(t.Name(), "Restore key from the PIT backup, destroy with purge") },
+					Config:    azureProviderSettingsConfig(initConfig+restoreConfig, true, false, true),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttrPair(restoredResource, "vault_id", purgeableVaultResource, "id"),
+						resource.TestCheckResourceAttr(restoredResource, "name", pitKeyName),
+						resource.TestCheckResourceAttr(restoredResource, "restore_key.key_id", pitKeyID),
+						resource.TestCheckResourceAttr(restoredResource, "restore_key.backup_id", pitBackupID),
+					),
+				},
+			},
+		})
 	})
 }
