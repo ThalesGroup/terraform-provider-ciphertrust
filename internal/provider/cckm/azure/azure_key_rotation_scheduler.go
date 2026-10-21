@@ -90,7 +90,8 @@ func azureKeyApplyRotation(ctx context.Context, id string, client *common.Client
 }
 
 // azureKeyRotationDiffers returns true if a value in the plan differs from the rotation labels of the key.
-// An optional value that is not configured is ignored.
+// An optional value that is not configured counts as a difference when the key has a value for it, for example
+// one that was set outside Terraform, so that the rotation job is enabled again without it.
 func azureKeyRotationDiffers(rot *models.EnableAutoRotationTFSDK, response string) bool {
 	labels := gjson.Get(response, "labels")
 	if rot.JobConfigID.ValueString() != labels.Get("job_config_id").String() ||
@@ -98,21 +99,33 @@ func azureKeyRotationDiffers(rot *models.EnableAutoRotationTFSDK, response strin
 		rot.KeyType.ValueString() != labels.Get("auto_rotate_key_type").String() {
 		return true
 	}
-	if !rot.KeySize.IsNull() && rot.KeySize.ValueInt64() != labels.Get("auto_rotate_key_size").Int() {
+	keySize := labels.Get("auto_rotate_key_size")
+	if rot.KeySize.IsNull() {
+		if keySize.Exists() {
+			return true
+		}
+	} else if rot.KeySize.ValueInt64() != keySize.Int() {
 		return true
 	}
-	if !rot.ECName.IsNull() && rot.ECName.ValueString() != labels.Get("auto_rotate_ec_name").String() {
+	ecName := labels.Get("auto_rotate_ec_name")
+	if rot.ECName.IsNull() {
+		if ecName.Exists() {
+			return true
+		}
+	} else if rot.ECName.ValueString() != ecName.String() {
 		return true
 	}
 	enableKey := labels.Get("auto_rotate_enable_key")
 	if !rot.EnableKey.IsNull() && !rot.EnableKey.IsUnknown() && (!enableKey.Exists() || rot.EnableKey.ValueBool() != enableKey.Bool()) {
 		return true
 	}
-	if !rot.ReleasePolicy.IsNull() && !rot.ReleasePolicy.IsUnknown() {
-		policy := labels.Get("auto_rotate_release_policy")
-		if !policy.Exists() || !azureReleasePolicyEquivalent(rot.ReleasePolicy.ValueString(), policy.Raw) {
+	policy := labels.Get("auto_rotate_release_policy")
+	if rot.ReleasePolicy.IsNull() {
+		if policy.Exists() {
 			return true
 		}
+	} else if !rot.ReleasePolicy.IsUnknown() && (!policy.Exists() || !azureReleasePolicyEquivalent(rot.ReleasePolicy.ValueString(), policy.Raw)) {
+		return true
 	}
 	return false
 }

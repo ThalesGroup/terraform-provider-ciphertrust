@@ -46,7 +46,7 @@ testacc:
 	rm -rf /work/tf.log
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzure
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run Test_CM_CckmSchedulers
-	TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureKeyNative$
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureKeyNative$
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureAclUsersAndGroups
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureAclOOB
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureDataSourceVaultList
@@ -63,6 +63,8 @@ testacc:
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureSecret
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureSecretMaxConfigAndRecover
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureDataSourceSecretList
+	TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureKeyUploadAndRunScheduler
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider/cckm/azure -run TestCckmAzureReleasePolicy
 
 me: build
 	rm -rf /work/ctp.log

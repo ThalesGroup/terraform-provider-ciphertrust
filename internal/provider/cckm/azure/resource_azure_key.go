@@ -511,6 +511,78 @@ func (r *resourceCCKMAzureKey) Schema(_ context.Context, _ resource.SchemaReques
 				Description:   "The vault's name and subscription ID in the form <vault name>::<subscription id>.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			"rotated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date and time the key was last rotated. Not set until the key has been rotated.",
+			},
+			"azure_created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date and time the key was created in Azure.",
+			},
+			"azure_updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date and time the key was last updated in Azure.",
+			},
+			"azure_expire_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date and time the key expires in Azure. Not set if the key has no expiry.",
+			},
+			"created_by": schema.StringAttribute{
+				Computed: true,
+				Description: "Identity that created the key. It is the client ID of the Azure registered application " +
+					"used by the CipherTrust Manager connection.",
+			},
+			"modified_by": schema.StringAttribute{
+				Computed: true,
+				Description: "Identity that last modified the key. It is the client ID of the Azure registered " +
+					"application used by the CipherTrust Manager connection.",
+			},
+			"gone": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the key no longer exists in Azure.",
+			},
+			"version_deleted_in_azure": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether this version of the key was deleted in Azure.",
+			},
+			"key_source": schema.StringAttribute{
+				Computed:    true,
+				Description: "The source of the key, for example ciphertrust or native.",
+			},
+			"local_key_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "CipherTrust Manager resource ID of the local key the Azure key was created from.",
+			},
+			"meta": schema.StringAttribute{
+				Computed:    true,
+				Description: "Additional key metadata as a JSON object string.",
+			},
+			"operation": schema.StringAttribute{
+				Computed:    true,
+				Description: "The last operation performed on the key.",
+			},
+			"operation_error": schema.StringAttribute{
+				Computed:    true,
+				Description: "The error of the last operation, if it failed.",
+			},
+			"available_in_key_vault": schema.StringAttribute{
+				Computed:    true,
+				Description: "Whether the key is available in the key vault.",
+			},
+			"pk_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "CipherTrust Manager resource ID of the key's primary key record.",
+			},
+			"subscription_ids": schema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Azure subscription IDs the key is available in.",
+			},
+			"vault_labels": schema.MapAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Key:value labels of the key's vault.",
+			},
 		},
 	}
 }

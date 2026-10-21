@@ -137,6 +137,45 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 		state.VaultID = types.StringValue(vaultID)
 	}
 
+	state.RotatedAt = azureKeyTimeString(gjson.Get(response, "rotated_at").String())
+	state.AzureCreatedAt = azureKeyTimeString(gjson.Get(response, "azure_created_at").String())
+	state.AzureUpdatedAt = azureKeyTimeString(gjson.Get(response, "azure_updated_at").String())
+	state.AzureExpireAt = azureKeyTimeString(gjson.Get(response, "azure_expire_at").String())
+	state.CreatedBy = azureKeyOptString(gjson.Get(response, "created_by").String())
+	state.ModifiedBy = azureKeyOptString(gjson.Get(response, "modified_by").String())
+	state.Gone = types.BoolValue(gjson.Get(response, "gone").Bool())
+	state.VersionDeletedInAzure = types.BoolValue(gjson.Get(response, "version_deleted_in_azure").Bool())
+	state.KeySource = azureKeyOptString(gjson.Get(response, "key_source").String())
+	state.LocalKeyID = azureKeyOptString(gjson.Get(response, "local_key_id").String())
+	state.Operation = azureKeyOptString(gjson.Get(response, "operation").String())
+	state.OperationError = azureKeyOptString(gjson.Get(response, "operation_error").String())
+	state.AvailableInKeyVault = azureKeyOptString(gjson.Get(response, "available_in_key_vault").String())
+	state.PkID = azureKeyOptString(gjson.Get(response, "pk_id").String())
+	state.Meta = types.StringNull()
+	if meta := gjson.Get(response, "meta"); meta.Exists() && meta.Type != gjson.Null && meta.Raw != "{}" && meta.Raw != "" {
+		state.Meta = types.StringValue(meta.Raw)
+	}
+	subscriptionIDs := make([]string, 0)
+	for _, s := range gjson.Get(response, "subscription_ids").Array() {
+		subscriptionIDs = append(subscriptionIDs, s.String())
+	}
+	state.SubscriptionIDs = types.ListNull(types.StringType)
+	if len(subscriptionIDs) > 0 {
+		list, d := types.ListValueFrom(ctx, types.StringType, subscriptionIDs)
+		diags.Append(d...)
+		state.SubscriptionIDs = list
+	}
+	vaultLabels := make(map[string]string)
+	for k, v := range gjson.Get(response, "vault_labels").Map() {
+		vaultLabels[k] = v.String()
+	}
+	state.VaultLabels = types.MapNull(types.StringType)
+	if len(vaultLabels) > 0 {
+		m, d := types.MapValueFrom(ctx, types.StringType, vaultLabels)
+		diags.Append(d...)
+		state.VaultLabels = m
+	}
+
 	azureKeySetParams(ctx, response, state, diags)
 	azureKeySetPolicyAndLabels(ctx, response, state, diags)
 	azureKeySetUploadKey(response, state)
@@ -145,12 +184,10 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 	// rotation that was enabled or disabled outside Terraform, is detected. This also covers import.
 	state.EnableAutoRotation = azureKeyRotationFromState(response, state.EnableAutoRotation)
 
-	// backup_config is set from the response like labels. enable_auto_backup is rebuilt from it only when
-	// state has none. This covers import and backup that was enabled outside Terraform.
+	// backup_config is set from the response like labels. enable_auto_backup is always rebuilt from it so
+	// that backup that was enabled, disabled or changed outside Terraform is detected. This also covers import.
 	state.BackupConfig = azureKeyBackupConfigMap(ctx, response, diags)
-	if state.EnableAutoBackup == nil {
-		state.EnableAutoBackup = azureKeyBackupFromConfig(response)
-	}
+	state.EnableAutoBackup = azureKeyBackupFromConfig(response)
 }
 
 // azureKeyRotationFromState builds enable_auto_rotation from the labels of the key. The labels hold exactly

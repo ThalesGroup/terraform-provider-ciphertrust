@@ -1,13 +1,13 @@
 package cckm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -112,7 +112,7 @@ func (m azureReleasePolicyImmutableModifier) MarkdownDescription(ctx context.Con
 	return m.Description(ctx)
 }
 
-func (m azureReleasePolicyImmutableModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+func (m azureReleasePolicyImmutableModifier) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
 	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
 		return
 	}
@@ -124,5 +124,26 @@ func (m azureReleasePolicyImmutableModifier) PlanModifyString(ctx context.Contex
 		resp.PlanValue = req.StateValue
 		return
 	}
-	modifiers.ImmutableString().PlanModifyString(ctx, req, resp)
+	// Show the policy content rather than a file path so that the message says what differs.
+	shown := func(value string) string {
+		content, err := azureReleasePolicyContent(value)
+		if err != nil {
+			return value
+		}
+		var compact bytes.Buffer
+		if json.Compact(&compact, []byte(content)) != nil {
+			return content
+		}
+		return compact.String()
+	}
+	resp.Diagnostics.AddError(
+		"Attribute is immutable",
+		fmt.Sprintf(
+			"This attribute cannot be changed after creation (old: %s, new: %s). "+
+				"To change this attribute, destroy and recreate the resource.",
+			shown(req.StateValue.ValueString()),
+			shown(req.PlanValue.ValueString()),
+		),
+	)
+	resp.PlanValue = req.StateValue
 }

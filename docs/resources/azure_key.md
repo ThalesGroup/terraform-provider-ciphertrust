@@ -352,26 +352,43 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
+- `available_in_key_vault` (String) Whether the key is available in the key vault.
+- `azure_created_at` (String) Date and time the key was created in Azure.
+- `azure_expire_at` (String) Date and time the key expires in Azure. Not set if the key has no expiry.
+- `azure_updated_at` (String) Date and time the key was last updated in Azure.
 - `backup` (String) CipherTrust Manager resource ID of the Azure key backup.It is not a PIT backup ID and cannot be used as restore_key.backup_id.
 - `backup_at` (String) Date and time the key was last backed up.
 - `backup_config` (Map of String) Backup scheduler configuration of the key. When a backup job is enabled for the key, it contains backup_job_config_id.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `created_at` (String) Date and time the key was created in CipherTrust Manager.
+- `created_by` (String) Identity that created the key. It is the client ID of the Azure registered application used by the CipherTrust Manager connection.
 - `deleted` (Boolean) Whether the key has been deleted.
+- `gone` (Boolean) Whether the key no longer exists in Azure.
 - `id` (String) The key's CipherTrust Manager resource ID.
 - `key_material_origin` (String) The origin of the key material.
 - `key_soft_deleted_in_azure` (Boolean) Whether the key is soft deleted in Azure.
+- `key_source` (String) The source of the key, for example ciphertrust or native.
 - `labels` (Map of String) Key:value pairs associated with the key. When a scheduler job is enabled for the key, the labels contain entries describing the job.
+- `local_key_id` (String) CipherTrust Manager resource ID of the local key the Azure key was created from.
 - `managed` (Boolean) True if the lifetime of the key is managed by the key vault, for example a key that backs a certificate. False if the API does not return the value.
+- `meta` (String) Additional key metadata as a JSON object string.
+- `modified_by` (String) Identity that last modified the key. It is the client ID of the Azure registered application used by the CipherTrust Manager connection.
+- `operation` (String) The last operation performed on the key.
+- `operation_error` (String) The error of the last operation, if it failed.
+- `pk_id` (String) CipherTrust Manager resource ID of the key's primary key record.
 - `region` (String) Azure region of the vault in which the key resides.
+- `rotated_at` (String) Date and time the key was last rotated. Not set until the key has been rotated.
 - `soft_delete_enabled` (Boolean) Whether soft delete is enabled for the key's vault.
 - `status` (String) Status of the key in CipherTrust Manager.
+- `subscription_ids` (List of String) Azure subscription IDs the key is available in.
 - `synced_at` (String) Date and time the key was last synchronized.
 - `tenant` (String) The Azure tenant of the key.
 - `updated_at` (String) Date and time the key was last updated in CipherTrust Manager.
+- `vault_labels` (Map of String) Key:value labels of the key's vault.
 - `vault_name` (String) The vault's name and subscription ID in the form <vault name>::<subscription id>.
 - `version` (String) The Azure version identifier of the key.
 - `version_count` (Number) The number of versions of the key.
+- `version_deleted_in_azure` (Boolean) Whether this version of the key was deleted in Azure.
 
 <a id="nestedatt--azure_params"></a>
 ### Nested Schema for `azure_params`

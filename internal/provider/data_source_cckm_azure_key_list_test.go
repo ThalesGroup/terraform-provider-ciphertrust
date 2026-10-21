@@ -31,7 +31,7 @@ type azureKeyListCase struct {
 // because the filters attribute is a map of strings.
 //
 // Not covered here: key_size and external_key_id (an EC key has neither). The version filter and the
-// RSA side of the algorithm filter are covered by TestCckmAzureKeyUpload.
+// RSA side of the algorithm filter are covered by TestCckmAzureKeyUploadAndRunScheduler.
 func azureKeyListCases() []azureKeyListCase {
 	k := func(attr string) string { return azureKeyListKey + "." + attr }
 	return []azureKeyListCase{
@@ -79,7 +79,7 @@ func azureKeyListCases() []azureKeyListCase {
 // TestCckmAzureDataSourceKeyList creates an EC key, attaches a rotation scheduler and a backup scheduler in an
 // update (they cannot be set on create) and runs the ciphertrust_azure_key_list filter cases against it. The
 // backup value changes in the update, so the cases run after it. Together with the version and RSA
-// algorithm data sources in TestCckmAzureKeyUpload, this covers the filters of the data source.
+// algorithm data sources in TestCckmAzureKeyUploadAndRunScheduler, this covers the filters of the data source.
 func TestCckmAzureDataSourceKeyList(t *testing.T) {
 	initConfig, ok := initCckmAzureTest()
 	if !ok {

@@ -249,3 +249,98 @@ func TestCckmAzureReleasePolicy(t *testing.T) {
 		t.Errorf("state, edited file after the update: want the file path kept")
 	}
 }
+
+// TestCckmAzureRotationDiffers is a plain unit test of azureKeyRotationDiffers and of the release_policy
+// immutable error. It needs no CipherTrust Manager, vault or credentials.
+func TestCckmAzureRotationDiffers(t *testing.T) {
+	const policy = `{"version":"1.0.0","anyOf":[{"authority":"https://example.com"}]}`
+	const policyDifferent = `{"version":"1.0.0","anyOf":[{"authority":"https://other.example.com"}]}`
+
+	// 13. azureKeyRotationDiffers. An optional value that is not configured is a difference only when the
+	// key has a value for it.
+	labelsWith := func(extra string) string {
+		return `{"labels":{"job_config_id":"job-1","auto_rotate_key_source":"native","auto_rotate_key_type":"RSA",` +
+			`"auto_rotate_enable_key":true` + extra + `}}`
+	}
+	base := func() *models.EnableAutoRotationTFSDK {
+		return &models.EnableAutoRotationTFSDK{
+			JobConfigID:   types.StringValue("job-1"),
+			KeySource:     types.StringValue("native"),
+			KeyType:       types.StringValue("RSA"),
+			KeySize:       types.Int64Null(),
+			ECName:        types.StringNull(),
+			EnableKey:     types.BoolValue(true),
+			ReleasePolicy: types.StringNull(),
+		}
+	}
+	sized := func() *models.EnableAutoRotationTFSDK {
+		r := base()
+		r.KeySize = types.Int64Value(2048)
+		return r
+	}
+	named := func() *models.EnableAutoRotationTFSDK {
+		r := base()
+		r.ECName = types.StringValue("P-256")
+		return r
+	}
+	withPolicy := func() *models.EnableAutoRotationTFSDK {
+		r := base()
+		r.ReleasePolicy = types.StringValue(policy)
+		return r
+	}
+	sizeLabel := `,"auto_rotate_key_size":2048`
+	ecLabel := `,"auto_rotate_ec_name":"P-256"`
+	policyLabel := `,"auto_rotate_release_policy":` + policy
+	cases := []struct {
+		name     string
+		rot      *models.EnableAutoRotationTFSDK
+		response string
+		want     bool
+	}{
+		{"nothing optional", base(), labelsWith(""), false},
+		{"key_size equal", sized(), labelsWith(sizeLabel), false},
+		{"key_size changed", sized(), labelsWith(`,"auto_rotate_key_size":3072`), true},
+		{"key_size configured, no label", sized(), labelsWith(""), true},
+		{"key_size not configured, label set", base(), labelsWith(sizeLabel), true},
+		{"ec_name equal", named(), labelsWith(ecLabel), false},
+		{"ec_name changed", named(), labelsWith(`,"auto_rotate_ec_name":"P-384"`), true},
+		{"ec_name not configured, label set", base(), labelsWith(ecLabel), true},
+		{"release_policy equal", withPolicy(), labelsWith(policyLabel), false},
+		{"release_policy changed", withPolicy(), labelsWith(`,"auto_rotate_release_policy":` + policyDifferent), true},
+		{"release_policy configured, no label", withPolicy(), labelsWith(""), true},
+		{"release_policy not configured, label set", base(), labelsWith(policyLabel), true},
+		{"job_config_id changed", base(), strings.Replace(labelsWith(""), "job-1", "job-2", 1), true},
+	}
+	for _, c := range cases {
+		if got := azureKeyRotationDiffers(c.rot, c.response); got != c.want {
+			t.Errorf("differs, %s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// 14. The immutable error shows the policy content, not the path of the file.
+	dir := t.TempDir()
+	policyFile := filepath.Join(dir, "policy.json")
+	if err := os.WriteFile(policyFile, []byte(policyDifferent), 0o600); err != nil {
+		t.Fatalf("unable to write policy file: %v", err)
+	}
+	nonNullRaw := tftypes.NewValue(tftypes.Object{AttributeTypes: map[string]tftypes.Type{}}, map[string]tftypes.Value{})
+	req := planmodifier.StringRequest{
+		Path:       path.Root("release_policy"),
+		State:      tfsdk.State{Raw: nonNullRaw},
+		Plan:       tfsdk.Plan{Raw: nonNullRaw},
+		StateValue: types.StringValue(policy),
+		PlanValue:  types.StringValue(policyFile),
+	}
+	resp := &planmodifier.StringResponse{PlanValue: req.PlanValue}
+	azureReleasePolicyImmutable().PlanModifyString(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatalf("immutable message: want an error, got none")
+	}
+	detail := resp.Diagnostics.Errors()[0].Detail()
+	if strings.Contains(detail, policyFile) || !strings.Contains(detail, policy) || !strings.Contains(detail, policyDifferent) {
+		t.Errorf("immutable message: want the old and new JSON and not the file path, got %q", detail)
+	}
+	if resp.PlanValue.ValueString() != policy {
+		t.Errorf("immutable message: want the plan value reset to the state value, got %q", resp.PlanValue.ValueString())
+	}
+}
