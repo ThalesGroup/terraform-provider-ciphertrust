@@ -1,6 +1,7 @@
 variable "oci_key_file" {
   description = "Path to or contents of the OCI private key file."
   type        = string
+  sensitive   = true
 }
 
 variable "oci_pub_key_fingerprint" {

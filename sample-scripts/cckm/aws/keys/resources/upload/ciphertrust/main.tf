@@ -2,7 +2,11 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "1.0.1"
+      version = "1.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
     }
   }
 }
