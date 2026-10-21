@@ -448,12 +448,15 @@ func testAccRunCCKMRotation(schedulerResource string) resource.TestCheckFunc {
 		// Wait for the job to complete. A failed or aborted job will not complete, so stop early.
 		url = "api/v1/scheduler/jobs/"
 		var status string
-		for retries := 0; retries < 10; retries++ {
+		// A job is queued first and can take more than a minute to complete on a shared service, so wait
+		// up to 3 minutes.
+		for retries := 0; retries < 36; retries++ {
 			response, err = client.GetById(ctx, id, jobID, url)
 			if err != nil {
 				return fmt.Errorf("%s: failed to get scheduler job %s: %s", testName, jobID, err.Error())
 			}
 			status = gjson.Get(response, "status").String()
+			client.Log.Debug(fmt.Sprintf("[%s][job:%s][retry:%d][status:%s][response:%s]", testName, jobID, retries, status, response))
 			if status == "completed" {
 				return nil
 			}
@@ -462,6 +465,6 @@ func testAccRunCCKMRotation(schedulerResource string) resource.TestCheckFunc {
 			}
 			time.Sleep(5 * time.Second)
 		}
-		return fmt.Errorf("%s: job %s did not complete, last status: %s", testName, jobID, status)
+		return fmt.Errorf("%s: job %s did not complete, last status: %s, last response: %s", testName, jobID, status, response)
 	}
 }
