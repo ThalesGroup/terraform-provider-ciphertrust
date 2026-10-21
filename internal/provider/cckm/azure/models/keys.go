@@ -51,6 +51,24 @@ type AzureKeyTFSDK struct {
 	Version               types.String `tfsdk:"version"`
 	VersionCount          types.Int64  `tfsdk:"version_count"`
 	VaultName             types.String `tfsdk:"vault_name"`
+	AvailableInKeyVault   types.String `tfsdk:"available_in_key_vault"`
+	AzureCreatedAt        types.String `tfsdk:"azure_created_at"`
+	AzureExpireAt         types.String `tfsdk:"azure_expire_at"`
+	AzureUpdatedAt        types.String `tfsdk:"azure_updated_at"`
+	CreatedBy             types.String `tfsdk:"created_by"`
+	Gone                  types.Bool   `tfsdk:"gone"`
+	KeySource             types.String `tfsdk:"key_source"`
+	LocalKeyID            types.String `tfsdk:"local_key_id"`
+	Meta                  types.String `tfsdk:"meta"`
+	ModifiedBy            types.String `tfsdk:"modified_by"`
+	Operation             types.String `tfsdk:"operation"`
+	OperationError        types.String `tfsdk:"operation_error"`
+	PkID                  types.String `tfsdk:"pk_id"`
+	RotatedAt             types.String `tfsdk:"rotated_at"`
+	SubscriptionIDs       types.List   `tfsdk:"subscription_ids"`
+	VaultLabels           types.Map    `tfsdk:"vault_labels"`
+
+	VersionDeletedInAzure types.Bool `tfsdk:"version_deleted_in_azure"`
 }
 
 // AzureRestoreKeyTFSDK is the restore_key block.

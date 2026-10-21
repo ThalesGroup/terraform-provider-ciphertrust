@@ -2,7 +2,6 @@ package cckm
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"sort"
 	"strings"
@@ -27,14 +26,6 @@ func azureKeyOptInt64(value int64) types.Int64 {
 		return types.Int64Null()
 	}
 	return types.Int64Value(value)
-}
-
-// azureKeyDate converts Unix epoch seconds from the API to a UTC RFC3339 string. 0 is null.
-func azureKeyDate(epoch int64) types.String {
-	if epoch == 0 {
-		return types.StringNull()
-	}
-	return types.StringValue(time.Unix(epoch, 0).UTC().Format(time.RFC3339))
 }
 
 // azureKeyKeyOps returns key_ops from the response, keeping the current value
@@ -95,10 +86,12 @@ func azureKeySetParams(ctx context.Context, response string, state *models.Azure
 	})
 	diags.Append(d...)
 
+	// The API never returns exp or nbf for a key, so the dates are carried from the plan or prior state.
+	priorAttrs := objectAttrs(objectAttrs(state.AzureParams)["attributes"])
 	attrsObj, d := types.ObjectValue(models.AzureParamsAttributesAttrTypes, map[string]attr.Value{
 		"enabled":         types.BoolValue(gjson.Get(response, "azure_param.attributes.enabled").Bool()),
-		"expiration_date": azureKeyDate(gjson.Get(response, "azure_param.attributes.exp").Int()),
-		"activation_date": azureKeyDate(gjson.Get(response, "azure_param.attributes.nbf").Int()),
+		"expiration_date": azureSecretKeptDate(priorAttrs, "expiration_date"),
+		"activation_date": azureSecretKeptDate(priorAttrs, "activation_date"),
 		"recovery_level":  types.StringValue(gjson.Get(response, "azure_param.attributes.recoveryLevel").String()),
 		"created":         azureKeyOptInt64(gjson.Get(response, "azure_param.attributes.created").Int()),
 		"updated":         azureKeyOptInt64(gjson.Get(response, "azure_param.attributes.updated").Int()),
@@ -144,22 +137,73 @@ func azureKeySetState(ctx context.Context, response string, state *models.AzureK
 		state.VaultID = types.StringValue(vaultID)
 	}
 
+	state.RotatedAt = azureKeyTimeString(gjson.Get(response, "rotated_at").String())
+	state.AzureCreatedAt = azureKeyTimeString(gjson.Get(response, "azure_created_at").String())
+	state.AzureUpdatedAt = azureKeyTimeString(gjson.Get(response, "azure_updated_at").String())
+	state.AzureExpireAt = azureKeyTimeString(gjson.Get(response, "azure_expire_at").String())
+	state.CreatedBy = azureKeyOptString(gjson.Get(response, "created_by").String())
+	state.ModifiedBy = azureKeyOptString(gjson.Get(response, "modified_by").String())
+	state.Gone = types.BoolValue(gjson.Get(response, "gone").Bool())
+	state.VersionDeletedInAzure = types.BoolValue(gjson.Get(response, "version_deleted_in_azure").Bool())
+	state.KeySource = azureKeyOptString(gjson.Get(response, "key_source").String())
+	state.LocalKeyID = azureKeyOptString(gjson.Get(response, "local_key_id").String())
+	state.Operation = azureKeyOptString(gjson.Get(response, "operation").String())
+	state.OperationError = azureKeyOptString(gjson.Get(response, "operation_error").String())
+	state.AvailableInKeyVault = azureKeyOptString(gjson.Get(response, "available_in_key_vault").String())
+	state.PkID = azureKeyOptString(gjson.Get(response, "pk_id").String())
+	state.Meta = types.StringNull()
+	if meta := gjson.Get(response, "meta"); meta.Exists() && meta.Type != gjson.Null && meta.Raw != "{}" && meta.Raw != "" {
+		state.Meta = types.StringValue(meta.Raw)
+	}
+	subscriptionIDs := make([]string, 0)
+	for _, s := range gjson.Get(response, "subscription_ids").Array() {
+		subscriptionIDs = append(subscriptionIDs, s.String())
+	}
+	state.SubscriptionIDs = types.ListNull(types.StringType)
+	if len(subscriptionIDs) > 0 {
+		list, d := types.ListValueFrom(ctx, types.StringType, subscriptionIDs)
+		diags.Append(d...)
+		state.SubscriptionIDs = list
+	}
+	vaultLabels := make(map[string]string)
+	for k, v := range gjson.Get(response, "vault_labels").Map() {
+		vaultLabels[k] = v.String()
+	}
+	state.VaultLabels = types.MapNull(types.StringType)
+	if len(vaultLabels) > 0 {
+		m, d := types.MapValueFrom(ctx, types.StringType, vaultLabels)
+		diags.Append(d...)
+		state.VaultLabels = m
+	}
+
 	azureKeySetParams(ctx, response, state, diags)
 	azureKeySetPolicyAndLabels(ctx, response, state, diags)
 	azureKeySetUploadKey(response, state)
 
-	// enable_auto_rotation is rebuilt from the labels only when state has none. This covers import and
-	// rotation that was enabled outside Terraform.
-	if state.EnableAutoRotation == nil {
-		state.EnableAutoRotation = azureKeyRotationFromLabels(response)
-	}
+	// enable_auto_rotation is always rebuilt from the labels so that a change made outside Terraform, or
+	// rotation that was enabled or disabled outside Terraform, is detected. This also covers import.
+	state.EnableAutoRotation = azureKeyRotationFromState(response, state.EnableAutoRotation)
 
-	// backup_config is set from the response like labels. enable_auto_backup is rebuilt from it only when
-	// state has none. This covers import and backup that was enabled outside Terraform.
+	// backup_config is set from the response like labels. enable_auto_backup is always rebuilt from it so
+	// that backup that was enabled, disabled or changed outside Terraform is detected. This also covers import.
 	state.BackupConfig = azureKeyBackupConfigMap(ctx, response, diags)
-	if state.EnableAutoBackup == nil {
-		state.EnableAutoBackup = azureKeyBackupFromConfig(response)
+	state.EnableAutoBackup = azureKeyBackupFromConfig(response)
+}
+
+// azureKeyRotationFromState builds enable_auto_rotation from the labels of the key. The labels hold exactly
+// what was sent when rotation was enabled, so a value that was not configured is null. It returns nil if the
+// key has no rotation job. A configured release_policy, JSON or the path of a file, is kept only when it
+// resolves to JSON equivalent to the auto_rotate_release_policy label. Otherwise the label JSON is used, or
+// null if the label is gone, so the next plan shows a change and the update re-applies the configured policy.
+func azureKeyRotationFromState(response string, prior *models.EnableAutoRotationTFSDK) *models.EnableAutoRotationTFSDK {
+	rot := azureKeyRotationFromLabels(response)
+	if rot == nil || prior == nil || prior.ReleasePolicy.IsNull() || prior.ReleasePolicy.IsUnknown() || rot.ReleasePolicy.IsNull() {
+		return rot
 	}
+	if azureReleasePolicyEquivalent(prior.ReleasePolicy.ValueString(), rot.ReleasePolicy.ValueString()) {
+		rot.ReleasePolicy = prior.ReleasePolicy
+	}
+	return rot
 }
 
 // azureKeySetUploadKey sets the computed local_key_name of upload_key from the response. It is the name of
@@ -204,7 +248,8 @@ func azureKeyTimeString(value string) types.String {
 }
 
 // azureKeySetPolicyAndLabels sets release_policy and labels from the response.
-// A configured release_policy is kept when it is JSON-equivalent to the returned one.
+// A configured release_policy, JSON or the path of a file, is kept when it resolves to JSON that is equivalent
+// to the returned one. Otherwise the returned JSON is stored so a change made outside Terraform is detected.
 func azureKeySetPolicyAndLabels(ctx context.Context, response string, state *models.AzureKeyTFSDK, diags *diag.Diagnostics) {
 	policy := gjson.Get(response, "release_policy")
 	if !policy.Exists() || policy.Type == gjson.Null || policy.Raw == "{}" || policy.Raw == "" {
@@ -212,11 +257,7 @@ func azureKeySetPolicyAndLabels(ctx context.Context, response string, state *mod
 	} else {
 		keepPolicy := false
 		if !state.ReleasePolicy.IsNull() && !state.ReleasePolicy.IsUnknown() {
-			var cur, got interface{}
-			if json.Unmarshal([]byte(state.ReleasePolicy.ValueString()), &cur) == nil &&
-				json.Unmarshal([]byte(policy.Raw), &got) == nil {
-				keepPolicy = reflect.DeepEqual(cur, got)
-			}
+			keepPolicy = azureReleasePolicyEquivalent(state.ReleasePolicy.ValueString(), policy.Raw)
 		}
 		if !keepPolicy {
 			state.ReleasePolicy = types.StringValue(policy.Raw)

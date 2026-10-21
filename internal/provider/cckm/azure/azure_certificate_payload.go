@@ -95,6 +95,8 @@ func azureCertificatePolicyPayload(policy map[string]attr.Value) *models.AzureCe
 	if attributes := objectAttrs(policy["attributes"]); attributes != nil {
 		payload.Attributes = &models.AzureCertificateAttributesJSON{
 			Enabled: azureCertificateBoolPtr(attrBool(attributes, "enabled")),
+			Nbf:     azureCertificateEpochPtr(attrString(attributes, "activation_date")),
+			Exp:     azureCertificateEpochPtr(attrString(attributes, "expiration_date")),
 		}
 	}
 	if actions, ok := policy["lifetime_actions"].(types.List); ok && !actions.IsNull() && !actions.IsUnknown() {
@@ -108,6 +110,19 @@ func azureCertificatePolicyPayload(policy map[string]attr.Value) *models.AzureCe
 		}
 	}
 	return payload
+}
+
+// azureCertificateEpochPtr converts an RFC3339 date to Unix epoch seconds. It returns nil for a null,
+// unknown or empty value so that omitempty drops it. The schema validator rejects invalid dates before this runs.
+func azureCertificateEpochPtr(value types.String) *int64 {
+	if value.IsNull() || value.IsUnknown() || value.ValueString() == "" {
+		return nil
+	}
+	epoch, err := azureSecretEpoch(value.ValueString())
+	if err != nil {
+		return nil
+	}
+	return &epoch
 }
 
 func azureCertificateX509Payload(x509 map[string]attr.Value) *models.AzureCertificateX509PropsJSON {

@@ -27,6 +27,20 @@ type AzureKeyListEntryJSON struct {
 	UpdatedAt         string                `json:"updatedAt"`
 	SyncedAt          string                `json:"syncedAt"`
 	AzureParam        AzureKeyListParamJSON `json:"azure_param"`
+
+	RotatedAt             string `json:"rotated_at"`
+	AzureCreatedAt        string `json:"azure_created_at"`
+	AzureUpdatedAt        string `json:"azure_updated_at"`
+	AzureExpireAt         string `json:"azure_expire_at"`
+	CreatedBy             string `json:"created_by"`
+	ModifiedBy            string `json:"modified_by"`
+	VersionDeletedInAzure bool   `json:"version_deleted_in_azure"`
+	KeySource             string `json:"key_source"`
+	LocalKeyID            string `json:"local_key_id"`
+	Operation             string `json:"operation"`
+	OperationError        string `json:"operation_error"`
+	AvailableInKeyVault   string `json:"available_in_key_vault"`
+	PkID                  string `json:"pk_id"`
 }
 
 // AzureKeyListParamJSON is the azure_param object of a listed key.
@@ -70,6 +84,20 @@ type AzureKeyListEntryTFSDK struct {
 	CreatedAt         types.String `tfsdk:"created_at"`
 	UpdatedAt         types.String `tfsdk:"updated_at"`
 	SyncedAt          types.String `tfsdk:"synced_at"`
+
+	RotatedAt             types.String `tfsdk:"rotated_at"`
+	AzureCreatedAt        types.String `tfsdk:"azure_created_at"`
+	AzureUpdatedAt        types.String `tfsdk:"azure_updated_at"`
+	AzureExpireAt         types.String `tfsdk:"azure_expire_at"`
+	CreatedBy             types.String `tfsdk:"created_by"`
+	ModifiedBy            types.String `tfsdk:"modified_by"`
+	VersionDeletedInAzure types.Bool   `tfsdk:"version_deleted_in_azure"`
+	KeySource             types.String `tfsdk:"key_source"`
+	LocalKeyID            types.String `tfsdk:"local_key_id"`
+	Operation             types.String `tfsdk:"operation"`
+	OperationError        types.String `tfsdk:"operation_error"`
+	AvailableInKeyVault   types.String `tfsdk:"available_in_key_vault"`
+	PkID                  types.String `tfsdk:"pk_id"`
 }
 
 // AzureKeyListTFSDK is the top-level Terraform state for the

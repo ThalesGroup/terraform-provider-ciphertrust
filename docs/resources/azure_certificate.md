@@ -180,7 +180,7 @@ resource "ciphertrust_azure_certificate" "restored" {
 - `azure_created_at` (String) Time the certificate was created in Azure.
 - `azure_expire_at` (String) Time the certificate expires.
 - `azure_updated_at` (String) Time the certificate was last updated in Azure.
-- `backup` (String) Backup of the certificate.
+- `backup` (String) CipherTrust Manager resource ID of the Azure certificate backup.
 - `backup_at` (String) Time the certificate was last backed up.
 - `cert` (String) Base64 encoded certificate (CER).
 - `cert_material_origin` (String) Origin of the certificate material.
@@ -193,7 +193,6 @@ resource "ciphertrust_azure_certificate" "restored" {
 - `error` (String) Error reported for the certificate.
 - `gone` (Boolean) Whether the certificate no longer exists in Azure.
 - `id` (String) CipherTrust Manager resource ID of the certificate.
-- `key_vault` (String) Name of the Azure vault that contains the certificate.
 - `kid` (String) Azure identifier of the key backing the certificate.
 - `operation` (String) Last operation performed on the certificate.
 - `operation_error` (String) Error of the last operation, if it failed.
@@ -208,6 +207,7 @@ resource "ciphertrust_azure_certificate" "restored" {
 - `tenant` (String) Azure tenant of the vault.
 - `thumbprint` (String) Thumbprint of the certificate.
 - `updated_at` (String) Time the certificate was last updated in CipherTrust Manager.
+- `vault_name` (String) Name of the Azure vault that contains the certificate.
 - `version` (String) Azure version of the certificate.
 - `version_count` (Number) Number of versions of the certificate.
 
@@ -236,12 +236,9 @@ Optional:
 
 Optional:
 
+- `activation_date` (String) (Immutable) Date of certificate activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. Before this time the certificate cannot be used.
 - `enabled` (Boolean) Whether the certificate is enabled. Can be updated.
-
-Read-Only:
-
-- `activation_date` (String) Date of certificate activation in UTC time in RFC3339 format. Derived by Azure and cannot be set.
-- `expiration_date` (String) Date of certificate expiry in UTC time in RFC3339 format. Derived by Azure from x509_props.validity_months and cannot be set.
+- `expiration_date` (String) (Immutable) Date of certificate expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. Must be later than activation_date.
 
 
 <a id="nestedatt--azure_params--policy--issuer"></a>

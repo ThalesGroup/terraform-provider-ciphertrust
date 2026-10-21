@@ -124,8 +124,13 @@ output "latest_key_names" {
 
 Read-Only:
 
+- `available_in_key_vault` (String) Whether the key is available in the key vault.
+- `azure_created_at` (String) Time the key was created in Azure.
+- `azure_expire_at` (String) Time the key expires in Azure. Not set if the key has no expiry.
+- `azure_updated_at` (String) Time the key was last updated in Azure.
 - `cloud_name` (String) Cloud name as returned by CipherTrust Manager.
 - `created_at` (String) Time the key was created in CipherTrust Manager.
+- `created_by` (String) Client ID of the Azure registered application that created the key.
 - `curve` (String) Elliptic curve name. Only set for EC and EC-HSM keys.
 - `deleted` (Boolean) Whether the key has been deleted.
 - `enabled` (Boolean) Whether the key is enabled in Azure.
@@ -133,10 +138,17 @@ Read-Only:
 - `id` (String) CipherTrust Manager resource ID of the key version.
 - `key_material_origin` (String) Origin of the key material.
 - `key_size` (Number) Key size in bits. Only set for RSA and RSA-HSM keys.
+- `key_source` (String) The source of the key, for example ciphertrust or native.
 - `kid` (String) Azure key identifier of the key version.
 - `kty` (String) Key type.
+- `local_key_id` (String) CipherTrust Manager resource ID of the local key the Azure key was created from.
+- `modified_by` (String) Client ID of the Azure registered application that last modified the key.
 - `name` (String) Azure name of the key.
+- `operation` (String) The last operation performed on the key.
+- `operation_error` (String) The error of the last operation, if it failed.
+- `pk_id` (String) CipherTrust Manager resource ID of the key's primary key record.
 - `region` (String) Azure region of the key vault.
+- `rotated_at` (String) Time the key was last rotated. Not set until the key has been rotated.
 - `status` (String) Status of the key.
 - `synced_at` (String) Time the key was last synchronized with Azure.
 - `tenant` (String) Azure tenant ID.
@@ -144,3 +156,4 @@ Read-Only:
 - `vault_id` (String) CipherTrust Manager resource ID of the key vault.
 - `vault_name` (String) Name of the key vault the key belongs to.
 - `version` (String) Azure version identifier of the key version.
+- `version_deleted_in_azure` (Boolean) Whether this version of the key was deleted in Azure.

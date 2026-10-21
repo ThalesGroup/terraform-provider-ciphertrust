@@ -44,7 +44,11 @@ configuration.
 `azure_params.key_size`, `exportable` and `release_policy` cannot be changed.
 Set them in your configuration to match the imported state. For
 `release_policy`, differences in whitespace or key order are ignored, but the
-policy content must match the imported value.
+policy content must match the imported value. A `release_policy` can be JSON or
+the path of a file that contains the JSON. When it is a file path, the file
+content is compared with the policy of the key. If the policy was changed
+outside Terraform, the state holds the policy of the key and the plan reports
+that `release_policy` is immutable.
 
 **`restore_key` and `upload_key`** - input-only attributes used when a key
 is restored or uploaded. They are not returned by the API and are `null` in

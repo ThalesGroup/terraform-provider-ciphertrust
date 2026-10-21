@@ -3,12 +3,29 @@
 page_title: "ciphertrust_azure_key Resource - terraform-provider-ciphertrust"
 subcategory: ""
 description: |-
-  Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, to upload key material into a vault (upload_key), or to restore an existing key into a vault (restore_key). New versions of a key are created by creating another key resource with the same name.
+  Use this resource to add a key to a CipherTrust Manager Azure vault. The mode is chosen by which block is set. Only one block can be set.
+  No block (default): creates a new native Azure key in the vault from name and azure_params.upload_key: uploads key material to the vault.restore_key: restores an existing key that has a backup into the vault nominated by vault_id.
+  All inputs are immutable except azure_params.tags, azure_params.key.key_ops, and azure_params.attributes.enabled, azure_params.attributes.activation_date and azure_params.attributes.expiration_date.
+  To create a new version of a key, create another key resource with the same name.
+  If a soft-deleted key of the same name exists in the vault, creating the resource recovers it instead of creating a new key. This requires recover_soft_deleted_keys to be true in the provider settings, otherwise the create fails.
+  On destroy, the key is soft-deleted and, if the vault supports purging and purge_keys_on_delete is true in the provider settings (the default), purged. If it is false, the key is only soft-deleted. After a purge, the key backups are deleted from CipherTrust Manager unless retain_key_backups_after_purge is true in the provider settings.
 ---
 
 # ciphertrust_azure_key (Resource)
 
-Use this resource to create a native Azure key in a CipherTrust Manager Azure vault, to upload key material into a vault (upload_key), or to restore an existing key into a vault (restore_key). New versions of a key are created by creating another key resource with the same name.
+Use this resource to add a key to a CipherTrust Manager Azure vault. The mode is chosen by which block is set. Only one block can be set.
+
+- No block (default): creates a new native Azure key in the vault from name and azure_params.
+- upload_key: uploads key material to the vault.
+- restore_key: restores an existing key that has a backup into the vault nominated by vault_id.
+
+All inputs are immutable except `azure_params.tags`, `azure_params.key.key_ops`, and `azure_params.attributes.enabled`, `azure_params.attributes.activation_date` and `azure_params.attributes.expiration_date`.
+
+To create a new version of a key, create another key resource with the same name.
+
+If a soft-deleted key of the same name exists in the vault, creating the resource recovers it instead of creating a new key. This requires `recover_soft_deleted_keys` to be true in the provider settings, otherwise the create fails.
+
+On destroy, the key is soft-deleted and, if the vault supports purging and `purge_keys_on_delete` is true in the provider settings (the default), purged. If it is false, the key is only soft-deleted. After a purge, the key backups are deleted from CipherTrust Manager unless `retain_key_backups_after_purge` is true in the provider settings.
 
 ## Example Usage
 
@@ -122,6 +139,20 @@ resource "ciphertrust_azure_key" "exportable_key" {
   }
 }
 
+# release_policy can also be the path of a file that contains the JSON policy.
+resource "ciphertrust_azure_key" "exportable_key_from_file" {
+  vault_id       = ciphertrust_azure_vault.vault.id
+  name           = "exportable-key-from-file"
+  exportable     = true
+  release_policy = "./release_policy.json"
+  azure_params = {
+    key = {
+      kty = "RSA-HSM"
+    }
+    key_size = 3072
+  }
+}
+
 # Scheduler and auto-backup / auto-rotation notes
 # - Neither enable_auto_backup nor enable_auto_rotation can be set when a key is
 #   created. Create the key first, then add the block and apply again.
@@ -200,6 +231,18 @@ resource "ciphertrust_azure_key" "scheduled_ciphertrust_rsa_key" {
     key_type      = "RSA"
     # Required when key_type is RSA or RSA-HSM
     key_size = 2048
+  }
+}
+
+# Rotate with a release policy read from a file. The release_policy of
+# enable_auto_rotation is a JSON object string or the path of a file.
+resource "ciphertrust_azure_key" "scheduled_key_with_release_policy" {
+  enable_auto_rotation = {
+    job_config_id  = ciphertrust_scheduler.scheduled_rotation.id
+    key_source     = "native"
+    key_type       = "RSA-HSM"
+    key_size       = 3072
+    release_policy = "./release_policy.json"
   }
 }
 
@@ -302,33 +345,50 @@ resource "ciphertrust_azure_key" "uploaded_hsm_key" {
 - `enable_auto_rotation` (Attributes) Enable the key for a scheduled rotation job. Cannot be set at creation time; configure via update after the key is created. Removing the block disables the rotation job. (see [below for nested schema](#nestedatt--enable_auto_rotation))
 - `exportable` (Boolean) (Immutable) Whether the private key can be exported from Azure. The vault must be a premium or managed HSM vault. If true, release_policy must also be set.
 - `name` (String) (Immutable) Name of the key. May contain only alphanumeric characters and hyphens. Required unless restore_key is set. Uploading a key with the name of an existing key adds a new version to that key.
-- `release_policy` (String) (Immutable) Key release policy as a JSON object string. Must be set if exportable is true.
+- `release_policy` (String) (Immutable) Key release policy as a JSON object string or the path of a file that contains a JSON object. Must be set if exportable is true.
 - `restore_key` (Attributes) (Immutable) Restores an existing key that has a backup into the vault instead of creating a new key. No other key attributes may be configured. Cannot be combined with upload_key. (see [below for nested schema](#nestedatt--restore_key))
 - `upload_key` (Attributes) (Immutable) Uploads key material to the vault instead of creating a new key. Cannot be combined with restore_key. The azure_params kty, curve and key_size cannot be set; they are reported by Azure after the upload. (see [below for nested schema](#nestedatt--upload_key))
 
 ### Read-Only
 
 - `account` (String) The account which owns this resource.
-- `backup` (String) CipherTrust Manager opaque object ID holding the automatic backup of the key. CipherTrust Manager takes this backup when the key is created, updated or uploaded. It is not a PIT backup ID and cannot be used as restore_key.backup_id.
+- `available_in_key_vault` (String) Whether the key is available in the key vault.
+- `azure_created_at` (String) Date and time the key was created in Azure.
+- `azure_expire_at` (String) Date and time the key expires in Azure. Not set if the key has no expiry.
+- `azure_updated_at` (String) Date and time the key was last updated in Azure.
+- `backup` (String) CipherTrust Manager resource ID of the Azure key backup.It is not a PIT backup ID and cannot be used as restore_key.backup_id.
 - `backup_at` (String) Date and time the key was last backed up.
 - `backup_config` (Map of String) Backup scheduler configuration of the key. When a backup job is enabled for the key, it contains backup_job_config_id.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `created_at` (String) Date and time the key was created in CipherTrust Manager.
+- `created_by` (String) Identity that created the key. It is the client ID of the Azure registered application used by the CipherTrust Manager connection.
 - `deleted` (Boolean) Whether the key has been deleted.
+- `gone` (Boolean) Whether the key no longer exists in Azure.
 - `id` (String) The key's CipherTrust Manager resource ID.
 - `key_material_origin` (String) The origin of the key material.
 - `key_soft_deleted_in_azure` (Boolean) Whether the key is soft deleted in Azure.
+- `key_source` (String) The source of the key, for example ciphertrust or native.
 - `labels` (Map of String) Key:value pairs associated with the key. When a scheduler job is enabled for the key, the labels contain entries describing the job.
+- `local_key_id` (String) CipherTrust Manager resource ID of the local key the Azure key was created from.
 - `managed` (Boolean) True if the lifetime of the key is managed by the key vault, for example a key that backs a certificate. False if the API does not return the value.
+- `meta` (String) Additional key metadata as a JSON object string.
+- `modified_by` (String) Identity that last modified the key. It is the client ID of the Azure registered application used by the CipherTrust Manager connection.
+- `operation` (String) The last operation performed on the key.
+- `operation_error` (String) The error of the last operation, if it failed.
+- `pk_id` (String) CipherTrust Manager resource ID of the key's primary key record.
 - `region` (String) Azure region of the vault in which the key resides.
+- `rotated_at` (String) Date and time the key was last rotated. Not set until the key has been rotated.
 - `soft_delete_enabled` (Boolean) Whether soft delete is enabled for the key's vault.
 - `status` (String) Status of the key in CipherTrust Manager.
+- `subscription_ids` (List of String) Azure subscription IDs the key is available in.
 - `synced_at` (String) Date and time the key was last synchronized.
 - `tenant` (String) The Azure tenant of the key.
 - `updated_at` (String) Date and time the key was last updated in CipherTrust Manager.
+- `vault_labels` (Map of String) Key:value labels of the key's vault.
 - `vault_name` (String) The vault's name and subscription ID in the form <vault name>::<subscription id>.
 - `version` (String) The Azure version identifier of the key.
 - `version_count` (Number) The number of versions of the key.
+- `version_deleted_in_azure` (Boolean) Whether this version of the key was deleted in Azure.
 
 <a id="nestedatt--azure_params"></a>
 ### Nested Schema for `azure_params`
@@ -345,9 +405,9 @@ Optional:
 
 Optional:
 
-- `activation_date` (String) (Updateable) Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. Before this time the key cannot be used. A date cannot be removed once it is set: removing it from the configuration keeps the current value.
+- `activation_date` (String) Date of key activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. Before this time the key cannot be used. A date cannot be cleared once it is set
 - `enabled` (Boolean) Whether the key is enabled in Azure. Can be updated.
-- `expiration_date` (String) (Updateable) Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. Must be later than activation_date. A date cannot be removed once it is set: removing it from the configuration keeps the current value.
+- `expiration_date` (String) Date of key expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. Must be later than activation_date. A date cannot be cleared once it is set.
 
 Read-Only:
 
@@ -395,7 +455,7 @@ Optional:
 - `ec_name` (String) Curve of the new key version. Options are P-256, P-384, P-521 and SECP256K1. Required when key_type is EC or EC-HSM.
 - `enable_key` (Boolean) Whether the new key version is enabled. Default is true.
 - `key_size` (Number) Size of the new key version. Options are 2048, 3072 and 4096. Required when key_type is RSA or RSA-HSM.
-- `release_policy` (String) Key release policy of the new key version as a JSON object string.
+- `release_policy` (String) Key release policy of the new key version as a JSON object string or the path of a file that contains a JSON object.
 
 
 <a id="nestedatt--restore_key"></a>

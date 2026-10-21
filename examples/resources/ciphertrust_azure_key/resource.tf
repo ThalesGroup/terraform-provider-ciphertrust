@@ -107,6 +107,20 @@ resource "ciphertrust_azure_key" "exportable_key" {
   }
 }
 
+# release_policy can also be the path of a file that contains the JSON policy.
+resource "ciphertrust_azure_key" "exportable_key_from_file" {
+  vault_id       = ciphertrust_azure_vault.vault.id
+  name           = "exportable-key-from-file"
+  exportable     = true
+  release_policy = "./release_policy.json"
+  azure_params = {
+    key = {
+      kty = "RSA-HSM"
+    }
+    key_size = 3072
+  }
+}
+
 # Scheduler and auto-backup / auto-rotation notes
 # - Neither enable_auto_backup nor enable_auto_rotation can be set when a key is
 #   created. Create the key first, then add the block and apply again.
@@ -185,6 +199,18 @@ resource "ciphertrust_azure_key" "scheduled_ciphertrust_rsa_key" {
     key_type      = "RSA"
     # Required when key_type is RSA or RSA-HSM
     key_size = 2048
+  }
+}
+
+# Rotate with a release policy read from a file. The release_policy of
+# enable_auto_rotation is a JSON object string or the path of a file.
+resource "ciphertrust_azure_key" "scheduled_key_with_release_policy" {
+  enable_auto_rotation = {
+    job_config_id  = ciphertrust_scheduler.scheduled_rotation.id
+    key_source     = "native"
+    key_type       = "RSA-HSM"
+    key_size       = 3072
+    release_policy = "./release_policy.json"
   }
 }
 

@@ -97,7 +97,7 @@ func azureKeyUpdate(ctx context.Context, id string, client *common.Client, plan 
 			response = getResp
 		}
 	}
-	client.Log.Debug("[azure_key_update.go -> azureKeyUpdate][response:" + response + "]")
+	client.Log.Debug("[azure_key_update.go -> azureKeyUpdate][response:" + redactAzureKeyResponse(response) + "]")
 
 	azureKeySetState(ctx, response, plan, diags)
 }

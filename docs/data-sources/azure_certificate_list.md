@@ -177,7 +177,6 @@ Read-Only:
 - `deleted` (Boolean) Whether the certificate is deleted.
 - `gone` (Boolean) Whether the certificate no longer exists in Azure.
 - `id` (String) CipherTrust Manager resource ID of the certificate version.
-- `key_vault` (String) Name of the Azure vault that contains the certificate.
 - `kid` (String) Azure key identifier.
 - `name` (String) Name of the certificate in Azure.
 - `recoverable_days` (Number) Number of days a deleted certificate can be recovered.
@@ -192,6 +191,7 @@ Read-Only:
 - `thumbprint` (String) Thumbprint of the certificate.
 - `updated_at` (String) Time the certificate was last updated in CipherTrust Manager.
 - `vault_id` (String) CipherTrust Manager resource ID of the vault that contains the certificate.
+- `vault_name` (String) Name of the Azure vault that contains the certificate.
 - `version` (String) Azure version of the certificate.
 - `version_count` (Number) Number of versions of the certificate.
 

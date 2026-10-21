@@ -705,7 +705,8 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 			map[string]bool{"no_ssl_verify": true}, nil)
 		client := runProviderConfigure(t, p, req)
 
-		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: false, RetainKeyBackupsAfterPurge: true}
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: false, RetainKeyBackupsAfterPurge: true,
+			PurgeCertificatesOnDelete: true, PurgeSecretsOnDelete: true}
 		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
 			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
 		}
@@ -720,7 +721,8 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 			map[string]bool{"recover_soft_deleted_keys": true})
 		client := runProviderConfigure(t, p, req)
 
-		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true}
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true,
+			PurgeCertificatesOnDelete: true, PurgeSecretsOnDelete: true}
 		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
 			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
 		}
@@ -736,10 +738,13 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 				"purge_keys_on_delete":           false,
 				"recover_soft_deleted_keys":      true,
 				"retain_key_backups_after_purge": false,
+				"purge_secrets_on_delete":        false,
+				"recover_soft_deleted_secrets":   true,
 			})
 		client := runProviderConfigure(t, p, req)
 
-		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false}
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false,
+			PurgeCertificatesOnDelete: true, PurgeSecretsOnDelete: false, RecoverSoftDeletedSecrets: true}
 		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
 			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
 		}
@@ -754,6 +759,8 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 			"azure_purge_keys_on_delete = false",
 			"azure_recover_soft_deleted_keys = true",
 			"azure_retain_key_backups_after_purge = false",
+			"azure_purge_secrets_on_delete = false",
+			"azure_recover_soft_deleted_secrets = true",
 		)
 
 		p := &ciphertrustProvider{}
@@ -761,7 +768,8 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 			map[string]bool{"no_ssl_verify": true}, nil)
 		client := runProviderConfigure(t, p, req)
 
-		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false}
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: false, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: false,
+			PurgeCertificatesOnDelete: true, PurgeSecretsOnDelete: false, RecoverSoftDeletedSecrets: true}
 		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
 			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
 		}
@@ -784,7 +792,8 @@ func TestUnit_Provider_AzureSettings(t *testing.T) {
 		client := runProviderConfigure(t, p, req)
 
 		// purge comes from the block, recover from the file, retain is the default.
-		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true}
+		want := common.AzureCCKMSettings{PurgeKeysOnDelete: true, RecoverSoftDeletedKeys: true, RetainKeyBackupsAfterPurge: true,
+			PurgeCertificatesOnDelete: true, PurgeSecretsOnDelete: true}
 		if got := client.CCKMConfig.AzureCCKMSettings; got != want {
 			t.Errorf("AzureCCKMSettings: want %+v, got %+v", want, got)
 		}

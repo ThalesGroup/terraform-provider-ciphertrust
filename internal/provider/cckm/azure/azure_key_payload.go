@@ -1,7 +1,6 @@
 package cckm
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -128,9 +127,8 @@ func azureKeyBuildUpdatePayload(id string, client *common.Client, plan *models.A
 				"activation_date must be in RFC3339 format, for example 2026-07-03T14:24:00Z.")
 			return nil
 		}
-		if t.Unix() != gjson.Get(keyResponse, "azure_param.attributes.nbf").Int() {
-			attrs["nbf"] = t.Unix()
-		}
+		// The response is not compared, because its nbf is a UTC time and not necessarily epoch seconds.
+		attrs["nbf"] = t.Unix()
 	}
 	if !v.ExpirationDate.IsNull() && !v.ExpirationDate.IsUnknown() {
 		t, err := time.Parse(time.RFC3339, v.ExpirationDate.ValueString())
@@ -139,9 +137,8 @@ func azureKeyBuildUpdatePayload(id string, client *common.Client, plan *models.A
 				"expiration_date must be in RFC3339 format, for example 2030-07-03T14:24:00Z.")
 			return nil
 		}
-		if t.Unix() != gjson.Get(keyResponse, "azure_param.attributes.exp").Int() {
-			attrs["exp"] = t.Unix()
-		}
+		// The response is not compared, because its exp is a UTC time and not necessarily epoch seconds.
+		attrs["exp"] = t.Unix()
 	}
 	if len(attrs) > 0 {
 		payload["attributes"] = attrs
@@ -236,10 +233,8 @@ func azureKeyBuildCreateNativePayload(plan *models.AzureKeyTFSDK, vaultType stri
 		payload.Exportable = &b
 	}
 	if !plan.ReleasePolicy.IsNull() && !plan.ReleasePolicy.IsUnknown() {
-		var policy map[string]interface{}
-		if err := json.Unmarshal([]byte(plan.ReleasePolicy.ValueString()), &policy); err != nil {
-			diags.AddAttributeError(path.Root("release_policy"), "Invalid release policy",
-				"release_policy must be a valid JSON object.")
+		policy, ok := azureReleasePolicyObject(plan.ReleasePolicy.ValueString(), path.Root("release_policy"), diags)
+		if !ok {
 			return payload, false
 		}
 		payload.ReleasePolicy = policy

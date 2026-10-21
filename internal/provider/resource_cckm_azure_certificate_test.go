@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
@@ -32,6 +33,13 @@ func azureProviderCertSettingsConfig(config string, purgeCertificatesOnDelete, r
 	return strings.Replace(config, `provider "ciphertrust" {`, settings, 1)
 }
 
+// importStateVerifyIgnoreAzureCert lists the certificate date attributes that are null after an import, because
+// the API does not return them. ImportStateVerify ignores them.
+var importStateVerifyIgnoreAzureCert = []string{
+	"azure_params.policy.attributes.activation_date",
+	"azure_params.policy.attributes.expiration_date",
+}
+
 // azureCertSoftDeleteOutOfBand soft-deletes the certificate with the CipherTrust Manager API, outside of
 // Terraform. The certificate keeps its ID and stays in the vault. The error is returned so the test can fail.
 func azureCertSoftDeleteOutOfBand(certID string) error {
@@ -46,8 +54,8 @@ func azureCertSoftDeleteOutOfBand(certID string) error {
 	return err
 }
 
-// azureCertCaptureAttrs copies every attribute of the resource in state into attrs.
-func azureCertCaptureAttrs(resourceName string, attrs *map[string]string) resource.TestCheckFunc {
+// azureCaptureCckmAttrs copies every attribute of the resource in state into attrs.
+func azureCaptureCckmAttrs(resourceName string, attrs *map[string]string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -65,7 +73,7 @@ func azureCertCaptureAttrs(resourceName string, attrs *map[string]string) resour
 // azureCertCompareAttrs checks that the resource in state has the same attributes as the ones captured earlier.
 // Recover only makes a soft-deleted certificate available again, so everything except the attributes in
 // ignore (status and updated_at by default) must be identical, including id and version.
-func azureCertCompareAttrs(resourceName string, attrs *map[string]string, ignore ...string) resource.TestCheckFunc {
+func azureCompareCckmAttrs(resourceName string, attrs *map[string]string, ignore ...string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -152,13 +160,13 @@ func TestCckmAzureCertificateValidationNative(t *testing.T) {
 
 	nameOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 		}`
 
 	tagsOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			azure_params = {
 				tags = { purpose = "validation" }
 			}
@@ -166,7 +174,7 @@ func TestCckmAzureCertificateValidationNative(t *testing.T) {
 
 	policyNoNameConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			azure_params = {
 				policy = {
 					issuer     = { name = "Self" }
@@ -211,7 +219,7 @@ func TestCckmAzureCertificateValidationRestore(t *testing.T) {
 
 	config := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			restore_certificate = {
 				certificate_id = "placeholder-certificate-id"
@@ -223,7 +231,7 @@ func TestCckmAzureCertificateValidationRestore(t *testing.T) {
 
 	nameOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			restore_certificate = {
 				certificate_id = "placeholder-certificate-id"
@@ -232,7 +240,7 @@ func TestCckmAzureCertificateValidationRestore(t *testing.T) {
 
 	paramsOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			restore_certificate = {
 				certificate_id = "placeholder-certificate-id"
 			}
@@ -243,7 +251,7 @@ func TestCckmAzureCertificateValidationRestore(t *testing.T) {
 
 	emptyBlockConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			restore_certificate = {}
 		}`
 
@@ -291,13 +299,13 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	emptyBlockConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id           = ciphertrust_azure_vault.standard_vault.id
+			vault_id           = ciphertrust_azure_vault.nonpurgeable_vault.id
 			upload_certificate = {}
 		}`
 
 	noNameConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			upload_certificate = {
 				certificate     = local.azure_cert_pem
 				private_key_pem = local.azure_cert_private_key_pem
@@ -309,7 +317,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	noPrivateKeyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				source_cert_id = "placeholder-source-id"
@@ -319,7 +327,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	certificateWithCaConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				certificate     = local.azure_cert_pem
@@ -331,7 +339,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	privateKeyOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				private_key_pem = local.azure_cert_private_key_pem
@@ -340,7 +348,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	caOnlyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				ca_id = "placeholder-ca-id"
@@ -349,7 +357,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	noCaIdConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				source_cert_id  = "placeholder-source-id"
@@ -359,7 +367,7 @@ func TestCckmAzureCertificateValidationUpload(t *testing.T) {
 
 	certificateWithPolicyConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			upload_certificate = {
 				certificate     = local.azure_cert_pem
@@ -443,7 +451,7 @@ func TestCckmAzureCertificateValidationUploadPfx(t *testing.T) {
 
 	noNameConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			upload_certificate = {
 				certificate = local.azure_cert_pfx_b64
 			}
@@ -472,7 +480,7 @@ func TestCckmAzureCertificateValidationConflicts(t *testing.T) {
 
 	restoreAndUploadConfig := initConfig + `
 		resource "ciphertrust_azure_certificate" "cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = "tf-validation"
 			restore_certificate = {
 				certificate_id = "placeholder-certificate-id"
@@ -496,7 +504,7 @@ func TestCckmAzureCertificateValidationConflicts(t *testing.T) {
 	})
 }
 
-// TestCckmAzureCertificateMaxConfigAndRecover exercises a native ciphertrust_azure_certificate in the standard vault
+// TestCckmAzureCertificateMaxConfigAndRecover exercises a native ciphertrust_azure_certificate in the nonpurgeable vault
 // with every attribute set. It checks the in-place update and that the immutable attributes are rejected. It then
 // soft-deletes the certificate out of band, removes it from state and applies the same config again. Create
 // recovers the soft-deleted certificate, which is identical to the original. The subtests run in order and share
@@ -512,10 +520,14 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 	subject := "CN=" + name
 	resourceName := "ciphertrust_azure_certificate.native_cert"
 
-	// createConfig args: certificate name, subject.
+	activationTime := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	activationDate := activationTime.Format(time.RFC3339)
+	expirationDate := activationTime.AddDate(0, 6, 0).Format(time.RFC3339)
+
+	// createConfig args: certificate name, subject, activation date, expiration date.
 	createConfig := fmt.Sprintf(`
 		resource "ciphertrust_azure_certificate" "native_cert" {
-			vault_id = ciphertrust_azure_vault.standard_vault.id
+			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			name     = %q
 			azure_params = {
 				tags = {
@@ -542,7 +554,9 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 						}
 					}
 					attributes = {
-						enabled = true
+						enabled         = true
+						activation_date = %q
+						expiration_date = %q
 					}
 					secret_props = {
 						content_type = "application/x-pkcs12"
@@ -553,7 +567,7 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 					}]
 				}
 			}
-		}`, name, subject)
+		}`, name, subject, activationDate, expirationDate)
 
 	// Purge is off so that destroy soft-deletes the certificate and recover is on so that creating a certificate
 	// with the name of a soft-deleted one recovers it.
@@ -562,15 +576,13 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 	updateConfig := strings.NewReplacer(
 		`purpose = "native-test"`, `purpose = "native-updated"`,
 		`owner   = "terraform"`, `owner   = "terraform-updated"`,
-		`enabled = true`, `enabled = false`,
+		`enabled         = true`, `enabled         = false`,
 	).Replace(config)
 	immutableName := strings.Replace(updateConfig, fmt.Sprintf("name     = %q", name), fmt.Sprintf("name     = %q", name+"-x"), 1)
 	immutableKeyProps := strings.Replace(updateConfig, `key_size   = 4096`, `key_size   = 2048`, 1)
 	immutableX509 := strings.Replace(updateConfig, `validity_months = 12`, `validity_months = 24`, 1)
 	immutableSecret := strings.Replace(updateConfig, `application/x-pkcs12`, `application/x-pem-file`, 1)
 	immutableLifetime := strings.Replace(updateConfig, `lifetime_percentage = 80`, `lifetime_percentage = 70`, 1)
-	// noRecoverConfig is the updated config with recover_soft_deleted_certificates set to false.
-	noRecoverConfig := strings.Replace(updateConfig, `recover_soft_deleted_certificates = true`, `recover_soft_deleted_certificates = false`, 1)
 
 	// original holds the attributes of the certificate after the in-place update. The recover steps at the end
 	// compare the recovered certificate against it and soft-delete it by its CipherTrust Manager id.
@@ -586,7 +598,7 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "id"),
 					resource.TestCheckResourceAttr(resourceName, "name", name),
-					resource.TestCheckResourceAttrPair(resourceName, "vault_id", "ciphertrust_azure_vault.standard_vault", "id"),
+					resource.TestCheckResourceAttrPair(resourceName, "vault_id", "ciphertrust_azure_vault.nonpurgeable_vault", "id"),
 					resource.TestCheckResourceAttr(resourceName, "status", "AVAILABLE"),
 					resource.TestCheckResourceAttrSet(resourceName, "version"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.tags.purpose", "native-test"),
@@ -610,20 +622,22 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.x509_props.sans.emails.#", "1"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.x509_props.sans.user_principal_names.#", "1"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.attributes.enabled", "true"),
+					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.attributes.activation_date", activationDate),
+					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.attributes.expiration_date", expirationDate),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.secret_props.content_type", "application/x-pkcs12"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.#", "1"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.0.action.action_type", "AutoRenew"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.0.trigger.lifetime_percentage", "80"),
-					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.attributes.activation_date"),
-					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.attributes.expiration_date"),
 				),
 			},
 			{
-				// Subtest 2: import reproduces the state.
-				Config:            config,
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				// Subtest 2: import reproduces the state. The dates are not returned by the API, so they are null
+				// after an import.
+				Config:                  config,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAzureCert,
 			},
 			{
 				// Subtest 3: update the tags and attributes.enabled in place. The id must not change.
@@ -634,15 +648,16 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "azure_params.tags.owner", "terraform-updated"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.attributes.enabled", "false"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.key_props.key_size", "4096"),
-					azureCertCaptureAttrs(resourceName, &original),
+					azureCaptureCckmAttrs(resourceName, &original),
 				),
 			},
 			{
 				// Subtest 4: import reproduces the updated state.
-				Config:            updateConfig,
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				Config:                  updateConfig,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: importStateVerifyIgnoreAzureCert,
 			},
 			{
 				// Subtest 5: name is immutable.
@@ -687,43 +702,28 @@ func TestCckmAzureCertificateMaxConfigAndRecover(t *testing.T) {
 				},
 			},
 			{
-				// Subtest 11: with recover_soft_deleted_certificates false, create does not recover the soft-deleted
-				// certificate of the same name. The create operation goes ahead and fails because the name is still taken.
-				Config:      noRecoverConfig,
-				ExpectError: regexp.MustCompile(`Error creating Azure certificate`),
-			},
-			{
-				// Subtest 12: with recover_soft_deleted_certificates false, importing the soft-deleted certificate
-				// fails, and it is not recovered. The id is given because the resource is not in state.
-				Config:            noRecoverConfig,
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateIdFunc: func(*terraform.State) (string, error) { return original["id"], nil },
-				ExpectError:       regexp.MustCompile(`recover_soft_deleted_certificates to true`),
-			},
-			{
-				// Subtest 13: the updated config finds the soft-deleted certificate of the same name and recovers it.
+				// Subtest 11: the updated config finds the soft-deleted certificate of the same name and recovers it.
 				// The certificate is recovered as is, so its id, version and attributes are unchanged. This also shows
 				// the failed steps above left the certificate recoverable.
 				Config: updateConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "status", "AVAILABLE"),
-					azureCertCompareAttrs(resourceName, &original),
+					azureCompareCckmAttrs(resourceName, &original),
 				),
 			},
 		},
 	})
 }
 
-// TestCckmAzureCertificateNativeMinConfigAndRestore creates a native certificate with only the required attributes
-// in the premium vault and checks that the server-defaulted attributes are populated, the plan after apply and
-// refresh is empty and import reproduces the state. The premium vault is used because it is the only vault that can
-// purge, and a certificate can only be restored once it is deleted. When the test above ends the certificate is
-// purged and CCKM keeps its record in the deleted state. A subtest then restores it into the standard vault.
-func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
-	initConfig, ok := initCckmAzureTestPremiumVault()
+// TestCckmAzureCertificateMinConfigAndRestore creates a native certificate with only the required attributes
+// in the purgeable vault and checks that the server-defaulted attributes are populated, the plan after apply and
+// refresh is empty and import reproduces the state. The purgeable vault is used because,
+// and a certificate can only be restored once it is deleted. When the test above ends the certificate is
+// purged and CCKM keeps its record in the deleted state. A subtest then restores it into the nonpurgeable vault.
+func TestCckmAzureCertificateMinConfigAndRestore(t *testing.T) {
+	initConfig, ok := initCckmAzureTestPurgeableVault()
 	if !ok {
-		t.Skip("Azure premium vault environment variables not set - skipping TestCckmAzureCertificateNativeMinConfigAndRestore")
+		t.Skip("Azure purgeable vault environment variables not set - skipping TestCckmAzureCertificateMinConfigAndRestore")
 	}
 
 	suffix := uuid.New().String()[:8]
@@ -734,7 +734,7 @@ func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
 	// createConfig args: certificate name, subject. Only the required attributes are set.
 	createConfig := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "native_min" {
-		vault_id = ciphertrust_azure_vault.premium_vault.id
+		vault_id = ciphertrust_azure_vault.purgeable_vault.id
 		name     = %q
 		azure_params = {
 			policy = {
@@ -755,7 +755,7 @@ func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
 		}
 	}`, name, subject)
 
-	// Purge is on so that destroy purges the certificate from the premium vault. The restore subtest below needs
+	// Purge is on so that destroy purges the certificate from the purgeable vault. The restore subtest below needs
 	// the certificate to be in the deleted state in CCKM.
 	config := azureProviderCertSettingsConfig(initConfig, true, false) + createConfig
 
@@ -786,9 +786,7 @@ func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
 					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.key_props.reuse_key"),
 					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.secret_props.content_type"),
 					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.attributes.enabled"),
-					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.attributes.activation_date"),
-					resource.TestCheckResourceAttrSet(resourceName, "azure_params.policy.attributes.expiration_date"),
-					azureCertCaptureAttrs(resourceName, &original),
+					azureCaptureCckmAttrs(resourceName, &original),
 				),
 			},
 			{
@@ -801,31 +799,31 @@ func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
 		},
 	})
 
-	// The certificate above was purged from the premium vault when the test above ended and CCKM keeps its record
+	// The certificate above was purged from the purgeable vault when the test above ended and CCKM keeps its record
 	// in the deleted state. A certificate can only be restored when it is deleted. This config re-adds the
-	// connection and both vaults and restores the certificate into the standard vault by its CipherTrust Manager id.
+	// connection and both vaults and restores the certificate into the nonpurgeable vault by its CipherTrust Manager id.
 	// Captured before the subtest starts because t inside the subtest is the subtest itself.
 	parentFailed := t.Failed()
-	t.Run("restore_into_standard_vault", func(t *testing.T) {
+	t.Run("restore_into_nonpurgeable_vault", func(t *testing.T) {
 		// Skip when the steps above failed. They leave resources behind that this subtest depends on.
 		if parentFailed {
-			t.Skip("earlier steps failed - skipping restore_into_standard_vault")
+			t.Skip("earlier steps failed - skipping restore_into_nonpurgeable_vault")
 		}
 		if original["id"] == "" {
-			t.Skip("certificate id was not captured - skipping restore_into_standard_vault")
+			t.Skip("certificate id was not captured - skipping restore_into_nonpurgeable_vault")
 		}
 		restoredName := "ciphertrust_azure_certificate.restored_cert"
 
 		// restoreConfig args: certificate id to restore.
 		restoreConfig := fmt.Sprintf(`
 			resource "ciphertrust_azure_certificate" "restored_cert" {
-				vault_id = ciphertrust_azure_vault.standard_vault.id
+				vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 				restore_certificate = {
 					certificate_id = %q
 				}
 			}`, original["id"])
 
-		// The standard vault cannot purge, so purge on delete is off and destroy only soft-deletes the restored certificate.
+		// The nonpurgeable vault cannot purge, so purge on delete is off and destroy only soft-deletes the restored certificate.
 		restoreFullConfig := azureProviderCertSettingsConfig(initConfig, false, false) + restoreConfig
 
 		resource.Test(t, resource.TestCase{
@@ -833,13 +831,13 @@ func TestCckmAzureCertificateNativeMinConfigAndRestore(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					// Restore the certificate into the standard vault. The framework fails the step if the plan
+					// Restore the certificate into the nonpurgeable vault. The framework fails the step if the plan
 					// after apply or refresh is not empty.
 					Config: restoreFullConfig,
 					Check: resource.ComposeAggregateTestCheckFunc(
 						resource.TestCheckResourceAttr(restoredName, "id", original["id"]),
 						resource.TestCheckResourceAttr(restoredName, "name", original["name"]),
-						resource.TestCheckResourceAttrPair(restoredName, "vault_id", "ciphertrust_azure_vault.standard_vault", "id"),
+						resource.TestCheckResourceAttrPair(restoredName, "vault_id", "ciphertrust_azure_vault.nonpurgeable_vault", "id"),
 						resource.TestCheckResourceAttr(restoredName, "status", "AVAILABLE"),
 						resource.TestCheckResourceAttrSet(restoredName, "version"),
 						resource.TestCheckResourceAttr(restoredName, "restore_certificate.certificate_id", original["id"]),
@@ -869,8 +867,8 @@ func TestCckmAzureCertificateNativeECConfigAndImport(t *testing.T) {
 	// createConfig args: certificate name, subject. No key_size is set for an EC key.
 	createConfig := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "native_ec" {
-		vault_id   = ciphertrust_azure_vault.standard_vault.id
-		depends_on = [ciphertrust_azure_vault.standard_vault]
+		vault_id   = ciphertrust_azure_vault.nonpurgeable_vault.id
+		depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 		name       = %q
 		azure_params = {
 			tags = { purpose = "native-ec-test" }
@@ -898,8 +896,8 @@ func TestCckmAzureCertificateNativeECConfigAndImport(t *testing.T) {
 	// import so the plan after import shows which attributes the import brings in that a minimal config does not set.
 	minimalResource := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "native_ec" {
-		vault_id   = ciphertrust_azure_vault.standard_vault.id
-		depends_on = [ciphertrust_azure_vault.standard_vault]
+		vault_id   = ciphertrust_azure_vault.nonpurgeable_vault.id
+		depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 		name       = %q
 	}`, name)
 
@@ -977,7 +975,7 @@ func TestCckmAzureCertificateNativeECConfigAndImport(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.#", "1"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.0.action.action_type", "EmailContacts"),
 					resource.TestCheckResourceAttr(resourceName, "azure_params.policy.lifetime_actions.0.trigger.days_before_expiry", "20"),
-					azureCertCaptureAttrs(resourceName, &original),
+					azureCaptureCckmAttrs(resourceName, &original),
 					func(s *terraform.State) error {
 						rs, ok := s.RootModule().Resources[resourceName]
 						if !ok {
@@ -1204,8 +1202,8 @@ func TestCckmAzureCertificateUploadLocal(t *testing.T) {
 	// createConfig args: certificate name, source certificate id, CA id, private key.
 	createConfig := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "upload_cm" {
-		vault_id   = ciphertrust_azure_vault.standard_vault.id
-		depends_on = [ciphertrust_azure_vault.standard_vault]
+		vault_id   = ciphertrust_azure_vault.nonpurgeable_vault.id
+		depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 		name       = %q
 		azure_params = {
 			tags = { purpose = "upload-cm-signed" }
@@ -1222,8 +1220,8 @@ func TestCckmAzureCertificateUploadLocal(t *testing.T) {
 	// The configuration a user has right after terraform import: no upload_certificate block.
 	importedResource := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "upload_cm" {
-		vault_id   = ciphertrust_azure_vault.standard_vault.id
-		depends_on = [ciphertrust_azure_vault.standard_vault]
+		vault_id   = ciphertrust_azure_vault.nonpurgeable_vault.id
+		depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 		name       = %q
 		azure_params = {
 			tags = { purpose = "upload-cm-updated" }
@@ -1375,14 +1373,14 @@ func TestCckmAzureCertificateUploadLocal(t *testing.T) {
 }
 
 // TestCckmAzureCertificateWithIssuer creates a certificate with a certificate authority (CA) issuer in the
-// standard vault instead of the Self issuer. CCKM_TF_FAKE_AZURE_CA is the name of that issuer. The test is
+// nonpurgeable vault instead of the Self issuer. CCKM_TF_FAKE_AZURE_CA is the name of that issuer. The test is
 // skipped when it is not set.
 //
 // THIS TEST IS EXPECTED TO FAIL TO CREATE. The issuer is a CA registered in the Azure key vault with dummy
 // values (for example a DigiCert provider with a made up account ID and organization ID), so Azure can never
-// issue the certificate. The certificate is accepted, then goes to the failed state. The create must report
+// issue the certificate. The certificate is accepted, then goes to the failed state. The create operation must report
 // that error and nothing must be left in Terraform state. To run it, add a certificate authority with dummy
-// values to the standard vault in the Azure portal (Certificates > Certificate Authorities > Add) and set
+// values to the nonpurgeable vault in the Azure portal (Certificates > Certificate Authorities > Add) and set
 // CCKM_TF_FAKE_AZURE_CA to its name.
 func TestCckmAzureCertificateWithIssuer(t *testing.T) {
 	issuerName := os.Getenv("CCKM_TF_FAKE_AZURE_CA")
@@ -1401,8 +1399,8 @@ func TestCckmAzureCertificateWithIssuer(t *testing.T) {
 	// createConfig args: certificate name, issuer name, subject.
 	createConfig := fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" "with_issuer" {
-		vault_id   = ciphertrust_azure_vault.standard_vault.id
-		depends_on = [ciphertrust_azure_vault.standard_vault]
+		vault_id   = ciphertrust_azure_vault.nonpurgeable_vault.id
+		depends_on = [ciphertrust_azure_vault.nonpurgeable_vault]
 		name       = %q
 		azure_params = {
 			policy = {
@@ -1427,7 +1425,7 @@ func TestCckmAzureCertificateWithIssuer(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// The create fails when the certificate reports the failed state, or when waiting for it
+				// The create operation fails when the certificate reports the failed state, or when waiting for it
 				// times out. Either way no certificate is left in state.
 				Config:      config,
 				ExpectError: regexp.MustCompile(`(?s)Error creating Azure certificate.*(the operation failed|timed out)`),

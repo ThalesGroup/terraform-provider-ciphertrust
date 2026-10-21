@@ -14,6 +14,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/cckm/utils"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/validators"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
@@ -423,14 +424,18 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 										},
 									},
 									"activation_date": schema.StringAttribute{
-										Computed:      true,
-										Description:   "Date of certificate activation in UTC time in RFC3339 format. Derived by Azure and cannot be set.",
-										PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+										Optional: true,
+										Description: "(Immutable) Date of certificate activation in UTC time in RFC3339 format. For example, 2026-07-03T14:24:00Z. " +
+											"Before this time the certificate cannot be used.",
+										Validators:    []validator.String{validators.RFC3339()},
+										PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 									},
 									"expiration_date": schema.StringAttribute{
-										Computed:      true,
-										Description:   "Date of certificate expiry in UTC time in RFC3339 format. Derived by Azure from x509_props.validity_months and cannot be set.",
-										PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+										Optional: true,
+										Description: "(Immutable) Date of certificate expiry in UTC time in RFC3339 format. For example, 2030-07-03T14:24:00Z. " +
+											"Must be later than activation_date.",
+										Validators:    []validator.String{validators.RFC3339()},
+										PlanModifiers: []planmodifier.String{modifiers.ImmutableString()},
 									},
 								},
 							},
@@ -509,7 +514,7 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 				},
 			},
 
-			// Computed - CipherTrust Manager
+			// Computed attributes.
 			"id": schema.StringAttribute{
 				Computed:      true,
 				Description:   "CipherTrust Manager resource ID of the certificate.",
@@ -577,14 +582,12 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 			},
 			"backup": schema.StringAttribute{
 				Computed:    true,
-				Description: "Backup of the certificate.",
+				Description: "CipherTrust Manager resource ID of the Azure certificate backup.",
 			},
 			"backup_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Time the certificate was last backed up.",
 			},
-
-			// Computed - Azure
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Azure cloud of the vault.",
@@ -597,7 +600,7 @@ func (r *resourceCCKMAzureCertificate) Schema(_ context.Context, _ resource.Sche
 				Computed:    true,
 				Description: "Azure tenant of the vault.",
 			},
-			"key_vault": schema.StringAttribute{
+			"vault_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "Name of the Azure vault that contains the certificate.",
 			},
@@ -825,7 +828,7 @@ func (r *resourceCCKMAzureCertificate) Update(ctx context.Context, req resource.
 			resp.Diagnostics.AddError(details, "")
 			return
 		}
-		patchResponse, err := r.client.UpdateData(ctx, certID, azureCertificatesEndpoint, payload, "")
+		patchResponse, err := azureUpdateDataV2WithRetry(ctx, id, r.client, azureCertificatesEndpoint, certID, payload)
 		if err != nil {
 			details := utils.ApiError("Error updating Azure certificate.",
 				map[string]interface{}{"error": err.Error(), "certificate_id": certID})

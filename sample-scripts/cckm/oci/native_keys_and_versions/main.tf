@@ -2,7 +2,11 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "1.0.1"
+      version = "1.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
     }
   }
 }
@@ -21,9 +25,8 @@ locals {
   user_ocid           = var.oci_user_ocid
   vault_ocid          = var.oci_vault_ocid
   connection_name     = "tf-${lower(random_id.random.hex)}"
-  cm_key_name         = "tf-${lower(random_id.random.hex)}"
   oci_key_name        = "tf-${lower(random_id.random.hex)}"
-  cm_key_version_name = "tf-ver-${lower(random_id.random.hex)}"
+  cm_key_version_name = "tf-aes-ver-${lower(random_id.random.hex)}"
 }
 
 # Define an OCI connection
@@ -43,14 +46,6 @@ resource "ciphertrust_oci_vault" "vault" {
   region        = local.region
 }
 
-# Define an RSA CipherTrust key
-resource "ciphertrust_cm_key" "cm_rsa_key" {
-  name       = local.cm_key_name
-  algorithm  = "RSA"
-  usage_mask = 60
-  key_size   = 2048
-}
-
 # Define an OCI native key
 resource "ciphertrust_oci_key" "native_key" {
   name  = local.oci_key_name
@@ -64,7 +59,7 @@ resource "ciphertrust_oci_key" "native_key" {
 }
 
 # Define an AES CipherTrust key for the key version
-resource "ciphertrust_cm_key" "cm_rsa_version" {
+resource "ciphertrust_cm_key" "cm_aes_version" {
   name       = local.cm_key_version_name
   algorithm  = "AES"
   usage_mask = 60
@@ -74,7 +69,7 @@ resource "ciphertrust_cm_key" "cm_rsa_version" {
 # Add a byok key version to the key
 resource "ciphertrust_oci_byok_key_version" "byok_version" {
   cckm_key_id   = ciphertrust_oci_key.native_key.id
-  source_key_id = ciphertrust_cm_key.cm_rsa_version.id
+  source_key_id = ciphertrust_cm_key.cm_aes_version.id
 }
 
 # Add a native version to the key

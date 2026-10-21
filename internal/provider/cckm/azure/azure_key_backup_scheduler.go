@@ -36,7 +36,7 @@ func azureKeyEnableBackup(ctx context.Context, id string, client *common.Client,
 		diags.AddError(details, "")
 		return
 	}
-	client.Log.Debug("[azure_key_backup_scheduler.go -> azureKeyEnableBackup][response:" + response + "]")
+	client.Log.Debug("[azure_key_backup_scheduler.go -> azureKeyEnableBackup][response:" + redactAzureKeyResponse(response) + "]")
 }
 
 // azureKeyDisableBackup disables the scheduled backup job for a key.
@@ -52,7 +52,7 @@ func azureKeyDisableBackup(ctx context.Context, id string, client *common.Client
 		diags.AddError(details, "")
 		return
 	}
-	client.Log.Debug("[azure_key_backup_scheduler.go -> azureKeyDisableBackup][response:" + response + "]")
+	client.Log.Debug("[azure_key_backup_scheduler.go -> azureKeyDisableBackup][response:" + redactAzureKeyResponse(response) + "]")
 }
 
 // azureKeyApplyBackup compares enable_auto_backup in the plan with backup_config of the key and enables or

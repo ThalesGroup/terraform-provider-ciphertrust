@@ -2,7 +2,11 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "1.0.1"
+      version = "1.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
     }
   }
 }
@@ -55,5 +59,6 @@ resource "ciphertrust_aws_key" "aws_key" {
   # Step 2: uncomment and re-apply to enable rotation
   # enable_rotation = {
   #   job_config_id = ciphertrust_scheduler.rotation_job.id
+  #   key_source    = "local"
   # }
 }

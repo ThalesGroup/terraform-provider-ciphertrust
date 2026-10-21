@@ -10,7 +10,7 @@ type AzureCertificateListEntryTFSDK struct {
 	ID                     types.String `tfsdk:"id"`
 	Name                   types.String `tfsdk:"name"`
 	VaultID                types.String `tfsdk:"vault_id"`
-	KeyVault               types.String `tfsdk:"key_vault"`
+	VaultName              types.String `tfsdk:"vault_name"`
 	CloudName              types.String `tfsdk:"cloud_name"`
 	Region                 types.String `tfsdk:"region"`
 	Tenant                 types.String `tfsdk:"tenant"`

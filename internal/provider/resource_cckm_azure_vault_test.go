@@ -14,7 +14,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// cleanupCckmAzureVaults removes the standard and premium Azure vaults (CCKM_TF_AZURE_NON_PURGEABLE_VAULT
+// cleanupCckmAzureVaults removes the nonpurgeable and pugeable Azure vaults (CCKM_TF_AZURE_NON_PURGEABLE_VAULT
 // and CCKM_TF_AZURE_PURGEABLE_VAULT) from CipherTrust Manager if a previous failed test run left them
 // behind. The same vault cannot be added twice, so a leftover would break the next run. Only vaults
 // whose azure_name matches one of the two env vars are removed. The vaults are removed from CM only,
@@ -124,7 +124,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 			connection_id = ciphertrust_azure_connection.azure_connection.id
 		}`
 
-	// vaultName is the standard vault name read from the environment at test setup time.
+	// vaultName is the nonpurgeable vault name read from the environment at test setup time.
 	vaultName := os.Getenv("CCKM_TF_AZURE_NON_PURGEABLE_VAULT")
 
 	t.Run("lifecycle", func(t *testing.T) {
@@ -153,7 +153,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 				{
 					Config: subConfig + `
 						resource "ciphertrust_azure_vault" "test" {
-							name            = local.azure_standard_vault
+							name            = local.azure_nonpurgeable_vault
 							connection_id   = ciphertrust_azure_connection.azure_connection.id
 							subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 						}`,
@@ -177,7 +177,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 				{
 					Config: subConfig + `
 						resource "ciphertrust_azure_vault" "test" {
-							name                   = local.azure_standard_vault
+							name                   = local.azure_nonpurgeable_vault
 							connection_id          = ciphertrust_azure_connection.azure_connection.id
 							subscription_id        = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 							cloud_key_backup_limit = 10
@@ -190,7 +190,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 				{
 					Config: subConfig + connBlock2 + `
 						resource "ciphertrust_azure_vault" "test" {
-							name                   = local.azure_standard_vault
+							name                   = local.azure_nonpurgeable_vault
 							connection_id          = ciphertrust_azure_connection.azure_connection2.id
 							subscription_id        = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 							cloud_key_backup_limit = 10
@@ -214,7 +214,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 				{
 					Config: subConfig + connBlock2 + `
 						resource "ciphertrust_azure_vault" "test" {
-							name                   = local.azure_standard_vault
+							name                   = local.azure_nonpurgeable_vault
 							connection_id          = ciphertrust_azure_connection.azure_connection2.id
 							subscription_id        = "00000000-0000-0000-0000-000000000000"
 							cloud_key_backup_limit = 10
@@ -242,10 +242,10 @@ func TestCckmAzureVaultResource(t *testing.T) {
 							subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 						}
 						resource "ciphertrust_azure_vault" "test" {
-							name            = local.azure_standard_vault
+							name            = local.azure_nonpurgeable_vault
 							connection_id   = ciphertrust_azure_connection.azure_connection.id
 							subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
-							vault_details   = data.ciphertrust_azure_vault_details.vaults.vaults[local.azure_standard_vault]
+							vault_details   = data.ciphertrust_azure_vault_details.vaults.vaults[local.azure_nonpurgeable_vault]
 						}
 						# No filter - all CCKM-stored subscriptions.
 						data "ciphertrust_azure_subscription_list" "all" {
@@ -287,7 +287,7 @@ func TestCckmAzureVaultResource(t *testing.T) {
 				{
 					Config: subConfig + `
 						resource "ciphertrust_azure_vault" "test" {
-							name            = local.azure_standard_vault
+							name            = local.azure_nonpurgeable_vault
 							connection_id   = ciphertrust_azure_connection.azure_connection.id
 							subscription_id = data.ciphertrust_azure_subscription_details.subs.subscriptions[0].subscription_id
 							vault_details = {

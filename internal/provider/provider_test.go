@@ -1,15 +1,19 @@
 package provider
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -359,5 +363,108 @@ func createCMClient() (*common.Client, bool) {
 			tenantVal, os.Getenv("CDSPAAS"))
 		return nil, false
 	}
+
+	logFile := "ctp.log"
+	logLevel := "info"
+
+	// Read config file
+	homeDir, _ := os.UserHomeDir()
+	configFileName := filepath.Join(homeDir, ".ciphertrust/config")
+	// Read and parse the  config file
+	var file *os.File
+	if file, err = os.Open(configFileName); err == nil {
+		defer func() {
+			_ = file.Close()
+		}()
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			switch key {
+			case "log_file":
+				logFile = value
+			case "log_level":
+				logLevel = value
+			}
+		}
+	}
+	providerLogger, logFH, logErr := openProviderLog(logFile, logLevel)
+	if logErr != nil {
+		// Never leave client.Log nil: provider code calls it without a nil check.
+		client.Log = hclog.NewNullLogger()
+	} else {
+		client.Log = providerLogger
+		if logFH != nil {
+			// logFH is deliberately left open: the client keeps logging to it for the whole test run.
+			providerLogger.Info("createCMClient", "log_level", logLevel, "log_file", logFile)
+		}
+	}
 	return client, true
+}
+
+// testAccRunCCKMRotation returns a check that runs a scheduler job config now and waits for the job to
+// complete. schedulerResource is the address of the ciphertrust_scheduler resource, for example
+// "ciphertrust_scheduler.rotation_scheduler". Its ID is read from state when the check runs, because it is
+// not known when the step is defined. The state seen by the check is from before the job ran, so the
+// effect of the job is visible in the next step, which refreshes the state.
+func testAccRunCCKMRotation(schedulerResource string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		testName := "testAccRunCCKMRotation"
+		rs, found := s.RootModule().Resources[schedulerResource]
+		if !found {
+			return fmt.Errorf("%s: resource %s not found in state", testName, schedulerResource)
+		}
+		jobConfigID := rs.Primary.ID
+		if jobConfigID == "" {
+			return fmt.Errorf("%s: the ID of %s is not set", testName, schedulerResource)
+		}
+
+		id := testName
+		ctx := context.Background()
+
+		// Create cm client
+		client, ok := createCMClient()
+		if !ok {
+			return fmt.Errorf("%s: could not create a CipherTrust Manager client", testName)
+		}
+
+		// Run scheduler
+		url := common.URL_SCHEDULER_JOB_CONFIGS + "/" + jobConfigID + "/run-now"
+		response, err := client.PostNoData(ctx, id, url)
+		if err != nil {
+			return fmt.Errorf("%s: failed to run scheduler job config %s: %s", testName, jobConfigID, err.Error())
+		}
+		jobID := gjson.Get(response, "job_id").String()
+		if jobID == "" {
+			return fmt.Errorf("%s: failed to get job_id from %s", testName, response)
+		}
+
+		// Wait for the job to complete. A failed or aborted job will not complete, so stop early.
+		url = "api/v1/scheduler/jobs/"
+		var status string
+		// A job is queued first and can take more than a minute to complete on a shared service, so wait
+		// up to 3 minutes.
+		for retries := 0; retries < 36; retries++ {
+			response, err = client.GetById(ctx, id, jobID, url)
+			if err != nil {
+				return fmt.Errorf("%s: failed to get scheduler job %s: %s", testName, jobID, err.Error())
+			}
+			status = gjson.Get(response, "status").String()
+			client.Log.Debug(fmt.Sprintf("[%s][job:%s][retry:%d][status:%s][response:%s]", testName, jobID, retries, status, response))
+			if status == "completed" {
+				return nil
+			}
+			if status == "failed" || status == "aborted" {
+				return fmt.Errorf("%s: job %s ended with status %s: %s", testName, jobID, status, response)
+			}
+			time.Sleep(5 * time.Second)
+		}
+		return fmt.Errorf("%s: job %s did not complete, last status: %s, last response: %s", testName, jobID, status, response)
+	}
 }

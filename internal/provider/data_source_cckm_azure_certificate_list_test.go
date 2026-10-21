@@ -46,7 +46,7 @@ func azureCertListVersionCases() []azureCertListVersionCase {
 		// A name returns every version of the certificate.
 		{"name_and_vault", [][2]string{name, vault, all}, "both", true},
 		{"name_only", [][2]string{name, all}, "both", true},
-		{"name_and_key_vault", [][2]string{name, {"key_vault", v1("key_vault")}, all}, "both", true},
+		{"name_and_key_vault", [][2]string{name, {"key_vault", v1("vault_name")}, all}, "both", true},
 		// Only the latest version.
 		{"name_latest_version", [][2]string{name, vault, {"version", `"-1"`}, all}, "v2", true},
 		// A single version.
@@ -173,7 +173,7 @@ func azureCertListVersionChecks(t *testing.T, cases []azureCertListVersionCase) 
 	}
 }
 
-// azureCertListNativeResource returns a native certificate resource in the standard vault. Every call with
+// azureCertListNativeResource returns a native certificate resource in the nonpurgeable vault. Every call with
 // the same name creates another version of that certificate.
 func azureCertListNativeResource(resourceName, dependsOn, certName, purpose string) string {
 	deps := ""
@@ -182,7 +182,7 @@ func azureCertListNativeResource(resourceName, dependsOn, certName, purpose stri
 	}
 	return fmt.Sprintf(`
 	resource "ciphertrust_azure_certificate" %q {
-		%[5]svault_id = ciphertrust_azure_vault.standard_vault.id
+		%[5]svault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 		name     = %[2]q
 		azure_params = {
 			tags = { purpose = %[3]q }
@@ -204,7 +204,7 @@ func azureCertListNativeResource(resourceName, dependsOn, certName, purpose stri
 }
 
 // TestCckmAzureDataSourceCertificateList creates two native versions of one certificate name in the
-// standard vault and runs the ciphertrust_azure_certificate_list filter cases against them. Filters that
+// nonpurgeable vault and runs the ciphertrust_azure_certificate_list filter cases against them. Filters that
 // identify a version return one certificate, filters on the name return both versions.
 func TestCckmAzureDataSourceCertificateList(t *testing.T) {
 	initConfig, ok := initCckmAzureTest()
@@ -217,7 +217,7 @@ func TestCckmAzureDataSourceCertificateList(t *testing.T) {
 	createConfig := azureCertListNativeResource("native_v1", "", name, "list-v1") +
 		azureCertListNativeResource("native_v2", "ciphertrust_azure_certificate.native_v1", name, "list-v2")
 
-	// The standard vault cannot purge, so destroy soft-deletes the certificates.
+	// The nonpurgeable vault cannot purge, so destroy soft-deletes the certificates.
 	build := func(extra string) string {
 		return azureProviderCertSettingsConfig(initConfig+createConfig+extra, false, true)
 	}
