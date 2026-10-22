@@ -12,6 +12,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -143,6 +144,13 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"idt_key_rules": schema.ListNestedAttribute{
 				Optional:    true,
 				Description: "IDT rules to link with the policy.",
+				Validators: []validator.List{
+					// TFIN-605: only one IDT key rule is allowed per policy. This was
+					// previously enforced only at apply time inside updateIDTKeyRules,
+					// so a config with 2+ entries passed `terraform plan` cleanly and
+					// only failed on apply. Enforce it at plan time instead.
+					listvalidator.SizeAtMost(1),
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
@@ -1567,6 +1575,11 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 		return fmt.Errorf("adding an IDT key rule via update is not supported by CipherTrust Manager")
 	}
 
+	// TFIN-605: idt_key_rules now also carries listvalidator.SizeAtMost(1) in
+	// the schema (above), which catches this at plan time and normally makes
+	// this branch unreachable via a plain `terraform apply`. Left in place as
+	// defense-in-depth for any path that bypasses schema validation (e.g. a
+	// plan applied from stale/hand-edited state).
 	if len(plan.IDTKeyRules) > 1 {
 		resp.Diagnostics.AddError(
 			"Invalid IDT Key Rule Configuration",
