@@ -144,6 +144,23 @@ func (r *resourceCTEClientGroupDesignatedPrimarySet) Read(ctx context.Context, r
 
 	url := fmt.Sprintf("%s/%s/dps", common.URL_CTE_CLIENT_GROUP, state.ClientGroupID.ValueString())
 	response, err := r.client.GetById(ctx, id, state.ID.ValueString(), url)
+	// This endpoint has a known CM-side bug (KY-118691) where a missing DPS
+	// returns HTTP 400 (not 404) with a "Failed to get designated primary
+	// set" message, so the shared 404-only handleReadNotFound() check below
+	// never matches it here. Detect this endpoint's specific 400 shape and
+	// route it to the same friendly not-found message (TFIN-629), instead
+	// of falling through to handleReadNotFound()'s generic AddError with a
+	// raw CM JSON error dump. This is resource-specific: handleReadNotFound()
+	// itself is left untouched since it's shared by other resources where a
+	// 400 is a genuine validation error, not a not-found.
+	if err != nil && strings.Contains(err.Error(), "status: 400") && strings.Contains(err.Error(), "Failed to get designated primary set") {
+		resourceLabel := "CTE Client Group Designated Primary Set (" + state.ID.ValueString() + ")"
+		resp.Diagnostics.AddError(
+			resourceLabel+" not found",
+			resourceLabel+" was not found on CipherTrust Manager during refresh. Keeping it in Terraform state rather than removing it, since this may be a transient issue or a change that should be reconciled deliberately.",
+		)
+		return
+	}
 	if handleReadNotFound(ctx, err, "CTE Client Group Designated Primary Set ("+state.ID.ValueString()+")", &resp.Diagnostics) {
 		return
 	}
