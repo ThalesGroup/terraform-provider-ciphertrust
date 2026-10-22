@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -98,6 +99,8 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 				Description: "Description to identify the client.",
 			},
 			"password": schema.StringAttribute{
@@ -177,6 +180,10 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
+				Default: mapdefault.StaticValue(
+					types.MapValueMust(types.StringType, map[string]attr.Value{}),
+				),
 				Description: "Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.",
 			},
 			"lgcs_access_only": schema.BoolAttribute{
@@ -662,11 +669,12 @@ func setCTEClientState(
 ) {
 
 	state.ID = types.StringValue(apiResp.ID)
-	if apiResp.Description != "" {
-		state.Description = types.StringValue(apiResp.Description)
-	} else {
-		state.Description = types.StringNull()
-	}
+	// description is Optional+Computed with a "" default (see schema), so both
+	// an omitted config value and an explicit description = "" converge to the
+	// same state value here. Do NOT normalize "" to null (TFIN-619): that
+	// reintroduces a perpetual plan loop because config "" would never match a
+	// null state.
+	state.Description = types.StringValue(apiResp.Description)
 	// TFIN-465: name must be refreshed from the live API response on every
 	// Read() (including `terraform apply -refresh-only`), not just the very
 	// first read when state happens to be null/empty. name now carries
@@ -704,25 +712,24 @@ func setCTEClientState(
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
-	// Normalize an absent/nil or empty {} labels response to null so the
-	// resource can converge once labels have ever been set (TFIN-463).
-	if len(apiResp.Labels) > 0 {
-		labelsMap := map[string]attr.Value{}
-		for k, v := range apiResp.Labels {
-			if strVal, ok := v.(string); ok {
-				labelsMap[k] = types.StringValue(strVal)
-			}
+	// labels is Optional+Computed with an empty-map default (see schema), so
+	// both an omitted config value and an explicit labels = {} converge to the
+	// same state value here. Do NOT normalize an absent/nil/empty labels
+	// response to null (TFIN-619): that reintroduces a perpetual plan loop
+	// because config {} would never match a null state. Always reflect CM's
+	// actual labels value (including empty) directly into state.
+	labelsMap := map[string]attr.Value{}
+	for k, v := range apiResp.Labels {
+		if strVal, ok := v.(string); ok {
+			labelsMap[k] = types.StringValue(strVal)
 		}
-		labels, diags := types.MapValue(types.StringType, labelsMap)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		state.Labels = labels
-	} else {
-		state.Labels = types.MapNull(types.StringType)
 	}
-
+	labels, diags := types.MapValue(types.StringType, labelsMap)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Labels = labels
 }
 
 func (r *resourceCTEClient) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

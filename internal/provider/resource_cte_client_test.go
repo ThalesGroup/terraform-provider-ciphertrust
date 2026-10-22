@@ -327,11 +327,17 @@ resource "ciphertrust_cte_client" "client" {
 }
 
 // TestCTEClientResource_labelsClearing verifies TFIN-463: Update() sends an
-// explicit null (not {}) when labels is cleared, and Read() normalizes an
-// absent/empty labels response to null so the resource can converge once
-// labels has ever been set. Create() never sends labels to CM (the same gap
-// documented for protection_mode above), so the refresh in step 2 legitimately
-// diverges from the configured value and exercises Read()'s normalization.
+// explicit null (not {}) when labels is cleared. Create() never sends labels
+// to CM (the same gap documented for protection_mode above; also confirmed
+// separately via direct, provider-independent API calls: CM's
+// transparent-encryption/clients endpoint never persists a non-empty "labels"
+// value regardless of write path on this appliance), so the refresh in step 2
+// legitimately diverges from the configured value.
+//
+// labels is now Optional+Computed with an empty-map default (TFIN-619), so
+// the "cleared" value the resource converges to is a concrete empty map, not
+// null - see TestCTEClientResource_labelsExplicitEmptyConverges for the
+// explicit labels = {} convergence check this schema change was for.
 func TestCTEClientResource_labelsClearing(t *testing.T) {
 	name := "tfin463-labels-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_client.client"
@@ -349,18 +355,106 @@ func TestCTEClientResource_labelsClearing(t *testing.T) {
 			{
 				RefreshState:       true,
 				ExpectNonEmptyPlan: true,
-				Check: checkStep(t, "client labels: refresh converges to null instead of getting stuck (TFIN-463)",
+				Check: checkStep(t, "client labels: refresh converges to an empty map instead of getting stuck (TFIN-463)",
 					resource.TestCheckNoResourceAttr(rn, "labels.env"),
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
 				),
 			},
 			{
 				Config: cteClientLabelsConfig(name, false),
-				Check: checkStep(t, "client labels: config catches up to null",
+				Check: checkStep(t, "client labels: config catches up to empty",
 					resource.TestCheckNoResourceAttr(rn, "labels.env"),
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
 				),
 			},
 			{
 				Config:             cteClientLabelsConfig(name, false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEClientResource_labelsExplicitEmptyConverges verifies TFIN-619: after
+// labels has held a value, switching config to an explicit labels = {} (as
+// opposed to omitting the attribute entirely) converges to "No changes" on
+// the next plan instead of looping forever. labels is Optional+Computed with
+// an empty-map default (see schema), so both the omitted case (already
+// covered by TestCTEClientResource_labelsClearing) and this explicit-{} case
+// resolve to the same state value.
+func TestCTEClientResource_labelsExplicitEmptyConverges(t *testing.T) {
+	name := "tfin619-labels-empty-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	explicitEmptyCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client" "client" {
+  name                     = %q
+  password_creation_method = "GENERATE"
+  labels                   = {}
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             cteClientLabelsConfig(name, true),
+				ExpectNonEmptyPlan: true,
+				Check: checkStep(t, "client labels: create with labels.env=drift-test",
+					resource.TestCheckResourceAttr(rn, "labels.env", "drift-test"),
+				),
+			},
+			{
+				Config: explicitEmptyCfg,
+				Check: checkStep(t, "client labels: switch to explicit labels = {}",
+					resource.TestCheckResourceAttr(rn, "labels.%", "0"),
+				),
+			},
+			// Plan again with the same explicit labels = {} - fixes TFIN-619:
+			// must show "No changes", not a perpetual diff.
+			{
+				Config:             explicitEmptyCfg,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEClientResource_emptyDescriptionConverges verifies TFIN-619: after
+// description has held a value, switching config to an explicit
+// description = "" converges to "No changes" on the next plan, instead of
+// looping forever proposing a description change. description is now
+// Optional+Computed with a "" default (see schema), so setCTEClientState no
+// longer needs to normalize an empty API response to null - it just always
+// reflects the API's actual value into state.
+func TestCTEClientResource_emptyDescriptionConverges(t *testing.T) {
+	name := "tfin619-desc-empty-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_client.client"
+
+	withDescription := cteClientDescriptionConfig(name, "non-empty description")
+	emptyDescription := cteClientDescriptionConfig(name, "")
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: withDescription,
+				Check: checkStep(t, "client description: create with non-empty description",
+					resource.TestCheckResourceAttr(rn, "description", "non-empty description"),
+				),
+			},
+			{
+				Config: emptyDescription,
+				Check: checkStep(t, "client description: switch to explicit description = \"\"",
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			// Plan again with the same explicit description = "" - fixes
+			// TFIN-619: must show "No changes", not a perpetual diff.
+			{
+				Config:             emptyDescription,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
