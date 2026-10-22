@@ -619,3 +619,163 @@ resource "ciphertrust_cte_client_group" "cg" {
 		},
 	})
 }
+
+// TestCTEClientGroupResource_nameFormatValidator verifies TFIN-491:  name
+// must start with an alpha character and contain only alphanumeric,
+// underscore, or dash characters. Before the fix, an invalid name (e.g.
+// containing a space or "!") passed terraform plan and only failed at apply,
+// either against CM directly (create) or via the provider's own immutability
+// check (update) regardless of format validity. Now it must be rejected at
+// plan time by the schema validator.
+func TestCTEClientGroupResource_nameFormatValidator(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	validName := "tf-cg-namefmt-" + suffix
+
+	invalidCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = "invalid name! %s"
+  cluster_type = "NON-CLUSTER"
+  description  = "TFIN-491 invalid name"
+}
+`, suffix)
+
+	validCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "TFIN-491 valid name"
+}
+`, validName)
+
+	const rn = "ciphertrust_cte_client_group.cg"
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      invalidCfg,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Value Match.*must start with an alpha character`),
+			},
+			{
+				Config: validCfg,
+				Check: checkStep(t, "client_group name format: valid name still works",
+					resource.TestCheckResourceAttr(rn, "name", validName),
+				),
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupResource_enabledCapabilitiesValidator verifies TFIN-626
+// Scenario 1: enabled_capabilities had no plan-time validator despite CM
+// only accepting "RESIGN". An invalid value must now be rejected at plan
+// time, while the legitimate value ("RESIGN") still works.
+func TestCTEClientGroupResource_enabledCapabilitiesValidator(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-cap-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+
+	invalidCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                 = %q
+  cluster_type         = "NON-CLUSTER"
+  description          = "TFIN-626 scenario1 invalid capability"
+  enabled_capabilities = "GARBAGE_CAP_VALUE"
+}
+`, cgName)
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "TFIN-626 scenario1 create"
+}
+`, cgName)
+
+	// enabled_capabilities is only wired up in Update()'s op_type="update"
+	// path (Create() does not send it at all -- a separate, pre-existing gap
+	// unrelated to this ticket), so the "legitimate value still works" check
+	// applies it via op_type="update" rather than at create.
+	validCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name                 = %q
+  cluster_type         = "NON-CLUSTER"
+  description          = "TFIN-626 scenario1 create"
+  op_type              = "update"
+  enabled_capabilities = "RESIGN"
+}
+`, cgName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      invalidCfg,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Value Match.*must be a comma-separated list of: RESIGN`),
+			},
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group enabled_capabilities: create",
+					resource.TestCheckResourceAttr(rn, "name", cgName),
+				),
+			},
+			{
+				Config: validCfg,
+				Check: checkStep(t, "client_group enabled_capabilities: valid value still works",
+					resource.TestCheckResourceAttr(rn, "enabled_capabilities", "RESIGN"),
+				),
+			},
+		},
+	})
+}
+
+// TestCTEClientGroupResource_updateGuardDiagnosticTitles verifies TFIN-626
+// Scenario 3: in the op_type = "" / "update" branch, each field-change guard
+// check now reports a diagnostic title matching the field it actually
+// checks, instead of every guard reusing "Invalid data input: CTE Client
+// Group Auth Binaries" regardless of which field triggered it. This checks
+// the `paused` guard specifically, since that was the field confirmed live
+// to report the wrong ("... Auth Binaries") title before the fix.
+func TestCTEClientGroupResource_updateGuardDiagnosticTitles(t *testing.T) {
+	suffix := uuid.New().String()[:8]
+	cgName := "tf-cg-guardtitle-" + suffix
+	const rn = "ciphertrust_cte_client_group.cg"
+
+	createCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+}
+`, cgName)
+
+	// op_type defaults to the "update" guard branch; changing only `paused`
+	// here (without op_type = "ldt-pause") must be rejected with a title
+	// that mentions Paused, not Auth Binaries.
+	pausedOnlyCfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_client_group" "cg" {
+  name         = %q
+  cluster_type = "NON-CLUSTER"
+  description  = "Initial create"
+  paused       = true
+}
+`, cgName)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: createCfg,
+				Check: checkStep(t, "client_group guard titles: create",
+					resource.TestCheckResourceAttr(rn, "name", cgName),
+				),
+			},
+			{
+				Config:      pausedOnlyCfg,
+				ExpectError: regexp.MustCompile(`Invalid data input: CTE Client Group Paused`),
+			},
+		},
+	})
+}

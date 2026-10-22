@@ -119,7 +119,6 @@ output "cte_client_group_id" {
 ### Optional
 
 - `auth_binaries` (String) Array of authorized binaries in the privilege-filename pair JSON format.
-- `client_id` (String) ID of the client to be removed from the client group.
 - `client_list` (Set of String)
 - `client_locked` (Boolean) Is FS Agent locked? Enables locking the configuration of the File System Agent on the client. This will prevent updates to any policies on the client. Default value is false.
 - `communication_enabled` (Boolean) Whether the File System communication is enabled.

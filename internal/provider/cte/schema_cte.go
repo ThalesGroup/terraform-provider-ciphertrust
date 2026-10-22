@@ -1005,7 +1005,6 @@ type CTEClientGroupTFSDK struct {
 	ReSign                  types.Bool     `tfsdk:"re_sign"`
 	ClientList              []types.String `tfsdk:"client_list"`
 	InheritAttributes       types.Bool     `tfsdk:"inherit_attributes"`
-	ClientID                types.String   `tfsdk:"client_id"`
 	OpType                  types.String   `tfsdk:"op_type"`
 	Paused                  types.Bool     `tfsdk:"paused"`
 }
@@ -1029,7 +1028,6 @@ type CTEClientGroupJSON struct {
 	ReSign                  bool     `json:"re_sign"`
 	ClientList              []string `json:"client_list"`
 	InheritAttributes       bool     `json:"inherit_attributes"`
-	ClientID                string   `json:"client_id"`
 	Paused                  bool     `json:"paused"`
 }
 

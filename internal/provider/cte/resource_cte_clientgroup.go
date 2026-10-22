@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -67,6 +68,12 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 			},
 			"name": schema.StringAttribute{
 				Required: true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`),
+						"name must start with an alpha character and contain only alphanumeric, underscore (_), or dash (-) characters",
+					),
+				},
 				PlanModifiers: []planmodifier.String{
 					modifiers.ImmutableString(),
 				},
@@ -145,6 +152,12 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 			"enabled_capabilities": schema.StringAttribute{
 				Optional:    true,
 				Description: "Comma-separated agent capabilities which are enabled. Currently only RESIGN for re-signing client settings can be enabled.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^RESIGN(,RESIGN)*$`),
+						"must be a comma-separated list of: RESIGN",
+					),
+				},
 			},
 			"shared_domain_list": schema.ListAttribute{
 				Optional:    true,
@@ -177,11 +190,6 @@ func (r *resourceCTEClientGroup) Schema(_ context.Context, _ resource.SchemaRequ
 			"inherit_attributes": schema.BoolAttribute{
 				Optional:    true,
 				Description: "Whether the client should inherit attributes from the ClientGroup.",
-			},
-			// Remove client from the group
-			"client_id": schema.StringAttribute{
-				Optional:    true,
-				Description: "ID of the client to be removed from the client group.",
 			},
 			// LDT Pause
 			"paused": schema.BoolAttribute{
@@ -435,23 +443,23 @@ func (r *resourceCTEClientGroup) Update(ctx context.Context, req resource.Update
 	if opType == "" || opType == "update" {
 		// Add error checks for fields we cant change in op_type = update
 		if !stringSlicesEqual(plan.ClientList, state.ClientList) {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "client_list cannot be changed with op_type 'update'")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Client List", "client_list cannot be changed with op_type 'update'")
 			return
 		}
 		if plan.InheritAttributes != state.InheritAttributes {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "inherit_attributes cannot be changed with op_type 'update'")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Inherit Attributes", "inherit_attributes cannot be changed with op_type 'update'")
 			return
 		}
 		if plan.AuthBinaries != state.AuthBinaries {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "auth_binaries cannot be changed with op_type 'update'")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "auth_binaries cannot be changed with op_type 'update'")
 			return
 		}
 		if plan.ReSign != state.ReSign {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Update Password", "re_sign cannot be changed with op_type 'update'")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Re Sign", "re_sign cannot be changed with op_type 'update'")
 			return
 		}
 		if plan.Paused != state.Paused {
-			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Auth Binaries", "paused cannot be changed with op_type 'update'")
+			resp.Diagnostics.AddError("Invalid data input: CTE Client Group Paused", "paused cannot be changed with op_type 'update'")
 			return
 		}
 
