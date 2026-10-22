@@ -701,6 +701,50 @@ func setCTEClientState(
 		state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
 	}
 
+	// shared_domain_list (TFIN-464): CipherTrust Manager's domain_list field is
+	// the live record of which domains this client actually belongs to/is
+	// shared with, so it's the genuine corresponding value for this
+	// attribute. It is refreshed only when state already holds a value (the
+	// configuration actually asked to share domains), for the same reason as
+	// protection_mode above: CM always returns a non-empty domain_list (it
+	// always includes the client's native domain), so populating it
+	// unconditionally would put a value in state for configurations that
+	// never set this Optional (not Computed) attribute and produce a plan
+	// diff that can never be resolved.
+	//
+	// NOTE: on a single-domain CipherTrust Manager (no additional domains
+	// licensed/created), domain_list always equals the client's native
+	// domain regardless of whether shared_domain_list was ever configured,
+	// so this refresh cannot be distinguished from a no-op in that
+	// environment -- confirmed directly by comparing a client with
+	// shared_domain_list=["root"] against a control client with the
+	// attribute entirely unset, both of which returned identical
+	// domain_list=["root"]. The mapping is still correct for CM instances
+	// with more than one domain, where domain_list would reflect real
+	// sharing/unsharing.
+	if state.SharedDomainList != nil && apiResp.DomainList != "" {
+		var domains []string
+		if err := json.Unmarshal([]byte(apiResp.DomainList), &domains); err == nil {
+			sharedDomainList := make([]types.String, 0, len(domains))
+			for _, domain := range domains {
+				sharedDomainList = append(sharedDomainList, types.StringValue(domain))
+			}
+			state.SharedDomainList = sharedDomainList
+		}
+	}
+
+	// disable_capability, dynamic_parameters, and lgcs_access_only are
+	// intentionally NOT refreshed here (TFIN-464): CipherTrust Manager's
+	// GET /transparent-encryption/clients/{id} response contains no field
+	// corresponding to any of these three at all -- confirmed by diffing the
+	// live response of a client with disable_capability="EKP" and
+	// lgcs_access_only=false explicitly configured against a control client
+	// with neither attribute set: both returned byte-for-byte identical
+	// capabilities/ldt_*/enabled_capabilities values, and no field
+	// resembling dynamic_parameters exists in the response at all. Unlike
+	// shared_domain_list's domain_list, there is no live value to read back
+	// for these three, so forcing a mapping would fabricate a false
+	// verification rather than provide one.
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
