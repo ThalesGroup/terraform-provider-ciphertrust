@@ -15,9 +15,52 @@ import (
 )
 
 var (
-	_ datasource.DataSource              = &dataSourceCTEClients{}
-	_ datasource.DataSourceWithConfigure = &dataSourceCTEClients{}
+	_ datasource.DataSource                     = &dataSourceCTEClients{}
+	_ datasource.DataSourceWithConfigure        = &dataSourceCTEClients{}
+	_ datasource.DataSourceWithConfigValidators = &dataSourceCTEClients{}
+
+	// cteClientsValidFilterKeys are the "filters" map keys that CipherTrust
+	// Manager's GET /transparent-encryption/clients/ endpoint actually honors.
+	// CM silently ignores unrecognized query parameters (returning the full,
+	// unfiltered list) rather than erroring, so unsupported keys must be
+	// rejected client-side (TFIN-620). This set was determined by probing the
+	// live endpoint field-by-field against known distributions of values.
+	cteClientsValidFilterKeys = map[string]struct{}{
+		"id": {}, "name": {}, "os_type": {}, "os_sub_type": {}, "client_type": {},
+		"profile_name": {}, "profile_id": {}, "client_version": {},
+		"client_health_status": {}, "ldt_enabled": {}, "fam_enabled": {},
+		"fam_state": {}, "dps_enabled": {},
+	}
 )
+
+// ConfigValidators rejects unrecognized filter keys at plan time.
+func (d *dataSourceCTEClients) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{cteClientsFilterValidator{}}
+}
+
+type cteClientsFilterValidator struct{}
+
+func (v cteClientsFilterValidator) Description(_ context.Context) string {
+	return "Validates that all filter keys are supported."
+}
+func (v cteClientsFilterValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+func (v cteClientsFilterValidator) ValidateDataSource(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var config CTEClientsDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() || config.Filters.IsNull() || config.Filters.IsUnknown() {
+		return
+	}
+	for k := range config.Filters.Elements() {
+		if _, ok := cteClientsValidFilterKeys[k]; !ok {
+			resp.Diagnostics.AddError(
+				"Unrecognized filter key",
+				fmt.Sprintf("%q is not a supported filter key for ciphertrust_cte_clients_list.", k),
+			)
+		}
+	}
+}
 
 func NewDataSourceCTEClients() datasource.DataSource {
 	return &dataSourceCTEClients{}
@@ -253,6 +296,7 @@ func (d *dataSourceCTEClients) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
+	state.Clients = make([]CTEClientsListTFSDK, 0, len(clients))
 	for _, client := range clients {
 
 		clientState := CTEClientsListTFSDK{}
