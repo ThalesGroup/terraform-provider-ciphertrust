@@ -77,7 +77,6 @@ resource "ciphertrust_aws_custom_keystore" "external_keystore" {
 }
 
 # Once the keystore is linked, use an update to connect it and add credential rotation.
-/*
 resource "ciphertrust_scheduler" "credential_rotation" {
   name      = "name"
   operation = "CKSRotateCredentials"
@@ -105,7 +104,6 @@ resource "ciphertrust_aws_custom_keystore" "external_keystore" {
     job_config_id = ciphertrust_scheduler.credential_rotation.id
   }
 }
-*/
 
 # Define a CloudHSM custom keystore. CloudHSM key stores are always linked by AWS.
 # Do not set linked_state = false for AWS_CLOUDHSM keystores.

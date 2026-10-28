@@ -12,6 +12,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -97,7 +98,19 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Computed:    true,
 							Description: "Identifier of the data transform rule.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// TFIN-641: UseStateForUnknown() unconditionally
+								// copies the prior state value once triggered.
+								// For a newly-added list entry with no prior
+								// state, that value is concrete null (not
+								// absent), which forces the planned value to
+								// null instead of leaving it unknown --
+								// Terraform then rejects the apply once the
+								// real id comes back from CM ("provider
+								// produced inconsistent result after apply").
+								// UseNonNullStateForUnknown() only copies the
+								// prior value when it is non-null, so a
+								// brand-new entry correctly stays unknown.
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"order_number": schema.Int64Attribute{
@@ -143,13 +156,24 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"idt_key_rules": schema.ListNestedAttribute{
 				Optional:    true,
 				Description: "IDT rules to link with the policy.",
+				Validators: []validator.List{
+					// TFIN-605: only one IDT key rule is allowed per policy. This was
+					// previously enforced only at apply time inside updateIDTKeyRules,
+					// so a config with 2+ entries passed `terraform plan` cleanly and
+					// only failed on apply. Enforce it at plan time instead.
+					listvalidator.SizeAtMost(1),
+				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							Computed:    true,
 							Description: "Identifier for key rule",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// TFIN-641: see data_transform_rules.id above --
+								// same UseNonNullStateForUnknown() fix so a
+								// newly-added idt_key_rules entry's id stays
+								// unknown instead of being forced to null.
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"current_key": schema.StringAttribute{
@@ -180,7 +204,11 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Computed:    true,
 							Description: "Identifier of the key rule.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// TFIN-641: see data_transform_rules.id above --
+								// same UseNonNullStateForUnknown() fix so a
+								// newly-added key_rules entry's id stays
+								// unknown instead of being forced to null.
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"order_number": schema.Int64Attribute{
@@ -216,7 +244,11 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Computed:    true,
 							Description: "Identifier of the LDT key rule.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// TFIN-641: see data_transform_rules.id above --
+								// same UseNonNullStateForUnknown() fix so a
+								// newly-added ldt_key_rules entry's id stays
+								// unknown instead of being forced to null.
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"order_number": schema.Int64Attribute{
@@ -305,7 +337,19 @@ func (r *resourceCTEPolicy) Schema(_ context.Context, _ resource.SchemaRequest, 
 							Computed:    true,
 							Description: "Identifier of the security rule.",
 							PlanModifiers: []planmodifier.String{
-								stringplanmodifier.UseStateForUnknown(),
+								// TFIN-641: UseStateForUnknown() unconditionally
+								// copies the prior state value once triggered.
+								// For a newly-added security_rules entry with no
+								// prior state, that value is concrete null (not
+								// absent), which forces the planned value to
+								// null instead of leaving it unknown --
+								// Terraform then rejects the apply once the
+								// real id comes back from CM ("provider
+								// produced inconsistent result after apply").
+								// UseNonNullStateForUnknown() only copies the
+								// prior value when it is non-null, so a
+								// brand-new entry correctly stays unknown.
+								stringplanmodifier.UseNonNullStateForUnknown(),
 							},
 						},
 						"order_number": schema.Int64Attribute{
@@ -856,12 +900,28 @@ func (r *resourceCTEPolicy) Read(ctx context.Context, req resource.ReadRequest, 
 			resp.Diagnostics.AddError("Error parsing IDT key rule response", err.Error())
 			return
 		}
+		// TFIN-604: CM's GET .../idtkeyrules/{id} never returns
+		// current_key_type/transformation_key_type today, so these were
+		// unconditionally hard-coded from prior state, making any
+		// out-of-band change to them permanently undetectable. Prefer the
+		// API response's value when CM actually supplies one (future-proofs
+		// against CM eventually returning it), falling back to the prior
+		// state value only when the API response genuinely omits/empties
+		// the field -- a no-op today since CM never returns these fields.
+		currentKeyType := rule.CurrentKeyType
+		if apiRule.CurrentKeyType != "" {
+			currentKeyType = types.StringValue(apiRule.CurrentKeyType)
+		}
+		transformationKeyType := rule.TransformationKeyType
+		if apiRule.TransformationKeyType != "" {
+			transformationKeyType = types.StringValue(apiRule.TransformationKeyType)
+		}
 		refreshedIDTKeyRules = append(refreshedIDTKeyRules, IDTKeyRuleTFSDK{
 			ID:                    types.StringValue(apiRule.ID),
 			CurrentKey:            types.StringValue(apiRule.CurrentKey),
-			CurrentKeyType:        rule.CurrentKeyType,
+			CurrentKeyType:        currentKeyType,
 			TransformationKey:     types.StringValue(apiRule.TransformationKey),
-			TransformationKeyType: rule.TransformationKeyType,
+			TransformationKeyType: transformationKeyType,
 		})
 	}
 	state.IDTKeyRules = refreshedIDTKeyRules
@@ -1567,6 +1627,11 @@ func updateIDTKeyRules(ctx context.Context, r *resourceCTEPolicy, plan CTEPolicy
 		return fmt.Errorf("adding an IDT key rule via update is not supported by CipherTrust Manager")
 	}
 
+	// TFIN-605: idt_key_rules now also carries listvalidator.SizeAtMost(1) in
+	// the schema (above), which catches this at plan time and normally makes
+	// this branch unreachable via a plain `terraform apply`. Left in place as
+	// defense-in-depth for any path that bypasses schema validation (e.g. a
+	// plan applied from stale/hand-edited state).
 	if len(plan.IDTKeyRules) > 1 {
 		resp.Diagnostics.AddError(
 			"Invalid IDT Key Rule Configuration",

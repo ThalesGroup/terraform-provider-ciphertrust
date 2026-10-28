@@ -1,0 +1,197 @@
+---
+page_title: "{{.Type}} {{.Name}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+  {{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}} "{{.Name}}" ({{.ProviderName}})
+
+{{ .Description | trimspace }}
+{{- if .HasExample }}
+
+## Example Usage
+
+{{ tffile .ExampleFile }}
+{{- end }}
+{{ .SchemaMarkdown | trimspace }}
+
+### Updates
+
+Only `azure_params.tags` and `azure_params.policy.attributes.enabled` can be updated in place. Attributes marked as `(Immutable)`, and every other value in `azure_params.policy`, cannot be modified after resource creation. Changing them is rejected at plan time and the resource is not recreated.
+
+An update of `azure_params.tags` replaces the whole set of tags. To remove a tag, leave it out of the map. Removing `tags` from the configuration does not clear the tags in Azure, set `tags = {}` to remove them all.
+
+### Destroy
+
+Destroying the resource soft-deletes the certificate in Azure. If `purge_certificates_on_delete` is true in the provider settings (the default) and the certificate is purgeable, it is then purged. A purge straight after a soft-delete can return a conflict until Azure has finished, so it is retried until `azure_operation_timeout` is used up.
+
+If the certificate is already soft-deleted or purged, only the remaining steps are done, so a destroy that failed part way can be run again. If the certificate does not exist in CipherTrust Manager, destroy adds a warning and removes the resource from state. A read or update of a certificate that does not exist in CipherTrust Manager is an error and the resource is kept in state. If it has been permanently deleted, remove it from the configuration or run `terraform state rm`.
+
+Azure deletes a certificate by name, so destroying one resource deletes every version of that name in Azure. When the other resources of the same name are destroyed, only the steps that are still needed are done.
+
+## Import
+
+An Azure certificate can be imported using its CipherTrust Manager certificate ID. The ID is returned in the API response body as the `id` field and is also visible in the CCKM interface.
+
+### Important: Behaviour after import
+
+After import, Terraform will attempt to make the certificate match your resource configuration. Only `azure_params.tags` and `azure_params.policy.attributes.enabled` can be updated. Any other difference is rejected at plan time and the resource is never replaced.
+
+**`name`** and **`vault_id`** - returned by the API after import and must match the values in your configuration. `vault_id` is the CipherTrust Manager resource ID of the vault, not the vault name.
+
+**`azure_params`** - rebuilt from the certificate after import, including the tags and the whole policy. For a native certificate, set `azure_params.policy` in your configuration to match it. The policy is fixed at creation.
+
+**`upload_certificate`** - input-only. It is not returned by the API, so the block and its secrets (`certificate`, `private_key_pem` and `private_key_password`) are not in state after import. For an uploaded certificate, do not set `azure_params.policy`, which cannot be combined with an upload. Only `azure_params.tags` can be set. You can leave the block out, or add it to the imported resource. When you add it, the values you set are kept in state as configured and are not read back from the API, and no `ignore_changes` is needed. Once it is in state it is immutable and cannot be removed.
+
+**`restore_certificate`** - input-only and `null` in state after import. Omit it from your configuration.
+
+**Soft-deleted certificates** - a certificate that is soft-deleted cannot be imported as is. If `recover_soft_deleted_certificates` is true in the provider settings, the certificate is recovered and then imported. If it is false (the default), the import fails.
+
+To avoid unintended changes, do one of the following:
+
+**Option 1 - Configure the resource block to match the certificate's current state** before running `terraform apply`. Set `vault_id`, `name` and the `azure_params` values to their current values so that Terraform detects no diff.
+
+**Option 2 - Use `lifecycle { ignore_changes }` to suppress diffs** on attributes you are not yet ready for Terraform to manage:
+
+```terraform
+lifecycle {
+  ignore_changes = [
+    azure_params,
+  ]
+}
+```
+
+The recommended approach (temporary use of `ignore_changes`):
+
+1. Add the `lifecycle { ignore_changes }` block to the resource
+2. Run `terraform apply` (or use `terraform import` for Terraform versions earlier than v1.5.0)
+3. Run `terraform state show ciphertrust_azure_certificate.example` to inspect the imported values
+4. Update your resource configuration to match the imported state
+5. Remove `ignore_changes` so Terraform manages the attributes going forward
+
+You can import a resource into Terraform in two ways.
+
+### 1. Import using an import block and terraform apply
+
+Only available for Terraform v1.5.0 and later.
+
+When Terraform processes the `import` block it:
+
+1. Reads the certificate from the API using the provided ID and stores the current values as state
+2. Compares that state to your resource block configuration
+3. Applies any differences as updates to the certificate (immediately during the same apply)
+
+All three steps happen within a single `terraform apply` run.
+
+**Step 1 - Import with `ignore_changes`** (safe starting point), for a native certificate:
+
+```terraform
+import {
+  to = ciphertrust_azure_certificate.native
+  id = "abc12345-1234-1234-1234-123456789012"
+}
+
+resource "ciphertrust_azure_certificate" "native" {
+  vault_id = "<vault-resource-id>"
+  name     = "<certificate-name>"
+  azure_params = {
+    policy = {
+      issuer = {
+        name = "Self"
+      }
+    }
+  }
+  lifecycle {
+    ignore_changes = [
+      azure_params,
+    ]
+  }
+}
+```
+
+**Step 2 - Final config after inspecting state** (remove `ignore_changes` once values are correct):
+
+```terraform
+resource "ciphertrust_azure_certificate" "native" {
+  vault_id = "<vault-resource-id>"
+  name     = "<certificate-name>"
+  azure_params = {
+    policy = {
+      issuer = {
+        name = "Self"
+      }
+      key_props = {
+        kty        = "RSA" # fixed at creation - set from imported state
+        key_size   = 2048  # fixed at creation - set from imported state
+        exportable = true
+        reuse_key  = false
+      }
+      x509_props = {
+        subject         = "CN=example.com"
+        validity_months = 12
+      }
+    }
+    tags = {
+      environment = "prod"
+    }
+  }
+}
+```
+
+For an uploaded certificate (one created with `upload_certificate`), omit `upload_certificate` and `azure_params.policy`:
+
+```terraform
+import {
+  to = ciphertrust_azure_certificate.uploaded
+  id = "abc12345-1234-1234-1234-123456789012"
+}
+
+resource "ciphertrust_azure_certificate" "uploaded" {
+  vault_id = "<vault-resource-id>"
+  name     = "<certificate-name>"
+  azure_params = {
+    tags = {
+      environment = "prod"
+    }
+  }
+}
+```
+
+Include only the attributes that apply to your certificate. For example, omit `azure_params.tags` if the certificate has no tags.
+
+### 2. Import using the terraform import command
+
+When `terraform import` is run it:
+
+1. Reads the certificate from the API using the provided ID and stores the current values as state
+2. Writes the imported state to the state file - no plan or apply is performed
+
+Before running `terraform apply`, apply Option 1 or Option 2 above to avoid unintended changes. Run `terraform plan` first to review exactly what would be applied.
+
+```shell
+terraform import ciphertrust_azure_certificate.example abc12345-1234-1234-1234-123456789012
+```
+
+## Finding and restoring a purged certificate
+
+All versions of a certificate share one backup, and a new backup is made each time a version is created. To find the versions of a certificate by backup, filter the `ciphertrust_azure_certificate_list` data source on the backup of the latest version:
+
+```terraform
+data "ciphertrust_azure_certificate_list" "by_backup" {
+  filters = {
+    backup = ciphertrust_azure_certificate.latest.backup
+  }
+}
+```
+
+After a certificate is purged it is no longer in Terraform state. Restore it into a vault with `restore_certificate`, using the CipherTrust Manager ID of the purged certificate. `name` and `azure_params` cannot be set when restoring:
+
+```terraform
+resource "ciphertrust_azure_certificate" "restored" {
+  vault_id = "<vault-resource-id>"
+  restore_certificate = {
+    certificate_id = "<purged-certificate-id>"
+  }
+}
+```

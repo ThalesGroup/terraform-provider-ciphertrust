@@ -2,7 +2,11 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "1.0.1"
+      version = "1.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
     }
   }
 }
@@ -50,6 +54,10 @@ resource "ciphertrust_oci_vault" "vault" {
   region        = data.ciphertrust_get_oci_regions.regions.oci_regions.0
   connection_id = ciphertrust_oci_connection.connection.id
   vault_id      = data.ciphertrust_get_oci_vaults.vaults.vaults.0.vault_id
+  # To back up HSM keys of a Virtual Private Vault, set an existing bucket in the vault's region.
+  # Use the ciphertrust_get_oci_buckets datasource (see the datasources example) to find one.
+  # bucket_name      = "my-bucket"
+  # bucket_namespace = "my-namespace"
 }
 
 # List a CipherTrust Manager OCI vault by display name

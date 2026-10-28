@@ -42,6 +42,9 @@ provider "ciphertrust" {
 
 ## Configure OCI Credentials
 
+The OCI connection `key_file` argument is write-only, so these examples require
+Terraform 1.11 or later.
+
 OCI connection credentials are supplied via Terraform variables. Set the following
 environment variables before running a script:
 
@@ -51,9 +54,46 @@ export TF_VAR_oci_pub_key_fingerprint=$CCKM_OCI_FINGERPRINT
 export TF_VAR_oci_region=$CCKM_OCI_REGION
 export TF_VAR_oci_tenancy_ocid=$CCKM_OCI_CONN_TENANCY
 export TF_VAR_oci_user_ocid=$CCKM_OCI_USER
-# Required for byok_keys_and_versions and native_keys_and_versions only:
+# Required for byok_keys_and_versions, native_keys_and_versions, native_key_types,
+# key_rotation_and_sync and datasources only:
 export TF_VAR_oci_vault_ocid=$CCKM_OCI_VAULT
 ```
+
+## Examples
+
+| Directory | Shows |
+|-----------|-------|
+| acls | Vault ACLs for a user and a group |
+| vaults | Adding a vault and listing vaults |
+| byok_keys_and_versions | BYOK key with BYOK and native versions |
+| native_keys_and_versions | Native key with BYOK and native versions |
+| native_key_types | AES, RSA and ECDSA native keys, tags, deletion wait |
+| key_rotation_and_sync | Rotation and synchronization schedulers, key auto-rotation |
+| datasources | Connection, compartment and bucket datasources |
+
+key_rotation_and_sync needs two applies to enable key rotation:
+
+```bash
+terraform apply
+terraform apply -var="enable_rotation=true"
+```
+
+native_key_types uses SOFTWARE protection. For HSM keys use a Virtual Private Vault and run
+`terraform apply -var="oci_protection_mode=HSM"`.
+
+## Import Existing Resources
+
+Resources can be imported by CipherTrust Manager resource ID after adding a matching resource
+block to the configuration:
+
+```bash
+terraform import ciphertrust_oci_vault.vault <vault-cm-id>
+terraform import ciphertrust_oci_key.native_key <key-cm-id>
+terraform import ciphertrust_oci_byok_key.byok_key <key-cm-id>
+```
+
+Key versions use the composite ID `<key-cm-id>.<version-id>`. ACLs use
+`<vault-cm-id>::<user|group>::<identity>`.
 
 ## Run Examples
 

@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/tidwall/gjson"
 
@@ -87,6 +89,23 @@ func (r *resourceCTEClientGP) Schema(_ context.Context, _ resource.SchemaRequest
 										"(see \"Cannot change guard_point_type for an existing GuardPoint\"), since CM does not " +
 										"support changing it via PATCH. Adding a brand-new guard_path with any guard_point_type " +
 										"does not force a replace -- it is created in place by Update().",
+									// TFIN-635: without this validator, an invalid guard_point_type
+									// passed plan-time entirely and was only rejected at apply with a
+									// raw CM 400 error. That delayed rejection is more dangerous here
+									// than a typical UX gap: adding a guard point can force a
+									// whole-resource destroy+recreate (TFIN-634), so an invalid value
+									// discovered only at apply time can trigger the destroy half
+									// before the create half fails, risking permanent loss of
+									// unrelated guard points. Matches the identical enum validator on
+									// the sibling resource_cte_clientgroup_guardpoints.go.
+									Validators: []validator.String{
+										stringvalidator.OneOf([]string{
+											"directory_auto", "directory_manual",
+											"rawdevice_manual", "rawdevice_auto",
+											"cloudstorage_auto", "cloudstorage_manual",
+											"ransomware_protection",
+										}...),
+									},
 									PlanModifiers: []planmodifier.String{
 										// TFIN-634: plain stringplanmodifier.RequiresReplace() cannot tell "a brand-new
 										// guard_path (map key) was added" apart from "an existing guard_path's type

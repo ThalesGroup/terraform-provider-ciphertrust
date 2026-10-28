@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -98,6 +100,8 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 				Description: "Description to identify the client.",
 			},
 			"password": schema.StringAttribute{
@@ -177,6 +181,10 @@ func (r *resourceCTEClient) Schema(_ context.Context, _ resource.SchemaRequest, 
 			"labels": schema.MapAttribute{
 				ElementType: types.StringType,
 				Optional:    true,
+				Computed:    true,
+				Default: mapdefault.StaticValue(
+					types.MapValueMust(types.StringType, map[string]attr.Value{}),
+				),
 				Description: "Labels are key/value pairs used to group resources. They are based on Kubernetes Labels, see https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/.",
 			},
 			"lgcs_access_only": schema.BoolAttribute{
@@ -275,6 +283,34 @@ func (r *resourceCTEClient) Create(ctx context.Context, req resource.CreateReque
 	}
 	if plan.RegistrationAllowed.ValueBool() != types.BoolNull().ValueBool() {
 		payload.RegistrationAllowed = plan.RegistrationAllowed.ValueBool()
+	}
+
+	// TFIN-467: a client being created here does not exist in CM yet, so it is
+	// guaranteed to be unregistered (no real CTE agent can have registered
+	// against an ID that doesn't exist yet). CipherTrust Manager 200-OKs a
+	// write to max_num_cache_log/max_space_cache_log for such a client but
+	// silently ignores it, so it can never persist. Failing fast here (before
+	// the API call) covers the one case where the old, now-removed
+	// ValidateConfig-time block was actually correct. See the equivalent,
+	// registration-status-gated check in Update() for existing clients, where
+	// a real agent may since have registered and CM genuinely persists the
+	// write.
+	if !config.MaxNumCacheLog.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_num_cache_log"),
+			"Non-Functional Field for Unregistered CTE Client",
+			"max_num_cache_log cannot be set when creating a CTE client; the client has no registered agent yet, so CipherTrust Manager accepts the write but silently ignores it. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead, or set this field in a follow-up update once a real agent has registered against this client.",
+		)
+	}
+	if !config.MaxSpaceCacheLog.IsNull() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("max_space_cache_log"),
+			"Non-Functional Field for Unregistered CTE Client",
+			"max_space_cache_log cannot be set when creating a CTE client; the client has no registered agent yet, so CipherTrust Manager accepts the write but silently ignores it. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead, or set this field in a follow-up update once a real agent has registered against this client.",
+		)
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	payloadJSON, err := json.Marshal(payload)
@@ -453,6 +489,53 @@ func (r *resourceCTEClient) Update(ctx context.Context, req resource.UpdateReque
 	if plan.LGCSAccessOnly.ValueBool() != types.BoolNull().ValueBool() {
 		payload.LGCSAccessOnly = plan.LGCSAccessOnly.ValueBool()
 	}
+	// TFIN-467: max_num_cache_log/max_space_cache_log are only functional at
+	// the client level for a client that has actually registered a real CTE
+	// agent at some point — for a dummy/never-registered client CM 200-OKs
+	// the write but silently ignores it, producing a perpetual,
+	// unresolvable plan diff. Registration status isn't knowable at
+	// ValidateConfig time (schema/config only, no state or API access), so
+	// it's checked here, immediately before sending the write, against a
+	// live GET of the client. client_health_status is populated by CM the
+	// moment a client is registered and stays a non-"UNREGISTERED" value
+	// thereafter (even if the agent later disconnects), so that's the
+	// signal used rather than requiring the agent to be currently connected.
+	maxNumCacheLogChanged := !plan.MaxNumCacheLog.Equal(state.MaxNumCacheLog)
+	maxSpaceCacheLogChanged := !plan.MaxSpaceCacheLog.Equal(state.MaxSpaceCacheLog)
+	if maxNumCacheLogChanged || maxSpaceCacheLogChanged {
+		checkID := uuid.New().String()
+		current, err := r.client.GetById(ctx, checkID, plan.ID.ValueString(), common.URL_CTE_CLIENT)
+		if err != nil {
+			r.client.Log.Debug(common.ERR_METHOD_END + err.Error() + " [resource_cte_client.go -> Update][" + plan.ID.ValueString() + "]")
+			resp.Diagnostics.AddError(
+				"Error reading CTE Client on CipherTrust Manager: ",
+				"Could not verify client registration status before updating max_num_cache_log/max_space_cache_log, unexpected error: "+err.Error(),
+			)
+			return
+		}
+		var currentClient CTEClientsListJSON
+		if err := json.Unmarshal([]byte(current), &currentClient); err != nil {
+			resp.Diagnostics.AddError("Error parsing CTE Client response", err.Error())
+			return
+		}
+		if currentClient.ClientHealthStatus == "" || currentClient.ClientHealthStatus == "UNREGISTERED" {
+			if maxNumCacheLogChanged {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("max_num_cache_log"),
+					"Non-Functional Field for Unregistered CTE Client",
+					"max_num_cache_log cannot be set on a client that has never registered a CTE agent with CipherTrust Manager; CM accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead, or set this field once a real agent has registered against this client.",
+				)
+			}
+			if maxSpaceCacheLogChanged {
+				resp.Diagnostics.AddAttributeError(
+					path.Root("max_space_cache_log"),
+					"Non-Functional Field for Unregistered CTE Client",
+					"max_space_cache_log cannot be set on a client that has never registered a CTE agent with CipherTrust Manager; CM accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead, or set this field once a real agent has registered against this client.",
+				)
+			}
+			return
+		}
+	}
 	if plan.MaxNumCacheLog.ValueInt64() != types.Int64Null().ValueInt64() {
 		payload.MaxNumCacheLog = plan.MaxNumCacheLog.ValueInt64()
 	}
@@ -611,48 +694,8 @@ func validateCTEUClientConfig(ctx context.Context, req resource.ValidateConfigRe
 	}
 }
 
-// validateNonFunctionalCacheLogFields rejects max_num_cache_log/max_space_cache_log
-// when explicitly configured. TFIN-467: CipherTrust Manager silently ignores
-// writes to these two fields at the client level (confirmed via direct REST
-// PATCH cross-check, including values that respect the linked profile's
-// documented minimums) — every apply reports success but the value never
-// persists, producing a perpetual, unresolvable plan diff. The equivalent
-// setting is only functional on the linked ciphertrust_cte_profile resource's
-// cache_settings.max_files/max_space. Erroring here up front, rather than
-// sending a PATCH CM will 200-OK and silently no-op, matches the existing
-// in-file precedent (see validateCTEUClientConfig above) of surfacing
-// unsupported field combinations as an explicit attribute error instead of
-// letting them fail silently against CM.
-func validateNonFunctionalCacheLogFields(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var maxNumCacheLog types.Int64
-	var maxSpaceCacheLog types.Int64
-
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_num_cache_log"), &maxNumCacheLog)...)
-	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("max_space_cache_log"), &maxSpaceCacheLog)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	if !maxNumCacheLog.IsNull() && !maxNumCacheLog.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("max_num_cache_log"),
-			"Non-Functional Field for CTE Client",
-			"max_num_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_files attribute instead.",
-		)
-	}
-	if !maxSpaceCacheLog.IsNull() && !maxSpaceCacheLog.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("max_space_cache_log"),
-			"Non-Functional Field for CTE Client",
-			"max_space_cache_log cannot be set at the client level; CipherTrust Manager accepts the write but silently ignores it, so it can never persist. Configure the equivalent setting on the linked ciphertrust_cte_profile resource's cache_settings.max_space attribute instead.",
-		)
-	}
-}
-
 func (r *resourceCTEClient) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	validateCTEUClientConfig(ctx, req, resp)
-	validateNonFunctionalCacheLogFields(ctx, req, resp)
 }
 
 func setCTEClientState(
@@ -662,11 +705,12 @@ func setCTEClientState(
 ) {
 
 	state.ID = types.StringValue(apiResp.ID)
-	if apiResp.Description != "" {
-		state.Description = types.StringValue(apiResp.Description)
-	} else {
-		state.Description = types.StringNull()
-	}
+	// description is Optional+Computed with a "" default (see schema), so both
+	// an omitted config value and an explicit description = "" converge to the
+	// same state value here. Do NOT normalize "" to null (TFIN-619): that
+	// reintroduces a perpetual plan loop because config "" would never match a
+	// null state.
+	state.Description = types.StringValue(apiResp.Description)
 	// TFIN-465: name must be refreshed from the live API response on every
 	// Read() (including `terraform apply -refresh-only`), not just the very
 	// first read when state happens to be null/empty. name now carries
@@ -674,7 +718,20 @@ func setCTEClientState(
 	// refreshed value that no longer matches config surfaces as an explicit
 	// "Attribute is immutable" error at plan time instead of a silent,
 	// unresolvable diff.
-	state.Name = types.StringValue(apiResp.Name)
+	//
+	// TFIN-627: CipherTrust Manager case-normalizes the name server-side
+	// (e.g. echoes back "tf_cte_client_test-..." for a client created as
+	// "TF_CTE_Client_Test-..."). Blindly overwriting state with CM's echoed
+	// value therefore mismatches the user's (unchanged) config on the very
+	// next plan, and ImmutableString()'s exact byte-for-byte comparison
+	// trips a false "Attribute is immutable" error. Only refresh state.Name
+	// from the API when the change is a genuine (case-insensitive) rename;
+	// when it differs from the current state only by case, keep the
+	// existing config-matching value so the immutable comparison still
+	// lines up.
+	if !strings.EqualFold(state.Name.ValueString(), apiResp.Name) {
+		state.Name = types.StringValue(apiResp.Name)
+	}
 	state.ClientLocked = types.BoolValue(apiResp.ClientLocked)
 	state.ClientType = types.StringValue(apiResp.ClientType)
 	state.CommunicationEnabled = types.BoolValue(apiResp.CommunicationEnabled)
@@ -701,28 +758,71 @@ func setCTEClientState(
 		state.ProtectionMode = types.StringValue(apiResp.ProtectionMode)
 	}
 
+	// shared_domain_list (TFIN-464): CipherTrust Manager's domain_list field is
+	// the live record of which domains this client actually belongs to/is
+	// shared with, so it's the genuine corresponding value for this
+	// attribute. It is refreshed only when state already holds a value (the
+	// configuration actually asked to share domains), for the same reason as
+	// protection_mode above: CM always returns a non-empty domain_list (it
+	// always includes the client's native domain), so populating it
+	// unconditionally would put a value in state for configurations that
+	// never set this Optional (not Computed) attribute and produce a plan
+	// diff that can never be resolved.
+	//
+	// NOTE: on a single-domain CipherTrust Manager (no additional domains
+	// licensed/created), domain_list always equals the client's native
+	// domain regardless of whether shared_domain_list was ever configured,
+	// so this refresh cannot be distinguished from a no-op in that
+	// environment -- confirmed directly by comparing a client with
+	// shared_domain_list=["root"] against a control client with the
+	// attribute entirely unset, both of which returned identical
+	// domain_list=["root"]. The mapping is still correct for CM instances
+	// with more than one domain, where domain_list would reflect real
+	// sharing/unsharing.
+	if state.SharedDomainList != nil && apiResp.DomainList != "" {
+		var domains []string
+		if err := json.Unmarshal([]byte(apiResp.DomainList), &domains); err == nil {
+			sharedDomainList := make([]types.String, 0, len(domains))
+			for _, domain := range domains {
+				sharedDomainList = append(sharedDomainList, types.StringValue(domain))
+			}
+			state.SharedDomainList = sharedDomainList
+		}
+	}
+
+	// disable_capability, dynamic_parameters, and lgcs_access_only are
+	// intentionally NOT refreshed here (TFIN-464): CipherTrust Manager's
+	// GET /transparent-encryption/clients/{id} response contains no field
+	// corresponding to any of these three at all -- confirmed by diffing the
+	// live response of a client with disable_capability="EKP" and
+	// lgcs_access_only=false explicitly configured against a control client
+	// with neither attribute set: both returned byte-for-byte identical
+	// capabilities/ldt_*/enabled_capabilities values, and no field
+	// resembling dynamic_parameters exists in the response at all. Unlike
+	// shared_domain_list's domain_list, there is no live value to read back
+	// for these three, so forcing a mapping would fabricate a false
+	// verification rather than provide one.
 	state.MaxNumCacheLog = types.Int64Value(apiResp.MaxNumCacheLog)
 	state.MaxSpaceCacheLog = types.Int64Value(apiResp.MaxSpaceCacheLog)
 
-	// Normalize an absent/nil or empty {} labels response to null so the
-	// resource can converge once labels have ever been set (TFIN-463).
-	if len(apiResp.Labels) > 0 {
-		labelsMap := map[string]attr.Value{}
-		for k, v := range apiResp.Labels {
-			if strVal, ok := v.(string); ok {
-				labelsMap[k] = types.StringValue(strVal)
-			}
+	// labels is Optional+Computed with an empty-map default (see schema), so
+	// both an omitted config value and an explicit labels = {} converge to the
+	// same state value here. Do NOT normalize an absent/nil/empty labels
+	// response to null (TFIN-619): that reintroduces a perpetual plan loop
+	// because config {} would never match a null state. Always reflect CM's
+	// actual labels value (including empty) directly into state.
+	labelsMap := map[string]attr.Value{}
+	for k, v := range apiResp.Labels {
+		if strVal, ok := v.(string); ok {
+			labelsMap[k] = types.StringValue(strVal)
 		}
-		labels, diags := types.MapValue(types.StringType, labelsMap)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		state.Labels = labels
-	} else {
-		state.Labels = types.MapNull(types.StringType)
 	}
-
+	labels, diags := types.MapValue(types.StringType, labelsMap)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Labels = labels
 }
 
 func (r *resourceCTEClient) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

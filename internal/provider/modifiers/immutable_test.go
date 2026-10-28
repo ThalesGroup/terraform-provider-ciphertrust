@@ -22,10 +22,10 @@ var nonNullResourceRaw = tftypes.NewValue(
 	map[string]tftypes.Value{"x": tftypes.NewValue(tftypes.String, "v")},
 )
 
-func nullState() tfsdk.State   { return tfsdk.State{Raw: nullResourceRaw} }
-func liveState() tfsdk.State   { return tfsdk.State{Raw: nonNullResourceRaw} }
-func destroyPlan() tfsdk.Plan  { return tfsdk.Plan{Raw: nullResourceRaw} }
-func updatePlan() tfsdk.Plan   { return tfsdk.Plan{Raw: nonNullResourceRaw} }
+func nullState() tfsdk.State  { return tfsdk.State{Raw: nullResourceRaw} }
+func liveState() tfsdk.State  { return tfsdk.State{Raw: nonNullResourceRaw} }
+func destroyPlan() tfsdk.Plan { return tfsdk.Plan{Raw: nullResourceRaw} }
+func updatePlan() tfsdk.Plan  { return tfsdk.Plan{Raw: nonNullResourceRaw} }
 
 // TestImmutableString verifies ImmutableString lifecycle semantics.
 func TestImmutableString(t *testing.T) {
@@ -44,27 +44,27 @@ func TestImmutableString(t *testing.T) {
 		wantError bool
 	}{
 		{
-			name: "create (null state) — allow any value",
+			name:  "create (null state) — allow any value",
 			state: nullState(), plan: updatePlan(),
 			stateVal: types.StringNull(), planVal: changed, wantError: false,
 		},
 		{
-			name: "destroy with matching config — allow",
+			name:  "destroy with matching config — allow",
 			state: liveState(), plan: destroyPlan(),
 			stateVal: old, planVal: old, wantError: false,
 		},
 		{
-			name: "destroy with drifted config — allow (TFIN-552 regression)",
+			name:  "destroy with drifted config — allow (TFIN-552 regression)",
 			state: liveState(), plan: destroyPlan(),
 			stateVal: old, planVal: changed, wantError: false,
 		},
 		{
-			name: "update no-change — allow",
+			name:  "update no-change — allow",
 			state: liveState(), plan: updatePlan(),
 			stateVal: old, planVal: old, wantError: false,
 		},
 		{
-			name: "update changed — block",
+			name:  "update changed — block",
 			state: liveState(), plan: updatePlan(),
 			stateVal: old, planVal: changed, wantError: true,
 		},
@@ -296,6 +296,71 @@ func TestImmutableObjectExceptWriteOnly(t *testing.T) {
 			}
 			resp := &planmodifier.ObjectResponse{PlanValue: tc.planVal}
 			mod.PlanModifyObject(ctx, req, resp)
+			assertError(t, resp.Diagnostics.HasError(), tc.wantError)
+		})
+	}
+}
+
+// TestImmutableJSONString verifies ImmutableJSONString lifecycle semantics. Equivalent
+// JSON (whitespace or key order differences) is not a change; different content or
+// invalid JSON is blocked like ImmutableString.
+func TestImmutableJSONString(t *testing.T) {
+	mod := modifiers.ImmutableJSONString()
+	ctx := context.Background()
+
+	compact := types.StringValue(`{"version":"1.0.0","anyOf":[{"authority":"a","allOf":[{"claim":"c","equals":"e"}]}]}`)
+	pretty := types.StringValue("{\n  \"anyOf\": [\n    {\n      \"allOf\": [{\"equals\": \"e\", \"claim\": \"c\"}],\n      \"authority\": \"a\"\n    }\n  ],\n  \"version\": \"1.0.0\"\n}")
+	different := types.StringValue(`{"version":"2.0.0","anyOf":[{"authority":"a","allOf":[{"claim":"c","equals":"e"}]}]}`)
+	invalid := types.StringValue("not json")
+
+	cases := []struct {
+		name      string
+		state     tfsdk.State
+		plan      tfsdk.Plan
+		stateVal  types.String
+		planVal   types.String
+		wantError bool
+	}{
+		{
+			name:  "create (null state) - allow any value",
+			state: nullState(), plan: updatePlan(),
+			stateVal: types.StringNull(), planVal: different, wantError: false,
+		},
+		{
+			name:  "destroy with drifted config - allow",
+			state: liveState(), plan: destroyPlan(),
+			stateVal: compact, planVal: different, wantError: false,
+		},
+		{
+			name:  "update identical - allow",
+			state: liveState(), plan: updatePlan(),
+			stateVal: compact, planVal: compact, wantError: false,
+		},
+		{
+			name:  "update whitespace and key order only - allow",
+			state: liveState(), plan: updatePlan(),
+			stateVal: compact, planVal: pretty, wantError: false,
+		},
+		{
+			name:  "update changed content - block",
+			state: liveState(), plan: updatePlan(),
+			stateVal: compact, planVal: different, wantError: true,
+		},
+		{
+			name:  "update invalid json differs from state - block",
+			state: liveState(), plan: updatePlan(),
+			stateVal: compact, planVal: invalid, wantError: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := planmodifier.StringRequest{
+				State: tc.state, Plan: tc.plan,
+				StateValue: tc.stateVal, PlanValue: tc.planVal,
+			}
+			resp := &planmodifier.StringResponse{PlanValue: tc.planVal}
+			mod.PlanModifyString(ctx, req, resp)
 			assertError(t, resp.Diagnostics.HasError(), tc.wantError)
 		})
 	}

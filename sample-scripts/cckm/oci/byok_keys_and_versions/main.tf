@@ -2,7 +2,11 @@ terraform {
   required_providers {
     ciphertrust = {
       source  = "ThalesGroup/ciphertrust"
-      version = "1.0.1"
+      version = "1.1.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
     }
   }
 }
@@ -21,9 +25,9 @@ locals {
   user_ocid           = var.oci_user_ocid
   vault_ocid          = var.oci_vault_ocid
   connection_name     = "tf-${lower(random_id.random.hex)}"
-  cm_key_name         = "tf-${lower(random_id.random.hex)}"
-  oci_key_name        = "tf-${lower(random_id.random.hex)}"
-  cm_key_version_name = "tf-ver-${lower(random_id.random.hex)}"
+  cm_key_name         = "tf-rsa-${lower(random_id.random.hex)}"
+  oci_key_name        = "tf-byok-${lower(random_id.random.hex)}"
+  cm_key_version_name = "tf-rsa-ver-${lower(random_id.random.hex)}"
 }
 
 # Define an OCI connection
@@ -63,7 +67,7 @@ resource "ciphertrust_oci_byok_key" "byok_key" {
   vault           = ciphertrust_oci_vault.vault.id
 }
 
-# Define an AES CipherTrust key for the key version
+# Define an RSA CipherTrust key for the key version
 resource "ciphertrust_cm_key" "cm_rsa_version" {
   name       = local.cm_key_version_name
   algorithm  = "RSA"

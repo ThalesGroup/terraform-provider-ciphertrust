@@ -192,6 +192,20 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 									Computed:    true,
 									Description: "A list of OCI vaults resource ID's for which OCI keys are synchronized. Unless synchronizing all OCI keys, at least one vault is required.",
 								},
+								"key_vaults": schema.SetAttribute{
+									ElementType: types.StringType,
+									Computed:    true,
+									Description: "A list of Azure key vault resource ID's for which Azure keys are synchronized. Unless synchronizing all Azure keys, at least one key vault is required.",
+								},
+								"sync_items": schema.SetAttribute{
+									ElementType: types.StringType,
+									Computed:    true,
+									Description: "A list of Azure item types that are synchronized.",
+								},
+								"take_cloud_key_backup": schema.BoolAttribute{
+									Computed:    true,
+									Description: "True if a backup of Azure keys is taken in the cloud during synchronization.",
+								},
 								"synchronize_all": schema.BoolAttribute{
 									Computed:    true,
 									Description: "True if all keys are synchronized.",
@@ -210,6 +224,16 @@ func (d *dataSourceScheduler) Schema(_ context.Context, _ datasource.SchemaReque
 								"cloud_name": schema.StringAttribute{
 									Computed:    true,
 									Description: "Name of the cloud in which the rotation operation is triggered. The only supported value is 'aws'.",
+								},
+							},
+						},
+						"cckm_key_backup_params": schema.SingleNestedAttribute{
+							Computed:    true,
+							Description: "CCKM key backup operation specific arguments. Populated only when operation is \"cckm_key_backup\".",
+							Attributes: map[string]schema.Attribute{
+								"cloud_name": schema.StringAttribute{
+									Computed:    true,
+									Description: "Name of the cloud in which the key backup operation is triggered. The only supported value is 'AzureCloud'.",
 								},
 							},
 						},
@@ -295,6 +319,8 @@ func (d *dataSourceScheduler) Read(ctx context.Context, req datasource.ReadReque
 			getCCKMSynchronizationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		case "cckm_xks_credential_rotation":
 			getCCKMCredentialRotationParams(ctx, id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
+		case "cckm_key_backup":
+			getCCKMKeyBackupParams(id, &schedulerJobs, jobs.JobConfigParams, &resp.Diagnostics, d.client.Log)
 		}
 		state.Scheduler = append(state.Scheduler, schedulerJobs)
 	}
@@ -453,6 +479,31 @@ func getCCKMSynchronizationParams(ctx context.Context, id string, schedulerJobs 
 		return
 	}
 	synchronizationParams.OCIVaults = ociSet
+	var keyVaultValues []attr.Value
+	for _, v := range cckmSyncParams.KeyVaults {
+		keyVaultValues = append(keyVaultValues, types.StringValue(v))
+	}
+	keyVaultSet, d := types.SetValue(types.StringType, keyVaultValues)
+	if d.HasError() {
+		diags.Append(d...)
+		return
+	}
+	synchronizationParams.KeyVaults = keyVaultSet
+	var itemValues []attr.Value
+	for _, v := range cckmSyncParams.SyncItems {
+		itemValues = append(itemValues, types.StringValue(v))
+	}
+	itemSet, d := types.SetValue(types.StringType, itemValues)
+	if d.HasError() {
+		diags.Append(d...)
+		return
+	}
+	synchronizationParams.SyncItems = itemSet
+	if cckmSyncParams.TakeCloudKeyBackup != nil {
+		synchronizationParams.TakeCloudKeyBackup = types.BoolValue(*cckmSyncParams.TakeCloudKeyBackup)
+	} else {
+		synchronizationParams.TakeCloudKeyBackup = types.BoolNull()
+	}
 	schedulerJobs.CCKMSynchronizationParams = synchronizationParams
 }
 
@@ -469,5 +520,21 @@ func getCCKMCredentialRotationParams(ctx context.Context, id string, schedulerJo
 	}
 	schedulerJobs.CCKMXksRotateCredentialsParams = &CCKMXksRotateCredentialsParamsTFSDK{
 		CloudName: types.StringValue(rotateCredentialsParams.CloudName),
+	}
+}
+
+func getCCKMKeyBackupParams(id string, schedulerJobs *JobConfigParamsTFSDK, jobConfigParams json.RawMessage, diags *diag.Diagnostics, logger hclog.Logger) {
+	var keyBackupParams CCKMKeyBackupParamsJSON
+	err := json.Unmarshal(jobConfigParams, &keyBackupParams)
+	if err != nil {
+		logger.Debug(common.ERR_METHOD_END + err.Error() + " [data_source_scheduler.go -> Read][" + id + "]")
+		diags.AddError(
+			"Unable to read scheduler key backup params",
+			err.Error(),
+		)
+		return
+	}
+	schedulerJobs.CCKMKeyBackupParams = &CCKMKeyBackupParamsTFSDK{
+		CloudName: types.StringValue(keyBackupParams.CloudName),
 	}
 }

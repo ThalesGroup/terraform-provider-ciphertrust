@@ -76,6 +76,7 @@ Read-Only:
 
 - `account` (String) The account which owns this resource.
 - `application` (String) The application this resource belongs to.
+- `cckm_key_backup_params` (Attributes) CCKM key backup operation specific arguments. Populated only when operation is "cckm_key_backup". (see [below for nested schema](#nestedatt--scheduler--cckm_key_backup_params))
 - `cckm_key_rotation_params` (Attributes) Cloud key rotation operation specific arguments. Populated only when operation is "cckm_key_rotation". (see [below for nested schema](#nestedatt--scheduler--cckm_key_rotation_params))
 - `cckm_synchronization_params` (Attributes) Cloud key synchronization operation specific arguments. Populated only when operation is "cckm_synchronization". (see [below for nested schema](#nestedatt--scheduler--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) CCKM XKS credential rotation operation specific arguments. Populated only when operation is "cckm_xks_credential_rotation". (see [below for nested schema](#nestedatt--scheduler--cckm_xks_credential_rotation_params))
@@ -87,7 +88,7 @@ Read-Only:
 - `end_date` (String) Date/time when the job ends. Format: YYYY-MM-DDTHH:MM:SSZ.
 - `id` (String) The unique identifier of the scheduler job configuration.
 - `name` (String) The name of the job configuration.
-- `operation` (String) The type of operation performed by this job configuration. One of: database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation.
+- `operation` (String) The type of operation performed by this job configuration. One of: database_backup, cckm_key_rotation, cckm_synchronization, cckm_xks_credential_rotation, cckm_key_backup.
 - `run_at` (String) Described using the cron expression format : "* * * * *" These five values indicate when the job should be executed. They are in order of minute, hour, day of month, month, and day of week. Valid values are 0-59 (minutes), 0-23 (hours), 1-31 (day of month), 1-12 or jan-dec (month), and 0-6 or sun-sat (day of week). Names are case insensitive. For use of special characters, consult the Time Specification description at the top of this page.
 
 For example:
@@ -100,13 +101,21 @@ For example:
 - `updated_at` (String) Date/time the resource was last updated.
 - `uri` (String) A human readable unique identifier of the resource.
 
+<a id="nestedatt--scheduler--cckm_key_backup_params"></a>
+### Nested Schema for `scheduler.cckm_key_backup_params`
+
+Read-Only:
+
+- `cloud_name` (String) Name of the cloud in which the key backup operation is triggered. The only supported value is 'AzureCloud'.
+
+
 <a id="nestedatt--scheduler--cckm_key_rotation_params"></a>
 ### Nested Schema for `scheduler.cckm_key_rotation_params`
 
 Read-Only:
 
 - `aws_retain_alias` (Boolean) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
-- `cloud_name` (String) Name of the cloud for which the key rotation is scheduled. Options are: aws,oci.
+- `cloud_name` (String) Name of the cloud for which the key rotation is scheduled. Options are: aws,oci,AzureCloud.
 - `expiration` (String) Expiration time of the new key. If not specified, the new key material never expires. Use either 'Xd' for x days or 'Yh' for y hours.
 - `expire_in` (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. Use either 'Xd' for x days or 'Yh' for y hours.
 - `rotate_material` (Boolean) If true, rotate the key material during the key rotation job. Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.
@@ -118,10 +127,13 @@ Read-Only:
 
 Read-Only:
 
-- `cloud_name` (String) The cloud that is synchronized on schedule. Options are: aws,oci.
+- `cloud_name` (String) The cloud that is synchronized on schedule. Options are: aws,oci,AzureCloud.
+- `key_vaults` (Set of String) A list of Azure key vault resource ID's for which Azure keys are synchronized. Unless synchronizing all Azure keys, at least one key vault is required.
 - `kms` (Set of String) A list of kms resource ID's for which AWS keys are synchronized. Unless synchronizing all AWS keys, at least one kms is required.
 - `oci_vaults` (Set of String) A list of OCI vaults resource ID's for which OCI keys are synchronized. Unless synchronizing all OCI keys, at least one vault is required.
+- `sync_items` (Set of String) A list of Azure item types that are synchronized.
 - `synchronize_all` (Boolean) True if all keys are synchronized.
+- `take_cloud_key_backup` (Boolean) True if a backup of Azure keys is taken in the cloud during synchronization.
 
 
 <a id="nestedatt--scheduler--cckm_xks_credential_rotation_params"></a>

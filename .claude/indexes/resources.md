@@ -49,30 +49,43 @@ Shared schema lives in [connections/schema_connections.go](../../internal/provid
 
 | TF type | Constructor | File |
 |---|---|---|
-| `ciphertrust_aws_kms` | `aws.NewResourceCCKMAWSKMS` | [cckm/aws/resource_aws_kms.go:31](../../internal/provider/cckm/aws/resource_aws_kms.go#L31) |
-| `ciphertrust_aws_key` | `aws.NewResourceAWSKey` | [cckm/aws/resource_aws_key.go:74](../../internal/provider/cckm/aws/resource_aws_key.go#L74) |
-| `ciphertrust_aws_key_rotation` | `aws.NewResourceAWSKeyRotation` | [cckm/aws/resource_aws_key_rotation.go:27](../../internal/provider/cckm/aws/resource_aws_key_rotation.go#L27) |
-| `ciphertrust_aws_key_import_material` | `aws.NewResourceAWSKeyImportMaterial` | [cckm/aws/resource_aws_key_import_material.go:33](../../internal/provider/cckm/aws/resource_aws_key_import_material.go#L33) |
-| `ciphertrust_aws_policy_template` | `aws.NewResourceAWSPolicyTemplate` | [cckm/aws/resource_aws_policy_template.go:34](../../internal/provider/cckm/aws/resource_aws_policy_template.go#L34) |
-| `ciphertrust_aws_custom_keystore` | `aws.NewResourceAWSCustomKeyStore` | [cckm/aws/resource_aws_custom_key_store.go:49](../../internal/provider/cckm/aws/resource_aws_custom_key_store.go#L49) |
-| `ciphertrust_aws_xks_key` | `aws.NewResourceAWSXKSKey` | [cckm/aws/resource_aws_xks_key.go:40](../../internal/provider/cckm/aws/resource_aws_xks_key.go#L40) |
-| `ciphertrust_aws_cloudhsm_key` | `aws.NewResourceAWSCloudHSMKey` | [cckm/aws/resource_aws_cloudhsm_key.go:40](../../internal/provider/cckm/aws/resource_aws_cloudhsm_key.go#L40) |
+| `ciphertrust_aws_kms` | `aws.NewResourceCCKMAWSKMS` | [cckm/aws/resource_aws_kms.go:37](../../internal/provider/cckm/aws/resource_aws_kms.go#L37) |
+| `ciphertrust_aws_key` | `aws.NewResourceAWSKey` | [cckm/aws/resource_aws_key.go:51](../../internal/provider/cckm/aws/resource_aws_key.go#L51) |
+| `ciphertrust_aws_byok_key` | `aws.NewResourceAWSByokKey` | [cckm/aws/resource_aws_byok_key.go:37](../../internal/provider/cckm/aws/resource_aws_byok_key.go#L37) |
+| `ciphertrust_aws_key_rotation` | `aws.NewResourceAWSKeyRotation` | [cckm/aws/resource_aws_key_rotation.go:62](../../internal/provider/cckm/aws/resource_aws_key_rotation.go#L62) |
+| `ciphertrust_aws_key_material` | `aws.NewResourceAWSKeyMaterial` | [cckm/aws/resource_aws_key_material.go:58](../../internal/provider/cckm/aws/resource_aws_key_material.go#L58) |
+| `ciphertrust_aws_policy_template` | `aws.NewResourceAWSPolicyTemplate` | [cckm/aws/resource_aws_policy_template.go:35](../../internal/provider/cckm/aws/resource_aws_policy_template.go#L35) |
+| `ciphertrust_aws_custom_keystore` | `aws.NewResourceAWSCustomKeyStore` | [cckm/aws/resource_aws_custom_key_store.go:60](../../internal/provider/cckm/aws/resource_aws_custom_key_store.go#L60) |
+| `ciphertrust_aws_xks_key` | `aws.NewResourceAWSXKSKey` | [cckm/aws/resource_aws_xks_key.go:35](../../internal/provider/cckm/aws/resource_aws_xks_key.go#L35) |
+| `ciphertrust_aws_cloudhsm_key` | `aws.NewResourceAWSCloudHSMKey` | [cckm/aws/resource_aws_cloudhsm_key.go:34](../../internal/provider/cckm/aws/resource_aws_cloudhsm_key.go#L34) |
 | `ciphertrust_aws_acl` | `aws.NewResourceCCKMAWSAcl` | [cckm/aws/resource_aws_acls.go:36](../../internal/provider/cckm/aws/resource_aws_acls.go#L36) |
 
-Shared schema lives in [cckm/aws/schema_cckm_aws.go](../../internal/provider/cckm/aws/schema_cckm_aws.go).
+Shared schema lives in [cckm/aws/aws_schema.go](../../internal/provider/cckm/aws/aws_schema.go).
 
 ## CCKM OCI (cckm/oci/)
 
 | TF type | Constructor | File |
 |---|---|---|
-| `ciphertrust_oci_vault` | `oci.NewResourceCCKMOCIVault` | [cckm/oci/resource_oci_vault.go:34](../../internal/provider/cckm/oci/resource_oci_vault.go#L34) |
+| `ciphertrust_oci_vault` | `oci.NewResourceCCKMOCIVault` | [cckm/oci/resource_oci_vault.go:35](../../internal/provider/cckm/oci/resource_oci_vault.go#L35) |
 | `ciphertrust_oci_key` | `oci.NewResourceCCKMOCIKey` | [cckm/oci/resource_oci_key.go:37](../../internal/provider/cckm/oci/resource_oci_key.go#L37) |
 | `ciphertrust_oci_key_version` | `oci.NewResourceCCKMOCIVersion` | [cckm/oci/resource_oci_key_version.go:36](../../internal/provider/cckm/oci/resource_oci_key_version.go#L36) |
-| `ciphertrust_oci_byok_key` | `oci.NewResourceCCKMOCIByokKey` | [cckm/oci/resource_oci_byok_key.go:53](../../internal/provider/cckm/oci/resource_oci_byok_key.go#L53) |
-| `ciphertrust_oci_byok_key_version` | `oci.NewResourceCCKMOCIByokVersion` | [cckm/oci/resource_oci_byok_key_version.go:38](../../internal/provider/cckm/oci/resource_oci_byok_key_version.go#L38) |
+| `ciphertrust_oci_byok_key` | `oci.NewResourceCCKMOCIByokKey` | [cckm/oci/resource_oci_byok_key.go:54](../../internal/provider/cckm/oci/resource_oci_byok_key.go#L54) |
+| `ciphertrust_oci_byok_key_version` | `oci.NewResourceCCKMOCIByokVersion` | [cckm/oci/resource_oci_byok_key_version.go:37](../../internal/provider/cckm/oci/resource_oci_byok_key_version.go#L37) |
 | `ciphertrust_oci_acl` | `oci.NewResourceCCKMOCIAcl` | [cckm/oci/resource_oci_acls.go:36](../../internal/provider/cckm/oci/resource_oci_acls.go#L36) |
 
 OCI-specific helpers: [oci/oci_key_common.go](../../internal/provider/cckm/oci/oci_key_common.go), [oci/oci_key_version_common.go](../../internal/provider/cckm/oci/oci_key_version_common.go), [oci/oci_retry.go](../../internal/provider/cckm/oci/oci_retry.go), [oci/oci_log.go](../../internal/provider/cckm/oci/oci_log.go), [oci/tags.go](../../internal/provider/cckm/oci/tags.go). Models: [oci/models/](../../internal/provider/cckm/oci/models/).
+
+## CCKM Azure (cckm/azure/)
+
+| TF type | Constructor | File |
+|---|---|---|
+| `ciphertrust_azure_vault` | `azure.NewResourceCCKMAzureVault` | [cckm/azure/resource_azure_vault.go:45](../../internal/provider/cckm/azure/resource_azure_vault.go#L45) |
+| `ciphertrust_azure_key` | `azure.NewResourceCCKMAzureKey` | [cckm/azure/resource_azure_key.go:62](../../internal/provider/cckm/azure/resource_azure_key.go#L62) |
+| `ciphertrust_azure_certificate` | `azure.NewResourceCCKMAzureCertificate` | [cckm/azure/resource_azure_certificate.go:45](../../internal/provider/cckm/azure/resource_azure_certificate.go#L45) |
+| `ciphertrust_azure_key_pit_backup` | `azure.NewResourceAzureKeyPitBackup` | [cckm/azure/resource_azure_key_pit_backup.go:31](../../internal/provider/cckm/azure/resource_azure_key_pit_backup.go#L31) |
+| `ciphertrust_azure_acl` | `azure.NewResourceCCKMAzureAcl` | [cckm/azure/resource_azure_acls.go:36](../../internal/provider/cckm/azure/resource_azure_acls.go#L36) |
+
+Azure-specific helpers: certificate ([azure_certificate_schema.go](../../internal/provider/cckm/azure/azure_certificate_schema.go), [azure_certificate_modify_plan.go](../../internal/provider/cckm/azure/azure_certificate_modify_plan.go), [azure_certificate_payload.go](../../internal/provider/cckm/azure/azure_certificate_payload.go), [azure_certificate_state.go](../../internal/provider/cckm/azure/azure_certificate_state.go), [azure_certificate_files.go](../../internal/provider/cckm/azure/azure_certificate_files.go)); key ([azure_key_payload.go](../../internal/provider/cckm/azure/azure_key_payload.go), [azure_key_state.go](../../internal/provider/cckm/azure/azure_key_state.go), [azure_key_update.go](../../internal/provider/cckm/azure/azure_key_update.go), [azure_key_validate.go](../../internal/provider/cckm/azure/azure_key_validate.go), [azure_key_backup_scheduler.go](../../internal/provider/cckm/azure/azure_key_backup_scheduler.go), [azure_key_rotation_scheduler.go](../../internal/provider/cckm/azure/azure_key_rotation_scheduler.go)); shared ([azure_attr_helpers.go](../../internal/provider/cckm/azure/azure_attr_helpers.go), [azure_post.go](../../internal/provider/cckm/azure/azure_post.go), [azure_read.go](../../internal/provider/cckm/azure/azure_read.go)).
 
 ## CTE (cte/)
 
@@ -103,4 +116,4 @@ Shared schema lives in [cte/schema_cte.go](../../internal/provider/cte/schema_ct
 ## How to find a resource quickly
 - By TF type (`ciphertrust_aws_key`): grep `resp.TypeName = req.ProviderTypeName + "_aws_key"` in [internal/provider/](../../internal/provider/).
 - By constructor name: tables above are sorted by subsystem.
-- All constructors are registered in [internal/provider/provider.go](../../internal/provider/provider.go) `Resources()` (lines 444–510).
+- All constructors are registered in [internal/provider/provider.go](../../internal/provider/provider.go) `Resources()` (starts at line 819).

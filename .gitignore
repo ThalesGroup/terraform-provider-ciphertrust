@@ -13,3 +13,6 @@ definition-beta.json
 .repro_verify/
 dev.tfrc
 *.log
+/memory-bank
+/.idea
+/.vscode

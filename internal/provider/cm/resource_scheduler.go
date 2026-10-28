@@ -15,6 +15,7 @@ import (
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -51,9 +52,10 @@ For Customer fragments, valid resourceQuery parameter values are 'ids' and 'name
 Note: When providing resource_query as a JSON string, ensure proper escaping of special characters like quotes (") and use \n for line breaks if entering the JSON in multiple lines.
 For example: "{\"ids\": ["56fc2127-3a96-428e-b93b-ab169728c23c", "a6c8d8eb-1b69-42f0-97d7-4f0845fbf602"]}"
 `
-	cckmRotationClouds  = []string{"aws", "oci"}
-	cckmSyncClouds      = []string{"aws", "oci"}
-	supportedOperations = []string{"database_backup", "cckm_key_rotation", "cckm_synchronization", "cckm_xks_credential_rotation"}
+	cckmRotationClouds  = []string{"aws", "oci", "AzureCloud"}
+	cckmSyncClouds      = []string{"aws", "oci", "AzureCloud"}
+	cckmKeyBackupClouds = []string{"AzureCloud"}
+	supportedOperations = []string{"database_backup", "cckm_key_rotation", "cckm_synchronization", "cckm_xks_credential_rotation", "cckm_key_backup"}
 )
 
 const (
@@ -84,10 +86,21 @@ func (r *resourceScheduler) ValidateConfig(ctx context.Context, req resource.Val
 	}
 
 	var names []string
-	if config.DatabaseBackupParams != nil           { names = append(names, "database_backup_params") }
-	if config.CCKMKeyRotationParams != nil          { names = append(names, "cckm_key_rotation_params") }
-	if config.CCKMSynchronizationParams != nil      { names = append(names, "cckm_synchronization_params") }
-	if config.CCKMXksRotateCredentialsParams != nil { names = append(names, "cckm_xks_credential_rotation_params") }
+	if config.DatabaseBackupParams != nil {
+		names = append(names, "database_backup_params")
+	}
+	if config.CCKMKeyRotationParams != nil {
+		names = append(names, "cckm_key_rotation_params")
+	}
+	if config.CCKMSynchronizationParams != nil {
+		names = append(names, "cckm_synchronization_params")
+	}
+	if config.CCKMXksRotateCredentialsParams != nil {
+		names = append(names, "cckm_xks_credential_rotation_params")
+	}
+	if config.CCKMKeyBackupParams != nil {
+		names = append(names, "cckm_key_backup_params")
+	}
 
 	if len(names) > 1 {
 		resp.Diagnostics.AddError(
@@ -104,7 +117,7 @@ func (r *resourceScheduler) ValidateConfig(ctx context.Context, req resource.Val
 // Schema defines the schema for the resource.
 func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params', 'cckm_key_rotation_params', and 'cckm_xks_credential_rotation_params' fields are mutually exclusive, ie: cannot be set simultaneously.",
+		Description: "Creates a new job configuration. The 'database_backup_params', 'cckm_synchronization_params', 'cckm_key_rotation_params', 'cckm_xks_credential_rotation_params', and 'cckm_key_backup_params' fields are mutually exclusive, ie: cannot be set simultaneously.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -274,6 +287,25 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 					},
 				},
 			},
+			"cckm_key_backup_params": schema.SingleNestedAttribute{
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.Object{
+					common.NewObjectUseStateForUnknown(),
+					modifiers.ImmutableObject(),
+				},
+				Description: "(Immutable) CCKM key backup operation specific arguments. These can only be set when the job is created, as the update API does not accept them. Azure is the only supported cloud.",
+				Attributes: map[string]schema.Attribute{
+					"cloud_name": schema.StringAttribute{
+						Required:    true,
+						Description: "Name of the cloud in which the key backup operation will be triggered. Options are: " + strings.Join(cckmKeyBackupClouds, ",") + ".",
+						Validators: []validator.String{
+							stringvalidator.OneOf(cckmKeyBackupClouds...),
+						},
+					},
+				},
+			},
+
 			"uri":         schema.StringAttribute{Computed: true, Description: "A human readable unique identifier of the resource."},
 			"account":     schema.StringAttribute{Computed: true, Description: "The account which owns this resource."},
 			"created_at":  schema.StringAttribute{Computed: true, Description: "Date/time the resource was created."},
@@ -368,6 +400,26 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 						Description: "A list OCI vaults resource ID's for which OCI keys will be synchronized. Unless synchronizing all OCI keys, at least one vaults is required.",
 						ElementType: types.StringType,
 					},
+					"key_vaults": schema.SetAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "A list of Azure key vault resource ID's for which Azure keys will be synchronized. Unless synchronizing all Azure keys, at least one key vault is required.",
+						ElementType: types.StringType,
+					},
+					"sync_items": schema.SetAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "A list of Azure item types to synchronize. Options are: key.",
+						ElementType: types.StringType,
+						Validators: []validator.Set{
+							setvalidator.ValueStringsAre(stringvalidator.OneOf("key")),
+						},
+					},
+					"take_cloud_key_backup": schema.BoolAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "Set true to take a backup of Azure keys in the cloud during synchronization.",
+					},
 					"synchronize_all": schema.BoolAttribute{
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
@@ -435,6 +487,8 @@ func (r *resourceScheduler) Create(ctx context.Context, req resource.CreateReque
 		if rotateCredentialsParams != nil {
 			payload.CCKMXksRotateCredentialsParams = rotateCredentialsParams
 		}
+	case "cckm_key_backup":
+		payload.CCKMKeyBackupParams = getCckmKeyBackupParams(plan)
 	}
 
 	// start_date / end_date: omit empty string from the POST payload (TFIN-557).
@@ -844,6 +898,25 @@ func getCckmSyncParams(ctx context.Context, plan CreateJobConfigParamsTFSDK, dia
 			}
 			syncParamsJSON.OCIVaults = vaults
 		}
+		if len(syncParams.KeyVaults.Elements()) != 0 {
+			keyVaults := make([]string, 0, len(syncParams.KeyVaults.Elements()))
+			diags.Append(syncParams.KeyVaults.ElementsAs(ctx, &keyVaults, false)...)
+			if diags.HasError() {
+				return nil
+			}
+			syncParamsJSON.KeyVaults = keyVaults
+		}
+		if len(syncParams.SyncItems.Elements()) != 0 {
+			items := make([]string, 0, len(syncParams.SyncItems.Elements()))
+			diags.Append(syncParams.SyncItems.ElementsAs(ctx, &items, false)...)
+			if diags.HasError() {
+				return nil
+			}
+			syncParamsJSON.SyncItems = items
+		}
+		if !syncParams.TakeCloudKeyBackup.IsNull() && !syncParams.TakeCloudKeyBackup.IsUnknown() {
+			syncParamsJSON.TakeCloudKeyBackup = syncParams.TakeCloudKeyBackup.ValueBoolPointer()
+		}
 		return &syncParamsJSON
 	}
 	return nil
@@ -856,6 +929,15 @@ func getCckmXksRotateCredentialsParams(plan CreateJobConfigParamsTFSDK) *CCKMXks
 			rotateCredsParams.CloudName = plan.CCKMXksRotateCredentialsParams.CloudName.ValueString()
 		}
 		return &rotateCredsParams
+	}
+	return nil
+}
+
+func getCckmKeyBackupParams(plan CreateJobConfigParamsTFSDK) *CCKMKeyBackupParamsJSON {
+	if plan.CCKMKeyBackupParams != nil {
+		return &CCKMKeyBackupParamsJSON{
+			CloudName: plan.CCKMKeyBackupParams.CloudName.ValueString(),
+		}
 	}
 	return nil
 }
@@ -961,11 +1043,34 @@ func getParamsFromResponse(ctx context.Context, response string, plan *CreateJob
 		} else {
 			cckmParams.OCIVaults = types.SetValueMust(types.StringType, []attr.Value{})
 		}
+		var keyVaults []string
+		for _, v := range gjson.Get(response, "job_config_params.key_vaults").Array() {
+			keyVaults = append(keyVaults, v.String())
+		}
+		if len(keyVaults) != 0 {
+			cckmParams.KeyVaults, _ = types.SetValueFrom(ctx, types.StringType, keyVaults)
+		} else {
+			cckmParams.KeyVaults = types.SetValueMust(types.StringType, []attr.Value{})
+		}
+		var syncItems []string
+		for _, v := range gjson.Get(response, "job_config_params.sync_item").Array() {
+			syncItems = append(syncItems, v.String())
+		}
+		if len(syncItems) != 0 {
+			cckmParams.SyncItems, _ = types.SetValueFrom(ctx, types.StringType, syncItems)
+		} else {
+			cckmParams.SyncItems = types.SetValueMust(types.StringType, []attr.Value{})
+		}
+		cckmParams.TakeCloudKeyBackup = types.BoolValue(gjson.Get(response, "job_config_params.take_cloud_key_backup").Bool())
 		plan.CCKMSynchronizationParams = cckmParams
 	case "cckm_xks_credential_rotation":
 		cckmParams := &CCKMXksRotateCredentialsParamsTFSDK{
 			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
 		}
 		plan.CCKMXksRotateCredentialsParams = cckmParams
+	case "cckm_key_backup":
+		plan.CCKMKeyBackupParams = &CCKMKeyBackupParamsTFSDK{
+			CloudName: types.StringValue(gjson.Get(response, "job_config_params.cloud_name").String()),
+		}
 	}
 }

@@ -1,6 +1,6 @@
 # Data source index
 
-Every data source registered in [internal/provider/provider.go](../../internal/provider/provider.go) `DataSources()` (lines 392–442) → constructor file:line and Terraform type name. Update whenever you add or rename a data source.
+Every data source registered in [internal/provider/provider.go](../../internal/provider/provider.go) `DataSources()` (starts at line 756) → constructor file:line and Terraform type name. Update whenever you add or rename a data source.
 
 ## CipherTrust Manager core (cm/)
 
@@ -30,24 +30,42 @@ Every data source registered in [internal/provider/provider.go](../../internal/p
 
 | TF type | Constructor | File |
 |---|---|---|
-| `ciphertrust_aws_account_details` | `aws.NewDataSourceAWSAccountDetails` | [cckm/aws/data_source_aws_account_details.go:22](../../internal/provider/cckm/aws/data_source_aws_account_details.go#L22) |
-| `ciphertrust_aws_key` | `aws.NewDataSourceAWSKeys` | [cckm/aws/data_source_aws_key.go:29](../../internal/provider/cckm/aws/data_source_aws_key.go#L29) |
-| `ciphertrust_aws_kms_list` | `aws.NewDataSourceAWSKms` | [cckm/aws/data_source_aws_kms.go:25](../../internal/provider/cckm/aws/data_source_aws_kms.go#L25) |
-| `ciphertrust_aws_custom_keystore` | `aws.NewDataSourceAWSCustomKeyStore` | [cckm/aws/data_source_aws_custom_key_store.go:28](../../internal/provider/cckm/aws/data_source_aws_custom_key_store.go#L28) |
-| `ciphertrust_aws_xks_key` | `aws.NewDataSourceAWSXKSKeys` | [cckm/aws/data_source_aws_xks_key.go:30](../../internal/provider/cckm/aws/data_source_aws_xks_key.go#L30) |
-| `ciphertrust_aws_cloudhsm_key` | `aws.NewDataSourceAWSCloudHSMKeys` | [cckm/aws/data_source_aws_cloudhsm_key.go:29](../../internal/provider/cckm/aws/data_source_aws_cloudhsm_key.go#L29) |
-| `ciphertrust_aws_key_rotation_list` | `aws.NewDataSourceAWSKeyRotationList` | [cckm/aws/data_source_aws_key_rotation_list.go:23](../../internal/provider/cckm/aws/data_source_aws_key_rotation_list.go#L23) |
+| `ciphertrust_aws_account_details` | `aws.NewDataSourceAWSAccountDetails` | [cckm/aws/data_source_aws_account_details.go:24](../../internal/provider/cckm/aws/data_source_aws_account_details.go#L24) |
+| `ciphertrust_aws_keys_list` | `aws.NewDataSourceAWSKeys` | [cckm/aws/data_source_aws_keys_list.go:100](../../internal/provider/cckm/aws/data_source_aws_keys_list.go#L100) |
+| `ciphertrust_aws_kms_list` | `aws.NewDataSourceAWSKms` | [cckm/aws/data_source_aws_kms_list.go:75](../../internal/provider/cckm/aws/data_source_aws_kms_list.go#L75) |
+| `ciphertrust_aws_custom_keystore_list` | `aws.NewDataSourceAWSCustomKeyStore` | [cckm/aws/data_source_aws_custom_key_store_list.go:83](../../internal/provider/cckm/aws/data_source_aws_custom_key_store_list.go#L83) |
+| `ciphertrust_aws_xks_keys_list` | `aws.NewDataSourceAWSXKSKeys` | [cckm/aws/data_source_aws_xks_keys_list.go:53](../../internal/provider/cckm/aws/data_source_aws_xks_keys_list.go#L53) |
+| `ciphertrust_aws_cloudhsm_keys_list` | `aws.NewDataSourceAWSCloudHSMKeys` | [cckm/aws/data_source_aws_cloudhsm_keys_list.go:53](../../internal/provider/cckm/aws/data_source_aws_cloudhsm_keys_list.go#L53) |
+| `ciphertrust_aws_key_rotation_list` | `aws.NewDataSourceAWSKeyRotationList` | [cckm/aws/data_source_aws_key_rotation_list.go:79](../../internal/provider/cckm/aws/data_source_aws_key_rotation_list.go#L79) |
+| `ciphertrust_aws_iam_roles_list` | `aws.NewDataSourceAWSIAMRoles` | [cckm/aws/data_source_aws_iam_roles_list.go:26](../../internal/provider/cckm/aws/data_source_aws_iam_roles_list.go#L26) |
+| `ciphertrust_aws_iam_users_list` | `aws.NewDataSourceAWSIAMUsers` | [cckm/aws/data_source_aws_iam_users_list.go:26](../../internal/provider/cckm/aws/data_source_aws_iam_users_list.go#L26) |
 
 ## CCKM OCI (cckm/oci/)
 
 | TF type | Constructor | File |
 |---|---|---|
-| `ciphertrust_get_oci_regions` | `oci.NewDataSourceGetOCIRegions` | [cckm/oci/data_source_get_oci_regions.go:24](../../internal/provider/cckm/oci/data_source_get_oci_regions.go#L24) |
+| `ciphertrust_get_oci_regions` | `oci.NewDataSourceGetOCIRegions` | [cckm/oci/data_source_get_oci_regions.go:26](../../internal/provider/cckm/oci/data_source_get_oci_regions.go#L26) |
 | `ciphertrust_get_oci_compartments` | `oci.NewDataSourceGetOCICompartments` | [cckm/oci/data_source_get_oci_compartments.go:26](../../internal/provider/cckm/oci/data_source_get_oci_compartments.go#L26) |
 | `ciphertrust_get_oci_vaults` | `oci.NewDataSourceGetOCIVaults` | [cckm/oci/data_source_get_oci_vaults.go:26](../../internal/provider/cckm/oci/data_source_get_oci_vaults.go#L26) |
-| `ciphertrust_oci_vault_list` | `oci.NewDataSourceOCIVault` | [cckm/oci/data_source_oci_vaults.go:25](../../internal/provider/cckm/oci/data_source_oci_vaults.go#L25) |
-| `ciphertrust_oci_key_list` | `oci.NewDataSourceOCIKeys` | [cckm/oci/data_source_oci_keys.go:25](../../internal/provider/cckm/oci/data_source_oci_keys.go#L25) |
-| `ciphertrust_oci_key_version_list` | `oci.NewDataSourceOCIVersions` | [cckm/oci/data_source_oci_key_versions.go:24](../../internal/provider/cckm/oci/data_source_oci_key_versions.go#L24) |
+| `ciphertrust_get_oci_buckets` | `oci.NewDataSourceGetOCIBuckets` | [cckm/oci/data_source_get_oci_buckets.go:26](../../internal/provider/cckm/oci/data_source_get_oci_buckets.go#L26) |
+| `ciphertrust_oci_compartments_list` | `oci.NewDataSourceOCICompartmentsList` | [cckm/oci/data_source_oci_compartments_list.go:71](../../internal/provider/cckm/oci/data_source_oci_compartments_list.go#L71) |
+| `ciphertrust_oci_vault_list` | `oci.NewDataSourceOCIVault` | [cckm/oci/data_source_oci_vaults.go:87](../../internal/provider/cckm/oci/data_source_oci_vaults.go#L87) |
+| `ciphertrust_oci_key_list` | `oci.NewDataSourceOCIKeys` | [cckm/oci/data_source_oci_keys.go:96](../../internal/provider/cckm/oci/data_source_oci_keys.go#L96) |
+| `ciphertrust_oci_key_version_list` | `oci.NewDataSourceOCIVersions` | [cckm/oci/data_source_oci_key_versions.go:74](../../internal/provider/cckm/oci/data_source_oci_key_versions.go#L74) |
+
+## CCKM Azure (cckm/azure/)
+
+| TF type | Constructor | File |
+|---|---|---|
+| `ciphertrust_azure_subscription_details` | `azure.NewDataSourceAzureSubscriptionDetails` | [cckm/azure/data_source_azure_subscription_details.go:27](../../internal/provider/cckm/azure/data_source_azure_subscription_details.go#L27) |
+| `ciphertrust_azure_subscription_list` | `azure.NewDataSourceAzureSubscriptionList` | [cckm/azure/data_source_azure_subscription_list.go:71](../../internal/provider/cckm/azure/data_source_azure_subscription_list.go#L71) |
+| `ciphertrust_azure_vault_details` | `azure.NewDataSourceAzureVaultDetails` | [cckm/azure/data_source_azure_vault_details.go:28](../../internal/provider/cckm/azure/data_source_azure_vault_details.go#L28) |
+| `ciphertrust_azure_vault_list` | `azure.NewDataSourceAzureVaultList` | [cckm/azure/data_source_azure_vault_list.go:81](../../internal/provider/cckm/azure/data_source_azure_vault_list.go#L81) |
+| `ciphertrust_azure_key_list` | `azure.NewDataSourceAzureKeyList` | [cckm/azure/data_source_azure_key_list.go:66](../../internal/provider/cckm/azure/data_source_azure_key_list.go#L66) |
+| `ciphertrust_azure_certificate_list` | `azure.NewDataSourceAzureCertificateList` | [cckm/azure/data_source_azure_certificate_list.go:64](../../internal/provider/cckm/azure/data_source_azure_certificate_list.go#L64) |
+| `ciphertrust_azure_key_pit_backup_list` | `azure.NewDataSourceAzureKeyPitBackupList` | [cckm/azure/data_source_azure_key_pit_backup_list.go:54](../../internal/provider/cckm/azure/data_source_azure_key_pit_backup_list.go#L54) |
+
+The key list schema lives in [cckm/azure/data_source_azure_key_list_schema.go](../../internal/provider/cckm/azure/data_source_azure_key_list_schema.go).
 
 ## CTE (cte/)
 

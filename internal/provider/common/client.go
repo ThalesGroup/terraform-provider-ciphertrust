@@ -73,9 +73,50 @@ func normalizeAddress(addr string) string {
 	return addr
 }
 
+// Default values for the Azure CCKM provider settings.
+const (
+	DefaultAzurePurgeKeysOnDelete          = true
+	DefaultAzureRecoverSoftDeletedKeys     = false
+	DefaultAzureRetainKeyBackupsAfterPurge = true
+
+	DefaultAzurePurgeCertificatesOnDelete      = true
+	DefaultAzureRecoverSoftDeletedCertificates = false
+
+	DefaultAzurePurgeSecretsOnDelete      = true
+	DefaultAzureRecoverSoftDeletedSecrets = false
+)
+
+// AzureCCKMSettings holds provider level settings for Azure CCKM key, certificate and secret resources.
+type AzureCCKMSettings struct {
+	PurgeKeysOnDelete          bool
+	RecoverSoftDeletedKeys     bool
+	RetainKeyBackupsAfterPurge bool
+
+	PurgeCertificatesOnDelete      bool
+	RecoverSoftDeletedCertificates bool
+
+	PurgeSecretsOnDelete      bool
+	RecoverSoftDeletedSecrets bool
+}
+
+// DefaultAzureCCKMSettings returns the settings used when none are specified.
+func DefaultAzureCCKMSettings() AzureCCKMSettings {
+	return AzureCCKMSettings{
+		PurgeKeysOnDelete:              DefaultAzurePurgeKeysOnDelete,
+		RecoverSoftDeletedKeys:         DefaultAzureRecoverSoftDeletedKeys,
+		RetainKeyBackupsAfterPurge:     DefaultAzureRetainKeyBackupsAfterPurge,
+		PurgeCertificatesOnDelete:      DefaultAzurePurgeCertificatesOnDelete,
+		RecoverSoftDeletedCertificates: DefaultAzureRecoverSoftDeletedCertificates,
+		PurgeSecretsOnDelete:           DefaultAzurePurgeSecretsOnDelete,
+		RecoverSoftDeletedSecrets:      DefaultAzureRecoverSoftDeletedSecrets,
+	}
+}
+
 type CCKMProviderConfig struct {
-	AwsOperationTimeout int64
-	OCIOperationTimeout int64
+	AwsOperationTimeout   int64
+	OCIOperationTimeout   int64
+	AzureOperationTimeout int64
+	AzureCCKMSettings     AzureCCKMSettings
 }
 
 // Client

@@ -151,6 +151,63 @@ func Test_CM_CckmSchedulersRotationDataSource(t *testing.T) {
 		})
 	})
 
+	t.Run("KeyBackup", func(t *testing.T) {
+		schedulerConfig := `
+			resource "ciphertrust_scheduler" "key_backup" {
+				cckm_key_backup_params = {
+					cloud_name = "AzureCloud"
+				}
+				name       = "%s"
+				operation  = "cckm_key_backup"
+				run_at     = "0 9 * * fri"
+			}
+			resource "ciphertrust_scheduler" "key_backup_2" {
+				cckm_key_backup_params = {
+					cloud_name = "AzureCloud"
+				}
+				name      = "%s"
+				operation = "cckm_key_backup"
+				run_at    = "0 9 * * fri"
+			}
+			data "ciphertrust_scheduler_list" "key_backup" {
+				filters = {
+					id = ciphertrust_scheduler.key_backup.id
+				}
+			}
+			data "ciphertrust_scheduler_list" "key_backup_no_filter" {
+				depends_on = [
+					ciphertrust_scheduler.key_backup,
+					ciphertrust_scheduler.key_backup_2,
+				]
+			}`
+		schedulerName := "tf-key-backup" + uuid.New().String()[:8]
+		schedulerName2 := "tf-key-backup" + uuid.New().String()[:8]
+		schedulerConfigStr := fmt.Sprintf(schedulerConfig, schedulerName, schedulerName2)
+		resourceName := "ciphertrust_scheduler.key_backup"
+		datasourceName := "data.ciphertrust_scheduler_list.key_backup"
+		noFilterDatasourceName := "data.ciphertrust_scheduler_list.key_backup_no_filter"
+		resource.Test(t, resource.TestCase{
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: schedulerConfigStr,
+					Check: resource.ComposeTestCheckFunc(
+						resource.TestCheckResourceAttrSet(resourceName, "id"),
+						resource.TestCheckResourceAttr(resourceName, "cckm_key_backup_params.cloud_name", "AzureCloud"),
+
+						resource.TestCheckResourceAttr(datasourceName, "scheduler.#", "1"),
+						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.cckm_key_backup_params.cloud_name", "AzureCloud"),
+						resource.TestCheckResourceAttr(datasourceName, "scheduler.0.operation", "cckm_key_backup"),
+
+						// No-filter datasource: verify at least both created schedulers are returned
+						resource.TestCheckResourceAttrSet(noFilterDatasourceName, "scheduler.0.id"),
+						resource.TestCheckResourceAttrSet(noFilterDatasourceName, "scheduler.1.id"),
+					),
+				},
+			},
+		})
+	})
+
 	t.Run("oci", func(t *testing.T) {
 		if os.Getenv("CCKM_OCI_CONN_TENANCY") == "" {
 			t.Skip("CCKM_OCI_CONN_TENANCY not set — skipping OCI scheduler rotation test")
@@ -385,6 +442,14 @@ func Test_CM_CckmSchedulersListAllDataSource(t *testing.T) {
 			operation = "cckm_xks_credential_rotation"
 			run_at    = "0 9 * * fri"
 		}
+		resource "ciphertrust_scheduler" "backup" {
+			cckm_key_backup_params = {
+				cloud_name = "AzureCloud"
+			}
+			name      = "%s"
+			operation = "cckm_key_backup"
+			run_at    = "0 9 * * fri"
+		}
 		data "ciphertrust_scheduler_list" "all_cckm" {
 			filters = {
 				operation = "cckm*"
@@ -393,12 +458,14 @@ func Test_CM_CckmSchedulersListAllDataSource(t *testing.T) {
 				ciphertrust_scheduler.rotation,
 				ciphertrust_scheduler.sync,
 				ciphertrust_scheduler.xks,
+				ciphertrust_scheduler.backup,
 			]
 		}`
 
 	rotationName := "tf-rot-" + uuid.New().String()[:8]
 	syncName := "tf-sync-" + uuid.New().String()[:8]
 	xksName := "tf-xks-" + uuid.New().String()[:8]
+	backupName := "tf-backup-" + uuid.New().String()[:8]
 	dsName := "data.ciphertrust_scheduler_list.all_cckm"
 
 	resource.Test(t, resource.TestCase{
@@ -406,16 +473,18 @@ func Test_CM_CckmSchedulersListAllDataSource(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(config, rotationName, syncName, xksName),
+				Config: fmt.Sprintf(config, rotationName, syncName, xksName, backupName),
 				Check: resource.ComposeTestCheckFunc(
-					// Verify at least three results are returned.
+					// Verify at least four results are returned.
 					resource.TestCheckResourceAttrSet(dsName, "scheduler.0.id"),
 					resource.TestCheckResourceAttrSet(dsName, "scheduler.1.id"),
 					resource.TestCheckResourceAttrSet(dsName, "scheduler.2.id"),
+					resource.TestCheckResourceAttrSet(dsName, "scheduler.3.id"),
 					// Verify each of our created schedulers appears in the list.
 					testCheckListContainsName(dsName, "scheduler", "name", rotationName),
 					testCheckListContainsName(dsName, "scheduler", "name", syncName),
 					testCheckListContainsName(dsName, "scheduler", "name", xksName),
+					testCheckListContainsName(dsName, "scheduler", "name", backupName),
 				),
 			},
 		},
