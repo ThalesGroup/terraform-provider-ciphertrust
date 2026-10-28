@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -674,7 +675,20 @@ func setCTEClientState(
 	// refreshed value that no longer matches config surfaces as an explicit
 	// "Attribute is immutable" error at plan time instead of a silent,
 	// unresolvable diff.
-	state.Name = types.StringValue(apiResp.Name)
+	//
+	// TFIN-627: CipherTrust Manager case-normalizes the name server-side
+	// (e.g. echoes back "tf_cte_client_test-..." for a client created as
+	// "TF_CTE_Client_Test-..."). Blindly overwriting state with CM's echoed
+	// value therefore mismatches the user's (unchanged) config on the very
+	// next plan, and ImmutableString()'s exact byte-for-byte comparison
+	// trips a false "Attribute is immutable" error. Only refresh state.Name
+	// from the API when the change is a genuine (case-insensitive) rename;
+	// when it differs from the current state only by case, keep the
+	// existing config-matching value so the immutable comparison still
+	// lines up.
+	if !strings.EqualFold(state.Name.ValueString(), apiResp.Name) {
+		state.Name = types.StringValue(apiResp.Name)
+	}
 	state.ClientLocked = types.BoolValue(apiResp.ClientLocked)
 	state.ClientType = types.StringValue(apiResp.ClientType)
 	state.CommunicationEnabled = types.BoolValue(apiResp.CommunicationEnabled)
