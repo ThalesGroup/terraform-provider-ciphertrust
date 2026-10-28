@@ -153,6 +153,9 @@ func TestCTEProfileResource_drift(t *testing.T) {
 
 // TestCTEProfileResource_removingDescriptionConverges verifies that removing
 // description from config and applying converges to no changes (TFIN-500).
+// description is Optional+Computed with a "" default, so omitting it from
+// config converges on the same state value ("") as explicitly setting it to
+// "" - see TestCTEProfileResource_emptyDescriptionConverges (TFIN-501).
 func TestCTEProfileResource_removingDescriptionConverges(t *testing.T) {
 	name := "tf-profile-rem-desc-" + uuid.New().String()[:8]
 	const rn = "ciphertrust_cte_profile.profile"
@@ -175,13 +178,50 @@ resource "ciphertrust_cte_profile" "profile" {
 }
 `, name),
 				Check: checkStep(t, "profile: remove description",
-					resource.TestCheckNoResourceAttr(rn, "description"),
+					resource.TestCheckResourceAttr(rn, "description", ""),
 				),
 			},
 			// Plan again should show no changes (fixes TFIN-500)
 			{
-				Config:          providerConfig + fmt.Sprintf(`resource "ciphertrust_cte_profile" "profile" { name = %q }`, name),
-				PlanOnly:        true,
+				Config:             providerConfig + fmt.Sprintf(`resource "ciphertrust_cte_profile" "profile" { name = %q }`, name),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestCTEProfileResource_emptyDescriptionConverges verifies that explicitly
+// setting description = "" in config converges to no changes on the next
+// plan, instead of looping forever proposing `+ description = ""` (TFIN-501).
+// The earlier fix for TFIN-500 reintroduced this bug by normalizing an empty
+// description read back from CM to null in state, which never matched the
+// explicit "" in config.
+func TestCTEProfileResource_emptyDescriptionConverges(t *testing.T) {
+	name := "tf-profile-empty-desc-" + uuid.New().String()[:8]
+	const rn = "ciphertrust_cte_profile.profile"
+
+	cfg := providerConfig + fmt.Sprintf(`
+resource "ciphertrust_cte_profile" "profile" {
+  name        = %q
+  description = ""
+}
+`, name)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create with an explicit empty description
+			{
+				Config: cfg,
+				Check: checkStep(t, "profile: create with description = \"\"",
+					resource.TestCheckResourceAttr(rn, "description", ""),
+				),
+			},
+			// Plan again should show no changes (fixes TFIN-501)
+			{
+				Config:             cfg,
+				PlanOnly:           true,
 				ExpectNonEmptyPlan: false,
 			},
 		},

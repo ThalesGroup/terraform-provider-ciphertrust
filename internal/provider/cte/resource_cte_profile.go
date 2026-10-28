@@ -103,6 +103,8 @@ func (r *resourceCTEProfile) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"description": schema.StringAttribute{
 				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 				Description: "Description of the profile resource.",
 			},
 			"duplicate_settings": schema.SingleNestedAttribute{
@@ -1246,12 +1248,12 @@ func setProfileState(
 	apiResp *CTEProfilesListJSON,
 ) {
 	// Simple scalar fields
-	// Normalize empty description to null to prevent plan loops (TFIN-500, TFIN-501)
-	if apiResp.Description != "" {
-		state.Description = types.StringValue(apiResp.Description)
-	} else {
-		state.Description = types.StringNull()
-	}
+	// description is Optional+Computed with a "" default (see schema), so both
+	// an omitted config value and an explicit description = "" converge to the
+	// same state value here. Do NOT normalize "" to null (TFIN-500/TFIN-501):
+	// that reintroduces a perpetual plan loop because config "" would never
+	// match a null state.
+	state.Description = types.StringValue(apiResp.Description)
 
 	state.Name = types.StringValue(apiResp.Name)
 	state.ConciseLogging = types.BoolValue(apiResp.ConciseLogging)
