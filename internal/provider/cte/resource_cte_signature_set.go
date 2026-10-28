@@ -9,6 +9,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
+	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -90,10 +91,13 @@ func (r *resourceCTESignatureSet) Schema(_ context.Context, _ resource.SchemaReq
 				Computed: true,
 			},
 			"type": schema.StringAttribute{
-				Description: "Type of the signature set. The valid values are Application and Container-Image. The default value is Application.",
+				Description: "Type of the signature set. The valid values are Application and Container-Image. The default value is Application. This field is immutable after creation; the signature set's id is referenced by other resources (e.g. ciphertrust_cte_policy signature rules), so changing type blocks in place at plan time rather than destroying and recreating the resource.",
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("Application"),
+				PlanModifiers: []planmodifier.String{
+					modifiers.ImmutableString(),
+				},
 			},
 			"source_list": schema.ListAttribute{
 				Description: "Path of the directory or file to be signed. If a directory is specified, all files in the directory and its subdirectories are signed.",
@@ -237,10 +241,8 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 		resp.Diagnostics.AddError("Cannot change signature set name once it is created", "Name is an immutable field")
 		return
 	}
-	if plan.Type.ValueString() != state.Type.ValueString() {
-		resp.Diagnostics.AddError("Cannot change signature set type", "Type is an immutable field")
-		return
-	}
+	// type immutability is now enforced at plan time via modifiers.ImmutableString()
+	// on the schema attribute (TFIN-588), so this runtime check is redundant.
 
 	if plan.Description.ValueString() != "" && plan.Description.ValueString() != types.StringNull().ValueString() {
 		payload.Description = plan.Description.ValueString()
@@ -293,11 +295,19 @@ func (r *resourceCTESignatureSet) Update(ctx context.Context, req resource.Updat
 			payload.Sources = append(payload.Sources, source.ValueString())
 		}
 	}
-	labelsPayload := make(map[string]interface{})
-	for k, v := range plan.Labels.Elements() {
-		labelsPayload[k] = v.(types.String).ValueString()
+	// Handle labels: send nil when empty to clear labels in CM (TFIN-589). CM's
+	// signaturesets endpoint requires an explicit JSON null to clear labels; an
+	// empty {} is silently ignored, so removing labels from config would never
+	// converge (same pattern already fixed for process sets in TFIN-598).
+	if len(plan.Labels.Elements()) == 0 {
+		payload.Labels = nil
+	} else {
+		labelsPayload := make(map[string]interface{})
+		for k, v := range plan.Labels.Elements() {
+			labelsPayload[k] = v.(types.String).ValueString()
+		}
+		payload.Labels = labelsPayload
 	}
-	payload.Labels = labelsPayload
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
