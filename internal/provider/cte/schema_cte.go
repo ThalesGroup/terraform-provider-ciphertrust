@@ -82,6 +82,11 @@ type CTEClientsListJSON struct {
 	MaxNumCacheLog         int64                  `json:"max_num_cache_log"`
 	MaxSpaceCacheLog       int64                  `json:"max_space_cache_log"`
 	Labels                 map[string]interface{} `json:"labels"`
+	// DomainList is CipherTrust Manager's own JSON-string-encoded array of the
+	// domains this client belongs to/is shared with (e.g. `"[\"root\"]"`) --
+	// the field that corresponds to the client-level shared_domain_list
+	// attribute (TFIN-464).
+	DomainList string `json:"domain_list"`
 }
 
 type CTEClientTFSDK struct {
