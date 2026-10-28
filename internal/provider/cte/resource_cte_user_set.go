@@ -10,6 +10,7 @@ import (
 
 	common "github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/common"
 	"github.com/ThalesGroup/terraform-provider-ciphertrust/internal/provider/modifiers"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -115,6 +117,7 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 						"gid": schema.Int64Attribute{
 							Description: "Group ID of the user to be added to the user set.",
 							Optional:    true,
+							Validators:  []validator.Int64{int64validator.AtLeast(0)},
 						},
 						"gname": schema.StringAttribute{
 							Description: "Group name of the user to be added to the user set.",
@@ -129,6 +132,7 @@ func (r *resourceCTEUserSet) Schema(_ context.Context, _ resource.SchemaRequest,
 						"uid": schema.Int64Attribute{
 							Description: "ID of the user to be added to the user set.",
 							Optional:    true,
+							Validators:  []validator.Int64{int64validator.AtLeast(0)},
 						},
 						"uname": schema.StringAttribute{
 							Description: "Name of the user to be added to the user set.",
