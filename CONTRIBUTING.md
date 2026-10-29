@@ -42,7 +42,7 @@ and helper files for each area.
 
 ## Requirements
 
-- Go 1.25.8 or later
+- Go 1.27.3 or later
 - A live CipherTrust Manager or CDSPaaS tenant for acceptance testing
 
 ## Building and testing
