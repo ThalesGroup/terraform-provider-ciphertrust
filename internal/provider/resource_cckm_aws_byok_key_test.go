@@ -624,17 +624,21 @@ func TestCckmAWSByokKeyRSA(t *testing.T) {
 				),
 			},
 			{
-				// Step 5: run the scheduler now and wait for the job to complete. Nothing is expected
-				// from the plan after the apply yet, so that the output shows what Terraform reports.
+				// Step 5: run the scheduler now and wait for the job to complete. The rotation creates a
+				// new key and moves the alias to it, so the original key (still tracked by this resource)
+				// no longer has its alias. A non-empty plan (alias drift) is expected.
 				Config: base + rotateScheduler + rotateKeyConfig,
 				Check: resource.ComposeTestCheckFunc(
 					testAccRunCCKMRotation(schedulerResource),
 				),
+				ExpectNonEmptyPlan: true,
 			},
 			{
 				// Step 6: refresh after the rotation. The key resource is key-centric so it still
-				// tracks the original key. That key is now archived and has lost its labels.
-				Config: base + rotateScheduler + rotateKeyConfig,
+				// tracks the original key. That key is now archived and has lost its labels. Refresh
+				// only, because the configured alias cannot be re-applied to an archived key.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckNoResourceAttr(keyResource, "labels.job_config_id"),
 				),
