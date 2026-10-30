@@ -318,19 +318,23 @@ func (r *resourceScheduler) Schema(_ context.Context, _ resource.SchemaRequest, 
 				PlanModifiers: []planmodifier.Object{
 					common.NewObjectUseStateForUnknown(),
 				},
-				Description: "Specifies cloud key rotation parameters. cloud_name is immutable after creation; the remaining fields can be updated.",
+				Description: "Specifies cloud key rotation parameters. It is recommended to auto-rotate on for AWS native the key resource",
 				Attributes: map[string]schema.Attribute{
 					"aws_retain_alias": schema.BoolAttribute{
 						Optional: true,
-						Description: "Retain the alias and timestamp on the archived key after rotation. " +
-							"Applicable only to AWS key rotation.",
+						Description: "AWS only. When rotation creates a new key, adds a gravestone alias " +
+							"<first alias>-rotated-<timestamp> to the old key.",
 						Computed: true,
 					},
 					"rotate_material": schema.BoolAttribute{
 						Optional: true,
-						Description: "If true, rotate the key material during the key rotation job. " +
-							"Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and  " +
-							"valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.",
+						Description: "AWS only. When true, rotates key material instead of creating a new key. " +
+							"Supported only for AES (SYMMETRIC_DEFAULT) keys: single-region keys on " +
+							"CipherTrust Manager 2.21+, and multi-region keys on 2.23+, or CDSPaaS. " +
+							"Defaults to true on supported CipherTrust Manager versions and CDSPaaS. " +
+							"Ignored for unsupported key types and versions. " +
+							"When false, rotation creates a new key and moves the first alias to it. " +
+							"Newly created keys must be imported into CipherTrust Manager to be managed.",
 						Computed: true,
 					},
 					"cloud_name": schema.StringAttribute{
@@ -764,6 +768,42 @@ func (r *resourceScheduler) ModifyPlan(ctx context.Context, req resource.ModifyP
 			"The 'run_on' attribute is only supported on on-premises CipherTrust Manager clusters. "+
 				"CDSPaaS does not support clustering, so this attribute must be omitted.",
 		)
+	}
+	r.modifyAwsRotateMaterialPlan(ctx, req, resp)
+}
+
+// awsRotateMaterialMinCMVersion is the first on-premises CipherTrust Manager version whose
+// scheduler honours rotate_material for imported (BYOK) AWS AES keys.
+const awsRotateMaterialMinCMVersion = 221
+
+// modifyAwsRotateMaterialPlan defaults an omitted AWS rotate_material to true
+// on CDSPaaS and CipherTrust Manager 2.21 or later.
+// The server ignores this setting for unsupported key types (such as RSA and HMAC).
+// Explicit values are preserved. Older CM versions retain their existing behavior.
+func (r *resourceScheduler) modifyAwsRotateMaterialPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	if !r.client.IsCDSPaaS && r.client.CMVersion < awsRotateMaterialMinCMVersion {
+		return
+	}
+	var params types.Object
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("cckm_key_rotation_params"), &params)...)
+	if resp.Diagnostics.HasError() || params.IsNull() || params.IsUnknown() {
+		return
+	}
+	attrs := params.Attributes()
+	cloudName, ok := attrs["cloud_name"].(types.String)
+	if !ok || cloudName.IsNull() || cloudName.IsUnknown() || !strings.EqualFold(cloudName.ValueString(), "aws") {
+		return
+	}
+	rotateMaterial, ok := attrs["rotate_material"].(types.Bool)
+	if !ok || rotateMaterial.IsUnknown() {
+		return
+	}
+	rotateMaterialPath := path.Root("cckm_key_rotation_params").AtName("rotate_material")
+	if rotateMaterial.IsNull() {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, rotateMaterialPath, types.BoolValue(true))...)
 	}
 }
 

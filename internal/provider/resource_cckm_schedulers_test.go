@@ -33,6 +33,33 @@ func schedulerTopLevelUpdate(config string) string {
 	return strings.ReplaceAll(config, schedulerRunAtOriginal, schedulerRunAtUpdated)
 }
 
+// Test_CM_CckmSchedulerAwsRotateMaterialDefaultsToTrue verifies that an omitted
+// rotate_material is planned as true on CDSPaaS and CM 2.21 or later.
+func Test_CM_CckmSchedulerAwsRotateMaterialDefaultsToTrue(t *testing.T) {
+	if os.Getenv("CDSPAAS") != "true" && getCipherTrustVersion() < 221 {
+		t.Skip("Skipping: rotate_material defaults to true only on CDSPaaS and CipherTrust Manager 2.21 or later")
+	}
+	config := fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "rotate_material_default" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			name      = "%s"
+			operation = "cckm_key_rotation"
+			run_at    = "0 9 * * fri"
+		}`, "RotateMaterialDefault"+uuid.New().String()[:8])
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.TestCheckResourceAttr("ciphertrust_scheduler.rotate_material_default",
+					"cckm_key_rotation_params.rotate_material", "true"),
+			},
+		},
+	})
+}
+
 func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 	t.Run("aws", func(t *testing.T) {
 		createSchedulerParams := `
@@ -123,6 +150,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 			rotationAfterUpdate, minParamsName)
 		updateConfig2 := fmt.Sprintf(updateSchedulerParams2, maxParamsName, minParamsName)
 		rotateMaterialExpectedTrueValue := "true"
+		rotateMaterialExpectedFalseValue := "false"
 		if getCipherTrustVersion() < 221 {
 			rotateMaterialExpectedTrueValue = "false"
 			createConfig = strings.ReplaceAll(createConfig, "rotate_material = true", "")
@@ -172,7 +200,7 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", expirationUpdate),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", expireInUpdate),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", rotationAfterUpdate),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedFalseValue),
 
 						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
@@ -193,14 +221,14 @@ func Test_CM_CckmSchedulersRotationResource(t *testing.T) {
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expiration", ""),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.expire_in", ""),
 						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(maxParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedFalseValue),
 
 						resource.TestCheckResourceAttrSet(minParamsResource, "id"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.cloud_name", "aws"),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expiration", ""),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.expire_in", ""),
 						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotation_after", ""),
-						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", "false"),
+						resource.TestCheckResourceAttr(minParamsResource, "cckm_key_rotation_params.rotate_material", rotateMaterialExpectedFalseValue),
 					),
 				},
 				{
