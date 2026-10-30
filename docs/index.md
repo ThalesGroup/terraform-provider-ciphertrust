@@ -7,7 +7,7 @@ these platforms.
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.11
-- [Go](https://go.dev/doc/install) >= 1.25.8 (only needed to build the provider from source)
+- [Go](https://go.dev/doc/install) >= 1.27.3 (only needed to build the provider from source)
 
 ## Example Usage
 
