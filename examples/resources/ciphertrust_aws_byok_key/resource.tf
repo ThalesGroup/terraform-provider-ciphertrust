@@ -79,7 +79,7 @@ resource "ciphertrust_aws_byok_key" "byok_key" {
   enable_rotation = {
     disable_encrypt = false
     job_config_id   = ciphertrust_scheduler.scheduled_rotation.id
-    key_source      = "ciphertrust"
+    key_source      = "local"
   }
 }
 

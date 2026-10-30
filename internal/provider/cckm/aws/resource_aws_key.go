@@ -103,7 +103,7 @@ func (r *resourceAWSKey) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"auto_rotate": schema.BoolAttribute{
 				Computed:    true,
 				Optional:    true,
-				Description: "Enable AWS autorotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.",
+				Description: "Enable AWS auto-rotation of the key. Auto-rotation is only applicable to native symmetric keys. Cannot be set to true during key creation; configure via update after the key has been created.",
 				Default:     booldefault.StaticBool(false),
 			},
 			"enable_key": schema.BoolAttribute{
@@ -395,6 +395,12 @@ func (r *resourceAWSKey) Read(ctx context.Context, req resource.ReadRequest, res
 		r.client.Log.Error(details)
 		resp.Diagnostics.AddError(details, "")
 		return
+	}
+	if isArchivedRotatedKey(response) {
+		msg := "AWS key was archived by a rotation scheduler and replaced by a new key. Remove it from state and import the key identified by rotated_to."
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString(), "rotated_to": gjson.Get(response, "rotated_to").String()})
+		r.client.Log.Warn(details)
+		resp.Diagnostics.AddWarning(details, "")
 	}
 	r.setKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {

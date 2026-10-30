@@ -230,7 +230,7 @@ For example:
 ### Optional
 
 - `cckm_key_backup_params` (Attributes) (Immutable) CCKM key backup operation specific arguments. These can only be set when the job is created, as the update API does not accept them. Azure is the only supported cloud. (see [below for nested schema](#nestedatt--cckm_key_backup_params))
-- `cckm_key_rotation_params` (Attributes) Specifies cloud key rotation parameters. cloud_name is immutable after creation; the remaining fields can be updated. (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
+- `cckm_key_rotation_params` (Attributes) Specifies cloud key rotation parameters. It is recommended to auto-rotate on for AWS native the key resource (see [below for nested schema](#nestedatt--cckm_key_rotation_params))
 - `cckm_synchronization_params` (Attributes) Cloud key synchronization parameters. (see [below for nested schema](#nestedatt--cckm_synchronization_params))
 - `cckm_xks_credential_rotation_params` (Attributes) (Immutable) CCKM XKS credential rotation operation specific arguments. (see [below for nested schema](#nestedatt--cckm_xks_credential_rotation_params))
 - `database_backup_params` (Attributes) Database backup operation specific arguments. Should be JSON-serializable. Required only for "database_backup" operations. Not allowed for other operations. (see [below for nested schema](#nestedatt--database_backup_params))
@@ -267,10 +267,10 @@ Required:
 
 Optional:
 
-- `aws_retain_alias` (Boolean) Retain the alias and timestamp on the archived key after rotation. Applicable only to AWS key rotation.
+- `aws_retain_alias` (Boolean) AWS only. When rotation creates a new key, adds a gravestone alias <first alias>-rotated-<timestamp> to the old key.
 - `expiration` (String) Expiration time of the new key. If not specified, the new key material never expires. For example, if you want the scheduler to the rotate keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. To remove the setting, set to an empty string.
 - `expire_in` (String) Period during which certain keys are going to expire. The scheduler rotates the keys that are expiring in this period. If not specified, the scheduler rotates all the keys. For example, if you want the scheduler to rotate the keys that are expiring within six hours of its run, set expire_in to 6h. Use either 'Xd' for x days or 'Yh' for y hours. To remove the setting, set to an empty string.
-- `rotate_material` (Boolean) If true, rotate the key material during the key rotation job. Valid for imported (BYOK) symmetric single-region AES keys in CipherTrustManager version 2.21 or later and  valid for imported (BYOK) symmetric multi-region AES keys in CipherTrustManager version 2.24 or later.
+- `rotate_material` (Boolean) AWS only. When true, rotates key material instead of creating a new key. Supported only for AES (SYMMETRIC_DEFAULT) keys: single-region keys on CipherTrust Manager 2.21+, and multi-region keys on 2.23+, or CDSPaaS. Defaults to true on supported CipherTrust Manager versions and CDSPaaS. Ignored for unsupported key types and versions. When false, rotation creates a new key and moves the first alias to it. Newly created keys must be imported into CipherTrust Manager to be managed.
 - `rotation_after` (String) Number of days after which the keys will be rotated. Specify Xd for x days. The first key rotation will happen after x days of key creation. Subsequent key rotations will happen after every x days of the last rotation date. For example, if you set rotation_after to 6d, the first key rotation will happen after six days of key creation. Subsequently, the keys will be rotated after every six days. To remove the setting, set to an empty string.
 
 

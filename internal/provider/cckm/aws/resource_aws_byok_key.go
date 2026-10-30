@@ -414,6 +414,12 @@ func (r *resourceAWSByokKey) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
+	if isArchivedRotatedKey(response) {
+		msg := "AWS BYOK key was archived by a rotation scheduler and replaced by a new key. Remove it from state and import the key identified by rotated_to."
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": state.ID.ValueString(), "rotated_to": gjson.Get(response, "rotated_to").String()})
+		r.client.Log.Warn(details)
+		resp.Diagnostics.AddWarning(details, "")
+	}
 	r.setByokKeyState(ctx, response, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return

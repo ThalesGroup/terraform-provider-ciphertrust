@@ -1015,8 +1015,16 @@ func keyStoreKeyPolicySchemaAttribute() schema.Attribute {
 // AWS key resources (aws_key, aws_byok_key, aws_xks_key, aws_cloudhsm_key).
 func enableRotationSchemaAttribute() schema.Attribute {
 	return schema.SingleNestedAttribute{
-		Optional:    true,
-		Description: "Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. XKS keys require local_hosted_params.linked = true.",
+		Optional: true,
+		Description: "Register the key with a CipherTrust Manager scheduled rotation job. " +
+			"Can only be configured after key creation. " +
+			"'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive. " +
+			"XKS keys require local_hosted_params.linked = true. " +
+			"For native AES keys, rotation with rotate_material = false creates a new key, " +
+			"moves the first alias, and removes labels from the old key, causing Terraform drift. " +
+			"The new key must be imported into Terraform to be managed. " +
+			"Alternatively, use auto_rotate for native AWS keys or " +
+			"ciphertrust_aws_key_rotation for on-demand rotation.",
 		Attributes: map[string]schema.Attribute{
 			"job_config_id": schema.StringAttribute{
 				Required:    true,

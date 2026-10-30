@@ -41,10 +41,24 @@ resource "ciphertrust_aws_kms" "kms" {
   regions       = data.ciphertrust_aws_account_details.account_details.regions
 }
 
-# Minimum input parameters for a symmetric key
-resource "ciphertrust_aws_key" "aes_min_params" {
-  kms_id = ciphertrust_aws_kms.kms.id
-  region = ciphertrust_aws_kms.kms.regions[0]
+# # Minimum input parameters for a symmetric key
+# resource "ciphertrust_aws_key" "aes_min_params" {
+#   kms_id = ciphertrust_aws_kms.kms.id
+#   region = ciphertrust_aws_kms.kms.regions[0]
+# }
+
+# After creation, create a key rotation scheduler and attach it to the AES key via update
+resource "ciphertrust_scheduler" "scheduled_rotation" {
+  cckm_key_rotation_params = {
+    cloud_name       = "aws"
+    expiration       = "2d"
+    aws_retain_alias = true
+    rotate_material  = true
+  }
+  name      = "name"
+  operation = "cckm_key_rotation"
+  run_at    = "0 9 * * sat"
+  run_on    = "any"
 }
 
 # Maximum input parameters for a symmetric key
@@ -79,5 +93,9 @@ resource "ciphertrust_aws_key" "aes_key_max_params" {
         }]
       }
     )
+  }
+  enable_rotation = {
+    job_config_id = ciphertrust_scheduler.scheduled_rotation.id
+    key_source = "local"
   }
 }

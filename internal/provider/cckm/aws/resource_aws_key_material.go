@@ -148,10 +148,7 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 							Required:    true,
 							Description: "Source of the key material. Current option is 'local' implying a CipherTrust Manager key.",
 							Validators: []validator.String{
-								stringvalidator.RegexMatches(
-									regexp.MustCompile(`\S`),
-									"must contain at least one non-whitespace character",
-								),
+								stringvalidator.OneOf("local"),
 							},
 						},
 						// Optional attributes
