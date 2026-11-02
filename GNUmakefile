@@ -63,7 +63,12 @@ testacc:
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureSecret
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureSecretMaxConfigAndRecover
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureDataSourceSecretList
-	TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureKeyUploadAndRunScheduler
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAzureKeyUploadAndRunScheduler
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAWSKeyScheduler
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAWSByokKeyRSA
+#TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion
+	TF_ACC=1 go test -v -timeout=120m ./internal/provider -run TestCckmAWSKeyRotationNative
+
 #TF_ACC=1 go test -v -timeout=120m ./internal/provider/cckm/azure -run TestCckmAzureReleasePolicy
 
 me: build

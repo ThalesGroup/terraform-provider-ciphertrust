@@ -864,11 +864,12 @@ func waitForPrimaryRegionUpdated(
 	// each refresh call reflects current AWS state. Sleep between attempts gives AWS
 	// additional time if the primary-region transition is still in progress.
 	//
-	// Individual key refresh (POST .../refresh) is only supported on CM >= 2.22.
-	// On older CM and on CDSPaaS the endpoint returns 404, so skip the refresh
-	// loop entirely and accept whatever state the inner poll loop produced.
-	if client.CMVersion < 222 || client.IsCDSPaaS {
-		client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] individual key refresh not supported (CipherTrust Manager < 2.22 or CDSPaaS), skipping refresh loop")
+	// Individual key refresh (POST .../refresh) is supported on CDSPaaS and on CM >= 2.22.
+	// On older on-premises CM the endpoint returns 404, so skip the refresh loop
+	// entirely and accept whatever state the inner poll loop produced.
+	// CMVersion is not fetched for CDSPaaS (it stays 0), so CDSPaaS must be excluded explicitly.
+	if !client.IsCDSPaaS && client.CMVersion < 222 {
+		client.Log.Info("[aws_multiregion.go -> waitForPrimaryRegionUpdated] individual key refresh not supported (CipherTrust Manager < 2.22), skipping refresh loop")
 		for i, keyID := range allKeyIDs {
 			if !confirmed[i] {
 				client.Log.Warn(fmt.Sprintf("[aws_multiregion.go -> waitForPrimaryRegionUpdated] key %s not confirmed after poll loop (refresh unavailable)", keyID))

@@ -94,7 +94,9 @@ func (r *resourceAWSKeyRotation) Schema(_ context.Context, _ resource.SchemaRequ
 			"been called it will never be retried automatically. " +
 			"To request another rotation, change the trigger value to cause resource replacement. " +
 			"This resource does not manage EXTERNAL keys; use aws_key_material for those. " +
-			"\n\n\n\nNote: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater.",
+			"\n\n\n\nNote: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater. " +
+			"Single key refresh is not supported before CipherTrust Manager 2.22. Without it CipherTrust Manager may report an incorrect number of rotations. " +
+			"The rotation itself is still performed in AWS.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -487,12 +489,12 @@ func waitForNativeRotation(
 
 			// Last poll of the last round - timeout expired.
 			if r+1 == maxRefreshRounds && i+1 == maxPolls {
-				msg := "On-demand rotation was requested but completion could not be confirmed before the timeout expired. " +
-					"The rotation may still complete asynchronously. " +
-					"Refresh the key before retrying."
+				msg := "On-demand rotation was requested successfully but completion could not be confirmed before the timeout period expired. " +
+					"Do not change the trigger unless another rotation is required. " +
+					"Refresh the key to see the latest rotation details."
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
-				client.Log.Error(details)
-				diags.AddError(details, "")
+				client.Log.Warn(details)
+				diags.AddWarning(details, "")
 				return false
 			}
 		}
