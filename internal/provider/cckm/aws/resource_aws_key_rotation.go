@@ -290,25 +290,25 @@ func (r *resourceAWSKeyRotation) Create(ctx context.Context, req resource.Create
 	}
 	r.client.Log.Info("[resource_aws_key_rotation.go -> Create] rotate-material called successfully for key_id=" + keyID)
 
-	// Step 7: poll until the rotation is confirmed or timeout expires.
-	// waitForNativeRotation sleeps at the top of each iteration so no head-start
-	// sleep is needed here.
-	if !waitForNativeRotation(ctx, id, keyID, r.client, prevMaterialID, prevRotationCount, &resp.Diagnostics) {
-		// waitForNativeRotation added the error to diags. Do not write state because
-		// rotate-material already fired - the user must change trigger to retry.
-		return
-	}
+	// Step 7: poll until the rotation is confirmed or the timeout expires. A timeout only adds
+	// a warning to diags (see waitForNativeRotation) because rotate-material has already
+	// succeeded. Before CM 2.22 there is no single key refresh so CM may take a long time to
+	// report the rotation, or not report it at all.
+	waitForNativeRotation(ctx, id, keyID, r.client, prevMaterialID, prevRotationCount, &resp.Diagnostics)
 
-	// Step 8: fetch the final rotation history to populate state.
+	// Step 8: fetch the rotation history to populate state. rotate-material has succeeded so
+	// state is always saved. If the history cannot be read, warn and save an empty history -
+	// the next Read refreshes it. Returning an error here would leave the rotation untracked
+	// or taint the resource, and a replacement would rotate the key again.
 	rotHistory, listErr := fetchNativeRotationHistory(ctx, id, keyID, r.client)
 	if listErr != nil {
-		msg := "Error reading rotation history after successful rotation."
+		msg := "Rotation was requested but the rotation history could not be read. It will be refreshed on the next read."
 		details := utils.ApiError(msg, map[string]interface{}{"error": listErr.Error(), "key_id": keyID})
-		r.client.Log.Error(details)
-		resp.Diagnostics.AddError(details, "")
-		return
+		r.client.Log.Warn(details)
+		resp.Diagnostics.AddWarning(details, "")
 	}
 
+	// The id is always key_id/trigger, even when the rotation could not be confirmed.
 	plan.RotationHistory = rotHistory
 	plan.ID = types.StringValue(keyID + "/" + plan.Trigger.ValueString())
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -422,8 +422,9 @@ func waitForKeyUpdatedAt(
 //
 // The outer loop runs maxRefreshRounds times. On each round after the first a
 // best-effort /refresh is issued before polling, prompting CCKM to re-sync with AWS.
-// If the last poll of the last round still shows no change, an error is added to diags.
-// Returns true on confirmed success, false if the timeout expired.
+// If the last poll of the last round still shows no change, a warning is added to diags.
+// The rotation itself has already succeeded so a timeout is not an error. A failure to
+// fetch the key while polling adds an error.
 func waitForNativeRotation(
 	ctx context.Context,
 	id string,
@@ -432,7 +433,7 @@ func waitForNativeRotation(
 	prevMaterialID string,
 	prevRotationCount int64,
 	diags *diag.Diagnostics,
-) bool {
+) {
 	client.Log.Debug(common.MSG_METHOD_START + "[resource_aws_key_rotation.go -> waitForNativeRotation][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[resource_aws_key_rotation.go -> waitForNativeRotation][" + id + "]")
 
@@ -467,7 +468,7 @@ func waitForNativeRotation(
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
 				client.Log.Error(details)
 				diags.AddError(details, "")
-				return false
+				return
 			}
 			currentMaterialID := gjson.Get(keyJSON, "aws_param.CurrentKeyMaterialId").String()
 
@@ -484,7 +485,7 @@ func waitForNativeRotation(
 			if (currentMaterialID != "" && currentMaterialID != prevMaterialID) || currentRotationCount > prevRotationCount {
 				client.Log.Info(fmt.Sprintf("[resource_aws_key_rotation.go -> waitForNativeRotation] rotation confirmed on round %d/%d poll %d/%d",
 					r+1, maxRefreshRounds, i+1, maxPolls))
-				return true
+				return
 			}
 
 			// Last poll of the last round - timeout expired.
@@ -495,12 +496,10 @@ func waitForNativeRotation(
 				details := utils.ApiError(msg, map[string]interface{}{"key_id": keyID})
 				client.Log.Warn(details)
 				diags.AddWarning(details, "")
-				return false
+				return
 			}
 		}
 	}
-
-	return false
 }
 
 // fetchNativeRotationHistory retrieves all rotation records for the given key and returns
